@@ -77,8 +77,8 @@ for key in $(jq -r 'keys[]' "$STATE"); do
   name=$(jq -r --arg k "$key" '.[$k].name' "$STATE")
   age=$((now - $(jq -r --arg k "$key" '.[$k].at' "$STATE")))
   st=$(session_state "$name")
+  log "#$n: $name state=${st:-<none>}"
   case "$st" in
-    working | blocked) continue ;; # blocked = waiting for you; leave it
     "")
       [ "$age" -lt 600 ] && continue # just launched; may not be listed yet
       fail_issue "$n" "$name" "no session found"
@@ -88,7 +88,7 @@ for key in $(jq -r 'keys[]' "$STATE"); do
       fail_issue "$n" "$name" "session $st"
       state_del "$key"
       ;;
-    *) # done: check the ticket was handed off
+    done) # check the ticket was handed off
       issue=$(gh issue view "$n" --repo "$GH_REPO" --json state,labels)
       labels=",$(echo "$issue" | jq -r '[.labels[].name] | join(",")'),"
       ok=0
@@ -97,6 +97,7 @@ for key in $(jq -r 'keys[]' "$STATE"); do
       [ "$ok" = 0 ] && fail_issue "$n" "$name" "session finished but the ticket was not handed off"
       state_del "$key"
       ;;
+    *) continue ;; # working, blocked, waiting, idle or unknown: still alive; leave it
   esac
 done
 
