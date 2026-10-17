@@ -3,13 +3,14 @@
 Agentic tooling for D&D and TTRPGs in general: assistance for the DM during play, plus related experiments.
 
 ## Status
-TypeScript scaffold in place; no domain code yet.
+npm workspaces monorepo in place (`packages/core`, `packages/mcp`); no domain code yet.
 - Stack: Node 24 (`.node-version`), npm, ESM, strict TypeScript (NodeNext), vitest, ESLint (flat config, typescript-eslint) + Prettier.
-- `npm run check` = typecheck, lint, format:check, test, build (fail-fast). It is the definition of done; CI (`.github/workflows/ci.yml`) runs it on PRs and pushes to main.
+- `npm run check` = build, typecheck, lint, format:check, test (fail-fast). It is the definition of done; CI (`.github/workflows/ci.yml`) runs it on PRs and pushes to main.
 
 ## Conventions
 - Owner: Tony (personal GitHub account `askrzypczak`). Private repo.
 - Keep this file short; record decisions here as they are made.
+- Layout: npm workspaces under `packages/*` (`@ttrpg-agents/core`, `@ttrpg-agents/mcp`). `core` has no MCP deps; `mcp` depends on `core`. `build` runs before typecheck because `mcp` resolves `core` through its built `dist/`. `scripts/` stays at the root.
 
 ## Ticketing workflow
 GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not on PATH).
