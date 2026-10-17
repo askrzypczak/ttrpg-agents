@@ -1,72 +1,7 @@
 # scripts
 
-## Agent poller (automatic ticket dispatch)
+Root-level repo tooling. Ticket automation (agent dispatch, label setup, close-time label cleanup) moved to the `askrzypczak/claude-workflow` repo.
 
-Every 3 minutes a macOS LaunchAgent runs `agent-poller.sh`, which starts an interactive background Claude Code session for each ticket that is ready for an agent. Sessions show up in `claude agents`.
-
-A ticket is picked up when it is **open**, authored by `askrzypczak`, and labelled **`agent-ok` + `ready`** (and is not `in-progress`, `blocked` or `agent-failed`). The session is named `ttrpg-<issue>` and runs the `work-ticket` skill.
-
-### Conflict resolution
-After launching tickets, the poller lists open PRs (`gh pr list`, no model tokens) on `issue-N-*` branches whose `mergeable` is `CONFLICTING` and launches `claude --bg --name ttrpg-N-conflict "/ticket-workflow:resolve-conflicts N"`. The skill merges `main` into the branch (merge, not rebase: force-push is not allowed).
-- `UNKNOWN` (GitHub computes it lazily) is retried next poll; `BEHIND` without conflicts is ignored.
-- Skipped when `ttrpg-N` is `working` or `blocked` (it owns the branch), a `ttrpg-N-conflict` session is alive, the ticket is not `agent-ok`, not by `AGENT_OWNER`, or has `agent-failed`.
-- At most one attempt per `{pr, main SHA}`, recorded in `conflicts.json`; a new commit on main allows a new attempt.
-- A conflict session that fails, is stopped, or finishes with the PR still `CONFLICTING` gets `agent-failed` on the ticket plus a comment on the PR and ticket. Remove `agent-failed` to retry.
-- Needs the `resolve-conflicts` skill in the `ticket-workflow` plugin (update the plugin).
-- `--dry-run` logs the would-be launch.
-
-### Setup (once)
-1. Create the labels: `scripts/setup-labels.sh` (adds `skip-plan` and `agent-failed` among others).
-2. Trust the workspace: run `claude` once in the main checkout, accept the prompt, exit. `claude --bg` fails in an untrusted directory.
-3. Install the LaunchAgent **from the main checkout, not a worktree**: `scripts/install-launchd.sh`.
-
-Remove it with `scripts/install-launchd.sh uninstall`.
-
-### Daily use
-1. Write the ticket, review it, then add `ready` (your approval; agents normally already set `agent-ok`, remove it if the ticket shouldn't run unattended). Within ~3 minutes a session starts.
-2. Open `claude agents` to see it. A session in the `blocked` state is waiting for you: usually the plan sign-off, but also questions and permission prompts. Attach with `claude attach ttrpg-<issue>`, answer, and leave it running.
-3. For easy tickets add `skip-plan`: the session runs `work-ticket N auto` and skips the plan sign-off. It still asks if the ticket is ambiguous or risky.
-4. When it finishes, the ticket is `needs-review` with a PR. Review as usual.
-
-### When something fails
-If a session fails, is stopped, or ends without handing the ticket off, the poller adds `agent-failed` and comments with how to inspect it (`claude logs ttrpg-<issue>`). To retry, remove `agent-failed` and add `ready` again. Only the states `done` (checked for hand-off), `failed` and `stopped` end a tracked session; any other state (`working`, `blocked`, `waiting`, `idle`, unknown) counts as alive and the poller logs it as `state=<value>`.
-
-### Checking on it
-| What | Command |
-|---|---|
-| Log | `tail -f ~/Library/Logs/ttrpg-agents.log` |
-| Is it loaded? | `launchctl list \| grep ttrpg` |
-| Sessions | `claude agents` (or `claude agents --json --all`) |
-| One session's output | `claude logs ttrpg-<issue>` |
-| Stop a session | `claude stop ttrpg-<issue>` |
-| What would launch now | `scripts/agent-poller.sh --dry-run` |
-| Pause everything | `scripts/install-launchd.sh uninstall` |
-
-### Options
-Set as environment variables. To change one for the LaunchAgent, add it to `EnvironmentVariables` in `scripts/launchd/com.askrzypczak.ttrpg-agents.plist` and rerun `scripts/install-launchd.sh` (it regenerates the installed copy, so edits made only to `~/Library/LaunchAgents/` are overwritten). For a one-off run, prefix the command: `CLAUDE_BG_FLAGS="--permission-mode acceptEdits" scripts/agent-poller.sh --dry-run`.
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `CLAUDE_BG_FLAGS` | empty | Extra flags for `claude --bg`, e.g. `--permission-mode acceptEdits`. |
-| `AGENT_OWNER` | `askrzypczak` | Only tickets authored by this user are launched. |
-| `GH_REPO` | `askrzypczak/ttrpg-agents` | Repo to poll. |
-| `REPO_DIR` | `~/Projects/ttrpg-agents` | Checkout the sessions start in. |
-| `EXTRA_PATH` | empty | Directories prepended to the poller's PATH (inherited by sessions). fnm's default bin dir (`~/.local/share/fnm/aliases/default/bin`) is always included so sessions find `node`/`npm`. |
-| `STATE_DIR` | `~/.local/state/ttrpg-agents` | Lock file, `launched.json` (which tickets already have a session) and `conflicts.json` (last conflict attempt per ticket). |
-
-### Notes
-- The poller never claims a ticket itself: the session does that (`in-progress`) as part of `work-ticket`.
-- A ticket is launched once. Delete its entry from `launched.json` to force a relaunch of a ticket that still has `ready`.
-- The Mac must be awake and logged in. Nothing runs while it sleeps; the next run after wake picks up anything missed.
-
-## Label cleanup on close
-`ticket-labels.ts` runs from `.github/workflows/ticket-labels.yml` whenever an issue is closed (e.g. by merging a PR with `Closes #N`).
-- Removes `ready`, `in-progress`, `needs-review`, `blocked` from the closed issue (only those it has).
-- For each open `blocked` issue whose body has `Blocked by #N` (also `#3, #5` or `#3 and #5`, several lines allowed), removes `blocked` once every referenced blocker is closed. An issue with another open blocker keeps the label.
-- Issues closed as not planned count as closed for unblocking.
-- Never adds `ready`: only Tony adds it (see Ticketing workflow in `CLAUDE.md`).
-- Manual run (needs `gh` auth): `node scripts/ticket-labels.ts <issue-number>`. Tests: `scripts/ticket-labels.test.ts`.
-
-## Other scripts
-- `setup-labels.sh [owner/repo]`: create or refresh the ticket label set.
-- `install-launchd.sh [install|uninstall]`: manage the LaunchAgent described above.
+- `coverage.ts`: `npm run coverage`. Unit, integration and e2e coverage plus a merged total. Informational only; reports land in `reports/coverage/<kind>`.
+- `coverage-lib.ts`: pure helpers for `coverage.ts` (Istanbul merge and the per-kind summary table). Unit-tested in `coverage-lib.test.ts`.
+- `vitest-projects.test.ts`: checks that every test file belongs to exactly one vitest project (see `vitest.globs.ts`).
