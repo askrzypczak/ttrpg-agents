@@ -6,6 +6,9 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/",
+      "**/dist-e2e/",
+      "**/test-results/",
+      "**/playwright-report/",
       "**/node_modules/",
       ".claude/",
       ".stryker-tmp/",
