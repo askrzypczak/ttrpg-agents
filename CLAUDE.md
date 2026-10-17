@@ -27,7 +27,7 @@ GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not
 - The session follows `work-ticket`, including the plan sign-off: it shows as `blocked` in `claude agents` until you attach and approve (`claude attach ttrpg-N`). Same for questions and permission prompts.
 - Label `skip-plan` on easy tickets to launch with `work-ticket N auto`, which skips the sign-off (the agent still asks if the ticket is ambiguous or risky).
 - Failures: a session that fails, is stopped, or ends without handing off gets `agent-failed` plus a comment. Remove it and re-add `ready` to retry.
-- Limits: 2 concurrent sessions. Dry run: `scripts/agent-poller.sh --dry-run`. Log: `~/Library/Logs/ttrpg-agents.log`. Extra `claude --bg` flags via `CLAUDE_BG_FLAGS`.
+- No concurrency limit: every eligible ticket gets a session on the next poll. Dry run: `scripts/agent-poller.sh --dry-run`. Log: `~/Library/Logs/ttrpg-agents.log`. Extra `claude --bg` flags via `CLAUDE_BG_FLAGS`.
 - One-time: trust this directory by running `claude` in it once; `claude --bg` fails in an untrusted workspace.
 
 ## Work practices

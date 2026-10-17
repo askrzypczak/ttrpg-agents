@@ -34,11 +34,10 @@ If a session fails, is stopped, or ends without handing the ticket off, the poll
 | Pause everything | `scripts/install-launchd.sh uninstall` |
 
 ### Options
-Set as environment variables. To change one for the LaunchAgent, add it to `EnvironmentVariables` in `scripts/launchd/com.askrzypczak.ttrpg-agents.plist` and rerun `scripts/install-launchd.sh` (it regenerates the installed copy, so edits made only to `~/Library/LaunchAgents/` are overwritten). For a one-off run, prefix the command: `MAX_CONCURRENT=1 scripts/agent-poller.sh`.
+Set as environment variables. To change one for the LaunchAgent, add it to `EnvironmentVariables` in `scripts/launchd/com.askrzypczak.ttrpg-agents.plist` and rerun `scripts/install-launchd.sh` (it regenerates the installed copy, so edits made only to `~/Library/LaunchAgents/` are overwritten). For a one-off run, prefix the command: `CLAUDE_BG_FLAGS="--permission-mode acceptEdits" scripts/agent-poller.sh --dry-run`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MAX_CONCURRENT` | `2` | Max live sessions. `blocked` sessions count, so two plans waiting on you hold off new launches. |
 | `CLAUDE_BG_FLAGS` | empty | Extra flags for `claude --bg`, e.g. `--permission-mode acceptEdits`. |
 | `AGENT_OWNER` | `askrzypczak` | Only tickets authored by this user are launched. |
 | `GH_REPO` | `askrzypczak/ttrpg-agents` | Repo to poll. |
