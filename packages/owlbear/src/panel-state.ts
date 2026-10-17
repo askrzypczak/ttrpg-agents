@@ -1,6 +1,8 @@
 import type { SocketState } from "@ttrpg-agents/core/bridge";
 
-export type PlayerRole = "gm" | "player";
+import type { PlayerRole } from "./scene-model.js";
+
+export type { PlayerRole };
 
 export interface PanelInput {
   role: PlayerRole;

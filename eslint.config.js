@@ -15,4 +15,34 @@ export default tseslint.config(
   eslint.configs.recommended,
   tseslint.configs.recommended,
   prettier,
+  {
+    // Only the adapter may touch the SDK; everything else uses ObrAdapter so
+    // it can be unit-tested with the fake (see packages/owlbear/README.md).
+    files: ["packages/owlbear/src/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@owlbear-rodeo/sdk",
+              message:
+                "Import the SDK only in obr-adapter.ts; depend on ObrAdapter elsewhere.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["@owlbear-rodeo/sdk/*"],
+              message:
+                "Import the SDK only in obr-adapter.ts; depend on ObrAdapter elsewhere.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["packages/owlbear/src/obr-adapter.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
 );
