@@ -15,8 +15,15 @@ GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not
 - Type labels: `bug`, `feature`, `chore`. Create/refresh all labels with `scripts/setup-labels.sh`.
 - One ticket = one worktree = one branch (`issue-N-slug`) = one PR containing `Closes #N`.
 - Dependencies: write `Blocked by #M` in the issue body.
-- Agents are dispatched manually with an explicit ticket number and follow the `work-ticket` skill from the `ticket-workflow` plugin (see Work practices). Never auto-pick tickets.
-- Find work: `gh issue list --label ready --json number,title`.
+- Agents follow the `work-ticket` skill from the `ticket-workflow` plugin (see Work practices) with an explicit ticket number, either run manually or launched by the poller below. Agents never pick tickets themselves.
+
+### Automatic dispatch (local)
+`scripts/agent-poller.sh` runs every 3 min from a LaunchAgent (`scripts/install-launchd.sh`; run it from the main checkout) and starts one interactive background session `ttrpg-N` (visible in `claude agents`) per open `ready` + `agent-ok` ticket authored by `askrzypczak`.
+- The session follows `work-ticket`, including the plan sign-off: it shows as `blocked` in `claude agents` until you attach and approve (`claude attach ttrpg-N`). Same for questions and permission prompts.
+- Label `skip-plan` on easy tickets to launch with `work-ticket N auto`, which skips the sign-off (the agent still asks if the ticket is ambiguous or risky).
+- Failures: a session that fails, is stopped, or ends without handing off gets `agent-failed` plus a comment. Remove it and re-add `ready` to retry.
+- Limits: 2 concurrent sessions. Dry run: `scripts/agent-poller.sh --dry-run`. Log: `~/Library/Logs/ttrpg-agents.log`. Extra `claude --bg` flags via `CLAUDE_BG_FLAGS`.
+- One-time: trust this directory by running `claude` in it once; `claude --bg` fails in an untrusted workspace.
 
 ## Work practices
 - The workflow itself (skills `work-ticket`, `address-feedback`; subagents `implementer`, `reviewer`; `grg.sh`) lives in the private plugin marketplace repo `askrzypczak/claude-workflow` (local clone `~/Projects/claude-workflow`), enabled in `.claude/settings.json`. Change the workflow there, not here. The guardrails and these conventions stay in this repo.
