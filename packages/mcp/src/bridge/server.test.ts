@@ -151,6 +151,22 @@ describe("bridge server", () => {
     }
   });
 
+  it("sets CSP and nosniff on static, 404 and OPTIONS responses", async () => {
+    const base = `http://127.0.0.1:${server.port}`;
+    const responses = [
+      await fetch(`${base}/manifest.json`),
+      await fetch(`${base}/missing.js`),
+      await fetch(`${base}/manifest.json`, { method: "OPTIONS" }),
+    ];
+    expect(responses.map((r) => r.status)).toEqual([200, 404, 204]);
+    for (const res of responses) {
+      expect(res.headers.get("content-security-policy")).toBe(
+        "frame-ancestors https://www.owlbear.rodeo https://owlbear.rodeo",
+      );
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    }
+  });
+
   it("refuses WebSocket upgrades from foreign origins", async () => {
     const result = await new Promise<string>((resolve) => {
       const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, {

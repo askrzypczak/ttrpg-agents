@@ -13,4 +13,6 @@ The `owlbear` package is an Owlbear Rodeo extension served from a local bridge s
 3. In Owlbear Rodeo, Profile > Add Custom Extension, and enter `http://localhost:5199/manifest.json`.
 4. Chrome may ask for local network access for `owlbear.rodeo`; allow it, or the panel stays on "Connecting" and shows a hint after a few seconds.
 
+Warning: `BRIDGE_STATIC_DIR` overrides the served folder, and the bridge serves whatever it points at, readable by owlbear.rodeo pages; only point it at the built extension.
+
 The panel is GM-only and shows connection status; it reconnects with backoff if the bridge restarts.

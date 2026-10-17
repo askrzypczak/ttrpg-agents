@@ -103,6 +103,11 @@ export async function startBridgeServer(
   const clients = new Set<WebSocket>();
 
   const http: Server = createServer((req, res) => {
+    res.setHeader(
+      "Content-Security-Policy",
+      "frame-ancestors https://www.owlbear.rodeo https://owlbear.rodeo",
+    );
+    res.setHeader("X-Content-Type-Options", "nosniff");
     const origin = req.headers.origin;
     if (origin && ALLOWED_ORIGINS.has(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
