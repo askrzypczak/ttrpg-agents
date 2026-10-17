@@ -51,6 +51,14 @@ Set as environment variables. To change one for the LaunchAgent, add it to `Envi
 - A ticket is launched once. Delete its entry from `launched.json` to force a relaunch of a ticket that still has `ready`.
 - The Mac must be awake and logged in. Nothing runs while it sleeps; the next run after wake picks up anything missed.
 
+## Label cleanup on close
+`ticket-labels.ts` runs from `.github/workflows/ticket-labels.yml` whenever an issue is closed (e.g. by merging a PR with `Closes #N`).
+- Removes `ready`, `in-progress`, `needs-review`, `blocked` from the closed issue (only those it has).
+- For each open `blocked` issue whose body has `Blocked by #N` (also `#3, #5` or `#3 and #5`, several lines allowed), removes `blocked` once every referenced blocker is closed. An issue with another open blocker keeps the label.
+- Issues closed as not planned count as closed for unblocking.
+- Never adds `ready`: promoting a ticket stays a human decision.
+- Manual run (needs `gh` auth): `node scripts/ticket-labels.ts <issue-number>`. Tests: `scripts/ticket-labels.test.ts`.
+
 ## Other scripts
 - `setup-labels.sh [owner/repo]`: create or refresh the ticket label set.
 - `install-launchd.sh [install|uninstall]`: manage the LaunchAgent described above.

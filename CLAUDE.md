@@ -17,6 +17,7 @@ GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not
 - Type labels: `bug`, `feature`, `chore`. Create/refresh all labels with `scripts/setup-labels.sh`.
 - One ticket = one worktree = one branch (`issue-N-slug`) = one PR containing `Closes #N`.
 - Dependencies: write `Blocked by #M` in the issue body.
+- Label cleanup on close: workflow `ticket-labels.yml` strips state labels from a closed issue and removes `blocked` from dependents whose blockers are all closed (never adds `ready`). Logic in `scripts/ticket-labels.ts`.
 - Agents follow the `work-ticket` skill from the `ticket-workflow` plugin (see Work practices) with an explicit ticket number, either run manually or launched by the poller below. Agents never pick tickets themselves.
 
 ### Automatic dispatch (local)
