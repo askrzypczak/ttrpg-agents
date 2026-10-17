@@ -24,6 +24,9 @@ interface InstanceRow {
   created_at: number;
 }
 
+const ACTIVE_SCOPE =
+  "encounter_id IN (SELECT id FROM encounters WHERE active = 1)";
+
 function toInstance(row: InstanceRow): MonsterInstance {
   return {
     id: row.id,
@@ -81,6 +84,15 @@ export class SqliteEncounterRepository implements EncounterRepository {
             `maxHp must be a positive integer, got ${item.maxHp}`,
           );
         }
+        if (
+          item.initiative != null &&
+          (typeof item.initiative !== "number" ||
+            !Number.isInteger(item.initiative))
+        ) {
+          throw new RangeError(
+            `initiative must be an integer or null, got ${String(item.initiative)}`,
+          );
+        }
         const instance: MonsterInstance = {
           id: this.newId(),
           encounterId: encounter.id,
@@ -119,7 +131,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
 
   removeInstance(id: string): boolean {
     const result = this.db
-      .prepare("DELETE FROM monster_instances WHERE id = ?")
+      .prepare(
+        `DELETE FROM monster_instances
+         WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      )
       .run(id);
     return Number(result.changes) > 0;
   }
@@ -153,7 +168,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
     }
     return this.transaction(() => {
       const row = this.db
-        .prepare("SELECT * FROM monster_instances WHERE id = ?")
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new Error(`Unknown monster instance: ${id}`);
       const hp = Math.min(
@@ -170,7 +188,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
   /** Runs fn in a transaction; nests by joining an already-open one. */
   private transaction<T>(fn: () => T): T {
     if (this.db.isTransaction) return fn();
-    this.db.exec("BEGIN");
+    this.db.exec("BEGIN IMMEDIATE");
     try {
       const result = fn();
       this.db.exec("COMMIT");
