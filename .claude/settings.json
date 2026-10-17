@@ -1,4 +1,12 @@
 {
+  "extraKnownMarketplaces": {
+    "askrzypczak-plugins": {
+      "source": { "source": "github", "repo": "askrzypczak/claude-workflow" }
+    }
+  },
+  "enabledPlugins": {
+    "ticket-workflow@askrzypczak-plugins": true
+  },
   "permissions": {
     "allow": [
       "Bash(gh issue view *)",
@@ -22,7 +30,8 @@
       "Bash(git switch *)",
       "Bash(git fetch *)",
       "Bash(git push *)",
-      "Bash(scripts/grg.sh *)",
+      "Bash(*/scripts/grg.sh)",
+      "Bash(*/scripts/grg.sh *)",
       "Bash(npm run *)"
     ],
     "deny": [
