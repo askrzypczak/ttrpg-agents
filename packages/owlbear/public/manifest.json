@@ -1,0 +1,12 @@
+{
+  "name": "ttrpg-agents",
+  "version": "0.0.0",
+  "manifest_version": 1,
+  "action": {
+    "title": "ttrpg-agents",
+    "icon": "/icon.svg",
+    "popover": "/index.html",
+    "width": 320,
+    "height": 220
+  }
+}

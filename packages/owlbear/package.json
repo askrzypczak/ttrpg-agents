@@ -1,0 +1,17 @@
+{
+  "name": "@ttrpg-agents/owlbear",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build",
+    "dev": "vite build --watch"
+  },
+  "dependencies": {
+    "@owlbear-rodeo/sdk": "^3.1.0",
+    "@ttrpg-agents/core": "*"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}
