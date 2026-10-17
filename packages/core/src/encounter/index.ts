@@ -16,3 +16,4 @@ export {
   getUserVersion,
   type Migration,
 } from "./migrations.js";
+export * from "./add-monsters.js";

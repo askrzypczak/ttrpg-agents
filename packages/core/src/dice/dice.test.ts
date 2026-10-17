@@ -165,8 +165,17 @@ describe("createLogEntry", () => {
     expect(entry).toEqual({
       expression: "2d6+1",
       dice: result.dice,
+      sides: [6],
       total: result.total,
       timestamp: "2026-01-02T03:04:05.000Z",
     });
+  });
+
+  it("records sides per dice term and an optional label", () => {
+    const result = roll("2d6 + 1d8 - 1", createSeededRng(5));
+    const entry = createLogEntry(result, new Date(0), "Shadow 3 HP");
+    expect(entry.sides).toEqual([6, 8]);
+    expect(entry.label).toBe("Shadow 3 HP");
+    expect(createLogEntry(result, new Date(0))).not.toHaveProperty("label");
   });
 });
