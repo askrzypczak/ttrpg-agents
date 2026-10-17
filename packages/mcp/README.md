@@ -16,6 +16,9 @@ The encounter is stored in SQLite at `$TTRPG_AGENTS_DB`, else
 `$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else
 `~/.local/share/ttrpg-agents/encounters.db`.
 
+The project skill `.claude/skills/dm-encounter` tells Claude how to turn DM
+table commands into these tool calls (see its `EVALS.md` for the prompt evals).
+
 ## Tools
 
 | Tool              | Purpose                                                          |
