@@ -21,6 +21,8 @@ export interface AddMonstersGroup {
 }
 
 export interface AddMonstersOptions {
+  /** Max instances per group; positive integer. Defaults to `MAX_GROUP_COUNT`. */
+  maxGroupCount?: number;
   /** `group` (default): one initiative roll per group; `each`: one per instance. */
   initiative?: InitiativeMode;
 }
@@ -57,7 +59,11 @@ export interface AddMonstersResult {
 }
 
 export type AddMonstersErrorCode =
-  "empty" | "unknown_monster" | "invalid_count" | "invalid_hp";
+  | "empty"
+  | "unknown_monster"
+  | "invalid_count"
+  | "invalid_hp"
+  | "invalid_initiative";
 
 export class AddMonstersError extends Error {
   readonly code: AddMonstersErrorCode;
@@ -68,25 +74,50 @@ export class AddMonstersError extends Error {
   }
 }
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * Default naming: "<Name> <n>", n continuing from the highest numeric suffix
+ * already used for that exact monster name. Create one per addMonsters call:
+ * it scans `existingNames` once (on first use), then each call is O(1).
+ */
+export function createNumberedNaming(): NamingStrategy {
+  let highest: Map<string, number> | undefined;
+  return ({ monster, existingNames }) => {
+    if (highest === undefined) {
+      const map = new Map<string, number>();
+      for (const name of existingNames) {
+        const space = name.lastIndexOf(" ");
+        if (space < 0) continue;
+        const suffix = name.slice(space + 1);
+        if (!/^\d+$/.test(suffix)) continue;
+        const prefix = name.slice(0, space);
+        map.set(prefix, Math.max(map.get(prefix) ?? 0, Number(suffix)));
+      }
+      highest = map;
+    }
+    const next = (highest.get(monster.name) ?? 0) + 1;
+    highest.set(monster.name, next);
+    return `${monster.name} ${String(next)}`;
+  };
 }
-
-/** "<Name> <n>", n continuing from the highest numeric suffix already used. */
-export const defaultNaming: NamingStrategy = ({ monster, existingNames }) => {
-  const pattern = new RegExp(`^${escapeRegExp(monster.name)} (\\d+)$`);
-  let highest = 0;
-  for (const name of existingNames) {
-    const match = pattern.exec(name);
-    if (match?.[1] !== undefined) highest = Math.max(highest, Number(match[1]));
-  }
-  return `${monster.name} ${highest + 1}`;
-};
 
 function validate(
   monsters: MonsterIndex,
   groups: readonly AddMonstersGroup[],
+  maxGroupCount: number,
+  initiative: unknown,
 ): void {
+  if (!Number.isInteger(maxGroupCount) || maxGroupCount < 1) {
+    throw new AddMonstersError(
+      "invalid_count",
+      `maxGroupCount must be a positive integer, got ${String(maxGroupCount)}`,
+    );
+  }
+  if (initiative !== "group" && initiative !== "each") {
+    throw new AddMonstersError(
+      "invalid_initiative",
+      `initiative must be "group" or "each", got ${String(initiative)}`,
+    );
+  }
   if (groups.length === 0) {
     throw new AddMonstersError("empty", "No monster groups given");
   }
@@ -101,11 +132,11 @@ function validate(
     if (
       !Number.isInteger(group.count) ||
       group.count < 1 ||
-      group.count > MAX_GROUP_COUNT
+      group.count > maxGroupCount
     ) {
       throw new AddMonstersError(
         "invalid_count",
-        `${where}: count must be an integer between 1 and ${MAX_GROUP_COUNT}, got ${String(group.count)}`,
+        `${where}: count must be an integer between 1 and ${String(maxGroupCount)}, got ${String(group.count)}`,
       );
     }
     if (
@@ -132,16 +163,22 @@ export function addMonsters(
   options: AddMonstersOptions = {},
 ): AddMonstersResult {
   const { repo, monsters, rng, now } = deps;
-  const naming = deps.naming ?? defaultNaming;
+  const naming = deps.naming ?? createNumberedNaming();
   const newGroupId = deps.newGroupId ?? randomUUID;
   const initiativeMode = options.initiative ?? "group";
 
-  validate(monsters, groups);
+  validate(
+    monsters,
+    groups,
+    options.maxGroupCount ?? MAX_GROUP_COUNT,
+    initiativeMode,
+  );
 
   const names = repo.listInstances().map((i) => i.displayName);
   const rolls: RollLogEntry[] = [];
   const items: NewMonsterInstance[] = [];
   const hpModes: HpMode[] = [];
+  const acs: number[] = [];
 
   for (const group of groups) {
     const monster = monsters.byKey.get(group.monster);
@@ -158,10 +195,12 @@ export function addMonsters(
       if (hpMode === "rolled") {
         const result = roll(monster.hp.dice, rng);
         rolls.push(createLogEntry(result, now(), `${displayName} HP`));
+        // Clamp to 1; the logged roll keeps the raw total, so it can differ from maxHp.
         maxHp = Math.max(1, result.total);
       }
       items.push({ monsterKey: monster.key, displayName, maxHp, groupId });
       hpModes.push(hpMode);
+      acs.push(monster.ac);
     }
 
     const rollInitiative = (label: string): number => {
@@ -185,17 +224,32 @@ export function addMonsters(
   }
 
   const saved = repo.addInstances(items);
+  if (saved.length !== items.length) {
+    throw new Error(
+      `Store persisted ${saved.length} instances, expected ${items.length}`,
+    );
+  }
   const instances = saved.map((s, i): AddedInstance => {
-    const monster = monsters.byKey.get(s.monsterKey);
+    const item = items[i];
+    const ac = acs[i];
+    const hpMode = hpModes[i];
+    if (
+      item?.initiative == null ||
+      item.groupId == null ||
+      ac === undefined ||
+      hpMode === undefined
+    ) {
+      throw new Error(`Missing local data for instance ${i}`);
+    }
     return {
       id: s.id,
-      name: s.displayName,
-      monsterKey: s.monsterKey,
-      ac: monster?.ac ?? 0,
-      maxHp: s.maxHp,
-      hpMode: hpModes[i] ?? "rolled",
-      initiative: s.initiative ?? 0,
-      groupId: s.groupId ?? "",
+      name: item.displayName,
+      monsterKey: item.monsterKey,
+      ac,
+      maxHp: item.maxHp,
+      hpMode,
+      initiative: item.initiative,
+      groupId: item.groupId,
     };
   });
   return { instances, rolls };
