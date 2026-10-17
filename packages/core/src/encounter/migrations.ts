@@ -41,15 +41,22 @@ export function getUserVersion(db: DatabaseSync): number {
   return row.user_version;
 }
 
-/** Applies pending migrations in order, each in its own transaction. */
+/**
+ * Applies pending migrations in order, each in its own transaction. The
+ * version is re-read under a write lock so concurrent openers apply each
+ * migration exactly once.
+ */
 export function migrate(db: DatabaseSync): void {
-  const current = getUserVersion(db);
-  const pending = migrations
-    .filter((m) => m.version > current)
-    .sort((a, b) => a.version - b.version);
-  for (const m of pending) {
-    db.exec("BEGIN");
+  // Cheap pre-check to avoid taking a write lock when nothing is pending.
+  if (getUserVersion(db) >= LATEST_VERSION) return;
+  const ordered = [...migrations].sort((a, b) => a.version - b.version);
+  for (const m of ordered) {
+    db.exec("BEGIN IMMEDIATE");
     try {
+      if (getUserVersion(db) >= m.version) {
+        db.exec("ROLLBACK");
+        continue;
+      }
       db.exec(m.sql);
       db.exec(`PRAGMA user_version = ${m.version}`);
       db.exec("COMMIT");
