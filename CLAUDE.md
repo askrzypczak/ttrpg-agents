@@ -15,7 +15,15 @@ GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not
 - Type labels: `bug`, `feature`, `chore`. Create/refresh all labels with `scripts/setup-labels.sh`.
 - One ticket = one worktree = one branch (`issue-N-slug`) = one PR containing `Closes #N`.
 - Dependencies: write `Blocked by #M` in the issue body.
-- Agents are dispatched manually with an explicit ticket number and follow the `work-ticket` skill from the `ticket-workflow` plugin (see Work practices). Never auto-pick tickets.
+- Agents follow the `work-ticket` skill from the `ticket-workflow` plugin (see Work practices) with an explicit ticket number, either run manually or launched by the poller below. Agents never pick tickets themselves.
+
+### Automatic dispatch (local)
+`scripts/agent-poller.sh` runs every 3 min from a LaunchAgent (`scripts/install-launchd.sh`; run it from the main checkout) and starts a background session `ttrpg-N-<mode>` (visible in `claude agents`) per ticket. Only open tickets authored by `askrzypczak` with `agent-ok` qualify.
+- `ready` -> `direct`: implement and open a PR (the PR is the review gate). The agent escalates to a plan itself if the ticket is ambiguous or risky.
+- `ready` + `needs-plan` -> `plan`: agent posts a plan comment, adds `plan-posted`, stops. Add `plan-approved` to start `implement`.
+- Failures: a session that fails, is stopped, or ends without handing off gets `agent-failed` plus a comment. Remove it and re-add `ready` (or `plan-approved`) to retry. Sessions over 3h are stopped.
+- Limits: 2 concurrent sessions. Dry run: `scripts/agent-poller.sh --dry-run`. Log: `~/Library/Logs/ttrpg-agents.log`. Extra `claude --bg` flags via `CLAUDE_BG_FLAGS`.
+- One-time: trust this directory by running `claude` in it once; `claude --bg` fails in an untrusted workspace.
 - Find work: `gh issue list --label ready --json number,title`.
 
 ## Work practices
