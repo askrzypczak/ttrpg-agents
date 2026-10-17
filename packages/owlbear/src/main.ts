@@ -1,11 +1,11 @@
-import OBR from "@owlbear-rodeo/sdk";
 import {
   PROTOCOL_VERSION,
   ReconnectingSocket,
   type SocketLike,
   type SocketState,
 } from "@ttrpg-agents/core/bridge";
-import { panelView, type PlayerRole } from "./panel-state.js";
+import { createObrAdapter } from "./obr-adapter.js";
+import { panelView } from "./panel-state.js";
 
 const BRIDGE_URL = "ws://localhost:5199/ws";
 const EXTENSION_VERSION = "0.0.0";
@@ -16,9 +16,10 @@ function el(id: string): HTMLElement {
   return found;
 }
 
-OBR.onReady(async () => {
-  const role: PlayerRole =
-    (await OBR.player.getRole()) === "GM" ? "gm" : "player";
+const obr = createObrAdapter();
+
+obr.onReady(async () => {
+  const role = await obr.getRole();
 
   let socketState: SocketState = "connecting";
   let streakStart = Date.now();
@@ -63,6 +64,6 @@ OBR.onReady(async () => {
   const showScene = (ready: boolean) => {
     el("scene").textContent = ready ? "Scene ready." : "Waiting for scene...";
   };
-  showScene(await OBR.scene.isReady());
-  OBR.scene.onReadyChange(showScene);
+  showScene(await obr.isSceneReady());
+  obr.onSceneReadyChange(showScene);
 });
