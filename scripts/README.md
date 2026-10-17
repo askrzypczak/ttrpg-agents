@@ -43,6 +43,7 @@ Set as environment variables. To change one for the LaunchAgent, add it to `Envi
 | `AGENT_OWNER` | `askrzypczak` | Only tickets authored by this user are launched. |
 | `GH_REPO` | `askrzypczak/ttrpg-agents` | Repo to poll. |
 | `REPO_DIR` | `~/Projects/ttrpg-agents` | Checkout the sessions start in. |
+| `EXTRA_PATH` | empty | Directories prepended to the poller's PATH (inherited by sessions). fnm's default bin dir (`~/.local/share/fnm/aliases/default/bin`) is always included so sessions find `node`/`npm`. |
 | `STATE_DIR` | `~/.local/state/ttrpg-agents` | Lock file and `launched.json` (which tickets already have a session). |
 
 ### Notes
