@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ttrpg-agents": {
+      "command": "node",
+      "args": ["packages/mcp/dist/stdio.js"]
+    }
+  }
+}
