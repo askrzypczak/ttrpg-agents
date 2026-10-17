@@ -14,6 +14,7 @@ TypeScript scaffold in place; no domain code yet.
 ## Ticketing workflow
 GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not on PATH).
 - State labels: `ready` -> `in-progress` -> `needs-review`; `blocked` when waiting. `agent-ok` marks tickets safe for unattended background agents.
+- `ready` means Tony has reviewed the ticket and approved it for work. Only Tony adds it. Agents that file tickets never set `ready` or `skip-plan`, even on unblocked tickets. Agents may set type labels, `agent-ok`, and `blocked` (with `Blocked by #M`); Tony removes `agent-ok` during review if needed.
 - Type labels: `bug`, `feature`, `chore`. Create/refresh all labels with `scripts/setup-labels.sh`.
 - One ticket = one worktree = one branch (`issue-N-slug`) = one PR containing `Closes #N`.
 - Dependencies: write `Blocked by #M` in the issue body.
