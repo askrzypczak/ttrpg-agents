@@ -1,5 +1,6 @@
 import { test as base, expect, type Frame, type Page } from "@playwright/test";
 import "./globals.d.ts";
+import { E2E_TOKEN } from "./token.js";
 
 const HARNESS = "http://127.0.0.1:5200/harness.html";
 export const EXTENSION = "http://localhost:5199/index.html";
@@ -12,11 +13,14 @@ export async function openHarness(
     ready?: boolean;
     target?: string;
     obrOrigin?: string;
+    token?: string | null;
   } = {},
 ): Promise<void> {
   const url = new URL(HARNESS);
   url.searchParams.set("target", options.target ?? EXTENSION);
   if (options.obrOrigin) url.searchParams.set("obrOrigin", options.obrOrigin);
+  const token = options.token === undefined ? E2E_TOKEN : options.token;
+  if (token) url.searchParams.set("token", token);
   url.searchParams.set("role", options.role ?? "gm");
   url.searchParams.set("ready", options.ready === false ? "0" : "1");
   await page.goto(url.href);

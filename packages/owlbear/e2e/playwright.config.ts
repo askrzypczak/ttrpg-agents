@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import { fileURLToPath } from "node:url";
+import { writeE2eTokenFile } from "./token.js";
 
+const tokenFile = writeE2eTokenFile();
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
 
 export default defineConfig({
@@ -30,7 +32,10 @@ export default defineConfig({
       // The real bridge serves the real built extension (packages/owlbear/dist).
       command: "node packages/mcp/dist/bridge/cli.js",
       cwd: repo,
-      env: { BRIDGE_STATIC_DIR: `${repo}packages/owlbear/dist` },
+      env: {
+        BRIDGE_STATIC_DIR: `${repo}packages/owlbear/dist`,
+        BRIDGE_TOKEN_FILE: tokenFile,
+      },
       url: "http://localhost:5199/manifest.json",
       reuseExistingServer: false,
     },

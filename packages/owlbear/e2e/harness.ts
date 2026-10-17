@@ -1,6 +1,6 @@
 // Harness page: plays the Owlbear host and iframes the extension.
 // Query: target=<url> (required), role=gm|player (default gm), ready=0|1,
-// obrOrigin=<origin> (advertise a wrong host origin to test the SDK check).
+// token=<hex> (URL fragment for the extension), obrOrigin=<origin> (advertise a wrong host origin to test the SDK check).
 import { SceneModel } from "../src/scene-model.js";
 import { FakeHost } from "./fake-host.js";
 import "./globals.d.ts";
@@ -18,4 +18,6 @@ target.searchParams.set(
   "obrref",
   btoa(`${params.get("obrOrigin") ?? location.origin} e2e-room`),
 );
-iframe.src = target.href;
+// Like the real manifest popover URL, the bridge token rides in the fragment.
+const token = params.get("token");
+iframe.src = target.href + (token ? `#${token}` : "");

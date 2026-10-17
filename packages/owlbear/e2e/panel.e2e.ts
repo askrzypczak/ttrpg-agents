@@ -15,6 +15,13 @@ test.describe("panel", () => {
     await expect(panel.locator("#scene")).toHaveText("Scene ready.");
   });
 
+  test("without a token the panel asks to reinstall", async ({ page }) => {
+    await openHarness(page, { token: null });
+    await expect(page.frameLocator("#extension").locator("#status")).toHaveText(
+      "Token missing: reinstall via the URL the bridge printed.",
+    );
+  });
+
   test("player sees the GM-only message", async ({ page }) => {
     await openHarness(page, { role: "player" });
     await expect(page.frameLocator("#extension").locator("#status")).toHaveText(
