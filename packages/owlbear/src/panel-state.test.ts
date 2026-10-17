@@ -12,6 +12,17 @@ describe("panelView", () => {
     expect(v.hint).toBeUndefined();
   });
 
+  it("asks the GM to reinstall when the token is missing", () => {
+    const v = panelView({
+      role: "gm",
+      socketState: "connecting",
+      disconnectedMs: 0,
+      tokenMissing: true,
+    });
+    expect(v.kind).toBe("token-missing");
+    expect(v.message).toContain("reinstall");
+  });
+
   it("shows connected for the GM when open", () => {
     const v = panelView({ role: "gm", socketState: "open", disconnectedMs: 0 });
     expect(v.kind).toBe("connected");

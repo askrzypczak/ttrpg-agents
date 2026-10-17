@@ -2,9 +2,12 @@ import { z } from "zod";
 
 export const PROTOCOL_VERSION = 1;
 
+// `role` is self-reported by the client and must never be used for
+// authorization; it only drives UI. The `token` is what authenticates a client.
 const helloPayload = z.object({
   role: z.enum(["gm", "player"]),
   extensionVersion: z.string(),
+  token: z.string(),
 });
 const helloAckPayload = z.object({ serverVersion: z.string() });
 const emptyPayload = z.object({});

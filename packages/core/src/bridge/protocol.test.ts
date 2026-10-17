@@ -11,7 +11,7 @@ const samples: BridgeMessage[] = [
     v: 1,
     type: "hello",
     id: "a1",
-    payload: { role: "gm", extensionVersion: "0.0.0" },
+    payload: { role: "gm", extensionVersion: "0.0.0", token: "t" },
   },
   { v: 1, type: "hello-ack", payload: { serverVersion: "1.2.3" } },
   { v: 1, type: "ping", payload: {} },
@@ -58,7 +58,15 @@ describe("protocol", () => {
 
   it("rejects a bad payload", () => {
     const r = decodeMessage(
-      '{"v":1,"type":"hello","payload":{"role":"wizard","extensionVersion":"1"}}',
+      '{"v":1,"type":"hello","payload":{"role":"wizard","extensionVersion":"1","token":"t"}}',
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("invalid-payload");
+  });
+
+  it("requires a token in hello", () => {
+    const r = decodeMessage(
+      '{"v":1,"type":"hello","payload":{"role":"gm","extensionVersion":"1"}}',
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");

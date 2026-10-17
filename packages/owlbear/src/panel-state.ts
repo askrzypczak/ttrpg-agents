@@ -11,10 +11,18 @@ export interface PanelInput {
   disconnectedMs: number;
   /** Show the stalled hint once disconnected this long. */
   stalledAfterMs?: number;
+  /** True when the panel URL carried no bridge token. */
+  tokenMissing?: boolean;
 }
 
 export interface PanelView {
-  kind: "gm-only" | "connected" | "connecting" | "reconnecting" | "closed";
+  kind:
+    | "gm-only"
+    | "token-missing"
+    | "connected"
+    | "connecting"
+    | "reconnecting"
+    | "closed";
   message: string;
   /** Extra explanation when the connection seems stuck. */
   hint?: string;
@@ -32,6 +40,12 @@ export function panelView(input: PanelInput): PanelView {
     return {
       kind: "gm-only",
       message: "This extension is only available to the GM.",
+    };
+  }
+  if (input.tokenMissing) {
+    return {
+      kind: "token-missing",
+      message: "Token missing: reinstall via the URL the bridge printed.",
     };
   }
   const stalledAfter = input.stalledAfterMs ?? DEFAULT_STALLED_AFTER_MS;

@@ -11,12 +11,14 @@ import {
 } from "@ttrpg-agents/core/bridge";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
+const MANIFEST = { name: "t", action: { popover: "/index.html" } };
+
 let dir: string;
 let server: BridgeServer;
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "bridge-"));
-  await writeFile(join(dir, "manifest.json"), '{"name":"t"}');
+  await writeFile(join(dir, "manifest.json"), JSON.stringify(MANIFEST));
   await mkdir(join(dir, "sub"));
   await writeFile(join(dir, "sub", "index.html"), "<p>hi</p>");
   server = await startBridgeServer({ port: 0, staticDir: dir });
@@ -62,34 +64,139 @@ function rawGet(
   });
 }
 
-const hello = encodeMessage({
-  v: 1,
-  type: "hello",
-  id: "h1",
-  payload: { role: "gm", extensionVersion: "0" },
-});
+function helloWith(token: string, role: "gm" | "player" = "gm"): string {
+  return encodeMessage({
+    v: 1,
+    type: "hello",
+    id: "h1",
+    payload: { role, extensionVersion: "0", token },
+  });
+}
+
+const ping = encodeMessage({ v: 1, type: "ping", payload: {} });
+
+/** Sends raw and resolves with the reply plus the close code that follows. */
+function requestThenClose(
+  ws: WebSocket,
+  raw: string,
+): Promise<{ reply: BridgeMessage; closeCode: number }> {
+  return new Promise((resolve, reject) => {
+    let reply: BridgeMessage | undefined;
+    ws.once("message", (data) => {
+      const r = decodeMessage(data.toString());
+      if (r.ok) reply = r.message;
+      else reject(new Error(r.detail));
+    });
+    ws.once("close", (code) => {
+      if (reply) resolve({ reply, closeCode: code });
+      else reject(new Error("closed without a reply"));
+    });
+    ws.send(raw);
+  });
+}
+
+async function authed(role: "gm" | "player" = "gm"): Promise<WebSocket> {
+  const ws = await connect();
+  const reply = await request(ws, helloWith(server.token, role));
+  expect(reply.type).toBe("hello-ack");
+  return ws;
+}
+
+function hostGet(
+  port: number,
+  path: string,
+  hostHeader: string,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    get(
+      { host: "127.0.0.1", port, path, headers: { Host: hostHeader } },
+      (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (c) => (body += c));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+      },
+    ).on("error", reject);
+  });
+}
 
 describe("bridge server", () => {
-  it("answers hello with hello-ack", async () => {
+  it("answers hello with a valid token with hello-ack", async () => {
     const ws = await connect();
-    const reply = await request(ws, hello);
+    const reply = await request(ws, helloWith(server.token));
     expect(reply.type).toBe("hello-ack");
     expect(reply.id).toBe("h1");
     ws.close();
   });
 
-  it("answers ping with pong", async () => {
+  it("rejects a wrong token with an error and closes the socket", async () => {
     const ws = await connect();
-    const reply = await request(
+    const { reply, closeCode } = await requestThenClose(ws, helloWith("wrong"));
+    expect(reply.type).toBe("error");
+    if (reply.type === "error") expect(reply.payload.code).toBe("bad-token");
+    expect(closeCode).toBe(1008);
+  });
+
+  it("rejects an empty token", async () => {
+    const ws = await connect();
+    const { reply, closeCode } = await requestThenClose(ws, helloWith(""));
+    expect(reply.type).toBe("error");
+    expect(closeCode).toBe(1008);
+  });
+
+  it("rejects a hello with no token field", async () => {
+    const ws = await connect();
+    const { reply, closeCode } = await requestThenClose(
       ws,
-      encodeMessage({ v: 1, type: "ping", payload: {} }),
+      '{"v":1,"type":"hello","payload":{"role":"gm","extensionVersion":"0"}}',
     );
+    expect(reply.type).toBe("error");
+    expect(closeCode).toBe(1008);
+  });
+
+  it("rejects messages sent before hello and closes", async () => {
+    const ws = await connect();
+    const { reply, closeCode } = await requestThenClose(ws, ping);
+    expect(reply.type).toBe("error");
+    if (reply.type === "error")
+      expect(reply.payload.code).toBe("unauthenticated");
+    expect(closeCode).toBe(1008);
+  });
+
+  it("rejects malformed messages before hello and closes", async () => {
+    const ws = await connect();
+    const { reply, closeCode } = await requestThenClose(ws, "{nope");
+    expect(reply.type).toBe("error");
+    expect(closeCode).toBe(1008);
+  });
+
+  it("treats gm and player roles identically", async () => {
+    for (const role of ["gm", "player"] as const) {
+      const ok = await authed(role);
+      expect((await request(ok, ping)).type).toBe("pong");
+      ok.close();
+      const bad = await connect();
+      const { reply } = await requestThenClose(bad, helloWith("wrong", role));
+      expect(reply.type).toBe("error");
+    }
+  });
+
+  it("answers ping with pong after hello", async () => {
+    const ws = await authed();
+    const reply = await request(ws, ping);
     expect(reply.type).toBe("pong");
     ws.close();
   });
 
+  it("re-acks a second hello on an authenticated socket", async () => {
+    const ws = await authed();
+    const reply = await request(ws, helloWith(server.token));
+    expect(reply.type).toBe("hello-ack");
+    ws.close();
+  });
+
   it("answers malformed messages with an error", async () => {
-    const ws = await connect();
+    const ws = await authed();
     const reply = await request(ws, "{nope");
     expect(reply.type).toBe("error");
     if (reply.type === "error")
@@ -105,14 +212,12 @@ describe("bridge server", () => {
     const a = await connect();
     const b = await connect();
     expect(server.clientCount()).toBe(2);
+    const hello = helloWith(server.token);
     const [ra, rb] = await Promise.all([request(a, hello), request(b, hello)]);
     expect(ra.type).toBe("hello-ack");
     expect(rb.type).toBe("hello-ack");
     a.close();
-    const rb2 = await request(
-      b,
-      encodeMessage({ v: 1, type: "ping", payload: {} }),
-    );
+    const rb2 = await request(b, ping);
     expect(rb2.type).toBe("pong");
     b.close();
   });
@@ -125,7 +230,64 @@ describe("bridge server", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe(
       "https://www.owlbear.rodeo",
     );
-    expect(await res.json()).toEqual({ name: "t" });
+    expect(await res.json()).toEqual(MANIFEST);
+  });
+
+  it("adds the token fragment to the popover only when the token is presented", async () => {
+    const base = `http://127.0.0.1:${server.port}/manifest.json`;
+    const withToken = await (
+      await fetch(`${base}?token=${server.token}`)
+    ).json();
+    expect(withToken).toEqual({
+      ...MANIFEST,
+      action: { popover: `/index.html#${server.token}` },
+    });
+    for (const q of ["?token=wrong", "?token=", ""]) {
+      const res = await fetch(base + q);
+      expect(await res.json()).toEqual(MANIFEST);
+    }
+  });
+
+  it("refuses HTTP requests with a foreign Host header", async () => {
+    const bad = await hostGet(server.port, "/manifest.json", "evil.example");
+    expect(bad.status).toBe(403);
+    expect(bad.body).not.toContain("popover");
+    const wrongPort = await hostGet(
+      server.port,
+      "/manifest.json",
+      `localhost:${server.port + 1}`,
+    );
+    expect(wrongPort.status).toBe(403);
+    for (const h of [`127.0.0.1:${server.port}`, `localhost:${server.port}`]) {
+      expect((await hostGet(server.port, "/manifest.json", h)).status).toBe(
+        200,
+      );
+    }
+  });
+
+  it("refuses WebSocket upgrades with a foreign Host header", async () => {
+    const result = await new Promise<string>((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, {
+        origin: `http://localhost:${server.port}`,
+        headers: { Host: "evil.example" },
+      });
+      ws.once("open", () => resolve("open"));
+      ws.once("error", () => resolve("refused"));
+    });
+    expect(result).toBe("refused");
+    expect(server.clientCount()).toBe(0);
+  });
+
+  it("accepts WebSocket upgrades addressed to localhost", async () => {
+    const ws = await new Promise<WebSocket>((resolve, reject) => {
+      const s = new WebSocket(`ws://localhost:${server.port}/ws`, {
+        origin: `http://localhost:${server.port}`,
+      });
+      s.once("open", () => resolve(s));
+      s.once("error", reject);
+    });
+    expect((await request(ws, helloWith(server.token))).type).toBe("hello-ack");
+    ws.close();
   });
 
   it("does not grant CORS to other origins", async () => {

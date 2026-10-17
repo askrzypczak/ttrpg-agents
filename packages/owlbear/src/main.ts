@@ -21,12 +21,17 @@ const obr = createObrAdapter();
 obr.onReady(async () => {
   const role = await obr.getRole();
 
+  // The bridge serves the manifest with the token as the popover URL fragment.
+  const token = /^#([0-9a-f]{64})/.exec(location.hash)?.[1] ?? "";
+  const tokenMissing = token === "";
+
   let socketState: SocketState = "connecting";
   let streakStart = Date.now();
 
   const render = () => {
     const view = panelView({
       role,
+      tokenMissing,
       socketState,
       disconnectedMs: Date.now() - streakStart,
     });
@@ -36,7 +41,7 @@ obr.onReady(async () => {
     el("hint").textContent = view.hint ?? "";
   };
 
-  if (role !== "gm") {
+  if (role !== "gm" || tokenMissing) {
     render();
     return;
   }
@@ -47,7 +52,7 @@ obr.onReady(async () => {
     hello: () => ({
       v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role, extensionVersion: EXTENSION_VERSION },
+      payload: { role, extensionVersion: EXTENSION_VERSION, token },
     }),
     onStateChange: (state) => {
       if (state === "open") streakStart = Date.now();

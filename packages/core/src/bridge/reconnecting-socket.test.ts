@@ -48,7 +48,7 @@ class FakeTimers implements Timers {
 const hello: BridgeMessage = {
   v: 1,
   type: "hello",
-  payload: { role: "gm", extensionVersion: "0" },
+  payload: { role: "gm", extensionVersion: "0", token: "t" },
 };
 const ack = encodeMessage({
   v: 1,
