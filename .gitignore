@@ -13,3 +13,8 @@ dist/
 # Claude Code local-only
 .claude/settings.local.json
 .claude/worktrees/
+
+# Stryker
+.stryker-tmp/
+reports/
+stryker.incremental.json

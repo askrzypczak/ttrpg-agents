@@ -4,3 +4,6 @@ package-lock.json
 CLAUDE.md
 scripts/README.md
 packages/core/data/
+.stryker-tmp
+reports
+stryker.incremental.json
