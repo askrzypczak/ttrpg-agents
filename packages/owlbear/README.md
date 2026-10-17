@@ -13,6 +13,10 @@ Owlbear Rodeo extension (GM-only panel that talks to the local bridge).
 - Logic modules (`hidden-token.ts`, `initiative.ts`, ...) take an `ObrAdapter`,
   never the SDK. `main.ts` wires `createObrAdapter()` into them.
 
+## Encounter sync
+
+`src/encounter-sync.ts` mirrors encounter instances as hidden (`visible: false`) circle SHAPE tokens named after the instance, in a row near the viewport centre. Tokens are linked by metadata key `com.ttrpg-agents/instance` (`{ instanceId }`); only items carrying it are ever touched. `applyEvent` and `applySnapshot` are idempotent (replays never duplicate), and `createEncounterSync(obr)` queues bridge messages so they apply one at a time. `hp-changed` is a no-op on tokens in v1. SHAPE items need a `shape` spec; the adapter exposes `getViewportCenter()`.
+
 ## Testing
 
 Tests live next to the code as `src/*.test.ts` and run under the root vitest

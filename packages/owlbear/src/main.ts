@@ -4,6 +4,7 @@ import {
   type SocketLike,
   type SocketState,
 } from "@ttrpg-agents/core/bridge";
+import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { panelView } from "./panel-state.js";
 
@@ -46,6 +47,9 @@ obr.onReady(async () => {
     return;
   }
 
+  const sync = createEncounterSync(obr, (e) =>
+    console.error("encounter sync failed", e),
+  );
   const socket = new ReconnectingSocket({
     url: BRIDGE_URL,
     createSocket: (url) => new WebSocket(url) as unknown as SocketLike,
@@ -54,6 +58,7 @@ obr.onReady(async () => {
       type: "hello",
       payload: { role, extensionVersion: EXTENSION_VERSION, token },
     }),
+    onMessage: (message) => void sync.handleMessage(message),
     onStateChange: (state) => {
       if (state === "open") streakStart = Date.now();
       else if (socketState === "open" || socketState === "closed")
