@@ -20,7 +20,7 @@ Remove it with `scripts/install-launchd.sh uninstall`.
 4. When it finishes, the ticket is `needs-review` with a PR. Review as usual.
 
 ### When something fails
-If a session fails, is stopped, or ends without handing the ticket off, the poller adds `agent-failed` and comments with how to inspect it (`claude logs ttrpg-<issue>`). To retry, remove `agent-failed` and add `ready` again.
+If a session fails, is stopped, or ends without handing the ticket off, the poller adds `agent-failed` and comments with how to inspect it (`claude logs ttrpg-<issue>`). To retry, remove `agent-failed` and add `ready` again. Only the states `done` (checked for hand-off), `failed` and `stopped` end a tracked session; any other state (`working`, `blocked`, `waiting`, `idle`, unknown) counts as alive and the poller logs it as `state=<value>`.
 
 ### Checking on it
 | What | Command |
