@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
   extname,
@@ -40,10 +41,13 @@ export interface BridgeServerOptions {
   /** Directory of the built extension (contains manifest.json). */
   staticDir: string;
   host?: string;
+  /** Shared secret clients must present in `hello`. Defaults to a random one. */
+  token?: string;
 }
 
 export interface BridgeServer {
   port: number;
+  token: string;
   clientCount(): number;
   close(): Promise<void>;
 }
@@ -60,8 +64,46 @@ function errorMessage(code: string, message: string): BridgeMessage {
   };
 }
 
-function handleMessage(ws: WebSocket, raw: string): void {
+function tokenMatches(expected: string, given: string): boolean {
+  // Hash both so the buffers are equal length for timingSafeEqual.
+  const a = createHash("sha256").update(expected).digest();
+  const b = createHash("sha256").update(given).digest();
+  return timingSafeEqual(a, b);
+}
+
+function rejectAndClose(ws: WebSocket, code: string, message: string): void {
+  send(ws, errorMessage(code, message));
+  ws.close(1008, code);
+}
+
+interface Session {
+  authenticated: boolean;
+}
+
+// Authorization is decided only by the token. The client-supplied `role` in
+// `hello` is never read here; it only drives the extension UI.
+function handleMessage(
+  ws: WebSocket,
+  session: Session,
+  token: string,
+  raw: string,
+): void {
   const result = decodeMessage(raw);
+  if (!session.authenticated) {
+    if (!result.ok || result.message.type !== "hello") {
+      rejectAndClose(
+        ws,
+        "unauthenticated",
+        "send hello with a valid token first",
+      );
+      return;
+    }
+    if (!tokenMatches(token, result.message.payload.token)) {
+      rejectAndClose(ws, "bad-token", "invalid token");
+      return;
+    }
+    session.authenticated = true;
+  }
   if (!result.ok) {
     send(ws, errorMessage(result.reason, result.detail));
     return;
@@ -98,11 +140,30 @@ function handleMessage(ws: WebSocket, raw: string): void {
 export async function startBridgeServer(
   options: BridgeServerOptions,
 ): Promise<BridgeServer> {
-  const { port = DEFAULT_BRIDGE_PORT, staticDir, host = "127.0.0.1" } = options;
+  const {
+    port = DEFAULT_BRIDGE_PORT,
+    staticDir,
+    host = "127.0.0.1",
+    token = randomBytes(32).toString("hex"),
+  } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
 
+  // DNS rebinding defense: only accept requests addressed to loopback names.
+  const hostAllowed = (hostHeader: string | undefined): boolean => {
+    const actualPort = (http.address() as AddressInfo).port;
+    return (
+      hostHeader === `localhost:${actualPort}` ||
+      hostHeader === `127.0.0.1:${actualPort}`
+    );
+  };
+
   const http: Server = createServer((req, res) => {
+    if (!hostAllowed(req.headers.host)) {
+      res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("forbidden host");
+      return;
+    }
     res.setHeader(
       "Content-Security-Policy",
       "frame-ancestors https://www.owlbear.rodeo https://owlbear.rodeo",
@@ -122,10 +183,12 @@ export async function startBridgeServer(
       res.writeHead(405).end();
       return;
     }
-    void serveStatic(req.url ?? "/", root).then(({ status, body, type }) => {
-      res.writeHead(status, { "Content-Type": type });
-      res.end(req.method === "HEAD" ? undefined : body);
-    });
+    void serveStatic(req.url ?? "/", root, token).then(
+      ({ status, body, type }) => {
+        res.writeHead(status, { "Content-Type": type });
+        res.end(req.method === "HEAD" ? undefined : body);
+      },
+    );
   });
 
   const wss = new WebSocketServer({
@@ -133,6 +196,11 @@ export async function startBridgeServer(
     maxPayload: 1024 * 1024,
   });
   http.on("upgrade", (req, socket, head) => {
+    if (!hostAllowed(req.headers.host)) {
+      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
     const actualPort = (http.address() as AddressInfo).port;
     const allowedOrigins = [
@@ -144,10 +212,13 @@ export async function startBridgeServer(
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      const session: Session = { authenticated: false };
       clients.add(ws);
       ws.on("close", () => clients.delete(ws));
       ws.on("error", () => clients.delete(ws));
-      ws.on("message", (data) => handleMessage(ws, data.toString()));
+      ws.on("message", (data) =>
+        handleMessage(ws, session, token, data.toString()),
+      );
     });
   });
 
@@ -161,6 +232,7 @@ export async function startBridgeServer(
 
   return {
     port: (http.address() as AddressInfo).port,
+    token,
     clientCount: () => clients.size,
     close: async () => {
       for (const ws of clients) ws.terminate();
@@ -174,14 +246,32 @@ export async function startBridgeServer(
   };
 }
 
+function withTokenPopover(manifestJson: string, token: string): string {
+  try {
+    const manifest = JSON.parse(manifestJson) as {
+      action?: { popover?: unknown };
+    };
+    if (manifest.action && typeof manifest.action.popover === "string") {
+      manifest.action.popover = `/index.html#${token}`;
+    }
+    return JSON.stringify(manifest);
+  } catch {
+    return manifestJson;
+  }
+}
+
 async function serveStatic(
   url: string,
   root: string,
+  token: string,
 ): Promise<{ status: number; body: string | Buffer; type: string }> {
   const text = "text/plain; charset=utf-8";
   let pathname: string;
+  let presentedToken: string | null;
   try {
-    pathname = decodeURIComponent(new URL(url, "http://localhost").pathname);
+    const parsed = new URL(url, "http://localhost");
+    pathname = decodeURIComponent(parsed.pathname);
+    presentedToken = parsed.searchParams.get("token");
   } catch {
     return { status: 400, body: "bad request", type: text };
   }
@@ -191,7 +281,16 @@ async function serveStatic(
     return { status: 403, body: "forbidden", type: text };
   }
   try {
-    const body = await readFile(file);
+    let body: string | Buffer = await readFile(file);
+    // Only a request that already presents the token learns it (as a URL
+    // fragment, which the browser never sends back over HTTP).
+    if (
+      pathname === "/manifest.json" &&
+      presentedToken !== null &&
+      tokenMatches(token, presentedToken)
+    ) {
+      body = withTokenPopover(body.toString("utf8"), token);
+    }
     return {
       status: 200,
       body,
