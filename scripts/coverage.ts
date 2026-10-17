@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,7 @@ import libReport from "istanbul-lib-report";
 import reports from "istanbul-reports";
 import { CoverageReport } from "monocart-coverage-reports";
 import {
+  formatComment,
   formatMarkdown,
   formatTable,
   mergeCoverage,
@@ -139,6 +141,8 @@ async function main(): Promise<void> {
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatMarkdown(rows));
   }
+  // Body for the CI sticky PR comment (see the coverage job in ci.yml).
+  writeFileSync(join(out, "summary.md"), formatComment(rows));
 }
 
 await main();

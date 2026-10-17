@@ -167,3 +167,8 @@ export function formatMarkdown(rows: Row[]): string {
     "",
   ].join("\n");
 }
+
+/** The sticky PR comment body: the markdown table plus a footer line. */
+export function formatComment(rows: Row[]): string {
+  return `${formatMarkdown(rows)}\n_Informational only; updated on every push._\n`;
+}
