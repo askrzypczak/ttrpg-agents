@@ -1,0 +1,203 @@
+{
+  "key": "srd-2024_shadow",
+  "name": "Shadow",
+  "type": {
+    "name": "Undead",
+    "key": "undead"
+  },
+  "size": {
+    "name": "Medium",
+    "key": "medium"
+  },
+  "challenge_rating": 0.5,
+  "proficiency_bonus": null,
+  "speed": {
+    "walk": 40,
+    "unit": "feet"
+  },
+  "speed_all": {
+    "unit": "feet",
+    "walk": 40,
+    "crawl": 20,
+    "hover": false,
+    "fly": 0,
+    "burrow": 0,
+    "climb": 20,
+    "swim": 20
+  },
+  "alignment": "chaotic evil",
+  "languages": {
+    "as_string": "",
+    "data": []
+  },
+  "armor_class": 12,
+  "armor_detail": "natural armor",
+  "hit_points": 27,
+  "hit_dice": "5d8 + 5",
+  "experience_points": 100,
+  "ability_scores": {
+    "strength": 6,
+    "dexterity": 14,
+    "constitution": 13,
+    "intelligence": 6,
+    "wisdom": 10,
+    "charisma": 8
+  },
+  "modifiers": {
+    "strength": -2,
+    "dexterity": 2,
+    "constitution": 1,
+    "intelligence": -2,
+    "wisdom": 0,
+    "charisma": -1
+  },
+  "initiative_bonus": 2,
+  "saving_throws": {
+    "strength": -2,
+    "dexterity": 2,
+    "constitution": 1,
+    "intelligence": -2,
+    "wisdom": 0,
+    "charisma": -1
+  },
+  "skill_bonuses": {
+    "stealth": 6
+  },
+  "passive_perception": 10,
+  "resistances_and_immunities": {
+    "damage_immunities_display": "necrotic, poison",
+    "damage_immunities": [
+      {
+        "name": "Necrotic",
+        "key": "necrotic"
+      },
+      {
+        "name": "Poison",
+        "key": "poison"
+      }
+    ],
+    "damage_resistances_display": "acid, cold, fire, lightning, thunder",
+    "damage_resistances": [
+      {
+        "name": "Acid",
+        "key": "acid"
+      },
+      {
+        "name": "Cold",
+        "key": "cold"
+      },
+      {
+        "name": "Fire",
+        "key": "fire"
+      },
+      {
+        "name": "Lightning",
+        "key": "lightning"
+      },
+      {
+        "name": "Thunder",
+        "key": "thunder"
+      }
+    ],
+    "damage_vulnerabilities_display": "",
+    "damage_vulnerabilities": [],
+    "condition_immunities_display": "exhaustion, frightened, grappled, paralyzed, petrified, poisoned, prone, restrained, unconscious",
+    "condition_immunities": [
+      {
+        "name": "Exhaustion",
+        "key": "exhaustion"
+      },
+      {
+        "name": "Frightened",
+        "key": "frightened"
+      },
+      {
+        "name": "Grappled",
+        "key": "grappled"
+      },
+      {
+        "name": "Paralyzed",
+        "key": "paralyzed"
+      },
+      {
+        "name": "Petrified",
+        "key": "petrified"
+      },
+      {
+        "name": "Poisoned",
+        "key": "poisoned"
+      },
+      {
+        "name": "Prone",
+        "key": "prone"
+      },
+      {
+        "name": "Restrained",
+        "key": "restrained"
+      },
+      {
+        "name": "Unconscious",
+        "key": "unconscious"
+      }
+    ]
+  },
+  "normal_sight_range": 10560,
+  "darkvision_range": 60,
+  "blindsight_range": null,
+  "tremorsense_range": null,
+  "truesight_range": null,
+  "actions": [
+    {
+      "name": "Draining Swipe",
+      "desc": "Melee Attack Roll: +4, reach 5 ft. 5 (1d6 + 2) Necrotic damage, and the target's Strength score decreases by 1d4. The target dies if this reduces that score to 0. If a Humanoid is slain by this attack, a Shadow rises from the corpse 1d4 hours later.",
+      "attacks": [
+        {
+          "name": "Draining Swipe attack",
+          "attack_type": "WEAPON",
+          "to_hit_mod": 4,
+          "reach": 5,
+          "range": null,
+          "long_range": null,
+          "target_creature_only": false,
+          "damage_die_count": 1,
+          "damage_die_type": "D6",
+          "damage_bonus": 2,
+          "damage_type": null,
+          "extra_damage_die_count": null,
+          "extra_damage_die_type": null,
+          "extra_damage_bonus": null,
+          "extra_damage_type": {
+            "name": "Necrotic",
+            "key": "necrotic"
+          },
+          "distance_unit": "feet"
+        }
+      ],
+      "action_type": "ACTION",
+      "order_in_statblock": 0,
+      "legendary_action_cost": 1,
+      "limited_to_form": null,
+      "usage_limits": null
+    },
+    {
+      "name": "Shadow Stealth",
+      "desc": "While in Dim Light or darkness, the shadow takes the Hide action.",
+      "attacks": [],
+      "action_type": "BONUS_ACTION",
+      "order_in_statblock": 0,
+      "legendary_action_cost": null,
+      "limited_to_form": null,
+      "usage_limits": null
+    }
+  ],
+  "traits": [
+    {
+      "name": "Amorphous",
+      "desc": "The shadow can move through a space as narrow as 1 inch without expending extra movement to do so."
+    },
+    {
+      "name": "Sunlight Weakness",
+      "desc": "While in sunlight, the shadow has Disadvantage on D20 Test."
+    }
+  ]
+}

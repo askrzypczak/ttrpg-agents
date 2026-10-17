@@ -10,6 +10,14 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
-  }
+    "build": "tsc -p tsconfig.build.json",
+    "import:srd": "node scripts/import-srd.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "files": [
+    "dist",
+    "data"
+  ]
 }
