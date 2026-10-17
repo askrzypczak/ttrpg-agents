@@ -1,6 +1,13 @@
 import { test as base, expect, type Frame, type Page } from "@playwright/test";
 import "./globals.d.ts";
+import { fileURLToPath } from "node:url";
+import { withCoverage } from "./coverage.js";
 import { E2E_TOKEN } from "./token.js";
+
+// Raw V8 entries land here; scripts/coverage.ts converts them.
+const COVERAGE_RAW_DIR = fileURLToPath(
+  new URL("../../../reports/coverage/e2e-raw", import.meta.url),
+);
 
 const HARNESS = "http://127.0.0.1:5200/harness.html";
 export const EXTENSION = "http://localhost:5199/index.html";
@@ -51,7 +58,12 @@ export const test = base.extend<{ hostErrors: { allow: boolean } }>({
         );
       await route.fulfill({ response, headers });
     });
-    await use(page);
+    // No-op unless E2E_COVERAGE=1 (see scripts/coverage.ts).
+    await withCoverage(
+      page,
+      { origin: "http://localhost:5199/", outDir: COVERAGE_RAW_DIR },
+      () => use(page),
+    );
   },
   // Auto fixture: after every test the fake host must not have seen a
   // message it does not implement (unless the test opted in).
