@@ -27,14 +27,14 @@ GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not
 - The session follows `work-ticket`, including the plan sign-off: it shows as `blocked` in `claude agents` until you attach and approve (`claude attach ttrpg-N`). Same for questions and permission prompts.
 - Label `skip-plan` on easy tickets to launch with `work-ticket N auto`, which skips the sign-off (the agent still asks if the ticket is ambiguous or risky).
 - Failures: a session that fails, is stopped, or ends without handing off gets `agent-failed` plus a comment. Remove it and re-add `ready` to retry.
-- Limits: 2 concurrent sessions. Dry run: `scripts/agent-poller.sh --dry-run`. Log: `~/Library/Logs/ttrpg-agents.log`. Extra `claude --bg` flags via `CLAUDE_BG_FLAGS`.
+- No concurrency limit: every eligible ticket gets a session on the next poll. Dry run: `scripts/agent-poller.sh --dry-run`. Log: `~/Library/Logs/ttrpg-agents.log`. Extra `claude --bg` flags via `CLAUDE_BG_FLAGS`.
 - One-time: trust this directory by running `claude` in it once; `claude --bg` fails in an untrusted workspace.
 
 ## Work practices
 - The workflow itself (skills `work-ticket`, `address-feedback`; subagents `implementer`, `reviewer`; `grg.sh`) lives in the private plugin marketplace repo `askrzypczak/claude-workflow` (local clone `~/Projects/claude-workflow`), enabled in `.claude/settings.json`. Change the workflow there, not here. The guardrails and these conventions stay in this repo.
 - Flow: plan (plan mode) -> **Tony signs off** -> `implementer` subagent -> green/red/green test proof -> `reviewer` subagent (complex changes only) -> PR with CI green -> **Tony reviews** -> `address-feedback` skill (summarise, ask questions, then fix).
 - The local `main` checkout can be stale. Before planning or filing tickets, `git fetch origin` and read `origin/main` (`git show origin/main:<path>`, `git ls-tree`), not the working tree.
-- Models: orchestrator in the main session; `implementer` defaults to sonnet/medium (haiku/xhigh for mechanical work, set in the approved plan); `reviewer` is opus/medium.
+- Models: orchestrator in the main session; once a plan is approved, `implementer` defaults to haiku/xhigh (sonnet/medium for subtle logic, opus for the hardest; the tier is set in the approved plan); `reviewer` is opus/medium.
 - Tests are mandatory. No TDD requirement; instead prove tests with green/red/green: the plugin's `grg.sh` (mechanical) plus targeted breaks of the implementation for logic-heavy code. Evidence goes in the PR body.
 - "Complex" = branching logic, new abstractions, shared code, security/data handling; complexity decides whether the reviewer runs.
 - Agents may push their own `issue-N-*` branch. Humans merge; nobody pushes to `main`, force-pushes, or runs `gh pr merge`. Enforced locally by `.claude/hooks/guard-git.sh` (tests: `.claude/hooks/test-guard-git.sh`) and deny rules in `.claude/settings.json`. GitHub branch protection is unavailable on this free private repo.

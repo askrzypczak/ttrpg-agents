@@ -17,7 +17,6 @@ export PATH="${EXTRA_PATH:+$EXTRA_PATH:}$HOME/.local/share/fnm/aliases/default/b
 REPO_DIR="${REPO_DIR:-$HOME/Projects/ttrpg-agents}"
 GH_REPO="${GH_REPO:-askrzypczak/ttrpg-agents}"
 OWNER="${AGENT_OWNER:-askrzypczak}"
-MAX_CONCURRENT="${MAX_CONCURRENT:-2}"
 STATE_DIR="${STATE_DIR:-$HOME/.local/state/ttrpg-agents}"
 # Extra flags for `claude --bg` (e.g. "--permission-mode acceptEdits"); word-split.
 read -r -a BG_FLAGS <<<"${CLAUDE_BG_FLAGS:-}"
@@ -102,7 +101,6 @@ for key in $(jq -r 'keys[]' "$STATE"); do
 done
 
 # --- Launch new sessions ---------------------------------------------------
-live=$(echo "$SESSIONS" | jq '[.[] | select((.name // "") | startswith("ttrpg-")) | select(.state == "working" or .state == "blocked")] | length')
 issues=$(gh issue list --repo "$GH_REPO" --state open --label agent-ok --limit 50 --json number,author,labels)
 
 while read -r row; do
@@ -122,10 +120,6 @@ while read -r row; do
     continue
   fi
   [ "$(jq -r --arg k "$n" 'has($k)' "$STATE")" = true ] && continue
-  if [ "$live" -ge "$MAX_CONCURRENT" ]; then
-    log "at capacity ($live/$MAX_CONCURRENT); #$n waits"
-    break
-  fi
 
   name="ttrpg-$n"
   arg="$n"
@@ -138,7 +132,6 @@ while read -r row; do
     (cd "$REPO_DIR" && claude --bg --name "$name" ${BG_FLAGS[@]+"${BG_FLAGS[@]}"} "/ticket-workflow:work-ticket $arg")
   fi
   state_set "$n" "$name"
-  live=$((live + 1))
 done < <(echo "$issues" | jq -c '.[]')
 
 log "done"
