@@ -5,6 +5,7 @@ on:
     types: [closed]
 
 permissions:
+  contents: read # checkout needs this on a private repo; setting permissions drops the default
   issues: write
 
 jobs:
