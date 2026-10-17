@@ -60,6 +60,11 @@ Chromium. First time: `npx playwright install chromium`. It is NOT part of
 - `main.ts` does not yet call `addItems`/`setMetadata`, so `e2e/driver.html`
   is a test-only page that runs the real `createObrAdapter()` through
   `addHiddenToken` / `writeInitiativeMetadata`.
+- `encounter-sync.e2e.ts` covers encounter -> hidden tokens end to end. The
+  bridge runs on a throwaway SQLite file (`TTRPG_AGENTS_DB`, `e2e/db.ts`,
+  recreated each run in the OS temp dir) seeded with 5 shadows before it
+  starts, never your real database. The fake host also answers the
+  viewport calls (fixed 1000x600 screen, identity transform).
 - Test-only workarounds (`fixtures.ts`, `playwright.config.ts`): the bridge's
   `frame-ancestors` CSP is rewritten to allow the harness origin, and
   Chromium's Local Network Access checks are disabled (a route-fulfilled
