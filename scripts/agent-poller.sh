@@ -11,7 +11,8 @@
 # does the claiming itself.
 set -euo pipefail
 
-export PATH="${EXTRA_PATH:+$EXTRA_PATH:}$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+# The fnm default bin dir puts node/npm on PATH; launchd does not read ~/.zshenv. Harmless if absent.
+export PATH="${EXTRA_PATH:+$EXTRA_PATH:}$HOME/.local/share/fnm/aliases/default/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 
 REPO_DIR="${REPO_DIR:-$HOME/Projects/ttrpg-agents}"
 GH_REPO="${GH_REPO:-askrzypczak/ttrpg-agents}"
