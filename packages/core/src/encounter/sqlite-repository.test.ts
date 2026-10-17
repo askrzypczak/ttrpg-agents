@@ -112,6 +112,48 @@ describe("removeInstance", () => {
   });
 });
 
+describe("active-encounter scoping", () => {
+  it("ignores instances of an inactive encounter", () => {
+    const [old] = repo.addInstances([goblin()]);
+    db.exec("UPDATE encounters SET active = 0");
+    repo.addInstances([goblin({ displayName: "New" })]);
+    expect(() => repo.applyDamage(old!.id, 1)).toThrow(/Unknown/);
+    expect(() => repo.applyHealing(old!.id, 1)).toThrow(/Unknown/);
+    expect(repo.removeInstance(old!.id)).toBe(false);
+    expect(
+      db
+        .prepare("SELECT current_hp FROM monster_instances WHERE id = ?")
+        .get(old!.id),
+    ).toEqual({ current_hp: 7 });
+    expect(repo.listInstances().map((i) => i.displayName)).toEqual(["New"]);
+  });
+});
+
+describe("initiative validation", () => {
+  it.each([1.5, Number.NaN, "3", Infinity])(
+    "rejects %j and persists nothing",
+    (bad) => {
+      expect(() =>
+        repo.addInstances([
+          goblin(),
+          goblin({ initiative: bad as unknown as number }),
+        ]),
+      ).toThrow(RangeError);
+      expect(repo.listInstances()).toEqual([]);
+    },
+  );
+
+  it("accepts integers, null and undefined", () => {
+    const added = repo.addInstances([
+      goblin({ initiative: -2 }),
+      goblin({ initiative: 0 }),
+      goblin({ initiative: null }),
+      goblin(),
+    ]);
+    expect(added.map((i) => i.initiative)).toEqual([-2, 0, null, null]);
+  });
+});
+
 describe("clearEncounter", () => {
   it("removes all instances", () => {
     repo.addInstances([goblin(), goblin()]);
@@ -136,5 +178,22 @@ describe("listInstances", () => {
       "D",
     ]);
     expect(repo.listInstances().slice(0, 3)).toEqual(added);
+  });
+
+  it("preserves insertion order when created_at ties (rowid tie-break)", () => {
+    let n = 0;
+    const tied = new SqliteEncounterRepository(openDatabase(":memory:"), {
+      newId: () => `z${9 - ++n}`, // ids sort opposite to insertion order
+      now: () => 1000,
+    });
+    tied.addInstances(
+      ["A", "B", "C", "D"].map((displayName) => goblin({ displayName })),
+    );
+    expect(tied.listInstances().map((i) => i.displayName)).toEqual([
+      "A",
+      "B",
+      "C",
+      "D",
+    ]);
   });
 });

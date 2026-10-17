@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { defaultDbPath, openDatabase } from "./db.js";
 import { LATEST_VERSION, getUserVersion, migrate } from "./migrations.js";
@@ -54,11 +55,72 @@ describe("defaultDbPath", () => {
     );
   });
 
-  it("falls back to ~/.local/share and is not inside the repo", () => {
-    const p = defaultDbPath({}, "/home/u");
-    expect(p).toBe(
+  it("falls back to ~/.local/share", () => {
+    expect(defaultDbPath({}, "/home/u")).toBe(
       join("/home/u", ".local", "share", "ttrpg-agents", "encounters.db"),
     );
+  });
+
+  it("real default is not inside the repo", () => {
+    const p = defaultDbPath({}, homedir());
+    expect(p).toBe(
+      join(homedir(), ".local", "share", "ttrpg-agents", "encounters.db"),
+    );
     expect(resolve(p).startsWith(resolve(process.cwd()) + sep)).toBe(false);
+  });
+});
+
+describe("openDatabase concurrency settings", () => {
+  const pragma = (db: DatabaseSync, name: string) =>
+    Object.values(db.prepare(`PRAGMA ${name}`).get() as object)[0];
+
+  it("uses a 5s busy timeout and WAL for file databases", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ttrpg-db-"));
+    dirs.push(dir);
+    const db = openDatabase(join(dir, "enc.db"));
+    expect(pragma(db, "busy_timeout")).toBe(5000);
+    expect(pragma(db, "journal_mode")).toBe("wal");
+    db.close();
+  });
+
+  it("keeps in-memory databases out of WAL", () => {
+    const db = openDatabase(":memory:");
+    expect(pragma(db, "journal_mode")).toBe("memory");
+  });
+
+  it("takes the write lock up front so a concurrent writer cannot race getOrCreateActiveEncounter", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ttrpg-db-"));
+    dirs.push(dir);
+    const path = join(dir, "enc.db");
+    const a = openDatabase(path);
+    const other = new DatabaseSync(path, { timeout: 0 });
+    let otherError: unknown;
+    let n = 0;
+    const repo = new SqliteEncounterRepository(a, {
+      // Called between the SELECT and the INSERT: simulates another process
+      // trying to create the active encounter at exactly that moment.
+      newId: () => {
+        if (++n === 1) {
+          try {
+            other
+              .prepare(
+                "INSERT INTO encounters (id, active, created_at) VALUES ('other', 1, 0)",
+              )
+              .run();
+          } catch (err) {
+            otherError = err;
+          }
+        }
+        return `id-${n}`;
+      },
+    });
+    const enc = repo.getOrCreateActiveEncounter();
+    expect(otherError).toBeDefined();
+    expect(enc.id).toBe("id-1");
+    expect(a.prepare("SELECT COUNT(*) AS c FROM encounters").get()).toEqual({
+      c: 1,
+    });
+    other.close();
+    a.close();
   });
 });
