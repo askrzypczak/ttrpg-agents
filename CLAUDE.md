@@ -21,6 +21,7 @@ GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not
 ## Work practices
 - The workflow itself (skills `work-ticket`, `address-feedback`; subagents `implementer`, `reviewer`; `grg.sh`) lives in the private plugin marketplace repo `askrzypczak/claude-workflow` (local clone `~/Projects/claude-workflow`), enabled in `.claude/settings.json`. Change the workflow there, not here. The guardrails and these conventions stay in this repo.
 - Flow: plan (plan mode) -> **Tony signs off** -> `implementer` subagent -> green/red/green test proof -> `reviewer` subagent (complex changes only) -> PR with CI green -> **Tony reviews** -> `address-feedback` skill (summarise, ask questions, then fix).
+- The local `main` checkout can be stale. Before planning or filing tickets, `git fetch origin` and read `origin/main` (`git show origin/main:<path>`, `git ls-tree`), not the working tree.
 - Models: orchestrator in the main session; `implementer` defaults to sonnet/medium (haiku/xhigh for mechanical work, set in the approved plan); `reviewer` is opus/medium.
 - Tests are mandatory. No TDD requirement; instead prove tests with green/red/green: the plugin's `grg.sh` (mechanical) plus targeted breaks of the implementation for logic-heavy code. Evidence goes in the PR body.
 - "Complex" = branching logic, new abstractions, shared code, security/data handling; complexity decides whether the reviewer runs.
