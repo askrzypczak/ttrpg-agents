@@ -9,6 +9,9 @@
 # (plan sign-off, questions, permissions) and waits. Tickets labelled `skip-plan`
 # are launched with `auto`, which skips the plan sign-off. The work-ticket skill
 # does the claiming itself.
+#
+# A third phase finds open `issue-N-*` PRs that conflict with main and launches
+# `ttrpg-N-conflict` (`resolve-conflicts N`), at most once per main SHA.
 set -euo pipefail
 
 # The fnm default bin dir puts node/npm on PATH; launchd does not read ~/.zshenv. Harmless if absent.
@@ -43,12 +46,22 @@ fi
 echo $$ >"$LOCK/pid"
 trap 'rm -rf "$LOCK"' EXIT
 
-STATE="$STATE_DIR/launched.json" # {"<N>": {"name": "...", "at": <epoch>}}
+# {"<N>": {"name": "...", "at": <epoch>}, "conflict-<N>": {"name", "at", "pr", "mainSha"}}
+STATE="$STATE_DIR/launched.json"
 [ -f "$STATE" ] || echo '{}' >"$STATE"
+# {"<N>": {"pr": "<pr>", "mainSha": "<sha>"}}: last conflict attempt per ticket. Kept after
+# the session ends so a failed attempt is not repeated against the same main.
+ATTEMPTS="$STATE_DIR/conflicts.json"
+[ -f "$ATTEMPTS" ] || echo '{}' >"$ATTEMPTS"
 
-state_set() { # key name
+state_set() { # key name [pr mainSha]
   [ "$DRY" = 1 ] && return 0
-  jq --arg k "$1" --arg n "$2" --argjson at "$(date +%s)" '.[$k] = {name: $n, at: $at}' "$STATE" >"$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  jq --arg k "$1" --arg n "$2" --arg pr "${3:-}" --arg sha "${4:-}" --argjson at "$(date +%s)" \
+    '.[$k] = ({name: $n, at: $at} + (if $pr != "" then {pr: $pr, mainSha: $sha} else {} end))' "$STATE" >"$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+}
+attempt_set() { # number pr mainSha
+  [ "$DRY" = 1 ] && return 0
+  jq --arg k "$1" --arg pr "$2" --arg sha "$3" '.[$k] = {pr: $pr, mainSha: $sha}' "$ATTEMPTS" >"$ATTEMPTS.tmp" && mv "$ATTEMPTS.tmp" "$ATTEMPTS"
 }
 state_del() { # key
   [ "$DRY" = 1 ] && return 0
@@ -70,10 +83,30 @@ fail_issue() { # number name reason
   run gh issue comment "$1" --repo "$GH_REPO" --body "Background session \`$2\` ended without finishing: $3. See \`claude logs $2\` or \`claude agents\`. To retry, remove \`agent-failed\` and add \`ready\`."
 }
 
+fail_conflict() { # number name pr reason
+  log "#$1: $4 (PR #$3) -> agent-failed"
+  local body="Conflict-resolution session \`$2\` ended without resolving the conflict on PR #$3: $4. See \`claude logs $2\`. It will not be retried against the same main; remove \`agent-failed\` to allow a retry once main moves."
+  run gh issue edit "$1" --repo "$GH_REPO" --add-label agent-failed || true
+  run gh pr comment "$3" --repo "$GH_REPO" --body "$body" || true
+  run gh issue comment "$1" --repo "$GH_REPO" --body "$body"
+}
+
 # --- Reconcile sessions we launched ---------------------------------------
 now=$(date +%s)
 for key in $(jq -r 'keys[]' "$STATE"); do
   n=$key
+  conflict=0
+  pr=""
+  case "$key" in
+    conflict-*)
+      conflict=1
+      n=${key#conflict-}
+      pr=$(jq -r --arg k "$key" '.[$k].pr' "$STATE")
+      ;;
+  esac
+  fail() { # reason
+    if [ "$conflict" = 1 ]; then fail_conflict "$n" "$name" "$pr" "$1"; else fail_issue "$n" "$name" "$1"; fi
+  }
   name=$(jq -r --arg k "$key" '.[$k].name' "$STATE")
   age=$((now - $(jq -r --arg k "$key" '.[$k].at' "$STATE")))
   st=$(session_state "$name")
@@ -81,20 +114,28 @@ for key in $(jq -r 'keys[]' "$STATE"); do
   case "$st" in
     "")
       [ "$age" -lt 600 ] && continue # just launched; may not be listed yet
-      fail_issue "$n" "$name" "no session found"
+      fail "no session found"
       state_del "$key"
       ;;
     failed | stopped)
-      fail_issue "$n" "$name" "session $st"
+      fail "session $st"
       state_del "$key"
       ;;
     done) # check the ticket was handed off
+      if [ "$conflict" = 1 ]; then
+        prinfo=$(gh pr view "$pr" --repo "$GH_REPO" --json state,mergeable)
+        if [ "$(echo "$prinfo" | jq -r '.state')" = OPEN ] && [ "$(echo "$prinfo" | jq -r '.mergeable')" = CONFLICTING ]; then
+          fail "session finished but the conflict remains"
+        fi
+        state_del "$key"
+        continue
+      fi
       issue=$(gh issue view "$n" --repo "$GH_REPO" --json state,labels)
       labels=",$(echo "$issue" | jq -r '[.labels[].name] | join(",")'),"
       ok=0
       [ "$(echo "$issue" | jq -r '.state')" = CLOSED ] && ok=1
       case "$labels" in *,needs-review,* | *,blocked,* | *,agent-failed,*) ok=1 ;; esac
-      [ "$ok" = 0 ] && fail_issue "$n" "$name" "session finished but the ticket was not handed off"
+      [ "$ok" = 0 ] && fail "session finished but the ticket was not handed off"
       state_del "$key"
       ;;
     *) continue ;; # working, blocked, waiting, idle or unknown: still alive; leave it
@@ -134,5 +175,72 @@ while read -r row; do
   fi
   state_set "$n" "$name"
 done < <(echo "$issues" | jq -c '.[]')
+
+# --- Resolve conflicts on agent PRs ----------------------------------------
+# Detection is plain gh/jq (no model tokens). UNKNOWN means GitHub has not computed
+# mergeability yet: retry next poll. BEHIND without conflicts is ignored.
+prs=$(gh pr list --repo "$GH_REPO" --state open --limit 100 --json number,headRefName,mergeable,mergeStateStatus)
+main_sha=""
+
+while read -r row; do
+  [ -n "$row" ] || continue
+  pr=$(echo "$row" | jq -r '.number')
+  n=$(echo "$row" | jq -r '.headRefName | capture("^issue-(?<n>[0-9]+)-").n // empty')
+  [ -n "$n" ] || continue
+  case "$(echo "$row" | jq -r '.mergeable')" in
+    CONFLICTING) ;;
+    UNKNOWN)
+      log "#$n: PR #$pr mergeability unknown; retry next poll"
+      continue
+      ;;
+    *) continue ;;
+  esac
+
+  # The ticket session owns the branch while it is active.
+  case "$(session_state "ttrpg-$n")" in
+    working | blocked)
+      log "#$n: PR #$pr conflicts but ttrpg-$n is active; skipping"
+      continue
+      ;;
+  esac
+  cname="ttrpg-$n-conflict"
+  case "$(session_state "$cname")" in
+    "" | done | failed | stopped) ;;
+    *) continue ;; # a conflict session is still alive
+  esac
+  [ "$(jq -r --arg k "conflict-$n" 'has($k)' "$STATE")" = true ] && continue
+
+  issue=$(gh issue view "$n" --repo "$GH_REPO" --json author,labels) || {
+    log "#$n: cannot read issue; skipping"
+    continue
+  }
+  labels=",$(echo "$issue" | jq -r '[.labels[].name] | join(",")'),"
+  case "$labels" in *,agent-ok,*) ;; *) continue ;; esac
+  case "$labels" in *,agent-failed,*) continue ;; esac
+  if [ "$(echo "$issue" | jq -r '.author.login')" != "$OWNER" ]; then
+    log "#$n: author is not $OWNER; skipping conflict resolution"
+    continue
+  fi
+
+  if [ -z "$main_sha" ]; then
+    main_sha=$(gh api "repos/$GH_REPO/commits/main" | jq -er '.sha') || {
+      log "cannot read main SHA; skipping conflict phase"
+      break
+    }
+  fi
+  if [ "$(jq -r --arg k "$n" --arg pr "$pr" --arg sha "$main_sha" '.[$k] | (.pr == $pr and .mainSha == $sha)' "$ATTEMPTS")" = true ]; then
+    log "#$n: PR #$pr already attempted against main ${main_sha:0:7}; skipping"
+    continue
+  fi
+
+  log "#$n: PR #$pr conflicts with main; launching $cname"
+  if [ "$DRY" = 1 ]; then
+    log "[dry-run] (cd $REPO_DIR && claude --bg --name $cname ${BG_FLAGS[*]:-} \"/ticket-workflow:resolve-conflicts $n\")"
+  else
+    (cd "$REPO_DIR" && claude --bg --name "$cname" ${BG_FLAGS[@]+"${BG_FLAGS[@]}"} "/ticket-workflow:resolve-conflicts $n")
+  fi
+  state_set "conflict-$n" "$cname" "$pr" "$main_sha"
+  attempt_set "$n" "$pr" "$main_sha"
+done < <(echo "$prs" | jq -c '.[]')
 
 log "done"

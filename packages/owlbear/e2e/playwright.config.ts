@@ -26,7 +26,15 @@ export default defineConfig({
         // page.route-fulfilled documents lose their loopback address space,
         // which trips Local Network Access checks on the bridge websocket.
         launchOptions: {
-          args: ["--disable-features=LocalNetworkAccessChecks"],
+          args: [
+            // When collecting coverage, also keep the cross-origin extension
+            // iframe in the page's process: page.coverage cannot see OOPIFs.
+            `--disable-features=LocalNetworkAccessChecks${
+              process.env.E2E_COVERAGE === "1"
+                ? ",IsolateOrigins,site-per-process"
+                : ""
+            }`,
+          ],
         },
       },
     },
