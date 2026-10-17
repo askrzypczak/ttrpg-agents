@@ -14,7 +14,7 @@ A ticket is picked up when it is **open**, authored by `askrzypczak`, and labell
 Remove it with `scripts/install-launchd.sh uninstall`.
 
 ### Daily use
-1. Write the ticket, then add `agent-ok` and `ready`. Within ~3 minutes a session starts.
+1. Write the ticket, review it, then add `ready` (your approval; agents normally already set `agent-ok`, remove it if the ticket shouldn't run unattended). Within ~3 minutes a session starts.
 2. Open `claude agents` to see it. A session in the `blocked` state is waiting for you: usually the plan sign-off, but also questions and permission prompts. Attach with `claude attach ttrpg-<issue>`, answer, and leave it running.
 3. For easy tickets add `skip-plan`: the session runs `work-ticket N auto` and skips the plan sign-off. It still asks if the ticket is ambiguous or risky.
 4. When it finishes, the ticket is `needs-review` with a PR. Review as usual.
@@ -56,7 +56,7 @@ Set as environment variables. To change one for the LaunchAgent, add it to `Envi
 - Removes `ready`, `in-progress`, `needs-review`, `blocked` from the closed issue (only those it has).
 - For each open `blocked` issue whose body has `Blocked by #N` (also `#3, #5` or `#3 and #5`, several lines allowed), removes `blocked` once every referenced blocker is closed. An issue with another open blocker keeps the label.
 - Issues closed as not planned count as closed for unblocking.
-- Never adds `ready`: promoting a ticket stays a human decision.
+- Never adds `ready`: only Tony adds it (see Ticketing workflow in `CLAUDE.md`).
 - Manual run (needs `gh` auth): `node scripts/ticket-labels.ts <issue-number>`. Tests: `scripts/ticket-labels.test.ts`.
 
 ## Other scripts
