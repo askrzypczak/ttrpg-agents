@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json && vite build",
-    "dev": "vite build --watch"
+    "dev": "vite build --watch",
+    "build:e2e": "vite build -c e2e/vite.config.ts"
   },
   "dependencies": {
     "@owlbear-rodeo/sdk": "^3.1.0",

@@ -17,10 +17,12 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "mutate": "stryker run --incremental",
-    "check": "npm run build && npm run typecheck && npm run lint && npm run format:check && npm run test"
+    "check": "npm run build && npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "test:e2e": "npm run build && npm run build:e2e -w @ttrpg-agents/owlbear && playwright test -c packages/owlbear/e2e/playwright.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^24.19.2",

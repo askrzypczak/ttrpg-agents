@@ -11,6 +11,7 @@ npm workspaces monorepo in place (`packages/core`, `packages/mcp`, `packages/owl
 - Owner: Tony (personal GitHub account `askrzypczak`). Private repo.
 - Keep this file short; record decisions here as they are made.
 - Never authorize by the client-supplied `role` (bridge `hello`); it only drives UI. Bridge clients authenticate with the token.
+- E2E: `npm run test:e2e` (Playwright + fake Owlbear host, `packages/owlbear/e2e`; see its README) is a separate `e2e` CI job, not part of `npm run check` (browser needed). Needs ports 5199/5200 free.
 - Layout: npm workspaces under `packages/*` (`@ttrpg-agents/core`, `@ttrpg-agents/mcp`, `@ttrpg-agents/owlbear`). `core` has no MCP deps; `mcp` depends on `core`; `owlbear` (Vite browser extension) imports only the browser-safe `@ttrpg-agents/core/bridge` subpath and is excluded from the root typecheck (it typechecks in its own build, with DOM lib). `build` runs before typecheck because `mcp` resolves `core` through its built `dist/`. `scripts/` stays at the root.
 - Owlbear extension code is tested browser-free via an SDK adapter + fake; see `packages/owlbear/README.md`. Only `obr-adapter.ts` may import `@owlbear-rodeo/sdk` (lint-enforced).
 
