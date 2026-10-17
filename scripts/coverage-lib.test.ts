@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CoverageMapData } from "istanbul-lib-coverage";
 import {
+  formatComment,
   formatMarkdown,
   formatTable,
   mergeCoverage,
@@ -126,5 +127,27 @@ describe("formatTable / formatMarkdown", () => {
       "| unit | 50.00% (1/2) | 50.00% (1/2) | 100.00% (1/1) |",
     );
     expect(md).toContain("| e2e | n/a | n/a | n/a |");
+  });
+});
+
+describe("formatComment", () => {
+  const unit = summarize(map(file("/a.ts", [1, 0], [1, 0])));
+  const rows: Row[] = [
+    { kind: "unit", summary: unit },
+    { kind: "e2e", summary: null },
+  ];
+
+  it("contains the markdown table from formatMarkdown", () => {
+    expect(formatComment(rows)).toContain(formatMarkdown(rows));
+  });
+
+  it("ends with a blank line and the informational footer", () => {
+    expect(formatComment(rows)).toMatch(
+      /\| e2e \| n\/a \| n\/a \| n\/a \|\n\n_Informational only; updated on every push\._\n$/,
+    );
+  });
+
+  it("renders a null summary as n/a", () => {
+    expect(formatComment(rows)).toContain("| e2e | n/a | n/a | n/a |");
   });
 });
