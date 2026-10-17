@@ -6,6 +6,15 @@ Every 3 minutes a macOS LaunchAgent runs `agent-poller.sh`, which starts an inte
 
 A ticket is picked up when it is **open**, authored by `askrzypczak`, and labelled **`agent-ok` + `ready`** (and is not `in-progress`, `blocked` or `agent-failed`). The session is named `ttrpg-<issue>` and runs the `work-ticket` skill.
 
+### Conflict resolution
+After launching tickets, the poller lists open PRs (`gh pr list`, no model tokens) on `issue-N-*` branches whose `mergeable` is `CONFLICTING` and launches `claude --bg --name ttrpg-N-conflict "/ticket-workflow:resolve-conflicts N"`. The skill merges `main` into the branch (merge, not rebase: force-push is not allowed).
+- `UNKNOWN` (GitHub computes it lazily) is retried next poll; `BEHIND` without conflicts is ignored.
+- Skipped when `ttrpg-N` is `working` or `blocked` (it owns the branch), a `ttrpg-N-conflict` session is alive, the ticket is not `agent-ok`, not by `AGENT_OWNER`, or has `agent-failed`.
+- At most one attempt per `{pr, main SHA}`, recorded in `conflicts.json`; a new commit on main allows a new attempt.
+- A conflict session that fails, is stopped, or finishes with the PR still `CONFLICTING` gets `agent-failed` on the ticket plus a comment on the PR and ticket. Remove `agent-failed` to retry.
+- Needs the `resolve-conflicts` skill in the `ticket-workflow` plugin (update the plugin).
+- `--dry-run` logs the would-be launch.
+
 ### Setup (once)
 1. Create the labels: `scripts/setup-labels.sh` (adds `skip-plan` and `agent-failed` among others).
 2. Trust the workspace: run `claude` once in the main checkout, accept the prompt, exit. `claude --bg` fails in an untrusted directory.
@@ -43,7 +52,7 @@ Set as environment variables. To change one for the LaunchAgent, add it to `Envi
 | `GH_REPO` | `askrzypczak/ttrpg-agents` | Repo to poll. |
 | `REPO_DIR` | `~/Projects/ttrpg-agents` | Checkout the sessions start in. |
 | `EXTRA_PATH` | empty | Directories prepended to the poller's PATH (inherited by sessions). fnm's default bin dir (`~/.local/share/fnm/aliases/default/bin`) is always included so sessions find `node`/`npm`. |
-| `STATE_DIR` | `~/.local/state/ttrpg-agents` | Lock file and `launched.json` (which tickets already have a session). |
+| `STATE_DIR` | `~/.local/state/ttrpg-agents` | Lock file, `launched.json` (which tickets already have a session) and `conflicts.json` (last conflict attempt per ticket). |
 
 ### Notes
 - The poller never claims a ticket itself: the session does that (`in-progress`) as part of `work-ticket`.
