@@ -4,7 +4,7 @@
 set -euo pipefail
 
 GH="${GH:-$(command -v gh || echo /opt/homebrew/bin/gh)}"
-REPO_ARGS=()
+REPO_ARGS=() # expanded with [@]+ below: empty arrays are unbound under set -u on macOS bash 3.2
 [ $# -ge 1 ] && REPO_ARGS=(--repo "$1")
 
 # name|color|description
@@ -23,5 +23,5 @@ LABELS=(
 
 for entry in "${LABELS[@]}"; do
   IFS='|' read -r name color desc <<<"$entry"
-  "$GH" label create "$name" --color "$color" --description "$desc" --force "${REPO_ARGS[@]}"
+  "$GH" label create "$name" --color "$color" --description "$desc" --force ${REPO_ARGS[@]+"${REPO_ARGS[@]}"}
 done
