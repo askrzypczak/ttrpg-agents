@@ -12,5 +12,6 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["packages/*/src", "packages/*/scripts", "scripts", "*.ts"]
+  "include": ["packages/*/src", "packages/*/scripts", "scripts", "*.ts"],
+  "exclude": ["packages/owlbear"]
 }

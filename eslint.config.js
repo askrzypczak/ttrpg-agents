@@ -5,8 +5,8 @@ import prettier from "eslint-config-prettier";
 export default tseslint.config(
   {
     ignores: [
-      "dist/",
-      "node_modules/",
+      "**/dist/",
+      "**/node_modules/",
       ".claude/",
       ".stryker-tmp/",
       "reports/",

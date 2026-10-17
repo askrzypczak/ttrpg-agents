@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ttrpg-agents</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        font-size: 14px;
+        margin: 12px;
+      }
+      #status[data-kind="connected"] {
+        color: #1a7f37;
+      }
+      #status[data-kind="reconnecting"] {
+        color: #9a6700;
+      }
+      #hint {
+        color: #57606a;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>ttrpg-agents</h3>
+    <p id="status">Starting...</p>
+    <p id="hint"></p>
+    <p id="scene"></p>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
