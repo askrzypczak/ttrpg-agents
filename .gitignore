@@ -3,7 +3,7 @@
 .idea/
 .vscode/
 
-# Node (for later)
+# Node
 node_modules/
 dist/
 .env
