@@ -26,6 +26,50 @@ describe("migrations", () => {
     expect(getUserVersion(db)).toBe(LATEST_VERSION);
   });
 
+  it("tolerates another process migrating between the version read and the transaction", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ttrpg-db-"));
+    dirs.push(dir);
+    const path = join(dir, "race.db");
+    const a = new DatabaseSync(path, { timeout: 500 });
+    a.exec("PRAGMA journal_mode = WAL");
+    const b = new DatabaseSync(path, { timeout: 500 });
+    let raced = false;
+    const racing = new Proxy(a, {
+      get(target, prop) {
+        const value: unknown = Reflect.get(target, prop, target);
+        if (typeof value !== "function") return value;
+        const fn = value as (...args: unknown[]) => unknown;
+        if (prop !== "prepare") return fn.bind(target);
+        return (sql: string) => {
+          const stmt = target.prepare(sql);
+          if (raced || sql !== "PRAGMA user_version") return stmt;
+          return new Proxy(stmt, {
+            get(st, p) {
+              const v: unknown = Reflect.get(st, p, st);
+              if (p !== "get" || typeof v !== "function") {
+                return typeof v === "function" ? v.bind(st) : v;
+              }
+              return (...args: unknown[]) => {
+                const row = (v as (...a: unknown[]) => unknown).apply(st, args);
+                raced = true;
+                migrate(b);
+                return row;
+              };
+            },
+          });
+        };
+      },
+    });
+    expect(() => migrate(racing)).not.toThrow();
+    expect(raced).toBe(true);
+    expect(getUserVersion(a)).toBe(LATEST_VERSION);
+    expect(a.prepare("SELECT count(*) AS n FROM encounters").get()).toEqual({
+      n: 0,
+    });
+    a.close();
+    b.close();
+  });
+
   it("persists data across reopen of a file-backed database", () => {
     const dir = mkdtempSync(join(tmpdir(), "ttrpg-db-"));
     dirs.push(dir);
