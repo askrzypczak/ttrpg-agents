@@ -23,21 +23,18 @@ npm workspaces monorepo in place (`packages/core`, `packages/mcp`, `packages/owl
 ## Ticketing workflow
 GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not on PATH).
 - State labels: `ready` -> `in-progress` -> `needs-review`; `blocked` when waiting. `agent-ok` marks tickets safe for unattended background agents.
-- `ready` means Tony has reviewed the ticket and approved it for work. Only Tony adds it. Agents that file tickets never set `ready` or `skip-plan`, even on unblocked tickets. Agents may set type labels, `agent-ok`, and `blocked` (with `Blocked by #M`); Tony removes `agent-ok` during review if needed.
-- Type labels: `bug`, `feature`, `chore`. Create/refresh all labels with `scripts/setup-labels.sh`.
+- `ready` means Tony has reviewed the ticket and approved it for work. Only Tony adds `ready` and `skip-plan`. Agents that file tickets never set them, even on unblocked tickets. Agents may set type labels, `agent-ok`, and `blocked` (with `Blocked by #M`); Tony removes `agent-ok` during review if needed.
+- Type labels: `bug`, `feature`, `chore`.
 - One ticket = one worktree = one branch (`issue-N-slug`) = one PR containing `Closes #N`.
 - Dependencies: write `Blocked by #M` in the issue body.
-- Label cleanup on close: workflow `ticket-labels.yml` strips state labels from a closed issue and removes `blocked` from dependents whose blockers are all closed (never adds `ready`). Logic in `scripts/ticket-labels.ts`.
-- Agents follow the `work-ticket` skill from the `ticket-workflow` plugin (see Work practices) with an explicit ticket number, either run manually or launched by the poller below. Agents never pick tickets themselves.
+- Agents follow the `work-ticket` skill (see Work practices) with an explicit ticket number, run manually or launched by the dispatcher. Agents never pick tickets themselves.
 
-### Automatic dispatch (local)
-`scripts/agent-poller.sh` runs every 3 min from a LaunchAgent (`scripts/install-launchd.sh`; run it from the main checkout) and starts one interactive background session `ttrpg-N` (visible in `claude agents`) per open `ready` + `agent-ok` ticket authored by `askrzypczak`.
-- The session follows `work-ticket`, including the plan sign-off: it shows as `blocked` in `claude agents` until you attach and approve (`claude attach ttrpg-N`). Same for questions and permission prompts.
-- Label `skip-plan` on easy tickets to launch with `work-ticket N auto`, which skips the sign-off (the agent still asks if the ticket is ambiguous or risky).
-- Failures: a session that fails, is stopped, or ends without handing off gets `agent-failed` plus a comment. Remove it and re-add `ready` to retry.
-- Conflicts: each poll also lists open PRs on `issue-N-*` branches; one that is `CONFLICTING` with `main` (agent-ok ticket by `askrzypczak`, no `agent-failed`, no active `ttrpg-N` session) gets `ttrpg-N-conflict` running `/ticket-workflow:resolve-conflicts N` (merge, not rebase). At most one attempt per main SHA (`conflicts.json`); a failed or unresolved attempt gets `agent-failed` plus a PR/issue comment.
-- No concurrency limit: every eligible ticket gets a session on the next poll. Dry run: `scripts/agent-poller.sh --dry-run`. Log: `~/Library/Logs/ttrpg-agents.log`. Extra `claude --bg` flags via `CLAUDE_BG_FLAGS`.
-- One-time: trust this directory by running `claude` in it once; `claude --bg` fails in an untrusted workspace.
+Dispatch, label setup (`setup-labels.sh`) and close-time label cleanup now live in the `claude-workflow` repo (local clone `~/Projects/claude-workflow`; see its README and `dispatch/README.md`). Close-time cleanup runs through `.github/workflows/ticket-labels.yml`, which calls the reusable workflow there.
+- This repo is registered in `~/.config/claude-workflow/repos.json` with session prefix `ttrpg`: sessions are `ttrpg-N`, and `ttrpg-N-conflict` for a conflicting PR.
+- `skip-plan` launches `work-ticket N auto`, which skips the plan sign-off.
+- A session shows as `blocked` in `claude agents` while it waits for you (plan sign-off, questions, permission prompts); `claude attach ttrpg-N` to answer.
+- A failed or stopped session gets `agent-failed` plus a comment. Remove it and re-add `ready` to retry.
+- Log: `~/Library/Logs/claude-workflow-poller.log`. Dry run: `dispatch/agent-poller.sh --dry-run` from the claude-workflow clone.
 
 ## Work practices
 - The workflow itself (skills `work-ticket`, `address-feedback`; subagents `implementer`, `reviewer`; `grg.sh`) lives in the private plugin marketplace repo `askrzypczak/claude-workflow` (local clone `~/Projects/claude-workflow`), enabled in `.claude/settings.json`. Change the workflow there, not here. The guardrails and these conventions stay in this repo.

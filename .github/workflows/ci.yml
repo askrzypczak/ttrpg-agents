@@ -36,9 +36,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
 
-  # Informational only: not required by (or blocking) check/e2e.
+  # Informational only: not required by (or blocking) check/e2e. On PRs the
+  # table is posted as one sticky comment, edited in place on each push.
   coverage:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,7 +51,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # mcp tests resolve core through its built dist/.
+      - run: npm run build
       - run: npm run coverage
+      - name: Comment coverage on PR
+        if: always() && github.event_name == 'pull_request' && hashFiles('reports/coverage/summary.md') != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --edit-last --create-if-none --body-file reports/coverage/summary.md
       - uses: actions/upload-artifact@v4
         if: always()
         with:
