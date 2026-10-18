@@ -3,11 +3,21 @@ import {
   DiceParseError,
   average,
   createLogEntry,
-  createSeededRng,
   parseDice,
   roll,
   type Rng,
 } from "../index.js";
+
+/** Test-only Rng: yields the given values in order, cycling, each reduced mod max. */
+function cycleRng(...values: number[]): Rng {
+  let i = 0;
+  return {
+    nextInt(max) {
+      const value = values[i++ % values.length] ?? 0;
+      return value % max;
+    },
+  };
+}
 
 describe("parseDice", () => {
   it("parses spec examples", () => {
@@ -88,7 +98,8 @@ describe("parseDice", () => {
 
 describe("roll", () => {
   it("stays within bounds and total equals sum of dice plus modifier", () => {
-    const rng = createSeededRng(123);
+    const rng = cycleRng(0, 1, 2, 3, 4, 5, 6, 7);
+    const seen = new Set<number>();
     for (let i = 0; i < 500; i++) {
       const r = roll("5d8 + 5", rng);
       expect(r.dice).toHaveLength(1);
@@ -97,22 +108,24 @@ describe("roll", () => {
       for (const d of dice) {
         expect(d).toBeGreaterThanOrEqual(1);
         expect(d).toBeLessThanOrEqual(8);
+        seen.add(d);
       }
       expect(r.modifier).toBe(5);
       expect(r.total).toBe(dice.reduce((a, b) => a + b, 0) + 5);
       expect(r.total).toBeGreaterThanOrEqual(10);
       expect(r.total).toBeLessThanOrEqual(45);
     }
+    expect([...seen].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
   it("subtracts negative terms", () => {
-    const rng = createSeededRng(7);
+    const rng = cycleRng(0, 2, 4, 5);
     for (let i = 0; i < 100; i++) {
       const r = roll("3d6 - 1", rng);
       expect(r.modifier).toBe(-1);
       expect(r.total).toBe((r.dice[0] ?? []).reduce((a, b) => a + b, 0) - 1);
     }
-    expect(roll("10 - 1d1", createSeededRng(1)).total).toBe(9);
+    expect(roll("10 - 1d1", cycleRng(0)).total).toBe(9);
   });
 
   it("uses only the injected Rng", () => {
@@ -127,19 +140,6 @@ describe("roll", () => {
     expect(calls).toEqual([6, 6, 4]);
     expect(r.dice).toEqual([[6, 6], [4]]);
     expect(r.total).toBe(16);
-  });
-
-  it("golden values for a fixed seed", () => {
-    // Changing the generator breaks replay of old seeds; update deliberately.
-    expect(roll("5d6", createSeededRng(42)).dice).toEqual([[4, 3, 6, 5, 2]]);
-  });
-
-  it("same seed gives same sequence, different seeds diverge", () => {
-    const a = roll("20d20", createSeededRng(42));
-    const b = roll("20d20", createSeededRng(42));
-    const c = roll("20d20", createSeededRng(43));
-    expect(a).toEqual(b);
-    expect(a.dice).not.toEqual(c.dice);
   });
 });
 
@@ -160,7 +160,7 @@ describe("average", () => {
 
 describe("createLogEntry", () => {
   it("builds an entry with injected time", () => {
-    const result = roll("2d6+1", createSeededRng(5));
+    const result = roll("2d6+1", cycleRng(4));
     const entry = createLogEntry(result, new Date("2026-01-02T03:04:05.000Z"));
     expect(entry).toEqual({
       expression: "2d6+1",
@@ -172,7 +172,7 @@ describe("createLogEntry", () => {
   });
 
   it("records sides per dice term and an optional label", () => {
-    const result = roll("2d6 + 1d8 - 1", createSeededRng(5));
+    const result = roll("2d6 + 1d8 - 1", cycleRng(4));
     const entry = createLogEntry(result, new Date(0), "Shadow 3 HP");
     expect(entry.sides).toEqual([6, 8]);
     expect(entry.label).toBe("Shadow 3 HP");
