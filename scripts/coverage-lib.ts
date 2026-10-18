@@ -156,11 +156,10 @@ export function formatTable(rows: Row[]): string {
   ].join("\n");
 }
 
-export function formatMarkdown(rows: Row[]): string {
+export function formatMarkdown(rows: Row[], heading = true): string {
   const line = (r: string[]) => `| ${r.join(" | ")} |`;
   return [
-    "## Coverage",
-    "",
+    ...(heading ? ["## Coverage", ""] : []),
     line(["kind", ...COLUMNS]),
     line(["---", "---:", "---:", "---:"]),
     ...rows.map((r) => line([r.kind, ...cells(r)])),
@@ -168,7 +167,127 @@ export function formatMarkdown(rows: Row[]): string {
   ].join("\n");
 }
 
-/** The sticky PR comment body: the markdown table plus a footer line. */
-export function formatComment(rows: Row[]): string {
-  return `${formatMarkdown(rows)}\n_Informational only; updated on every push._\n`;
+export interface PatchResult {
+  covered: number;
+  total: number;
+}
+
+/**
+ * Parses `git diff -U0` output into the added/changed line numbers (new side)
+ * per repo-relative path. Deleted files, pure deletions and binary files
+ * yield no entries.
+ */
+export function parseDiffAddedLines(diff: string): Map<string, number[]> {
+  const out = new Map<string, number[]>();
+  let inHeader = false;
+  let current: number[] | null = null;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("diff --git ")) {
+      inHeader = true;
+      current = null;
+      continue;
+    }
+    if (inHeader && line.startsWith("+++ ")) {
+      const target = line.slice(4).split("\t")[0] ?? "";
+      if (target.startsWith("b/")) {
+        const path = target.slice(2);
+        current = out.get(path) ?? [];
+        out.set(path, current);
+      } else {
+        current = null; // /dev/null: file deleted
+      }
+      continue;
+    }
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+    if (hunk) {
+      inHeader = false;
+      if (!current) continue;
+      const start = Number(hunk[1]);
+      const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+      for (let n = start; n < start + count; n++) current.push(n);
+    }
+  }
+  for (const [path, lines] of out) if (lines.length === 0) out.delete(path);
+  return out;
+}
+
+/**
+ * Coverage of the added lines. Only lines Istanbul considers coverable (they
+ * carry a statement) count; files absent from the map contribute nothing.
+ * `root` resolves repo-relative diff paths to the map's absolute keys.
+ */
+export function patchCoverage(
+  map: CoverageMapData,
+  added: Map<string, number[]>,
+  root: string,
+): PatchResult {
+  const base = root.endsWith("/") ? root : `${root}/`;
+  const result = { covered: 0, total: 0 };
+  for (const [path, lines] of added) {
+    const data = map[`${base}${path}`];
+    if (!data) continue;
+    const hits = libCoverage.createFileCoverage(data).getLineCoverage();
+    for (const n of lines) {
+      const h = hits[n];
+      if (h === undefined) continue;
+      result.total++;
+      if (h > 0) result.covered++;
+    }
+  }
+  return result;
+}
+
+/** Serialises the combined summary for use as a later baseline. */
+export function makeBaseline(summary: Summary): string {
+  return JSON.stringify(summary, null, 2);
+}
+
+/** Baseline line coverage percent from baseline JSON, or null if unusable. */
+export function parseBaseline(json: string): number | null {
+  try {
+    const pct = (JSON.parse(json) as { lines?: { pct?: unknown } } | null)
+      ?.lines?.pct;
+    return typeof pct === "number" && Number.isFinite(pct) ? pct : null;
+  } catch {
+    return null;
+  }
+}
+
+export function formatDelta(pct: number, base: number | null): string {
+  if (base === null) return `${pct.toFixed(2)}% (no baseline)`;
+  const diff = Number((pct - base).toFixed(2));
+  const sign = diff > 0 ? "+" : diff < 0 ? "-" : "±";
+  return `${pct.toFixed(2)}% (${sign}${Math.abs(diff).toFixed(2)})`;
+}
+
+export function formatPatch(res: PatchResult | null): string {
+  if (res === null || res.total === 0) return "no coverable lines changed";
+  const pct = ((res.covered / res.total) * 100).toFixed(1);
+  return `${pct}% (${res.covered}/${res.total} lines)`;
+}
+
+export interface Headline {
+  /** Combined line coverage, already formatted by formatDelta. */
+  delta: string;
+  /** Already formatted by formatPatch. */
+  patch: string;
+}
+
+export function formatHeadline(h: Headline): string {
+  return `**Line coverage:** ${h.delta}\n**Patch coverage:** ${h.patch}\n`;
+}
+
+/**
+ * The sticky PR comment body: headline (repo delta and patch coverage), the
+ * per-kind table collapsed, and an informational footer.
+ */
+export function formatComment(rows: Row[], headline?: Headline): string {
+  return [
+    "## Coverage\n",
+    ...(headline ? [formatHeadline(headline)] : []),
+    "<details><summary>Per-kind coverage</summary>\n",
+    formatMarkdown(rows, false),
+    "</details>\n",
+    "_Informational only; updated on every push._\n",
+  ].join("\n");
 }
