@@ -1,5 +1,5 @@
 import type { ObrAdapter } from "./obr-adapter.js";
-import { SceneModel, type Vec2 } from "./scene-model.js";
+import { MissingSceneError, SceneModel, type Vec2 } from "./scene-model.js";
 
 /** In-memory ObrAdapter over a SceneModel, for browser-free unit tests. */
 export function createFakeObr(
@@ -9,6 +9,11 @@ export function createFakeObr(
   obr: ObrAdapter;
   scene: SceneModel;
 } {
+  // Like the real SDK, item calls reject while no scene is loaded.
+  const whenReady = <T>(call: () => T): Promise<T> =>
+    scene.isReady()
+      ? Promise.resolve(call())
+      : Promise.reject(new MissingSceneError());
   const obr: ObrAdapter = {
     onReady: (callback) => {
       void Promise.resolve().then(callback);
@@ -19,10 +24,10 @@ export function createFakeObr(
       scene.onChange((change) => {
         if (change.kind === "ready") callback(change.ready);
       }),
-    addItems: (items) => Promise.resolve(scene.addItems(items)),
-    getItems: (filter) => Promise.resolve(scene.getItems(filter)),
-    updateItems: (ids, patch) => Promise.resolve(scene.updateItems(ids, patch)),
-    deleteItems: (ids) => Promise.resolve(scene.deleteItems(ids)),
+    addItems: (items) => whenReady(() => scene.addItems(items)),
+    getItems: (filter) => whenReady(() => scene.getItems(filter)),
+    updateItems: (ids, patch) => whenReady(() => scene.updateItems(ids, patch)),
+    deleteItems: (ids) => whenReady(() => scene.deleteItems(ids)),
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),

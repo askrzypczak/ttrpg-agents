@@ -6,7 +6,7 @@ import {
 } from "@ttrpg-agents/core/bridge";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
-import { panelView } from "./panel-state.js";
+import { describeError, panelView } from "./panel-state.js";
 
 const BRIDGE_URL = "ws://localhost:5199/ws";
 const EXTENSION_VERSION = "0.0.0";
@@ -28,18 +28,21 @@ obr.onReady(async () => {
 
   let socketState: SocketState = "connecting";
   let streakStart = Date.now();
+  let syncError: string | undefined;
 
   const render = () => {
     const view = panelView({
       role,
       tokenMissing,
       socketState,
+      syncError,
       disconnectedMs: Date.now() - streakStart,
     });
     const status = el("status");
     status.textContent = view.message;
     status.dataset.kind = view.kind;
     el("hint").textContent = view.hint ?? "";
+    el("sync-error").textContent = view.error ?? "";
   };
 
   if (role !== "gm" || tokenMissing) {
@@ -47,8 +50,18 @@ obr.onReady(async () => {
     return;
   }
 
-  const sync = createEncounterSync(obr, (e) =>
-    console.error("encounter sync failed", e),
+  const sync = createEncounterSync(
+    obr,
+    (e) => {
+      console.error("encounter sync failed", e);
+      syncError = describeError(e);
+      render();
+    },
+    () => {
+      if (syncError === undefined) return;
+      syncError = undefined;
+      render();
+    },
   );
   const socket = new ReconnectingSocket({
     url: BRIDGE_URL,
