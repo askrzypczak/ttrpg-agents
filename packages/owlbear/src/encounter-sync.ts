@@ -1,5 +1,5 @@
 import type { BridgeMessage } from "@ttrpg-agents/core/bridge";
-import type { ObrAdapter } from "./obr-adapter.js";
+import type { ImagePick, ObrAdapter } from "./obr-adapter.js";
 import type { SceneItem } from "./scene-model.js";
 
 export type EncounterEventPayload = Extract<
@@ -13,9 +13,28 @@ export type EncounterInstance = Extract<
 
 /** Our own metadata namespace; value is `{ instanceId }`. */
 export const INSTANCE_METADATA_KEY = "com.ttrpg-agents/instance";
+/** Scene metadata key; value is `{ [monsterKey]: { image, grid } }`. */
+export const TOKEN_ART_METADATA_KEY = "com.ttrpg-agents/token-art";
 /** One grid cell at Owlbear's default 150 dpi. */
 export const TOKEN_SIZE = 150;
 const TOKEN_SPACING = TOKEN_SIZE;
+
+type TokenArt = Record<string, ImagePick>;
+type InstanceLike = Pick<
+  EncounterInstance,
+  "id" | "displayName" | "monsterKey"
+>;
+
+/** Per-session state: keys the GM declined (or that errored) are not re-asked. */
+export interface SyncContext {
+  declined: Set<string>;
+  onError: (error: unknown) => void;
+}
+
+const newContext = (): SyncContext => ({
+  declined: new Set(),
+  onError: () => {},
+});
 
 function instanceIdOf(item: SceneItem): string | undefined {
   const value = item.metadata[INSTANCE_METADATA_KEY];
@@ -26,18 +45,38 @@ function instanceIdOf(item: SceneItem): string | undefined {
 
 const isOurs = (item: SceneItem): boolean => instanceIdOf(item) !== undefined;
 
-/** Pure mapping from an instance to a hidden SHAPE token at `position`. */
+function readTokenArt(metadata: Record<string, unknown>): TokenArt {
+  const value = metadata[TOKEN_ART_METADATA_KEY];
+  if (typeof value !== "object" || value === null) return {};
+  const art: TokenArt = {};
+  for (const [key, pick] of Object.entries(value)) {
+    const p = pick as Partial<ImagePick> | null;
+    if (typeof p === "object" && p !== null && p.image && p.grid)
+      art[key] = { image: p.image, grid: p.grid };
+  }
+  return art;
+}
+
+/**
+ * Pure mapping from an instance to a hidden token at `position`: an IMAGE when
+ * `art` is known for its monster, otherwise a circle SHAPE fallback.
+ */
 export function instanceToItem(
-  instance: Pick<EncounterInstance, "id" | "displayName">,
+  instance: InstanceLike,
   position: { x: number; y: number },
+  art?: ImagePick,
 ): SceneItem {
-  return {
+  const base = {
     id: `ttrpg-instance-${instance.id}`,
-    type: "SHAPE",
     name: instance.displayName,
     visible: false,
     position,
     metadata: { [INSTANCE_METADATA_KEY]: { instanceId: instance.id } },
+  };
+  if (art) return { ...base, type: "IMAGE", image: art.image, grid: art.grid };
+  return {
+    ...base,
+    type: "SHAPE",
     shape: { shapeType: "CIRCLE", width: TOKEN_SIZE, height: TOKEN_SIZE },
   };
 }
@@ -54,17 +93,58 @@ export function rowPositions(
   }));
 }
 
+/** Asks for art once per unmapped key; persists new picks to scene metadata. */
+async function resolveArt(
+  obr: ObrAdapter,
+  searchByKey: Map<string, string>,
+  ctx: SyncContext,
+): Promise<TokenArt> {
+  const art = readTokenArt(await obr.getSceneMetadata());
+  let changed = false;
+  for (const [key, search] of searchByKey) {
+    if (art[key] || ctx.declined.has(key)) continue;
+    try {
+      const pick = await obr.pickImage(search);
+      if (pick) {
+        art[key] = pick;
+        changed = true;
+      } else ctx.declined.add(key);
+    } catch (error) {
+      ctx.declined.add(key);
+      ctx.onError(error);
+    }
+  }
+  if (changed) {
+    try {
+      // setSceneMetadata shallow-merges, so only our key is written.
+      await obr.setSceneMetadata({ [TOKEN_ART_METADATA_KEY]: art });
+    } catch (error) {
+      // Not persisted, but the picks still apply to this batch.
+      ctx.onError(error);
+    }
+  }
+  return art;
+}
+
 async function addMissing(
   obr: ObrAdapter,
-  instances: Pick<EncounterInstance, "id" | "displayName">[],
+  instances: InstanceLike[],
+  ctx: SyncContext,
 ): Promise<void> {
   const existing = new Set(
     (await obr.getItems(isOurs)).map((item) => instanceIdOf(item)),
   );
   const missing = instances.filter((i) => !existing.has(i.id));
   if (missing.length === 0) return;
+  const searchByKey = new Map<string, string>();
+  for (const i of missing)
+    if (!searchByKey.has(i.monsterKey))
+      searchByKey.set(i.monsterKey, i.displayName);
+  const art = await resolveArt(obr, searchByKey, ctx);
   const positions = rowPositions(missing.length, await obr.getViewportCenter());
-  await obr.addItems(missing.map((i, n) => instanceToItem(i, positions[n]!)));
+  await obr.addItems(
+    missing.map((i, n) => instanceToItem(i, positions[n]!, art[i.monsterKey])),
+  );
 }
 
 async function deleteWhere(
@@ -87,10 +167,11 @@ async function deleteWhere(
 export async function applyEvent(
   obr: ObrAdapter,
   event: EncounterEventPayload,
+  ctx: SyncContext = newContext(),
 ): Promise<void> {
   switch (event.type) {
     case "added":
-      return addMissing(obr, event.instances);
+      return addMissing(obr, event.instances, ctx);
     case "removed":
       return deleteWhere(obr, (id) => id === event.id);
     case "cleared":
@@ -104,10 +185,11 @@ export async function applyEvent(
 export async function applySnapshot(
   obr: ObrAdapter,
   instances: EncounterInstance[],
+  ctx: SyncContext = newContext(),
 ): Promise<void> {
   const wanted = new Set(instances.map((i) => i.id));
   await deleteWhere(obr, (id) => !wanted.has(id));
-  await addMissing(obr, instances);
+  await addMissing(obr, instances, ctx);
 }
 
 export interface EncounterSync {
@@ -116,21 +198,24 @@ export interface EncounterSync {
 
 /**
  * Feeds bridge messages into the scene one at a time, in arrival order, so the
- * read-then-write idempotence checks never interleave. A failing message is
- * reported to `onError` and does not block later ones.
+ * read-then-write idempotence checks never interleave (this also makes the
+ * asset-picker prompts sequential). A failing message is reported to `onError`
+ * and does not block later ones. Cancelled picks are remembered per instance
+ * of this sync, so the GM is not re-prompted on every event.
  */
 export function createEncounterSync(
   obr: ObrAdapter,
   onError: (error: unknown) => void = () => {},
 ): EncounterSync {
   let tail: Promise<void> = Promise.resolve();
+  const ctx: SyncContext = { declined: new Set(), onError };
   return {
     handleMessage(message) {
       let task: (() => Promise<void>) | undefined;
       if (message.type === "encounter-event") {
-        task = () => applyEvent(obr, message.payload);
+        task = () => applyEvent(obr, message.payload, ctx);
       } else if (message.type === "encounter-snapshot") {
-        task = () => applySnapshot(obr, message.payload.instances);
+        task = () => applySnapshot(obr, message.payload.instances, ctx);
       }
       if (!task) return Promise.resolve();
       const run = tail.then(task);

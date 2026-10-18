@@ -66,6 +66,58 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       );
   });
 
+  test("picking art once turns new tokens into hidden IMAGE items and stores the mapping", async ({
+    page,
+  }) => {
+    await openHarness(page, { role: "gm" });
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+
+    // The fixture has exactly one monster key ("shadow"), so one prompt per sync.
+    // First sync: the picker replied with nothing (cancel), so circles.
+    expect(await page.evaluate(() => window.__host!.pickerCalls)).toBe(1);
+
+    // Now the GM would pick art. Drop the tokens and reload the iframe.
+    await page.evaluate(() => {
+      const host = window.__host!;
+      host.assetImages = [
+        {
+          name: "Shadow",
+          type: "CHARACTER",
+          image: {
+            url: "https://example.test/s.png",
+            mime: "image/png",
+            width: 8,
+            height: 8,
+          },
+          grid: { dpi: 300, offset: { x: 4, y: 4 } },
+        },
+      ];
+      host.scene.deleteItems(host.scene.getItems().map((i) => i.id));
+      const iframe = document.getElementById("extension") as HTMLIFrameElement;
+      const url = new URL(iframe.src);
+      url.searchParams.set("reload", "2");
+      iframe.src = url.href + location.hash;
+    });
+
+    await expect
+      .poll(
+        async () =>
+          (await readItems(page)).filter((i) => i.type === "IMAGE").length,
+      )
+      .toBe(5);
+    const items = await readItems(page);
+    expect(items.every((i) => i.visible === false)).toBe(true);
+    expect(items[0]!.image?.url).toBe("https://example.test/s.png");
+    expect(items[0]!.grid).toEqual({ dpi: 300, offset: { x: 4, y: 4 } });
+    expect(await page.evaluate(() => window.__host!.pickerCalls)).toBe(2);
+    const metadata = await page.evaluate(() =>
+      window.__host!.scene.getMetadata(),
+    );
+    expect(
+      Object.keys(metadata["com.ttrpg-agents/token-art"] as object),
+    ).toEqual(["shadow"]);
+  });
+
   test("a player does not connect and gets no tokens", async ({ page }) => {
     await openHarness(page, { role: "player" });
     await expect(page.frameLocator("#extension").locator("#status")).toHaveText(

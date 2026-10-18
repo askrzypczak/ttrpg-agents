@@ -41,6 +41,13 @@ export class FakeHost {
   /** Descriptions of messages the fake did not understand. Tests expect []. */
   readonly errors: string[] = [];
   readonly scene: SceneModel;
+  /**
+   * What the asset picker returns (ImageDownload objects). Empty means the GM
+   * cancelled. Tests set this before triggering a sync.
+   */
+  assetImages: unknown[] = [];
+  /** How many times the extension opened the asset picker. */
+  pickerCalls = 0;
   private readonly iframe: HTMLIFrameElement;
   private readonly ref = "e2e-ref";
   private readonly userId: string;
@@ -143,6 +150,9 @@ export class FakeHost {
       case "OBR_SCENE_SET_METADATA":
         this.scene.setMetadata(data.update as Record<string, unknown>);
         return {};
+      case "OBR_ASSETS_DOWNLOAD_IMAGES":
+        this.pickerCalls++;
+        return { images: this.assetImages };
       default:
         throw new UnhandledMessageError(
           `Unhandled Owlbear message "${message.id}": the fake host does not implement it. Add it to e2e/fake-host.ts (and the ObrAdapter and its fake) deliberately.`,

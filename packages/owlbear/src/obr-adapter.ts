@@ -3,12 +3,20 @@
 // unit-tested against the fake in fake-adapter.ts.
 import OBR, { buildImage, buildShape, type Item } from "@owlbear-rodeo/sdk";
 import type {
+  GridSpec,
+  ImageSpec,
   ItemPatch,
   Metadata,
   PlayerRole,
   SceneItem,
   Vec2,
 } from "./scene-model.js";
+
+/** Art chosen from the GM's Owlbear asset library. */
+export interface ImagePick {
+  image: ImageSpec;
+  grid: GridSpec;
+}
 
 export interface ObrAdapter {
   onReady(callback: () => void | Promise<void>): void;
@@ -25,6 +33,11 @@ export interface ObrAdapter {
   setSceneMetadata(update: Metadata): Promise<void>;
   /** Scene coordinates of the middle of the GM's current view. */
   getViewportCenter(): Promise<Vec2>;
+  /**
+   * Opens the asset picker (single image), optionally pre-filling its search.
+   * Resolves undefined when cancelled.
+   */
+  pickImage(search?: string): Promise<ImagePick | undefined>;
 }
 
 function toItem(item: SceneItem): Item {
@@ -99,6 +112,22 @@ export function createObrAdapter(): ObrAdapter {
     deleteItems: (ids) => OBR.scene.items.deleteItems(ids),
     getSceneMetadata: () => OBR.scene.getMetadata(),
     setSceneMetadata: (update) => OBR.scene.setMetadata(update),
+    pickImage: async (search) => {
+      const [download] = await OBR.assets.downloadImages(
+        false,
+        search,
+        "CHARACTER",
+      );
+      if (!download) return undefined;
+      const { url, mime, width, height } = download.image;
+      return {
+        image: { url, mime, width, height },
+        grid: {
+          dpi: download.grid.dpi,
+          offset: { x: download.grid.offset.x, y: download.grid.offset.y },
+        },
+      };
+    },
     getViewportCenter: async () => {
       const [width, height] = await Promise.all([
         OBR.viewport.getWidth(),

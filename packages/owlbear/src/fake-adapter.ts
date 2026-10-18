@@ -1,5 +1,16 @@
-import type { ObrAdapter } from "./obr-adapter.js";
+import type { ImagePick, ObrAdapter } from "./obr-adapter.js";
 import { SceneModel, type Vec2 } from "./scene-model.js";
+
+/**
+ * Scriptable asset picker: each `pickImage` call consumes the next entry of
+ * `results` (an Error rejects; undefined or an exhausted queue is a cancel).
+ */
+export interface FakePicker {
+  results: (ImagePick | Error | undefined)[];
+  calls: number;
+  /** The `search` argument of each call, in order. */
+  searches: (string | undefined)[];
+}
 
 /** In-memory ObrAdapter over a SceneModel, for browser-free unit tests. */
 export function createFakeObr(
@@ -8,7 +19,13 @@ export function createFakeObr(
 ): {
   obr: ObrAdapter;
   scene: SceneModel;
+  picker: FakePicker;
 } {
+  const picker: FakePicker = {
+    results: [],
+    calls: 0,
+    searches: [],
+  };
   const obr: ObrAdapter = {
     onReady: (callback) => {
       void Promise.resolve().then(callback);
@@ -26,6 +43,13 @@ export function createFakeObr(
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
+    pickImage: (search) => {
+      picker.calls++;
+      picker.searches.push(search);
+      const next = picker.results.shift();
+      if (next instanceof Error) return Promise.reject(next);
+      return Promise.resolve(next);
+    },
   };
-  return { obr, scene };
+  return { obr, scene, picker };
 }

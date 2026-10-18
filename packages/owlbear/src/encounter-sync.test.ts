@@ -260,3 +260,176 @@ describe("createEncounterSync", () => {
     expect(scene.getItems()).toEqual([]);
   });
 });
+
+describe("token art from the asset library", () => {
+  const pick = (name: string) => ({
+    image: {
+      url: `https://x/${name}.png`,
+      mime: "image/png",
+      width: 8,
+      height: 8,
+    },
+    grid: { dpi: 300, offset: { x: 4, y: 4 } },
+  });
+  const ART_KEY = "com.ttrpg-agents/token-art";
+  const other = (n: number, key: string): EncounterInstance => ({
+    ...inst(n),
+    monsterKey: key,
+  });
+
+  it("prompts once for a new key, stores the pick, and builds hidden IMAGE tokens", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    picker.results.push(pick("shadow"));
+    await applyEvent(obr, {
+      type: "added",
+      instances: [inst(1), inst(2), inst(3)],
+    });
+    expect(picker.calls).toBe(1);
+    const items = scene.getItems();
+    expect(items.every((i) => i.type === "IMAGE" && i.visible === false)).toBe(
+      true,
+    );
+    expect(items.map((i) => i.image)).toEqual([
+      pick("shadow").image,
+      pick("shadow").image,
+      pick("shadow").image,
+    ]);
+    expect(items[0]!.grid).toEqual(pick("shadow").grid);
+    expect(items.map((i) => i.name)).toEqual([
+      "Shadow 1",
+      "Shadow 2",
+      "Shadow 3",
+    ]);
+    expect(scene.getMetadata()[ART_KEY]).toEqual({ shadow: pick("shadow") });
+  });
+
+  it("reuses the stored mapping later with no second prompt", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    picker.results.push(pick("shadow"));
+    await applyEvent(obr, { type: "added", instances: [inst(1)] });
+    await applyEvent(obr, { type: "added", instances: [inst(1), inst(2)] });
+    expect(picker.calls).toBe(1);
+    expect(scene.getItems().map((i) => i.type)).toEqual(["IMAGE", "IMAGE"]);
+  });
+
+  it("uses an existing mapping (e.g. after reload) without prompting", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    scene.setMetadata({ [ART_KEY]: { shadow: pick("shadow") } });
+    await applySnapshot(obr, [inst(1)]);
+    expect(picker.calls).toBe(0);
+    expect(scene.getItems()[0]!.type).toBe("IMAGE");
+    expect(scene.getItems()[0]!.image).toEqual(pick("shadow").image);
+  });
+
+  it("falls back to a named circle when the GM cancels", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    picker.results.push(undefined);
+    await applyEvent(obr, { type: "added", instances: [inst(1)] });
+    const item = scene.getItems()[0]!;
+    expect(item.type).toBe("SHAPE");
+    expect(item.shape?.shapeType).toBe("CIRCLE");
+    expect(item.name).toBe("Shadow 1");
+    expect(scene.getMetadata()[ART_KEY]).toBeUndefined();
+  });
+
+  it("does not re-prompt a cancelled key within the same session", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    const sync = createEncounterSync(obr);
+    const added = (...n: number[]) => ({
+      v: 1 as const,
+      type: "encounter-event" as const,
+      payload: { type: "added" as const, instances: n.map(inst) },
+    });
+    await sync.handleMessage(added(1));
+    await sync.handleMessage(added(1, 2));
+    expect(picker.calls).toBe(1);
+    expect(scene.getItems().every((i) => i.type === "SHAPE")).toBe(true);
+  });
+
+  it("reports a picker error to onError, falls back to a shape, and does not retry", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    picker.results.push(new Error("boom"));
+    const errors: unknown[] = [];
+    const sync = createEncounterSync(obr, (e) => errors.push(e));
+    await sync.handleMessage({
+      v: 1,
+      type: "encounter-event",
+      payload: { type: "added", instances: [inst(1)] },
+    });
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe("boom");
+    expect(scene.getItems()[0]!.type).toBe("SHAPE");
+    await sync.handleMessage({
+      v: 1,
+      type: "encounter-event",
+      payload: { type: "added", instances: [inst(1), inst(2)] },
+    });
+    expect(picker.calls).toBe(1);
+  });
+
+  it("prompts once per distinct key in a batch and maps each to its own art", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    picker.results.push(pick("shadow"), pick("wolf"));
+    await applyEvent(obr, {
+      type: "added",
+      instances: [other(1, "shadow"), other(2, "wolf"), other(3, "shadow")],
+    });
+    expect(picker.calls).toBe(2);
+    expect(scene.getItems().map((i) => i.image?.url)).toEqual([
+      "https://x/shadow.png",
+      "https://x/wolf.png",
+      "https://x/shadow.png",
+    ]);
+  });
+
+  it("preserves other scene metadata and other keys' art on write", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    scene.setMetadata({
+      "other.ext/data": { a: 1 },
+      [ART_KEY]: { wolf: pick("wolf") },
+    });
+    picker.results.push(pick("shadow"));
+    await applyEvent(obr, { type: "added", instances: [inst(1)] });
+    expect(scene.getMetadata()).toEqual({
+      "other.ext/data": { a: 1 },
+      [ART_KEY]: { wolf: pick("wolf"), shadow: pick("shadow") },
+    });
+  });
+
+  it("pre-fills the picker search with the first instance's display name per key", async () => {
+    const { obr, picker } = createFakeObr();
+    await applyEvent(obr, {
+      type: "added",
+      instances: [other(1, "shadow"), other(2, "wolf"), other(3, "shadow")],
+    });
+    expect(picker.searches).toEqual(["Shadow 1", "Shadow 2"]);
+  });
+
+  it("still builds image tokens and reports when persisting the pick fails", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    picker.results.push(pick("shadow"));
+    const failing: ObrAdapter = {
+      ...obr,
+      setSceneMetadata: () => Promise.reject(new Error("meta failed")),
+    };
+    const errors: unknown[] = [];
+    const sync = createEncounterSync(failing, (e) => errors.push(e));
+    await sync.handleMessage({
+      v: 1,
+      type: "encounter-event",
+      payload: { type: "added", instances: [inst(1)] },
+    });
+    expect(errors.map((e) => (e as Error).message)).toEqual(["meta failed"]);
+    expect(scene.getItems()[0]!.type).toBe("IMAGE");
+    expect(scene.getItems()[0]!.image).toEqual(pick("shadow").image);
+  });
+
+  it("ignores malformed stored art and prompts again", async () => {
+    const { obr, scene, picker } = createFakeObr();
+    scene.setMetadata({ [ART_KEY]: { shadow: "junk" } });
+    picker.results.push(pick("shadow"));
+    await applyEvent(obr, { type: "added", instances: [inst(1)] });
+    expect(picker.calls).toBe(1);
+    expect(scene.getItems()[0]!.type).toBe("IMAGE");
+  });
+});

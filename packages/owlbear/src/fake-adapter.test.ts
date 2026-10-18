@@ -45,3 +45,25 @@ describe("createFakeObr", () => {
     expect(scene.getItems()).toEqual([]);
   });
 });
+
+describe("createFakeObr pickImage", () => {
+  const art = {
+    image: { url: "u", mime: "image/png", width: 1, height: 1 },
+    grid: { dpi: 150, offset: { x: 0, y: 0 } },
+  };
+
+  it("replays scripted results in order and counts calls", async () => {
+    const { obr, picker } = createFakeObr();
+    picker.results.push(art, undefined, new Error("nope"));
+    expect(await obr.pickImage()).toEqual(art);
+    expect(await obr.pickImage()).toBeUndefined();
+    await expect(obr.pickImage()).rejects.toThrow("nope");
+    expect(picker.calls).toBe(3);
+  });
+
+  it("cancels when nothing is scripted", async () => {
+    const { obr, picker } = createFakeObr();
+    expect(await obr.pickImage()).toBeUndefined();
+    expect(picker.calls).toBe(1);
+  });
+});

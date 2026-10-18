@@ -15,7 +15,9 @@ Owlbear Rodeo extension (GM-only panel that talks to the local bridge).
 
 ## Encounter sync
 
-`src/encounter-sync.ts` mirrors encounter instances as hidden (`visible: false`) circle SHAPE tokens named after the instance, in a row near the viewport centre. Tokens are linked by metadata key `com.ttrpg-agents/instance` (`{ instanceId }`); only items carrying it are ever touched. `applyEvent` and `applySnapshot` are idempotent (replays never duplicate), and `createEncounterSync(obr)` queues bridge messages so they apply one at a time. `hp-changed` is a no-op on tokens in v1. SHAPE items need a `shape` spec; the adapter exposes `getViewportCenter()`.
+`src/encounter-sync.ts` mirrors encounter instances as hidden (`visible: false`) circle SHAPE tokens named after the instance, in a row near the viewport centre. Tokens are linked by metadata key `com.ttrpg-agents/instance` (`{ instanceId }`); only items carrying it are ever touched. `applyEvent` and `applySnapshot` are idempotent (replays never duplicate), and `createEncounterSync(obr)` queues bridge messages so they apply one at a time. `hp-changed` is a no-op on tokens in v1.
+
+Token art: the first time an unmapped `monsterKey` needs tokens, the GM is prompted once (`pickImage()`, the Owlbear asset picker). The pick (`{ image, grid }`) is stored in scene metadata under `com.ttrpg-agents/token-art` (`{ [monsterKey]: pick }`) and reused for later tokens and after reloads; those tokens are hidden IMAGE items. A cancel or picker error falls back to the named circle, is reported to `onError` (errors only), and is not re-asked until the extension reloads. SHAPE items need a `shape` spec; the adapter exposes `getViewportCenter()`.
 
 ## Testing
 
