@@ -32,6 +32,9 @@ function isSdkMessage(value: unknown): value is SdkMessage {
 
 const NO_REPLY = Symbol("no-reply");
 
+/** Screen size the fake reports; the view centre is half of it. */
+export const VIEWPORT = { width: 1000, height: 600 } as const;
+
 class UnhandledMessageError extends Error {}
 
 export class FakeHost {
@@ -127,6 +130,14 @@ export class FakeHost {
       case "OBR_SCENE_ITEMS_DELETE_ITEMS":
         this.scene.deleteItems(data.ids as string[]);
         return {};
+      // Viewport: a fixed 1000x600 screen with an identity transform, so the
+      // view centre in scene coordinates is (500, 300).
+      case "OBR_VIEWPORT_GET_WIDTH":
+        return { width: VIEWPORT.width };
+      case "OBR_VIEWPORT_GET_HEIGHT":
+        return { height: VIEWPORT.height };
+      case "OBR_VIEWPORT_INVERSE_TRANSFORM_POINT":
+        return { point: data.point };
       case "OBR_SCENE_GET_METADATA":
         return { metadata: this.scene.getMetadata() };
       case "OBR_SCENE_SET_METADATA":

@@ -1,8 +1,11 @@
 import type { ObrAdapter } from "./obr-adapter.js";
-import { SceneModel } from "./scene-model.js";
+import { SceneModel, type Vec2 } from "./scene-model.js";
 
 /** In-memory ObrAdapter over a SceneModel, for browser-free unit tests. */
-export function createFakeObr(scene: SceneModel = new SceneModel()): {
+export function createFakeObr(
+  scene: SceneModel = new SceneModel(),
+  viewportCenter: Vec2 = { x: 0, y: 0 },
+): {
   obr: ObrAdapter;
   scene: SceneModel;
 } {
@@ -22,6 +25,7 @@ export function createFakeObr(scene: SceneModel = new SceneModel()): {
     deleteItems: (ids) => Promise.resolve(scene.deleteItems(ids)),
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
+    getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
   };
   return { obr, scene };
 }

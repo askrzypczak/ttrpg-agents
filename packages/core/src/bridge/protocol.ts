@@ -13,6 +13,33 @@ const helloAckPayload = z.object({ serverVersion: z.string() });
 const emptyPayload = z.object({});
 const errorPayload = z.object({ code: z.string(), message: z.string() });
 
+// Wire shape of a monster instance; structurally the core `MonsterInstance`.
+const instancePayload = z.object({
+  id: z.string(),
+  encounterId: z.string(),
+  monsterKey: z.string(),
+  displayName: z.string(),
+  maxHp: z.number(),
+  currentHp: z.number(),
+  initiative: z.number().nullable(),
+  groupId: z.string().nullable(),
+  createdAt: z.number(),
+});
+const encounterEventPayload = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("added"), instances: z.array(instancePayload) }),
+  z.object({ type: z.literal("removed"), id: z.string() }),
+  z.object({ type: z.literal("cleared") }),
+  z.object({
+    type: z.literal("hp-changed"),
+    id: z.string(),
+    currentHp: z.number(),
+    maxHp: z.number(),
+  }),
+]);
+const encounterSnapshotPayload = z.object({
+  instances: z.array(instancePayload),
+});
+
 function envelope<T extends string, P extends z.ZodType>(type: T, payload: P) {
   return z.object({
     v: z.literal(PROTOCOL_VERSION),
@@ -28,6 +55,8 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("ping", emptyPayload),
   envelope("pong", emptyPayload),
   envelope("error", errorPayload),
+  envelope("encounter-event", encounterEventPayload),
+  envelope("encounter-snapshot", encounterSnapshotPayload),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
@@ -39,6 +68,8 @@ const MESSAGE_TYPES: readonly string[] = [
   "ping",
   "pong",
   "error",
+  "encounter-event",
+  "encounter-snapshot",
 ];
 
 export type DecodeResult =

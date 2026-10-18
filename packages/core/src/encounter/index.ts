@@ -17,3 +17,4 @@ export {
   type Migration,
 } from "./migrations.js";
 export * from "./add-monsters.js";
+export * from "./events.js";

@@ -13,6 +13,10 @@ Owlbear Rodeo extension (GM-only panel that talks to the local bridge).
 - Logic modules (`hidden-token.ts`, `initiative.ts`, ...) take an `ObrAdapter`,
   never the SDK. `main.ts` wires `createObrAdapter()` into them.
 
+## Encounter sync
+
+`src/encounter-sync.ts` mirrors encounter instances as hidden (`visible: false`) circle SHAPE tokens named after the instance, in a row near the viewport centre. Tokens are linked by metadata key `com.ttrpg-agents/instance` (`{ instanceId }`); only items carrying it are ever touched. `applyEvent` and `applySnapshot` are idempotent (replays never duplicate), and `createEncounterSync(obr)` queues bridge messages so they apply one at a time. `hp-changed` is a no-op on tokens in v1. SHAPE items need a `shape` spec; the adapter exposes `getViewportCenter()`.
+
 ## Testing
 
 Tests live next to the code as `src/*.test.ts` and run under the root vitest
@@ -56,6 +60,11 @@ Chromium. First time: `npx playwright install chromium`. It is NOT part of
 - `main.ts` does not yet call `addItems`/`setMetadata`, so `e2e/driver.html`
   is a test-only page that runs the real `createObrAdapter()` through
   `addHiddenToken` / `writeInitiativeMetadata`.
+- `encounter-sync.e2e.ts` covers encounter -> hidden tokens end to end. The
+  bridge runs on a throwaway SQLite file (`TTRPG_AGENTS_DB`, `e2e/db.ts`,
+  recreated each run in the OS temp dir) seeded with 5 shadows before it
+  starts, never your real database. The fake host also answers the
+  viewport calls (fixed 1000x600 screen, identity transform).
 - Test-only workarounds (`fixtures.ts`, `playwright.config.ts`): the bridge's
   `frame-ancestors` CSP is rewritten to allow the harness origin, and
   Chromium's Local Network Access checks are disabled (a route-fulfilled

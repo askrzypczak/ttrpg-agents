@@ -360,3 +360,159 @@ describe("bridge server", () => {
     }
   });
 });
+
+describe("bridge server broadcast and snapshot", () => {
+  const snapshot: BridgeMessage = {
+    v: 1,
+    type: "encounter-snapshot",
+    payload: { instances: [] },
+  };
+  const cleared: BridgeMessage = {
+    v: 1,
+    type: "encounter-event",
+    payload: { type: "cleared" },
+  };
+
+  /** Records every decoded message a socket receives, from now on. */
+  function record(ws: WebSocket): BridgeMessage[] {
+    const received: BridgeMessage[] = [];
+    ws.on("message", (data) => {
+      const r = decodeMessage(data.toString());
+      if (r.ok) received.push(r.message);
+    });
+    return received;
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  let s2: BridgeServer;
+  beforeEach(async () => {
+    s2 = await startBridgeServer({
+      port: 0,
+      staticDir: dir,
+      snapshot: () => snapshot,
+    });
+  });
+  afterEach(async () => {
+    await s2.close();
+  });
+
+  function connect2(): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${s2.port}/ws`, {
+        origin: `http://localhost:${s2.port}`,
+      });
+      ws.once("open", () => resolve(ws));
+      ws.once("error", reject);
+    });
+  }
+
+  const hello2 = () =>
+    encodeMessage({
+      v: 1,
+      type: "hello",
+      payload: { role: "gm", extensionVersion: "0", token: s2.token },
+    });
+
+  it("sends the snapshot right after hello-ack", async () => {
+    const ws = await connect2();
+    const received = record(ws);
+    ws.send(hello2());
+    await settle();
+    expect(received.map((m) => m.type)).toEqual([
+      "hello-ack",
+      "encounter-snapshot",
+    ]);
+    ws.close();
+  });
+
+  it("broadcasts to authenticated clients only", async () => {
+    const authedWs = await connect2();
+    const authedMsgs = record(authedWs);
+    authedWs.send(hello2());
+    const anon = await connect2();
+    const anonMsgs = record(anon);
+    await settle();
+    authedMsgs.length = 0;
+    s2.broadcast(cleared);
+    await settle();
+    expect(authedMsgs).toEqual([cleared]);
+    expect(anonMsgs).toEqual([]);
+    authedWs.close();
+    anon.close();
+  });
+
+  it("reports snapshot-failed and stays up when the snapshot throws", async () => {
+    const s3 = await startBridgeServer({
+      port: 0,
+      staticDir: dir,
+      snapshot: () => {
+        throw new Error("db locked");
+      },
+    });
+    try {
+      const ws = await new Promise<WebSocket>((resolve, reject) => {
+        const w = new WebSocket(`ws://127.0.0.1:${s3.port}/ws`, {
+          origin: `http://localhost:${s3.port}`,
+        });
+        w.once("open", () => resolve(w));
+        w.once("error", reject);
+      });
+      const received = record(ws);
+      ws.send(
+        encodeMessage({
+          v: 1,
+          type: "hello",
+          payload: { role: "gm", extensionVersion: "0", token: s3.token },
+        }),
+      );
+      await settle();
+      expect(received.map((m) => m.type)).toEqual(["hello-ack", "error"]);
+      const err = received[1];
+      if (err?.type === "error") {
+        expect(err.payload).toEqual({
+          code: "snapshot-failed",
+          message: "db locked",
+        });
+      }
+      received.length = 0;
+      ws.send(ping);
+      await settle();
+      expect(received.map((m) => m.type)).toEqual(["pong"]);
+      ws.close();
+    } finally {
+      await s3.close();
+    }
+  });
+
+  it("rejects a client-sent encounter-event and relays nothing to others", async () => {
+    const a = await connect2();
+    const b = await connect2();
+    const aMsgs = record(a);
+    const bMsgs = record(b);
+    a.send(hello2());
+    b.send(hello2());
+    await settle();
+    aMsgs.length = 0;
+    bMsgs.length = 0;
+    a.send(encodeMessage(cleared));
+    await settle();
+    expect(aMsgs).toHaveLength(1);
+    const reply = aMsgs[0];
+    expect(reply?.type).toBe("error");
+    if (reply?.type === "error")
+      expect(reply.payload.code).toBe("unexpected-type");
+    expect(bMsgs).toEqual([]);
+    a.close();
+    b.close();
+  });
+
+  it("stops broadcasting to a client that disconnected", async () => {
+    const ws = await connect2();
+    ws.send(hello2());
+    await settle();
+    ws.close();
+    await settle();
+    expect(() => s2.broadcast(cleared)).not.toThrow();
+  });
+});

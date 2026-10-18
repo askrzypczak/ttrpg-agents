@@ -35,6 +35,13 @@ export interface GridSpec {
   offset: Vec2;
 }
 
+/** Geometry of a SHAPE item (what the SDK's buildShape needs). */
+export interface ShapeSpec {
+  shapeType: "RECTANGLE" | "CIRCLE" | "TRIANGLE" | "HEXAGON";
+  width: number;
+  height: number;
+}
+
 export interface SceneItem {
   id: string;
   type: string;
@@ -46,6 +53,8 @@ export interface SceneItem {
   image?: ImageSpec;
   /** Required by the real adapter when adding an IMAGE item. */
   grid?: GridSpec;
+  /** Required by the real adapter when adding a SHAPE item. */
+  shape?: ShapeSpec;
   /** Layer when adding. Default: "CHARACTER". */
   layer?: Layer;
   /** Scale when adding. Default: { x: 1, y: 1 }. */

@@ -1,8 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 import { fileURLToPath } from "node:url";
+import { E2E_DB_PATH, seedE2eDatabase } from "./db.js";
 import { writeE2eTokenFile } from "./token.js";
 
 const tokenFile = writeE2eTokenFile();
+// Playwright re-evaluates this config in each worker; only the main process
+// (no TEST_WORKER_INDEX) may recreate the DB the running bridge is using.
+if (process.env.TEST_WORKER_INDEX === undefined) seedE2eDatabase();
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
 
 export default defineConfig({
@@ -43,6 +47,7 @@ export default defineConfig({
       env: {
         BRIDGE_STATIC_DIR: `${repo}packages/owlbear/dist`,
         BRIDGE_TOKEN_FILE: tokenFile,
+        TTRPG_AGENTS_DB: E2E_DB_PATH,
       },
       url: "http://localhost:5199/manifest.json",
       reuseExistingServer: false,

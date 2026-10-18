@@ -9,6 +9,10 @@ Shared domain code: dice engine, encounter store, and the monster library.
 - `src/monsters/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadSrdMonsters()` loads the committed snapshot. A private source can be added later by passing another `{ path }`.
 - `src/monsters/search.ts`: `searchMonsters(index, query)` (case-insensitive, plural-tolerant, ranked) and `getMonsterByKey`.
 
+## Encounter events
+
+`src/encounter/events.ts`: `observeRepository(repo, emitter)` wraps an `EncounterRepository` and emits `added`, `removed`, `cleared` and `hp-changed` after each successful mutation (not on throws or no-ops such as `removeInstance` returning false). Subscribe through `EncounterEvents.subscribe(listener)`, which returns an unsubscribe function. Core knows nothing about Owlbear; the bridge forwards these events as `encounter-event` messages and sends an `encounter-snapshot` after each `hello-ack`.
+
 ## SRD 5.2 data
 
 `data/srd-5.2/monsters.json` is a committed snapshot of the SRD 5.2 creatures (CC-BY-4.0, see `data/srd-5.2/ATTRIBUTION.md`). It is generated, not hand-edited, and sorted by key so regeneration produces clean diffs. It is excluded from Prettier.

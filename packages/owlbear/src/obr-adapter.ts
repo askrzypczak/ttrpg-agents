@@ -1,12 +1,13 @@
 // The ONLY module allowed to import @owlbear-rodeo/sdk (enforced by ESLint).
 // Everything else depends on the narrow ObrAdapter interface so it can be
 // unit-tested against the fake in fake-adapter.ts.
-import OBR, { buildImage, type Item } from "@owlbear-rodeo/sdk";
+import OBR, { buildImage, buildShape, type Item } from "@owlbear-rodeo/sdk";
 import type {
   ItemPatch,
   Metadata,
   PlayerRole,
   SceneItem,
+  Vec2,
 } from "./scene-model.js";
 
 export interface ObrAdapter {
@@ -22,9 +23,27 @@ export interface ObrAdapter {
   getSceneMetadata(): Promise<Metadata>;
   /** Shallow-merges into existing scene metadata. */
   setSceneMetadata(update: Metadata): Promise<void>;
+  /** Scene coordinates of the middle of the GM's current view. */
+  getViewportCenter(): Promise<Vec2>;
 }
 
 function toItem(item: SceneItem): Item {
+  if (item.type === "SHAPE") {
+    if (!item.shape)
+      throw new Error(`SHAPE item ${item.id} needs a shape spec`);
+    return buildShape()
+      .id(item.id)
+      .name(item.name)
+      .visible(item.visible)
+      .position(item.position)
+      .metadata(item.metadata)
+      .layer(item.layer ?? "CHARACTER")
+      .scale(item.scale ?? { x: 1, y: 1 })
+      .shapeType(item.shape.shapeType)
+      .width(item.shape.width)
+      .height(item.shape.height)
+      .build();
+  }
   if (item.type !== "IMAGE")
     throw new Error(`adding ${item.type} items is not supported yet`);
   if (!item.image || !item.grid)
@@ -80,5 +99,15 @@ export function createObrAdapter(): ObrAdapter {
     deleteItems: (ids) => OBR.scene.items.deleteItems(ids),
     getSceneMetadata: () => OBR.scene.getMetadata(),
     setSceneMetadata: (update) => OBR.scene.setMetadata(update),
+    getViewportCenter: async () => {
+      const [width, height] = await Promise.all([
+        OBR.viewport.getWidth(),
+        OBR.viewport.getHeight(),
+      ]);
+      return OBR.viewport.inverseTransformPoint({
+        x: width / 2,
+        y: height / 2,
+      });
+    },
   };
 }

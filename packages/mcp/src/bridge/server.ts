@@ -43,12 +43,16 @@ export interface BridgeServerOptions {
   host?: string;
   /** Shared secret clients must present in `hello`. Defaults to a random one. */
   token?: string;
+  /** Message sent to a client right after each `hello-ack`, so it converges on current state. */
+  snapshot?: () => BridgeMessage;
 }
 
 export interface BridgeServer {
   port: number;
   token: string;
   clientCount(): number;
+  /** Sends to every authenticated client; unauthenticated sockets get nothing. */
+  broadcast(message: BridgeMessage): void;
   close(): Promise<void>;
 }
 
@@ -80,14 +84,21 @@ interface Session {
   authenticated: boolean;
 }
 
+interface Hooks {
+  token: string;
+  snapshot: (() => BridgeMessage) | undefined;
+  onAuthenticated: () => void;
+}
+
 // Authorization is decided only by the token. The client-supplied `role` in
 // `hello` is never read here; it only drives the extension UI.
 function handleMessage(
   ws: WebSocket,
   session: Session,
-  token: string,
+  hooks: Hooks,
   raw: string,
 ): void {
+  const { token } = hooks;
   const result = decodeMessage(raw);
   if (!session.authenticated) {
     if (!result.ok || result.message.type !== "hello") {
@@ -103,6 +114,7 @@ function handleMessage(
       return;
     }
     session.authenticated = true;
+    hooks.onAuthenticated();
   }
   if (!result.ok) {
     send(ws, errorMessage(result.reason, result.detail));
@@ -117,6 +129,19 @@ function handleMessage(
         ...(message.id !== undefined ? { id: message.id } : {}),
         payload: { serverVersion: SERVER_VERSION },
       });
+      if (hooks.snapshot) {
+        try {
+          send(ws, hooks.snapshot());
+        } catch (e) {
+          send(
+            ws,
+            errorMessage(
+              "snapshot-failed",
+              e instanceof Error ? e.message : String(e),
+            ),
+          );
+        }
+      }
       break;
     case "ping":
       send(ws, {
@@ -145,9 +170,11 @@ export async function startBridgeServer(
     staticDir,
     host = "127.0.0.1",
     token = randomBytes(32).toString("hex"),
+    snapshot,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
+  const authenticatedClients = new Set<WebSocket>();
 
   // DNS rebinding defense: only accept requests addressed to loopback names.
   const hostAllowed = (hostHeader: string | undefined): boolean => {
@@ -214,10 +241,19 @@ export async function startBridgeServer(
     wss.handleUpgrade(req, socket, head, (ws) => {
       const session: Session = { authenticated: false };
       clients.add(ws);
-      ws.on("close", () => clients.delete(ws));
-      ws.on("error", () => clients.delete(ws));
+      const forget = () => {
+        clients.delete(ws);
+        authenticatedClients.delete(ws);
+      };
+      const hooks: Hooks = {
+        token,
+        snapshot,
+        onAuthenticated: () => authenticatedClients.add(ws),
+      };
+      ws.on("close", forget);
+      ws.on("error", forget);
       ws.on("message", (data) =>
-        handleMessage(ws, session, token, data.toString()),
+        handleMessage(ws, session, hooks, data.toString()),
       );
     });
   });
@@ -234,9 +270,16 @@ export async function startBridgeServer(
     port: (http.address() as AddressInfo).port,
     token,
     clientCount: () => clients.size,
+    broadcast: (message) => {
+      const encoded = encodeMessage(message);
+      for (const ws of authenticatedClients) {
+        if (ws.readyState === ws.OPEN) ws.send(encoded);
+      }
+    },
     close: async () => {
       for (const ws of clients) ws.terminate();
       clients.clear();
+      authenticatedClients.clear();
       wss.close();
       await new Promise<void>((resolve, reject) => {
         http.close((err) => (err ? reject(err) : resolve()));
