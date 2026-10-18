@@ -7,6 +7,7 @@ import {
   rowPositions,
   type EncounterInstance,
 } from "./encounter-sync.js";
+import { INITIATIVE_METADATA_KEY } from "./initiative.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { SceneItem } from "./scene-model.js";
@@ -90,6 +91,47 @@ describe("applyEvent added", () => {
     await applyEvent(obr, { type: "added", instances: [inst(1), inst(2)] });
     expect(instanceIds(scene.getItems())).toEqual(["i1", "i2"]);
   });
+
+  it("gives a token its initiative for the Initiative Tracker, alongside the instance link", async () => {
+    const { obr, scene } = createFakeObr();
+    await applyEvent(obr, {
+      type: "added",
+      instances: [{ ...inst(1), initiative: 14 }],
+    });
+    const [item] = scene.getItems();
+    expect(item?.metadata).toEqual({
+      [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+      [INITIATIVE_METADATA_KEY]: { count: "14", active: false },
+    });
+    expect(item?.visible).toBe(false);
+  });
+
+  it("leaves the tracker key off a token whose instance has no initiative", async () => {
+    const { obr, scene } = createFakeObr();
+    await applyEvent(obr, { type: "added", instances: [inst(1)] });
+    const [item] = scene.getItems();
+    expect(item?.metadata).toEqual({
+      [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+    });
+  });
+
+  it("gives five instances sharing an initiative the same tracker count, all hidden", async () => {
+    const { obr, scene } = createFakeObr();
+    await applyEvent(obr, {
+      type: "added",
+      instances: [1, 2, 3, 4, 5].map((n) => ({ ...inst(n), initiative: 12 })),
+    });
+    const items = scene.getItems();
+    expect(items).toHaveLength(5);
+    expect(items.map((i) => i.metadata[INITIATIVE_METADATA_KEY])).toEqual([
+      { count: "12", active: false },
+      { count: "12", active: false },
+      { count: "12", active: false },
+      { count: "12", active: false },
+      { count: "12", active: false },
+    ]);
+    expect(items.every((i) => i.visible === false)).toBe(true);
+  });
 });
 
 describe("applyEvent removed/cleared/hp-changed", () => {
@@ -161,6 +203,30 @@ describe("applySnapshot", () => {
     await applyEvent(obr, { type: "added", instances: [inst(1)] });
     await applySnapshot(obr, []);
     expect(scene.getItems()).toEqual([]);
+  });
+
+  it("gives tokens it adds their initiative for the Initiative Tracker", async () => {
+    const { obr, scene } = createFakeObr();
+    await applySnapshot(obr, [{ ...inst(1), initiative: 9 }]);
+    expect(scene.getItems()[0]?.metadata).toEqual({
+      [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+      [INITIATIVE_METADATA_KEY]: { count: "9", active: false },
+    });
+  });
+
+  it("does not update the metadata of tokens that already exist", async () => {
+    const { obr, scene } = createFakeObr();
+    await applyEvent(obr, {
+      type: "added",
+      instances: [{ ...inst(1), initiative: 5 }],
+    });
+    const before = scene.getItems();
+    await applySnapshot(obr, [{ ...inst(1), initiative: 14 }]);
+    expect(scene.getItems()).toEqual(before);
+    expect(scene.getItems()[0]?.metadata[INITIATIVE_METADATA_KEY]).toEqual({
+      count: "5",
+      active: false,
+    });
   });
 });
 

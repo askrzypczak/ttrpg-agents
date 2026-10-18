@@ -1,4 +1,5 @@
 import type { BridgeMessage } from "@ttrpg-agents/core/bridge";
+import { initiativeMetadata } from "./initiative.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { SceneItem } from "./scene-model.js";
 
@@ -26,9 +27,12 @@ function instanceIdOf(item: SceneItem): string | undefined {
 
 const isOurs = (item: SceneItem): boolean => instanceIdOf(item) !== undefined;
 
-/** Pure mapping from an instance to a hidden SHAPE token at `position`. */
+/**
+ * Pure mapping from an instance to a hidden SHAPE token at `position`. The
+ * token also carries Initiative Tracker metadata for the instance's initiative.
+ */
 export function instanceToItem(
-  instance: Pick<EncounterInstance, "id" | "displayName">,
+  instance: Pick<EncounterInstance, "id" | "displayName" | "initiative">,
   position: { x: number; y: number },
 ): SceneItem {
   return {
@@ -37,7 +41,10 @@ export function instanceToItem(
     name: instance.displayName,
     visible: false,
     position,
-    metadata: { [INSTANCE_METADATA_KEY]: { instanceId: instance.id } },
+    metadata: {
+      [INSTANCE_METADATA_KEY]: { instanceId: instance.id },
+      ...initiativeMetadata(instance.initiative),
+    },
     shape: { shapeType: "CIRCLE", width: TOKEN_SIZE, height: TOKEN_SIZE },
   };
 }
@@ -56,7 +63,7 @@ export function rowPositions(
 
 async function addMissing(
   obr: ObrAdapter,
-  instances: Pick<EncounterInstance, "id" | "displayName">[],
+  instances: Pick<EncounterInstance, "id" | "displayName" | "initiative">[],
 ): Promise<void> {
   const existing = new Set(
     (await obr.getItems(isOurs)).map((item) => instanceIdOf(item)),
