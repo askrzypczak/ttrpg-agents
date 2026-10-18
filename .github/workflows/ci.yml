@@ -43,8 +43,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      actions: read
     steps:
+      # Full history so `git diff origin/<base>...HEAD` works for patch coverage.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
@@ -53,13 +57,32 @@ jobs:
       - run: npx playwright install --with-deps chromium
       # mcp tests resolve core through its built dist/.
       - run: npm run build
+      # Baseline = coverage-summary artifact of the latest green main run.
+      # Missing or expired is fine: the comment then says "no baseline".
+      - name: Download baseline coverage from main
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list --branch main --workflow ci.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$id" ]; then gh run download "$id" -n coverage-summary -D reports/baseline; fi
       - run: npm run coverage
+        env:
+          COVERAGE_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          COVERAGE_BASELINE: ${{ github.event_name == 'pull_request' && 'reports/baseline/coverage-summary.json' || '' }}
       - name: Comment coverage on PR
         if: always() && github.event_name == 'pull_request' && hashFiles('reports/coverage/summary.md') != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh pr comment ${{ github.event.pull_request.number }} --edit-last --create-if-none --body-file reports/coverage/summary.md
+      # Small separate artifact so PR runs can download the baseline cheaply.
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && hashFiles('reports/coverage/coverage-summary.json') != ''
+        with:
+          name: coverage-summary
+          path: reports/coverage/coverage-summary.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

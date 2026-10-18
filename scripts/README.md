@@ -2,6 +2,6 @@
 
 Root-level repo tooling. Ticket automation (agent dispatch, label setup, close-time label cleanup) moved to the `askrzypczak/claude-workflow` repo.
 
-- `coverage.ts`: `npm run coverage`. Unit, integration and e2e coverage plus a merged total. Informational only; reports land in `reports/coverage/<kind>`.
-- `coverage-lib.ts`: pure helpers for `coverage.ts` (Istanbul merge and the per-kind summary table). Unit-tested in `coverage-lib.test.ts`.
+- `coverage.ts`: `npm run coverage`. Unit, integration and e2e coverage plus a merged total. Informational only; reports land in `reports/coverage/<kind>`. Also writes `coverage-summary.json` (baseline artifact) and `total/coverage-final.json`. Optional env: `COVERAGE_BASE_REF` (e.g. `origin/main`; enables patch coverage from `git diff -U0 <ref>...HEAD`) and `COVERAGE_BASELINE` (path to a `coverage-summary.json` from main; enables the delta). Both unset locally means "no baseline" / "no coverable lines changed"; errors never fail the run.
+- `coverage-lib.ts`: pure helpers for `coverage.ts` (Istanbul merge, per-kind table, diff parsing, patch coverage, delta and comment formatting). Unit-tested in `coverage-lib.test.ts`.
 - `vitest-projects.test.ts`: checks that every test file belongs to exactly one vitest project (see `vitest.globs.ts`).
