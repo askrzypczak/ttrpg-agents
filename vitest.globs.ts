@@ -16,7 +16,7 @@ export const INTEGRATION_INCLUDE = [
   "packages/*/e2e/**/*.integration.test.ts",
   "scripts/**/*.integration.test.ts",
 ];
-export const COVERAGE_INCLUDE = ["packages/*/src/**/*.ts"];
+export const COVERAGE_INCLUDE = ["packages/*/src/**/*.ts", "scripts/**/*.ts"];
 export const COVERAGE_EXCLUDE = [
   "**/*.test.ts",
   "**/fixtures/**",

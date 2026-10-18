@@ -20,10 +20,17 @@ import reports from "istanbul-reports";
 import { CoverageReport } from "monocart-coverage-reports";
 import {
   formatComment,
+  formatDelta,
   formatMarkdown,
+  formatPatch,
   formatTable,
+  makeBaseline,
   mergeCoverage,
+  parseBaseline,
+  parseDiffAddedLines,
+  patchCoverage,
   summarize,
+  type PatchResult,
   type Row,
 } from "./coverage-lib.ts";
 
@@ -111,6 +118,48 @@ async function e2eKind(): Promise<CoverageMapData | null> {
   return readMap(join(dir, "coverage-final.json"));
 }
 
+/** Baseline line pct from COVERAGE_BASELINE; null on any problem. */
+function readBaseline(): number | null {
+  const file = process.env.COVERAGE_BASELINE;
+  if (!file) return null;
+  try {
+    return parseBaseline(readFileSync(resolve(root, file), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/** Patch coverage vs COVERAGE_BASE_REF; null when unset or git fails. */
+function readPatch(total: CoverageMapData): PatchResult | null {
+  const base = process.env.COVERAGE_BASE_REF;
+  if (!base) return null;
+  const r = spawnSync(
+    "git",
+    [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "-U0",
+      "--no-color",
+      "--no-ext-diff",
+      "--src-prefix=a/",
+      "--dst-prefix=b/",
+      `${base}...HEAD`,
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
+  );
+  if (r.status !== 0 || typeof r.stdout !== "string") {
+    console.error(`coverage: git diff against ${base} failed`);
+    return null;
+  }
+  try {
+    return patchCoverage(total, parseDiffAddedLines(r.stdout), root);
+  } catch (err) {
+    console.error(`coverage: patch coverage failed: ${String(err)}`);
+    return null;
+  }
+}
+
 async function main(): Promise<void> {
   const only = process.argv.slice(2);
   const want = (k: string) => only.length === 0 || only.includes(k);
@@ -142,7 +191,23 @@ async function main(): Promise<void> {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatMarkdown(rows));
   }
   // Body for the CI sticky PR comment (see the coverage job in ci.yml).
-  writeFileSync(join(out, "summary.md"), formatComment(rows));
+  const combined = total ? summarize(total) : null;
+  if (total && combined) {
+    // The summary is the baseline artifact uploaded from main (see ci.yml).
+    writeFileSync(join(out, "coverage-summary.json"), makeBaseline(combined));
+    writeFileSync(
+      join(out, "total", "coverage-final.json"),
+      JSON.stringify(total),
+    );
+  }
+  const headline =
+    total && combined
+      ? {
+          delta: formatDelta(combined.lines.pct, readBaseline()),
+          patch: formatPatch(readPatch(total)),
+        }
+      : undefined;
+  writeFileSync(join(out, "summary.md"), formatComment(rows, headline));
 }
 
 await main();
