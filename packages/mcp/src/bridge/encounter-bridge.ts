@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { EncounterEvents, EncounterRepository } from "@ttrpg-agents/core";
-import type { BridgeMessage } from "@ttrpg-agents/core/bridge";
+import type { BridgeMessage } from "@ttrpg-agents/protocol";
 
 /** Full current instance list, for a client that just connected. */
 export function snapshotMessage(repo: EncounterRepository): BridgeMessage {

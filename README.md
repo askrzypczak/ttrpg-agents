@@ -34,7 +34,7 @@ npm run check   # build, typecheck, lint, format check, tests
 
 ### Owlbear Rodeo extension (bridge)
 
-The `owlbear` package is an Owlbear Rodeo extension served from a local bridge server that also speaks a versioned WebSocket protocol (`@ttrpg-agents/core/bridge`).
+The `owlbear` package is an Owlbear Rodeo extension served from a local bridge server that also speaks a versioned WebSocket protocol (`@ttrpg-agents/protocol`).
 
 1. `npm run build` (builds the extension into `packages/owlbear/dist`).
 2. `npm run bridge -w @ttrpg-agents/mcp` (serves the extension and `ws://localhost:5199/ws`; override with `BRIDGE_PORT`).

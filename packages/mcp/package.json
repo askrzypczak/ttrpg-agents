@@ -19,6 +19,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@ttrpg-agents/core": "*",
+    "@ttrpg-agents/protocol": "*",
     "ws": "^8.18.0",
     "zod": "^4.6.7"
   },

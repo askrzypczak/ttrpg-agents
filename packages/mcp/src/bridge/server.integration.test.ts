@@ -8,7 +8,7 @@ import {
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
-} from "@ttrpg-agents/core/bridge";
+} from "@ttrpg-agents/protocol";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
 const MANIFEST = { name: "t", action: { popover: "/index.html" } };

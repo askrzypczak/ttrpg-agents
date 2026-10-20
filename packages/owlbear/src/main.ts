@@ -1,10 +1,10 @@
+import { PROTOCOL_VERSION } from "@ttrpg-agents/protocol";
 import {
-  PROTOCOL_VERSION,
   ReconnectingSocket,
   type RejectionCode,
   type SocketLike,
   type SocketState,
-} from "@ttrpg-agents/core/bridge";
+} from "./reconnecting-socket.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { describeError, panelView } from "./panel-state.js";

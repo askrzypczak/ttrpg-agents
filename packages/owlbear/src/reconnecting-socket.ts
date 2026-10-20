@@ -1,10 +1,10 @@
-import { nextDelay, type BackoffOptions } from "./backoff.js";
 import {
   decodeMessage,
   encodeMessage,
   PROTOCOL_VERSION,
   type BridgeMessage,
-} from "./protocol.js";
+} from "@ttrpg-agents/protocol";
+import { nextDelay, type BackoffOptions } from "./backoff.js";
 
 export type SocketState =
   "connecting" | "open" | "reconnecting" | "closed" | "rejected";

@@ -1,4 +1,4 @@
-import type { BridgeMessage } from "@ttrpg-agents/core/bridge";
+import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { SceneItem } from "./scene-model.js";
 
