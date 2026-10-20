@@ -1,11 +1,10 @@
 import { fileURLToPath } from "node:url";
+import { SqliteEncounterRepository, openDatabase } from "@ttrpg-agents/core";
 import {
-  SqliteEncounterRepository,
-  createEncounterEmitter,
-  observeRepository,
-  openDatabase,
-} from "@ttrpg-agents/core";
-import { forwardEncounterEvents, snapshotMessage } from "./encounter-bridge.js";
+  broadcastSnapshotsOnChange,
+  dataVersion,
+  snapshotMessage,
+} from "./encounter-bridge.js";
 import { DEFAULT_BRIDGE_PORT, startBridgeServer } from "./server.js";
 import { defaultTokenPath, loadOrCreateToken } from "./token-file.js";
 
@@ -18,21 +17,21 @@ const staticDir =
 const tokenPath = process.env.BRIDGE_TOKEN_FILE ?? defaultTokenPath();
 const token = await loadOrCreateToken(tokenPath);
 
-// The snapshot reads the shared SQLite file, so a connecting extension converges
-// on instances added by any process. Live events only cover mutations made
-// through `repo` in this process.
-const emitter = createEncounterEmitter();
-const repo = observeRepository(
-  new SqliteEncounterRepository(openDatabase()),
-  emitter,
-);
+// The snapshot is sent after each hello-ack and again whenever another process
+// (the MCP server) commits a change, detected by polling PRAGMA data_version.
+const db = openDatabase();
+const repo = new SqliteEncounterRepository(db);
 const server = await startBridgeServer({
   port,
   staticDir,
   token,
   snapshot: () => snapshotMessage(repo),
 });
-forwardEncounterEvents(emitter, server);
+const stopPolling = broadcastSnapshotsOnChange(
+  () => dataVersion(db),
+  repo,
+  server,
+);
 console.log(`bridge listening on http://localhost:${server.port}`);
 console.log(`serving ${staticDir}`);
 console.log(`token file: ${tokenPath}`);
@@ -42,6 +41,7 @@ console.log(
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
+    stopPolling();
     void server.close().then(() => process.exit(0));
   });
 }
