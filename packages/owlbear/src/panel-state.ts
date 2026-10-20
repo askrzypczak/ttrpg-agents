@@ -84,8 +84,19 @@ function connectionView(input: PanelInput): PanelView {
   switch (input.socketState) {
     case "open":
       return { kind: "connected", message: "Connected to the local bridge." };
-    case "closed":
     case "rejected":
+      return input.rejection === "unsupported-version"
+        ? {
+            kind: "rejected-version",
+            message:
+              "Bridge and extension versions differ: rebuild the extension and the bridge.",
+          }
+        : {
+            kind: "rejected-token",
+            message:
+              "The bridge rejected the token: reinstall via the URL the bridge printed.",
+          };
+    case "closed":
       return { kind: "closed", message: "Disconnected." };
     case "connecting":
     case "reconnecting": {
