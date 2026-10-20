@@ -8,7 +8,7 @@ npm workspaces monorepo in place (`packages/core`, `packages/mcp`, `packages/owl
 - `npm run check` = build, typecheck, lint, format:check, test (fail-fast). It is the definition of done; CI (`.github/workflows/ci.yml`) runs it on PRs and pushes to main.
 
 ## Conventions
-- Owner: Tony (personal GitHub account `askrzypczak`). Private repo.
+- Owner: Tony (personal GitHub account `askrzypczak`). Public repo, openly an agent-written test project for claude-workflow (see README). Tony is the only contributor: issues are for directing agents, outside PRs are not accepted. No license yet (all rights reserved); the SRD data is CC-BY 4.0.
 - Keep this file short; record decisions here as they are made.
 - Never authorize by the client-supplied `role` (bridge `hello`); it only drives UI. Bridge clients authenticate with the token.
 - E2E: `npm run test:e2e` (Playwright + fake Owlbear host, `packages/owlbear/e2e`; see its README) is a separate `e2e` CI job, not part of `npm run check` (browser needed). Needs ports 5199/5200 free.
@@ -37,13 +37,13 @@ Dispatch, label setup (`setup-labels.sh`) and close-time label cleanup now live 
 - Log: `~/Library/Logs/claude-workflow-poller.log`. Dry run: `dispatch/agent-poller.sh --dry-run` from the claude-workflow clone.
 
 ## Work practices
-- The workflow itself (skills `work-ticket`, `address-feedback`; subagents `implementer`, `reviewer`; `grg.sh`) lives in the private plugin marketplace repo `askrzypczak/claude-workflow` (local clone `~/Projects/claude-workflow`), enabled in `.claude/settings.json`. Change the workflow there, not here. The deny rules in `.claude/settings.json` and these conventions stay in this repo; the git guard ships with the plugin.
+- The workflow itself (skills `work-ticket`, `address-feedback`; subagents `implementer`, `reviewer`; `grg.sh`) lives in the public plugin marketplace repo `askrzypczak/claude-workflow` (local clone `~/Projects/claude-workflow`), enabled in `.claude/settings.json`. Change the workflow there, not here. The deny rules in `.claude/settings.json` and these conventions stay in this repo; the git guard ships with the plugin.
 - Flow: plan (plan mode) -> **Tony signs off** -> `implementer` subagent -> green/red/green test proof -> `reviewer` subagent (complex changes only) -> PR with CI green -> **Tony reviews** -> `address-feedback` skill (summarise, ask questions, then fix).
 - The local `main` checkout can be stale. Before planning or filing tickets, `git fetch origin` and read `origin/main` (`git show origin/main:<path>`, `git ls-tree`), not the working tree.
 - Models: orchestrator in the main session; once a plan is approved, `implementer` defaults to haiku/xhigh (sonnet/medium for subtle logic, opus for the hardest; the tier is set in the approved plan); `reviewer` is opus/medium.
 - Tests are mandatory. No TDD requirement; instead prove tests with green/red/green: the plugin's `grg.sh` (mechanical) plus targeted breaks of the implementation for logic-heavy code. Evidence goes in the PR body.
 - "Complex" = branching logic, new abstractions, shared code, security/data handling; complexity decides whether the reviewer runs.
-- Agents may push their own `issue-N-*` branch. Humans merge; nobody pushes to `main`, force-pushes, or runs `gh pr merge`. Enforced locally by the `ticket-workflow` plugin's git guard (claude-workflow `plugins/ticket-workflow/hooks/guard-git.sh`; change it there, not here) plus the deny rules in `.claude/settings.json`. GitHub branch protection is unavailable on this free private repo.
+- Agents may push their own `issue-N-*` branch. Humans merge; nobody pushes to `main`, force-pushes, or runs `gh pr merge`. Enforced locally by the `ticket-workflow` plugin's git guard (claude-workflow `plugins/ticket-workflow/hooks/guard-git.sh`; change it there, not here) plus the deny rules in `.claude/settings.json`. GitHub branch protection was unavailable while the repo was private; it is free on a public repo, so a server-side ruleset on `main` is the next step (not set up yet).
 - PRs are opened as active (not draft): this is a team of one human, so draft would only signal "review needed", which the `needs-review` label already does. `npm run check` (once scaffolded) is the single definition of done and what CI runs.
 
 ## Mutation testing
