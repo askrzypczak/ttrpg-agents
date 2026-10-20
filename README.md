@@ -45,6 +45,8 @@ Warning: `BRIDGE_STATIC_DIR` overrides the served folder, and the bridge serves 
 
 The panel is GM-only and shows connection status; it reconnects with backoff if the bridge restarts.
 
+The bridge polls the SQLite file every 250 ms and pushes a fresh snapshot when the MCP server changes it, so tokens appear without reloading the panel.
+
 ## Attribution
 
 Monster data is from the System Reference Document 5.2 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode); see [`ATTRIBUTION.md`](packages/core/data/srd-5.2/ATTRIBUTION.md). This project is not affiliated with or endorsed by Wizards of the Coast or Owlbear Rodeo.
