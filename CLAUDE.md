@@ -12,7 +12,7 @@ npm workspaces monorepo in place (`packages/core`, `packages/mcp`, `packages/owl
 - Keep this file short; record decisions here as they are made.
 - Never authorize by the client-supplied `role` (bridge `hello`); it only drives UI. Bridge clients authenticate with the token.
 - E2E: `npm run test:e2e` (Playwright + fake Owlbear host, `packages/owlbear/e2e`; see its README) is a separate `e2e` CI job, not part of `npm run check` (browser needed). Needs ports 5199/5200 free.
-- Layout: npm workspaces under `packages/*` (`@ttrpg-agents/core`, `@ttrpg-agents/mcp`, `@ttrpg-agents/owlbear`). `core` has no MCP deps; `mcp` depends on `core`; `owlbear` (Vite browser extension) imports only the browser-safe `@ttrpg-agents/core/bridge` subpath and is excluded from the root typecheck (it typechecks in its own build, with DOM lib). `build` runs before typecheck because `mcp` resolves `core` through its built `dist/`. `scripts/` stays at the root.
+- Layout: npm workspaces under `packages/*` (`@ttrpg-agents/core`, `@ttrpg-agents/mcp`, `@ttrpg-agents/owlbear`). `core` has no MCP deps; `mcp` depends on `core`; `owlbear` (Vite browser extension) imports only the browser-safe `@ttrpg-agents/core/bridge` subpath and is excluded from the root typecheck (it typechecks in its own build, with DOM lib). `mcp` resolves `core` through its built `dist/`, so `mcp` declares a TypeScript project reference to `core` (both `tsconfig.build.json` are `composite`). `build:ts` (`tsc -b`) is the single incremental build; `typecheck` and the vitest `globalSetup` (`vitest.global-setup.ts`) run it, so tests and typecheck never see a stale `core`/`mcp` `dist/` and a fresh worktree needs only `npm ci`. Each `tsconfig.build.json` keeps its `tsBuildInfoFile` inside `dist/` so deleting `dist/` also forces a rebuild. `scripts/` stays at the root.
 - Owlbear extension code is tested browser-free via an SDK adapter + fake; see `packages/owlbear/README.md`. Only `obr-adapter.ts` may import `@owlbear-rodeo/sdk` (lint-enforced).
 
 ## Test classification and coverage
@@ -47,7 +47,7 @@ Dispatch, label setup (`setup-labels.sh`) and close-time label cleanup now live 
 - PRs are opened as active (not draft): this is a team of one human, so draft would only signal "review needed", which the `needs-review` label already does. `npm run check` (once scaffolded) is the single definition of done and what CI runs.
 
 ## Mutation testing
-- `npm run mutate` runs Stryker (`stryker.config.json`, incremental; results in `reports/`, HTML at `reports/mutation/index.html`). Run `npm run build` first: `mcp` tests resolve `core` through `dist/`, which the Stryker sandbox only has if it was built.
+- `npm run mutate` runs Stryker (`stryker.config.json`, incremental; results in `reports/`, HTML at `reports/mutation/index.html`). No manual build needed: the vitest `globalSetup` rebuilds `dist/` in the Stryker sandbox.
 - Scope it with e.g. `npm run mutate -- --mutate 'packages/core/src/dice/*.ts,!packages/core/src/dice/*.test.ts'` (a CLI `--mutate` replaces the config's test/`index.ts` exclusions, so repeat them); add `--force` to ignore the incremental cache.
 - Outside `check` and CI. Use it to back up new-module PRs where `grg.sh` says `PASS (weak)`.
 - Noise rules: `StringLiteral` and `OptionalChaining` mutants are excluded globally (config). Silence other equivalent mutants inline with `// Stryker disable next-line <Mutator>: <reason>`.

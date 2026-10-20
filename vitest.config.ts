@@ -11,6 +11,7 @@ import {
 // is not slowed; see scripts/coverage.ts.
 export default defineConfig({
   test: {
+    globalSetup: ["./vitest.global-setup.ts"],
     coverage: {
       provider: "v8",
       include: COVERAGE_INCLUDE,
