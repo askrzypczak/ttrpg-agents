@@ -2,6 +2,7 @@ import { test as base, expect, type Frame, type Page } from "@playwright/test";
 import "./globals.d.ts";
 import { fileURLToPath } from "node:url";
 import { withCoverage } from "./coverage.js";
+import { bridgeOrigin, harnessOrigin } from "./env.js";
 import { E2E_TOKEN } from "./token.js";
 
 // Raw V8 entries land here; scripts/coverage.ts converts them.
@@ -9,9 +10,9 @@ const COVERAGE_RAW_DIR = fileURLToPath(
   new URL("../../../reports/coverage/e2e-raw", import.meta.url),
 );
 
-const HARNESS = "http://127.0.0.1:5200/harness.html";
-export const EXTENSION = "http://localhost:5199/index.html";
-export const DRIVER = "http://127.0.0.1:5200/driver.html";
+const HARNESS = `${harnessOrigin()}/harness.html`;
+export const EXTENSION = `${bridgeOrigin()}/index.html`;
+export const DRIVER = `${harnessOrigin()}/driver.html`;
 
 export async function openHarness(
   page: Page,
@@ -50,21 +51,21 @@ export const test = base.extend<{ hostErrors: { allow: boolean } }>({
   // The bridge only lets owlbear.rodeo frame the extension (frame-ancestors).
   // Swap in the harness origin for these tests, keeping the rest of the CSP.
   page: async ({ page }, use) => {
-    await page.route("http://localhost:5199/**", async (route) => {
+    await page.route(`${bridgeOrigin()}/**`, async (route) => {
       const response = await route.fetch();
       const headers = response.headers();
       const csp = headers["content-security-policy"];
       if (csp)
         headers["content-security-policy"] = csp.replace(
           /frame-ancestors [^;]*/,
-          "frame-ancestors http://127.0.0.1:5200",
+          `frame-ancestors ${harnessOrigin()}`,
         );
       await route.fulfill({ response, headers });
     });
     // No-op unless E2E_COVERAGE=1 (see scripts/coverage.ts).
     await withCoverage(
       page,
-      { origin: "http://localhost:5199/", outDir: COVERAGE_RAW_DIR },
+      { origin: `${bridgeOrigin()}/`, outDir: COVERAGE_RAW_DIR },
       () => use(page),
     );
   },

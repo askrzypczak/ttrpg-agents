@@ -37,7 +37,9 @@ import {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "reports", "coverage");
 const owlbearDir = join(root, "packages", "owlbear");
-const EXTENSION_ORIGIN = "http://localhost:5199/";
+// No port: the bridge port differs per e2e run. fixtures.ts already keeps only
+// the extension's entries in the raw files.
+const EXTENSION_URL_PREFIX = "http://localhost:";
 
 function run(
   cmd: string,
@@ -107,7 +109,7 @@ async function e2eKind(): Promise<CoverageMapData | null> {
     sourcePath: (path: string) =>
       path.startsWith("src/") ? join(owlbearDir, path) : path,
     entryFilter: (entry: { url: string }) =>
-      entry.url.startsWith(EXTENSION_ORIGIN),
+      entry.url.startsWith(EXTENSION_URL_PREFIX),
     cleanCache: true,
     logging: "error",
   });
