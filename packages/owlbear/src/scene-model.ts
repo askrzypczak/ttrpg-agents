@@ -68,6 +68,14 @@ export type ItemPatch = Partial<
 export type SceneChange =
   { kind: "items" } | { kind: "metadata" } | { kind: "ready"; ready: boolean };
 
+/** What the real SDK rejects item calls with while no scene is loaded. */
+export class MissingSceneError extends Error {
+  override name = "MissingDataError";
+  constructor() {
+    super("No scene found");
+  }
+}
+
 /**
  * Pure in-memory model of the Owlbear scene (items, scene metadata, role,
  * ready flag). No SDK or test-framework imports, so the e2e fake host can
@@ -77,11 +85,13 @@ export class SceneModel {
   private readonly items = new Map<string, SceneItem>();
   private metadata: Metadata = {};
   private readonly listeners = new Set<(change: SceneChange) => void>();
+  public role: PlayerRole;
+  private ready: boolean;
 
-  constructor(
-    public role: PlayerRole = "gm",
-    private ready = true,
-  ) {}
+  constructor(role: PlayerRole = "gm", ready = true) {
+    this.role = role;
+    this.ready = ready;
+  }
 
   onChange(listener: (change: SceneChange) => void): () => void {
     this.listeners.add(listener);

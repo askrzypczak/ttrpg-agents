@@ -1,4 +1,4 @@
-import type { SocketState } from "@ttrpg-agents/core/bridge";
+import type { RejectionCode, SocketState } from "./reconnecting-socket.js";
 
 import type { PlayerRole } from "./scene-model.js";
 
@@ -13,6 +13,10 @@ export interface PanelInput {
   stalledAfterMs?: number;
   /** True when the panel URL carried no bridge token. */
   tokenMissing?: boolean;
+  /** Description of the latest encounter sync failure, if not yet recovered. */
+  syncError?: string;
+  /** Why the bridge rejected us, when socketState is "rejected". */
+  rejection?: RejectionCode;
 }
 
 export interface PanelView {
@@ -22,10 +26,29 @@ export interface PanelView {
     | "connected"
     | "connecting"
     | "reconnecting"
-    | "closed";
+    | "closed"
+    | "rejected-token"
+    | "rejected-version";
   message: string;
   /** Extra explanation when the connection seems stuck. */
   hint?: string;
+  /** Visible encounter sync failure. */
+  error?: string;
+}
+
+/**
+ * Readable text for a rejection. The SDK rejects with the host's plain
+ * `{ name, message }` payload, not an Error.
+ */
+export function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error !== null) {
+    const { name, message } = error as { name?: unknown; message?: unknown };
+    if (typeof message === "string")
+      return typeof name === "string" ? `${name}: ${message}` : message;
+  }
+  return String(error);
 }
 
 export const DEFAULT_STALLED_AFTER_MS = 8000;
@@ -36,6 +59,15 @@ export const STALLED_HINT =
   "the bridge is running (npm run bridge -w @ttrpg-agents/mcp).";
 
 export function panelView(input: PanelInput): PanelView {
+  const view = connectionView(input);
+  return input.syncError &&
+    view.kind !== "gm-only" &&
+    view.kind !== "token-missing"
+    ? { ...view, error: `Encounter sync failed: ${input.syncError}` }
+    : view;
+}
+
+function connectionView(input: PanelInput): PanelView {
   if (input.role !== "gm") {
     return {
       kind: "gm-only",
@@ -52,6 +84,18 @@ export function panelView(input: PanelInput): PanelView {
   switch (input.socketState) {
     case "open":
       return { kind: "connected", message: "Connected to the local bridge." };
+    case "rejected":
+      return input.rejection === "unsupported-version"
+        ? {
+            kind: "rejected-version",
+            message:
+              "Bridge and extension versions differ: rebuild the extension and the bridge.",
+          }
+        : {
+            kind: "rejected-token",
+            message:
+              "The bridge rejected the token: reinstall via the URL the bridge printed.",
+          };
     case "closed":
       return { kind: "closed", message: "Disconnected." };
     case "connecting":

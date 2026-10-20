@@ -11,7 +11,11 @@ const helloPayload = z.object({
 });
 const helloAckPayload = z.object({ serverVersion: z.string() });
 const emptyPayload = z.object({});
-const errorPayload = z.object({ code: z.string(), message: z.string() });
+const errorPayload = z.object({
+  code: z.string(),
+  message: z.string(),
+  fatal: z.boolean(),
+});
 
 // Wire shape of a monster instance; structurally the core `MonsterInstance`.
 const instancePayload = z.object({
@@ -62,15 +66,9 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
 export type BridgeMessageType = BridgeMessage["type"];
 
-const MESSAGE_TYPES: readonly string[] = [
-  "hello",
-  "hello-ack",
-  "ping",
-  "pong",
-  "error",
-  "encounter-event",
-  "encounter-snapshot",
-];
+const MESSAGE_TYPES: readonly string[] = bridgeMessageSchema.options.map(
+  (o) => o.shape.type.value,
+);
 
 export type DecodeResult =
   | { ok: true; message: BridgeMessage }

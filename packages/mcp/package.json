@@ -2,6 +2,7 @@
   "name": "@ttrpg-agents/mcp",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -13,12 +14,12 @@
     "ttrpg-agents-mcp": "./dist/stdio.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
     "bridge": "node dist/bridge/cli.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@ttrpg-agents/core": "*",
+    "@ttrpg-agents/protocol": "*",
     "ws": "^8.18.0",
     "zod": "^4.6.7"
   },

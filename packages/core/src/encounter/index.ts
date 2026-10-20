@@ -3,7 +3,11 @@ export type {
   MonsterInstance,
   NewMonsterInstance,
 } from "./types.js";
-export type { EncounterRepository } from "./repository.js";
+export type {
+  EncounterRepository,
+  HpChange,
+  InstanceBuilder,
+} from "./repository.js";
 export {
   SqliteEncounterRepository,
   type RepositoryOptions,
@@ -18,3 +22,5 @@ export {
 } from "./migrations.js";
 export * from "./add-monsters.js";
 export * from "./events.js";
+export * from "./errors.js";
+export * from "./queries.js";

@@ -1,6 +1,9 @@
 import {
-  AddMonstersError,
+  DomainError,
+  TargetError,
   addMonsters,
+  compareByInitiative,
+  resolveTargets,
   getMonsterByKey,
   searchMonsters,
   type MonsterInstance,
@@ -57,7 +60,7 @@ function defineTool<S extends z.ZodRawShape>(def: {
       try {
         return def.run(ctx, parsed.data);
       } catch (e) {
-        if (e instanceof AddMonstersError || e instanceof RangeError) {
+        if (e instanceof DomainError) {
           return fail(e.message);
         }
         throw e;
@@ -87,38 +90,6 @@ function instanceView(i: MonsterInstance): Record<string, unknown> {
     maxHp: i.maxHp,
     initiative: i.initiative,
   };
-}
-
-/** Initiative descending, nulls last, then creation order. */
-function byInitiative(a: MonsterInstance, b: MonsterInstance): number {
-  if (a.initiative !== b.initiative) {
-    if (a.initiative === null) return 1;
-    if (b.initiative === null) return -1;
-    return b.initiative - a.initiative;
-  }
-  return a.createdAt - b.createdAt;
-}
-
-type Resolved =
-  { ok: true; instance: MonsterInstance } | { ok: false; error: string };
-
-/** Instance id first, else exact displayName; ambiguous or missing is an error. */
-function resolveTarget(
-  instances: readonly MonsterInstance[],
-  target: string,
-): Resolved {
-  const byId = instances.find((i) => i.id === target);
-  if (byId) return { ok: true, instance: byId };
-  const byName = instances.filter((i) => i.displayName === target);
-  const [only] = byName;
-  if (byName.length === 1 && only) return { ok: true, instance: only };
-  if (byName.length > 1) {
-    return {
-      ok: false,
-      error: `Ambiguous target "${target}": ${String(byName.length)} instances share that name; use an id`,
-    };
-  }
-  return { ok: false, error: `Unknown target "${target}"` };
 }
 
 const searchMonstersTool = defineTool({
@@ -213,7 +184,7 @@ const listEncounterTool = defineTool({
   description: "List the encounter in initiative order (highest first).",
   inputSchema: {},
   run(ctx) {
-    const instances = ctx.repo.listInstances().sort(byInitiative);
+    const instances = ctx.repo.listInstances().sort(compareByInitiative);
     if (instances.length === 0) {
       return ok("The encounter is empty.", { instances: [] });
     }
@@ -241,14 +212,14 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
       : "Heal a monster (HP clamped at max). Target is an instance id or exact name.",
     inputSchema: { target: z.string(), amount: z.number().int().min(0) },
     run(ctx, { target, amount }) {
-      const resolved = resolveTarget(ctx.repo.listInstances(), target);
-      if (!resolved.ok) return fail(resolved.error);
-      const updated = damage
-        ? ctx.repo.applyDamage(resolved.instance.id, amount)
-        : ctx.repo.applyHealing(resolved.instance.id, amount);
+      const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+      if (!instance) return fail(`Unknown target "${target}"`);
+      const { before, after } = damage
+        ? ctx.repo.applyDamage(instance.id, amount)
+        : ctx.repo.applyHealing(instance.id, amount);
       return ok(
-        `${updated.displayName}: ${String(resolved.instance.currentHp)} -> ${String(updated.currentHp)}/${String(updated.maxHp)} HP`,
-        { instance: instanceView(updated) },
+        `${after.displayName}: ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)} HP`,
+        { instance: instanceView(after) },
       );
     },
   });
@@ -260,19 +231,19 @@ const removeMonstersTool = defineTool({
     "Remove monsters by instance id or exact name. All targets must resolve, otherwise nothing is removed.",
   inputSchema: { targets: z.array(z.string()).min(1) },
   run(ctx, { targets }) {
-    const instances = ctx.repo.listInstances();
-    const resolved: MonsterInstance[] = [];
-    for (const target of targets) {
-      const r = resolveTarget(instances, target);
-      if (!r.ok) return fail(`${r.error}. Nothing was removed.`);
-      if (!resolved.some((i) => i.id === r.instance.id)) {
-        resolved.push(r.instance);
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was removed.`);
       }
+      throw e;
     }
-    for (const i of resolved) ctx.repo.removeInstance(i.id);
-    const names = resolved.map((i) => i.displayName);
+    const removed = ctx.repo.removeInstances(resolved.map((i) => i.id));
+    const names = removed.map((i) => i.displayName);
     return ok(`Removed ${String(names.length)}: ${names.join(", ")}`, {
-      removed: resolved.map(instanceView),
+      removed: removed.map(instanceView),
     });
   },
 });

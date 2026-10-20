@@ -1,11 +1,21 @@
-import { nextDelay, type BackoffOptions } from "./backoff.js";
 import {
   decodeMessage,
   encodeMessage,
+  PROTOCOL_VERSION,
   type BridgeMessage,
-} from "./protocol.js";
+} from "@ttrpg-agents/protocol";
+import { nextDelay, type BackoffOptions } from "./backoff.js";
 
-export type SocketState = "connecting" | "open" | "reconnecting" | "closed";
+export type SocketState =
+  "connecting" | "open" | "reconnecting" | "closed" | "rejected";
+
+/** Fatal server errors that stop reconnection until the user acts. */
+export type RejectionCode = "bad-token" | "unsupported-version";
+
+/** Idle time after hello-ack (or the last pong) before sending a ping. */
+export const PING_INTERVAL_MS = 15000;
+/** How long to wait for a pong before dropping the socket. */
+export const PONG_TIMEOUT_MS = 5000;
 
 /** Minimal WebSocket surface (satisfied by the browser WebSocket). */
 export interface SocketLike {
@@ -49,17 +59,27 @@ export class ReconnectingSocket {
   private socket: SocketLike | null = null;
   private timer: unknown = null;
   private ackTimer: unknown = null;
+  private pingTimer: unknown = null;
+  private pongTimer: unknown = null;
+  private rejected: RejectionCode | null = null;
   private attempt = 0;
   private current: SocketState = "closed";
   private started = false;
   private readonly timers: Timers;
+  private readonly opts: ReconnectingSocketOptions;
 
-  constructor(private readonly opts: ReconnectingSocketOptions) {
+  constructor(opts: ReconnectingSocketOptions) {
+    this.opts = opts;
     this.timers = opts.timers ?? defaultTimers;
   }
 
   get state(): SocketState {
     return this.current;
+  }
+
+  /** Why the server rejected us, once state is "rejected"; otherwise null. */
+  get rejection(): RejectionCode | null {
+    return this.rejected;
   }
 
   start(): void {
@@ -76,7 +96,9 @@ export class ReconnectingSocket {
 
   close(): void {
     this.started = false;
+    this.rejected = null;
     this.clearAckTimer();
+    this.clearHeartbeat();
     if (this.timer !== null) {
       this.timers.clearTimeout(this.timer);
       this.timer = null;
@@ -98,8 +120,15 @@ export class ReconnectingSocket {
 
   private connect(): void {
     this.timer = null;
+    this.rejected = null;
     this.setState(this.attempt === 0 ? "connecting" : "reconnecting");
-    const socket = this.opts.createSocket(this.opts.url);
+    let socket: SocketLike;
+    try {
+      socket = this.opts.createSocket(this.opts.url);
+    } catch {
+      this.scheduleRetry();
+      return;
+    }
     this.socket = socket;
     socket.onopen = () => {
       if (this.socket !== socket) return;
@@ -113,16 +142,33 @@ export class ReconnectingSocket {
     socket.onmessage = (ev) => {
       if (this.socket !== socket || typeof ev.data !== "string") return;
       const result = decodeMessage(ev.data);
-      if (!result.ok) return;
+      if (!result.ok) {
+        if (result.reason === "unsupported-version") {
+          this.reject(socket, "unsupported-version");
+        }
+        return;
+      }
       if (result.message.type === "error") {
+        const { code, fatal } = result.message.payload;
         this.opts.onMessage?.(result.message);
-        this.fail(socket);
+        if (!fatal) return;
+        if (code === "bad-token" || code === "unsupported-version") {
+          this.reject(socket, code);
+        } else {
+          this.fail(socket);
+        }
         return;
       }
       if (result.message.type === "hello-ack") {
         this.clearAckTimer();
         this.attempt = 0;
         this.setState("open");
+        this.startHeartbeat(socket);
+      }
+      if (result.message.type === "pong" && this.pongTimer !== null) {
+        this.timers.clearTimeout(this.pongTimer);
+        this.pongTimer = null;
+        this.schedulePing(socket);
       }
       this.opts.onMessage?.(result.message);
     };
@@ -138,10 +184,49 @@ export class ReconnectingSocket {
   private fail(socket: SocketLike, closeIt = true): void {
     if (this.socket !== socket) return;
     this.clearAckTimer();
+    this.clearHeartbeat();
     this.socket = null;
     detach(socket);
     if (closeIt) socket.close();
     this.scheduleRetry();
+  }
+
+  /** Fatal rejection: close the socket and stop reconnecting. */
+  private reject(socket: SocketLike, code: RejectionCode): void {
+    if (this.socket !== socket) return;
+    this.clearAckTimer();
+    this.clearHeartbeat();
+    this.socket = null;
+    detach(socket);
+    socket.close();
+    this.rejected = code;
+    this.setState("rejected");
+  }
+
+  private startHeartbeat(socket: SocketLike): void {
+    this.clearHeartbeat();
+    this.schedulePing(socket);
+  }
+
+  private schedulePing(socket: SocketLike): void {
+    this.pingTimer = this.timers.setTimeout(() => {
+      this.pingTimer = null;
+      if (this.socket !== socket) return;
+      socket.send(
+        encodeMessage({ v: PROTOCOL_VERSION, type: "ping", payload: {} }),
+      );
+      this.pongTimer = this.timers.setTimeout(() => {
+        this.pongTimer = null;
+        this.fail(socket);
+      }, PONG_TIMEOUT_MS);
+    }, PING_INTERVAL_MS);
+  }
+
+  private clearHeartbeat(): void {
+    if (this.pingTimer !== null) this.timers.clearTimeout(this.pingTimer);
+    if (this.pongTimer !== null) this.timers.clearTimeout(this.pongTimer);
+    this.pingTimer = null;
+    this.pongTimer = null;
   }
 
   private clearAckTimer(): void {

@@ -1,4 +1,4 @@
-import type { BridgeMessage } from "@ttrpg-agents/core/bridge";
+import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { initiativeMetadata } from "./initiative.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { SceneItem } from "./scene-model.js";
@@ -118,31 +118,83 @@ export async function applySnapshot(
 }
 
 export interface EncounterSync {
+  /** Resolves once the message is applied, or deferred until the scene is ready. */
   handleMessage(message: BridgeMessage): Promise<void>;
+}
+
+type SyncMessage = Extract<
+  BridgeMessage,
+  { type: "encounter-event" | "encounter-snapshot" }
+>;
+
+function applyMessage(obr: ObrAdapter, message: SyncMessage): Promise<void> {
+  return message.type === "encounter-event"
+    ? applyEvent(obr, message.payload)
+    : applySnapshot(obr, message.payload.instances);
 }
 
 /**
  * Feeds bridge messages into the scene one at a time, in arrival order, so the
- * read-then-write idempotence checks never interleave. A failing message is
- * reported to `onError` and does not block later ones.
+ * read-then-write idempotence checks never interleave. Messages that arrive
+ * while the scene is not ready (e.g. right after a room reload) are held and
+ * applied once it is; a snapshot supersedes anything still held. A failing
+ * message on a ready scene is reported to `onError` and does not block later
+ * ones. `onApplied` fires after each message is applied.
  */
 export function createEncounterSync(
   obr: ObrAdapter,
   onError: (error: unknown) => void = () => {},
+  onApplied: () => void = () => {},
 ): EncounterSync {
+  const pending: SyncMessage[] = [];
   let tail: Promise<void> = Promise.resolve();
+
+  const enqueue = (task: () => Promise<void>): Promise<void> => {
+    // Never let the chain reject, or every later message would be skipped.
+    tail = tail.then(task).catch((error) => {
+      try {
+        onError(error);
+      } catch {
+        // A throwing handler must not stop later messages.
+      }
+    });
+    return tail;
+  };
+
+  async function drain(): Promise<void> {
+    while (pending.length > 0 && (await obr.isSceneReady())) {
+      try {
+        await applyMessage(obr, pending[0]!);
+      } catch (error) {
+        // The scene went away mid-apply: keep the message (replay is safe).
+        // Known race: if it is ready again by now, this is reported as a
+        // genuine failure and the message dropped; the next snapshot repairs it.
+        if (!(await obr.isSceneReady())) return;
+        pending.shift();
+        onError(error);
+        continue;
+      }
+      pending.shift();
+      onApplied();
+    }
+  }
+
+  obr.onSceneReadyChange((ready) => {
+    if (ready) void enqueue(drain);
+  });
+
   return {
     handleMessage(message) {
-      let task: (() => Promise<void>) | undefined;
-      if (message.type === "encounter-event") {
-        task = () => applyEvent(obr, message.payload);
-      } else if (message.type === "encounter-snapshot") {
-        task = () => applySnapshot(obr, message.payload.instances);
-      }
-      if (!task) return Promise.resolve();
-      const run = tail.then(task);
-      tail = run.catch(onError);
-      return tail;
+      if (
+        message.type !== "encounter-event" &&
+        message.type !== "encounter-snapshot"
+      )
+        return Promise.resolve();
+      return enqueue(() => {
+        if (message.type === "encounter-snapshot") pending.length = 0;
+        pending.push(message);
+        return drain();
+      });
     },
   };
 }

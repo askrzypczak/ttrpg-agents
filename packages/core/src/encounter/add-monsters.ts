@@ -4,6 +4,7 @@ import { roll } from "../dice/roll.js";
 import type { Rng } from "../dice/rng.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/loader.js";
+import { DomainError } from "../errors.js";
 import type { EncounterRepository } from "./repository.js";
 import type { NewMonsterInstance } from "./types.js";
 
@@ -65,12 +66,11 @@ export type AddMonstersErrorCode =
   | "invalid_hp"
   | "invalid_initiative";
 
-export class AddMonstersError extends Error {
-  readonly code: AddMonstersErrorCode;
+export class AddMonstersError extends DomainError {
+  declare readonly code: AddMonstersErrorCode;
   constructor(code: AddMonstersErrorCode, message: string) {
-    super(message);
+    super(code, message);
     this.name = "AddMonstersError";
-    this.code = code;
   }
 }
 
@@ -174,56 +174,56 @@ export function addMonsters(
     initiativeMode,
   );
 
-  const names = repo.listInstances().map((i) => i.displayName);
   const rolls: RollLogEntry[] = [];
-  const items: NewMonsterInstance[] = [];
   const hpModes: HpMode[] = [];
   const acs: number[] = [];
 
-  for (const group of groups) {
-    const monster = monsters.byKey.get(group.monster);
-    /* v8 ignore next -- validated above */
-    if (monster === undefined) continue;
-    const hpMode = group.hp ?? "rolled";
-    const groupId = newGroupId();
-    const groupStart = items.length;
+  const items: NewMonsterInstance[] = [];
+  const saved = repo.addInstances((names) => {
+    for (const group of groups) {
+      const monster = monsters.byKey.get(group.monster);
+      /* v8 ignore next -- validated above */
+      if (monster === undefined) continue;
+      const hpMode = group.hp ?? "rolled";
+      const groupId = newGroupId();
+      const groupStart = items.length;
 
-    for (let n = 0; n < group.count; n++) {
-      const displayName = naming({ monster, existingNames: names });
-      names.push(displayName);
-      let maxHp = monster.hp.average;
-      if (hpMode === "rolled") {
-        const result = roll(monster.hp.dice, rng);
-        rolls.push(createLogEntry(result, now(), `${displayName} HP`));
-        // Clamp to 1; the logged roll keeps the raw total, so it can differ from maxHp.
-        maxHp = Math.max(1, result.total);
+      for (let n = 0; n < group.count; n++) {
+        const displayName = naming({ monster, existingNames: names });
+        names.push(displayName);
+        let maxHp = monster.hp.average;
+        if (hpMode === "rolled") {
+          const result = roll(monster.hp.dice, rng);
+          rolls.push(createLogEntry(result, now(), `${displayName} HP`));
+          // Clamp to 1; the logged roll keeps the raw total, so it can differ from maxHp.
+          maxHp = Math.max(1, result.total);
+        }
+        items.push({ monsterKey: monster.key, displayName, maxHp, groupId });
+        hpModes.push(hpMode);
+        acs.push(monster.ac);
       }
-      items.push({ monsterKey: monster.key, displayName, maxHp, groupId });
-      hpModes.push(hpMode);
-      acs.push(monster.ac);
+
+      const rollInitiative = (label: string): number => {
+        const result = roll("1d20", rng);
+        rolls.push(createLogEntry(result, now(), label));
+        return result.total + monster.initiativeModifier;
+      };
+      if (initiativeMode === "group") {
+        const initiative = rollInitiative(`${monster.name} initiative (group)`);
+        for (let i = groupStart; i < items.length; i++) {
+          const item = items[i];
+          if (item) item.initiative = initiative;
+        }
+      } else {
+        for (let i = groupStart; i < items.length; i++) {
+          const item = items[i];
+          if (item)
+            item.initiative = rollInitiative(`${item.displayName} initiative`);
+        }
+      }
     }
-
-    const rollInitiative = (label: string): number => {
-      const result = roll("1d20", rng);
-      rolls.push(createLogEntry(result, now(), label));
-      return result.total + monster.initiativeModifier;
-    };
-    if (initiativeMode === "group") {
-      const initiative = rollInitiative(`${monster.name} initiative (group)`);
-      for (let i = groupStart; i < items.length; i++) {
-        const item = items[i];
-        if (item) item.initiative = initiative;
-      }
-    } else {
-      for (let i = groupStart; i < items.length; i++) {
-        const item = items[i];
-        if (item)
-          item.initiative = rollInitiative(`${item.displayName} initiative`);
-      }
-    }
-  }
-
-  const saved = repo.addInstances(items);
+    return items;
+  });
   if (saved.length !== items.length) {
     throw new Error(
       `Store persisted ${saved.length} instances, expected ${items.length}`,

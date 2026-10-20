@@ -1,4 +1,4 @@
-import type { EncounterRepository } from "./repository.js";
+import type { EncounterRepository, HpChange } from "./repository.js";
 import type { MonsterInstance } from "./types.js";
 
 export type EncounterEvent =
@@ -40,36 +40,46 @@ export function createEncounterEmitter(): EncounterEmitter {
   };
 }
 
+function emitHp(emitter: EncounterEmitter, { after }: HpChange): void {
+  emitter.emit({
+    type: "hp-changed",
+    id: after.id,
+    currentHp: after.currentHp,
+    maxHp: after.maxHp,
+  });
+}
+
 /**
  * Wraps a repository so every successful mutation emits an event afterwards.
- * Failed calls (throws) and no-ops (removeInstance returning false) emit nothing.
+ * Failed calls (throws) emit nothing.
  */
 export function observeRepository(
   repo: EncounterRepository,
   emitter: EncounterEmitter,
 ): EncounterRepository {
-  const hpChanged = (instance: MonsterInstance): MonsterInstance => {
-    emitter.emit({
-      type: "hp-changed",
-      id: instance.id,
-      currentHp: instance.currentHp,
-      maxHp: instance.maxHp,
-    });
-    return instance;
-  };
   return {
     getOrCreateActiveEncounter: () => repo.getOrCreateActiveEncounter(),
     listInstances: () => repo.listInstances(),
-    addInstances(items) {
-      const instances = repo.addInstances(items);
+    addInstances(build) {
+      const instances = repo.addInstances(build);
       if (instances.length > 0) emitter.emit({ type: "added", instances });
       return instances;
     },
-    applyDamage: (id, amount) => hpChanged(repo.applyDamage(id, amount)),
-    applyHealing: (id, amount) => hpChanged(repo.applyHealing(id, amount)),
-    removeInstance(id) {
-      const removed = repo.removeInstance(id);
-      if (removed) emitter.emit({ type: "removed", id });
+    applyDamage(id, amount) {
+      const change = repo.applyDamage(id, amount);
+      emitHp(emitter, change);
+      return change;
+    },
+    applyHealing(id, amount) {
+      const change = repo.applyHealing(id, amount);
+      emitHp(emitter, change);
+      return change;
+    },
+    removeInstances(ids) {
+      const removed = repo.removeInstances(ids);
+      for (const instance of removed) {
+        emitter.emit({ type: "removed", id: instance.id });
+      }
       return removed;
     },
     clearEncounter() {

@@ -21,6 +21,8 @@ export async function openHarness(
     target?: string;
     obrOrigin?: string;
     token?: string | null;
+    /** Item calls fail with this message even when the scene is ready. */
+    failItems?: string;
   } = {},
 ): Promise<void> {
   const url = new URL(HARNESS);
@@ -28,6 +30,7 @@ export async function openHarness(
   if (options.obrOrigin) url.searchParams.set("obrOrigin", options.obrOrigin);
   const token = options.token === undefined ? E2E_TOKEN : options.token;
   if (token) url.searchParams.set("token", token);
+  if (options.failItems) url.searchParams.set("failItems", options.failItems);
   url.searchParams.set("role", options.role ?? "gm");
   url.searchParams.set("ready", options.ready === false ? "0" : "1");
   await page.goto(url.href);

@@ -15,7 +15,7 @@ import {
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
-} from "@ttrpg-agents/core/bridge";
+} from "@ttrpg-agents/protocol";
 
 export const DEFAULT_BRIDGE_PORT = 5199;
 export const SERVER_VERSION = "0.0.0";
@@ -60,11 +60,17 @@ function send(ws: WebSocket, message: BridgeMessage): void {
   ws.send(encodeMessage(message));
 }
 
+const FATAL_ERROR_CODES = new Set([
+  "bad-token",
+  "unauthenticated",
+  "unsupported-version",
+]);
+
 function errorMessage(code: string, message: string): BridgeMessage {
   return {
     v: PROTOCOL_VERSION,
     type: "error",
-    payload: { code, message },
+    payload: { code, message, fatal: FATAL_ERROR_CODES.has(code) },
   };
 }
 
@@ -100,6 +106,10 @@ function handleMessage(
 ): void {
   const { token } = hooks;
   const result = decodeMessage(raw);
+  if (!result.ok && result.reason === "unsupported-version") {
+    rejectAndClose(ws, "unsupported-version", result.detail);
+    return;
+  }
   if (!session.authenticated) {
     if (!result.ok || result.message.type !== "hello") {
       rejectAndClose(

@@ -8,7 +8,7 @@ import {
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
-} from "@ttrpg-agents/core/bridge";
+} from "@ttrpg-agents/protocol";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
 const MANIFEST = { name: "t", action: { popover: "/index.html" } };
@@ -170,6 +170,33 @@ describe("bridge server", () => {
     expect(closeCode).toBe(1008);
   });
 
+  it("a version mismatch before hello gets a fatal unsupported-version error and the socket closes", async () => {
+    const ws = await connect();
+    const { reply, closeCode } = await requestThenClose(
+      ws,
+      JSON.stringify({
+        v: 9,
+        type: "hello",
+        payload: { role: "gm", extensionVersion: "0", token: server.token },
+      }),
+    );
+    if (reply.type !== "error") throw new Error("expected error");
+    expect(reply.payload.code).toBe("unsupported-version");
+    expect(reply.payload.fatal).toBe(true);
+    expect(closeCode).toBe(1008);
+  });
+
+  it("bad-token and unauthenticated errors carry fatal true", async () => {
+    const badToken = await requestThenClose(await connect(), helloWith("x"));
+    if (badToken.reply.type !== "error") throw new Error("expected error");
+    expect(badToken.reply.payload.code).toBe("bad-token");
+    expect(badToken.reply.payload.fatal).toBe(true);
+    const unauth = await requestThenClose(await connect(), ping);
+    if (unauth.reply.type !== "error") throw new Error("expected error");
+    expect(unauth.reply.payload.code).toBe("unauthenticated");
+    expect(unauth.reply.payload.fatal).toBe(true);
+  });
+
   it("treats gm and player roles identically", async () => {
     for (const role of ["gm", "player"] as const) {
       const ok = await authed(role);
@@ -201,11 +228,20 @@ describe("bridge server", () => {
     expect(reply.type).toBe("error");
     if (reply.type === "error")
       expect(reply.payload.code).toBe("malformed-json");
-    const bad = await request(ws, '{"v":9,"type":"ping","payload":{}}');
-    if (bad.type === "error")
-      expect(bad.payload.code).toBe("unsupported-version");
-    else throw new Error("expected error");
+    expect((await request(ws, ping)).type).toBe("pong");
     ws.close();
+  });
+
+  it("a different-version message after login gets fatal unsupported-version and the socket closes", async () => {
+    const ws = await authed();
+    const closed = new Promise<number>((resolve) =>
+      ws.once("close", (code) => resolve(code)),
+    );
+    const reply = await request(ws, '{"v":9,"type":"ping","payload":{}}');
+    if (reply.type !== "error") throw new Error("expected error");
+    expect(reply.payload.code).toBe("unsupported-version");
+    expect(reply.payload.fatal).toBe(true);
+    expect(await closed).toBe(1008);
   });
 
   it("serves two simultaneous clients", async () => {
@@ -473,12 +509,73 @@ describe("bridge server broadcast and snapshot", () => {
         expect(err.payload).toEqual({
           code: "snapshot-failed",
           message: "db locked",
+          fatal: false,
         });
       }
       received.length = 0;
       ws.send(ping);
       await settle();
       expect(received.map((m) => m.type)).toEqual(["pong"]);
+      ws.close();
+    } finally {
+      await s3.close();
+    }
+  });
+
+  it("malformed, unexpected-type and snapshot-failed errors carry fatal false and the socket stays usable", async () => {
+    const s3 = await startBridgeServer({
+      port: 0,
+      staticDir: dir,
+      snapshot: () => {
+        throw new Error("db locked");
+      },
+    });
+    try {
+      const ws = await new Promise<WebSocket>((resolve, reject) => {
+        const w = new WebSocket(`ws://127.0.0.1:${s3.port}/ws`, {
+          origin: `http://localhost:${s3.port}`,
+        });
+        w.once("open", () => resolve(w));
+        w.once("error", reject);
+      });
+      const received = record(ws);
+      let closed = false;
+      ws.once("close", () => (closed = true));
+      ws.send(
+        encodeMessage({
+          v: 1,
+          type: "hello",
+          payload: { role: "gm", extensionVersion: "0", token: s3.token },
+        }),
+      );
+      for (const raw of [
+        "{nope",
+        "[]",
+        '{"v":1,"type":"launch","payload":{}}',
+        '{"v":1,"type":"hello","payload":{}}',
+        encodeMessage(cleared),
+      ]) {
+        ws.send(raw);
+      }
+      await settle();
+      const errors = received.flatMap((m) =>
+        m.type === "error"
+          ? [{ code: m.payload.code, fatal: m.payload.fatal }]
+          : [],
+      );
+      expect(errors).toEqual([
+        { code: "snapshot-failed", fatal: false },
+        { code: "malformed-json", fatal: false },
+        { code: "malformed-envelope", fatal: false },
+        { code: "unknown-type", fatal: false },
+        { code: "invalid-payload", fatal: false },
+        { code: "unexpected-type", fatal: false },
+      ]);
+      received.length = 0;
+      ws.send(ping);
+      await settle();
+      expect(received.map((m) => m.type)).toEqual(["pong"]);
+      expect(closed).toBe(false);
       ws.close();
     } finally {
       await s3.close();

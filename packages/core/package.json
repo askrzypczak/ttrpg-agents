@@ -2,19 +2,15 @@
   "name": "@ttrpg-agents/core",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./bridge": {
-      "types": "./dist/bridge/index.d.ts",
-      "default": "./dist/bridge/index.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
     "import:srd": "node scripts/import-srd.ts"
   },
   "dependencies": {

@@ -1,14 +1,14 @@
+import { PROTOCOL_VERSION } from "@ttrpg-agents/protocol";
 import {
-  PROTOCOL_VERSION,
   ReconnectingSocket,
+  type RejectionCode,
   type SocketLike,
   type SocketState,
-} from "@ttrpg-agents/core/bridge";
+} from "./reconnecting-socket.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
-import { panelView } from "./panel-state.js";
+import { describeError, panelView } from "./panel-state.js";
 
-const BRIDGE_URL = "ws://localhost:5199/ws";
 const EXTENSION_VERSION = "0.0.0";
 
 function el(id: string): HTMLElement {
@@ -28,18 +28,23 @@ obr.onReady(async () => {
 
   let socketState: SocketState = "connecting";
   let streakStart = Date.now();
+  let syncError: string | undefined;
 
+  let rejection: RejectionCode | undefined;
   const render = () => {
     const view = panelView({
       role,
       tokenMissing,
       socketState,
+      ...(rejection ? { rejection } : {}),
+      syncError,
       disconnectedMs: Date.now() - streakStart,
     });
     const status = el("status");
     status.textContent = view.message;
     status.dataset.kind = view.kind;
     el("hint").textContent = view.hint ?? "";
+    el("sync-error").textContent = view.error ?? "";
   };
 
   if (role !== "gm" || tokenMissing) {
@@ -47,11 +52,21 @@ obr.onReady(async () => {
     return;
   }
 
-  const sync = createEncounterSync(obr, (e) =>
-    console.error("encounter sync failed", e),
+  const sync = createEncounterSync(
+    obr,
+    (e) => {
+      console.error("encounter sync failed", e);
+      syncError = describeError(e);
+      render();
+    },
+    () => {
+      if (syncError === undefined) return;
+      syncError = undefined;
+      render();
+    },
   );
   const socket = new ReconnectingSocket({
-    url: BRIDGE_URL,
+    url: `ws://${location.host}/ws`,
     createSocket: (url) => new WebSocket(url) as unknown as SocketLike,
     hello: () => ({
       v: PROTOCOL_VERSION,
@@ -64,6 +79,7 @@ obr.onReady(async () => {
       else if (socketState === "open" || socketState === "closed")
         streakStart = Date.now();
       socketState = state;
+      rejection = socket.rejection ?? undefined;
       render();
     },
   });
