@@ -15,9 +15,9 @@ Owlbear Rodeo extension (GM-only panel that talks to the local bridge).
 
 ## Encounter sync
 
-`src/encounter-sync.ts` mirrors encounter instances as hidden (`visible: false`) circle SHAPE tokens named after the instance, in a row near the viewport centre. Tokens are linked by metadata key `com.ttrpg-agents/instance` (`{ instanceId }`); only items carrying it are ever touched. `applyEvent` and `applySnapshot` are idempotent (replays never duplicate), and `createEncounterSync(obr)` queues bridge messages so they apply one at a time. `hp-changed` is a no-op on tokens in v1.
+`src/encounter-sync.ts` mirrors encounter instances as hidden (`visible: false`) circle SHAPE tokens named after the instance, in a row near the viewport centre. Tokens are linked by metadata key `com.ttrpg-agents/instance` (`{ instanceId }`); only items carrying it are ever touched. `applyEvent` and `applySnapshot` are idempotent (replays never duplicate), and `createEncounterSync(obr)` queues bridge messages so they apply one at a time. `hp-changed` is a no-op on tokens in v1. Messages that arrive while the scene is not ready (the bridge snapshot usually beats the scene after a room reload) are held, not applied: nothing calls the items API until `isSceneReady()`, a snapshot supersedes earlier held messages, and the queue drains in arrival order on `onSceneReadyChange(true)`. A failure on a ready scene is shown in the panel (`#sync-error`, "Encounter sync failed: ...") until the next message applies; a scene that vanishes mid-apply counts as deferral, not failure. Both fakes (`createFakeObr`, the e2e fake host) reject item calls with `MissingDataError: No scene found` while the scene is not ready, like the real SDK. SHAPE items need a `shape` spec; the adapter exposes `getViewportCenter()`.
 
-Token art: the first time an unmapped `monsterKey` needs tokens, the GM is prompted once (`pickImage()`, the Owlbear asset picker). The pick (`{ image, grid }`) is stored in scene metadata under `com.ttrpg-agents/token-art` (`{ [monsterKey]: pick }`) and reused for later tokens and after reloads; those tokens are hidden IMAGE items. A cancel or picker error falls back to the named circle, is reported to `onError` (errors only), and is not re-asked until the extension reloads. SHAPE items need a `shape` spec; the adapter exposes `getViewportCenter()`.
+Token art: the first time an unmapped `monsterKey` needs tokens, the GM is prompted once (`pickImage()`, the Owlbear asset picker). The pick (`{ image, grid }`) is stored in scene metadata under `com.ttrpg-agents/token-art` (`{ [monsterKey]: pick }`) and reused for later tokens and after reloads; those tokens are hidden IMAGE items. A cancel or picker error falls back to the named circle, is reported to `onError` (errors only), and is not re-asked until the extension reloads.
 
 ## Testing
 
@@ -65,7 +65,9 @@ Chromium. First time: `npx playwright install chromium`. It is NOT part of
 - `encounter-sync.e2e.ts` covers encounter -> hidden tokens end to end. The
   bridge runs on a throwaway SQLite file (`TTRPG_AGENTS_DB`, `e2e/db.ts`,
   recreated each run in the OS temp dir) seeded with 5 shadows before it
-  starts, never your real database. The fake host also answers the
+  starts, never your real database. `openHarness(page, { failItems: "msg" })`
+  makes every item call fail with that message (to drive the panel error);
+  those failures are not recorded in `host.errors`. The fake host also answers the
   viewport calls (fixed 1000x600 screen, identity transform).
 - Test-only workarounds (`fixtures.ts`, `playwright.config.ts`): the bridge's
   `frame-ancestors` CSP is rewritten to allow the harness origin, and

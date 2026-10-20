@@ -4,6 +4,7 @@
 // `_ERROR` reply and recorded in `errors`, so the fake cannot drift silently
 // from what the extension uses.
 import {
+  MissingSceneError,
   SceneModel,
   type ItemPatch,
   type SceneItem,
@@ -13,6 +14,8 @@ export interface FakeHostOptions {
   iframe: HTMLIFrameElement;
   scene: SceneModel;
   userId?: string;
+  /** Makes every item call fail with this message, even on a ready scene. */
+  failItems?: string;
 }
 
 interface SdkMessage {
@@ -51,12 +54,14 @@ export class FakeHost {
   private readonly iframe: HTMLIFrameElement;
   private readonly ref = "e2e-ref";
   private readonly userId: string;
+  private readonly failItems: string | undefined;
   private readonly readySubscribed = { value: false };
 
   constructor(options: FakeHostOptions) {
     this.scene = options.scene;
     this.iframe = options.iframe;
     this.userId = options.userId ?? "e2e-user";
+    this.failItems = options.failItems;
     window.addEventListener("message", this.onMessage);
     this.scene.onChange((change) => {
       if (change.kind === "ready" && this.readySubscribed.value)
@@ -102,12 +107,17 @@ export class FakeHost {
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       if (error instanceof UnhandledMessageError) this.errors.push(text);
-      this.reply(message, "ERROR", { name: "Error", message: text });
+      const name = error instanceof Error ? error.name : "Error";
+      this.reply(message, "ERROR", { name, message: text });
     }
   };
 
   private handle(message: SdkMessage): unknown {
     const data = (message.data ?? {}) as Record<string, unknown>;
+    if (message.id.startsWith("OBR_SCENE_ITEMS_")) {
+      if (this.failItems !== undefined) throw new Error(this.failItems);
+      if (!this.scene.isReady()) throw new MissingSceneError();
+    }
     switch (message.id) {
       case "OBR_PLAYER_GET_ROLE":
         return { role: this.scene.role === "gm" ? "GM" : "PLAYER" };

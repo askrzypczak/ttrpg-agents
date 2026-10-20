@@ -126,4 +126,33 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     await page.waitForTimeout(500);
     expect(await readItems(page)).toEqual([]);
   });
+
+  test("a snapshot that beats the scene is applied once it is ready", async ({
+    page,
+  }) => {
+    await openHarness(page, { role: "gm", ready: false });
+    const frame = page.frameLocator("#extension");
+    await expect(frame.locator("#status")).toHaveText(
+      "Connected to the local bridge.",
+    );
+    await page.waitForTimeout(500);
+    expect(await readItems(page)).toEqual([]);
+    await expect(frame.locator("#sync-error")).toHaveText("");
+
+    await page.evaluate(() => window.__host!.scene.setReady(true));
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    await page.waitForTimeout(500);
+    const items = await readItems(page);
+    expect(items).toHaveLength(5);
+    expect(new Set(items.map((i) => i.id)).size).toBe(5);
+    await expect(frame.locator("#sync-error")).toHaveText("");
+  });
+
+  test("a sync failure is shown in the panel", async ({ page }) => {
+    await openHarness(page, { role: "gm", failItems: "items are broken" });
+    await expect(
+      page.frameLocator("#extension").locator("#sync-error"),
+    ).toHaveText("Encounter sync failed: Error: items are broken");
+    expect(await readItems(page)).toEqual([]);
+  });
 });

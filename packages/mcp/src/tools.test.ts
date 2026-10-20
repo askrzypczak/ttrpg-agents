@@ -1,9 +1,9 @@
 import {
   SqliteEncounterRepository,
-  createSeededRng,
   loadSrdMonsters,
   openDatabase,
   type NewMonsterInstance,
+  type Rng,
 } from "@ttrpg-agents/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
@@ -11,6 +11,17 @@ import { tools, type ToolResult } from "./tools.js";
 
 const monsters = loadSrdMonsters();
 const SHADOW = "srd-2024_shadow";
+
+/** Test-only Rng: yields the given values in order, cycling, each reduced mod max. */
+function cycleRng(...values: number[]): Rng {
+  let i = 0;
+  return {
+    nextInt(max) {
+      const value = values[i++ % values.length] ?? 0;
+      return value % max;
+    },
+  };
+}
 
 let ctx: ToolContext;
 let tick: number;
@@ -22,7 +33,7 @@ beforeEach(() => {
       now: () => tick++,
     }),
     monsters,
-    rng: createSeededRng(42),
+    rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
   };
 });
@@ -138,6 +149,14 @@ describe("add_monsters", () => {
     expect(text(r)).toContain("| Shadow 1 |");
     expect(text(r)).toContain("Shadow 1 HP");
     expect(text(r)).toContain("Shadow initiative (group)");
+  });
+
+  it("lists each roll under Rolls: with its label, expression and total", () => {
+    ctx.rng = cycleRng(0); // every die shows 1
+    const r = call("add_monsters", { groups: [{ monster: SHADOW, count: 1 }] });
+    expect(text(r)).toContain(
+      "Rolls:\n- Shadow 1 HP: 5d8 + 5 = 10\n- Shadow initiative (group): 1d20 = 1",
+    );
   });
 
   it("supports per-monster initiative", () => {

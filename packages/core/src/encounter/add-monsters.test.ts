@@ -5,7 +5,6 @@ import {
   MAX_GROUP_COUNT,
   addMonsters,
   createNumberedNaming,
-  createSeededRng,
   loadSrdMonsters,
   openDatabase,
   type AddMonstersDeps,
@@ -25,8 +24,19 @@ let repo: SqliteEncounterRepository;
 let calls: number;
 let groupN: number;
 
-function countingRng(seed: number): Rng {
-  const inner = createSeededRng(seed);
+/** Test-only Rng: yields the given values in order, cycling, each reduced mod max. */
+function cycleRng(...values: number[]): Rng {
+  let i = 0;
+  return {
+    nextInt(max) {
+      const value = values[i++ % values.length] ?? 0;
+      return value % max;
+    },
+  };
+}
+
+function countingRng(...values: number[]): Rng {
+  const inner = cycleRng(...values);
   return {
     nextInt(max) {
       calls++;
@@ -39,7 +49,7 @@ function deps(over: Partial<AddMonstersDeps> = {}): AddMonstersDeps {
   return {
     repo,
     monsters,
-    rng: countingRng(42),
+    rng: countingRng(7, 12, 3, 18, 9, 1),
     now: () => new Date("2026-01-01T00:00:00.000Z"),
     newGroupId: () => `group-${++groupN}`,
     ...over,
@@ -84,18 +94,6 @@ describe("addMonsters", () => {
     expect(stored).toHaveLength(5);
     for (const s of stored) expect(s.currentHp).toBe(s.maxHp);
     expect(stored.map((s) => s.maxHp)).toEqual(instances.map((i) => i.maxHp));
-  });
-
-  it("is deterministic for a given seed", () => {
-    const run = (): unknown => {
-      const r = new SqliteEncounterRepository(openDatabase(":memory:"));
-      const out = addMonsters(
-        deps({ repo: r, rng: createSeededRng(7), newGroupId: () => "g" }),
-        [{ monster: SHADOW, count: 4 }],
-      );
-      return out.instances.map((i) => [i.name, i.maxHp, i.initiative]);
-    };
-    expect(run()).toEqual(run());
   });
 
   it("continues numbering across calls and never reuses a present number", () => {

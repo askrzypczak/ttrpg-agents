@@ -5,11 +5,16 @@ import {
   applySnapshot,
   createEncounterSync,
   rowPositions,
+  type EncounterEventPayload,
   type EncounterInstance,
 } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
-import type { SceneItem } from "./scene-model.js";
+import {
+  MissingSceneError,
+  SceneModel,
+  type SceneItem,
+} from "./scene-model.js";
 
 const inst = (n: number): EncounterInstance => ({
   id: `i${n}`,
@@ -227,6 +232,58 @@ describe("createEncounterSync", () => {
     expect(scene.getItems()).toEqual([]);
   });
 
+  it("survives isSceneReady rejecting and still applies later messages", async () => {
+    const { obr, scene } = createFakeObr();
+    let first = true;
+    const flaky: ObrAdapter = {
+      ...obr,
+      isSceneReady: () => {
+        if (first) {
+          first = false;
+          return Promise.reject(new Error("not ready"));
+        }
+        return obr.isSceneReady();
+      },
+    };
+    const errors: unknown[] = [];
+    const sync = createEncounterSync(flaky, (e) => errors.push(e));
+    const snap = (n: number) => ({
+      v: 1 as const,
+      type: "encounter-snapshot" as const,
+      payload: { instances: [inst(n)] },
+    });
+    await sync.handleMessage(snap(1));
+    expect(errors).toHaveLength(1);
+    await sync.handleMessage(snap(2));
+    expect(instanceIds(scene.getItems())).toEqual(["i2"]);
+  });
+
+  it("keeps processing when onError itself throws", async () => {
+    const { obr, scene } = createFakeObr();
+    let failNext = true;
+    const flaky: ObrAdapter = {
+      ...obr,
+      addItems: (items) => {
+        if (failNext) {
+          failNext = false;
+          return Promise.reject(new Error("boom"));
+        }
+        return obr.addItems(items);
+      },
+    };
+    const sync = createEncounterSync(flaky, () => {
+      throw new Error("handler broke");
+    });
+    const msg = (n: number) => ({
+      v: 1 as const,
+      type: "encounter-event" as const,
+      payload: { type: "added" as const, instances: [inst(n)] },
+    });
+    await sync.handleMessage(msg(1));
+    await sync.handleMessage(msg(2));
+    expect(instanceIds(scene.getItems())).toEqual(["i2"]);
+  });
+
   it("reports a failure and keeps processing later messages", async () => {
     const { obr, scene } = createFakeObr();
     let failNext = true;
@@ -258,6 +315,132 @@ describe("createEncounterSync", () => {
     const sync = createEncounterSync(obr);
     await sync.handleMessage({ v: 1, type: "pong", payload: {} });
     expect(scene.getItems()).toEqual([]);
+  });
+
+  describe("while the scene is not ready", () => {
+    const snapshot = (...ns: number[]) => ({
+      v: 1 as const,
+      type: "encounter-snapshot" as const,
+      payload: { instances: ns.map(inst) },
+    });
+    const event = (payload: EncounterEventPayload) => ({
+      v: 1 as const,
+      type: "encounter-event" as const,
+      payload,
+    });
+    const notReady = () => {
+      const fake = createFakeObr(new SceneModel("gm", false));
+      const calls: string[] = [];
+      const obr: ObrAdapter = {
+        ...fake.obr,
+        getItems: (f) => (calls.push("getItems"), fake.obr.getItems(f)),
+        addItems: (i) => (calls.push("addItems"), fake.obr.addItems(i)),
+        deleteItems: (i) => (
+          calls.push("deleteItems"),
+          fake.obr.deleteItems(i)
+        ),
+      };
+      return { obr, scene: fake.scene, calls };
+    };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+    it("defers a snapshot without calling the items API or reporting an error", async () => {
+      const { obr, scene, calls } = notReady();
+      const errors: unknown[] = [];
+      const sync = createEncounterSync(obr, (e) => errors.push(e));
+      await sync.handleMessage(snapshot(1, 2));
+      expect(calls).toEqual([]);
+      expect(errors).toEqual([]);
+      scene.setReady(true);
+      await settle();
+      expect(errors).toEqual([]);
+      expect(instanceIds(scene.getItems())).toEqual(["i1", "i2"]);
+    });
+
+    it("applies deferred events in arrival order", async () => {
+      const { obr, scene } = notReady();
+      const sync = createEncounterSync(obr);
+      await sync.handleMessage(event({ type: "added", instances: [inst(1)] }));
+      await sync.handleMessage(event({ type: "added", instances: [inst(2)] }));
+      await sync.handleMessage(event({ type: "removed", id: "i1" }));
+      scene.setReady(true);
+      await settle();
+      expect(instanceIds(scene.getItems())).toEqual(["i2"]);
+    });
+
+    it("lets a snapshot supersede earlier pending messages", async () => {
+      const { obr, scene, calls } = notReady();
+      const sync = createEncounterSync(obr);
+      await sync.handleMessage(event({ type: "added", instances: [inst(1)] }));
+      await sync.handleMessage(snapshot(2));
+      await sync.handleMessage(event({ type: "added", instances: [inst(3)] }));
+      scene.setReady(true);
+      await settle();
+      expect(instanceIds(scene.getItems())).toEqual(["i2", "i3"]);
+      // The superseded event was never applied (no add-then-delete of i1).
+      expect(calls.filter((c) => c === "deleteItems")).toEqual([]);
+    });
+
+    it("does not replay applied messages on later ready flips", async () => {
+      const { obr, scene } = notReady();
+      const sync = createEncounterSync(obr);
+      await sync.handleMessage(snapshot(1, 2));
+      scene.setReady(true);
+      await settle();
+      scene.deleteItems([scene.getItems()[0]!.id]);
+      expect(instanceIds(scene.getItems())).toEqual(["i2"]);
+      scene.setReady(false);
+      scene.setReady(true);
+      await settle();
+      expect(instanceIds(scene.getItems())).toEqual(["i2"]);
+    });
+
+    it("calls onApplied per applied message, not for deferred ones", async () => {
+      const { obr, scene } = notReady();
+      let applied = 0;
+      const sync = createEncounterSync(
+        obr,
+        () => {},
+        () => applied++,
+      );
+      await sync.handleMessage(event({ type: "added", instances: [inst(1)] }));
+      await sync.handleMessage(event({ type: "added", instances: [inst(2)] }));
+      expect(applied).toBe(0);
+      scene.setReady(true);
+      await settle();
+      expect(applied).toBe(2);
+    });
+
+    it("treats a scene that goes away mid-apply as deferral, not failure", async () => {
+      const fake = createFakeObr();
+      const errors: unknown[] = [];
+      let failOnce = true;
+      const obr: ObrAdapter = {
+        ...fake.obr,
+        addItems: (items) => {
+          if (failOnce) {
+            failOnce = false;
+            fake.scene.setReady(false);
+            return Promise.reject(new MissingSceneError());
+          }
+          return fake.obr.addItems(items);
+        },
+      };
+      let applied = 0;
+      const sync = createEncounterSync(
+        obr,
+        (e) => errors.push(e),
+        () => applied++,
+      );
+      await sync.handleMessage(snapshot(1));
+      expect(errors).toEqual([]);
+      expect(applied).toBe(0);
+      fake.scene.setReady(true);
+      await settle();
+      expect(errors).toEqual([]);
+      expect(applied).toBe(1);
+      expect(instanceIds(fake.scene.getItems())).toEqual(["i1"]);
+    });
   });
 });
 
