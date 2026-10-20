@@ -42,7 +42,7 @@ export default defineConfig({
   webServer: [
     {
       // The real bridge serves the real built extension (packages/owlbear/dist).
-      command: "node packages/mcp/dist/bridge/cli.js",
+      command: "node packages/bridge/dist/cli.js",
       cwd: repo,
       env: {
         BRIDGE_STATIC_DIR: `${repo}packages/owlbear/dist`,

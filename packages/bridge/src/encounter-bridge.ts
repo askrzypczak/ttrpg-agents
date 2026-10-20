@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { EncounterEvents, EncounterRepository } from "@ttrpg-agents/core";
+import type { EncounterRepository } from "@ttrpg-agents/core";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 
 /** Full current instance list, for a client that just connected. */
@@ -9,16 +9,6 @@ export function snapshotMessage(repo: EncounterRepository): BridgeMessage {
     type: "encounter-snapshot",
     payload: { instances: repo.listInstances() },
   };
-}
-
-/** Forwards every encounter event to bridge clients. Returns an unsubscribe. */
-export function forwardEncounterEvents(
-  events: EncounterEvents,
-  target: { broadcast(message: BridgeMessage): void },
-): () => void {
-  return events.subscribe((event) =>
-    target.broadcast({ v: 1, type: "encounter-event", payload: event }),
-  );
 }
 
 const SNAPSHOT_POLL_INTERVAL_MS = 250;
