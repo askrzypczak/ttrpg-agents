@@ -56,7 +56,7 @@ export const DEFAULT_STALLED_AFTER_MS = 8000;
 export const STALLED_HINT =
   "Still not connected. Chrome may be asking for (or blocking) local network access: " +
   "allow it in the address bar or site settings for owlbear.rodeo, and make sure " +
-  "the bridge is running (npm run bridge -w @ttrpg-agents/mcp).";
+  "the bridge is running (npm run bridge).";
 
 export function panelView(input: PanelInput): PanelView {
   const view = connectionView(input);
