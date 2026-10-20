@@ -85,11 +85,13 @@ export class SceneModel {
   private readonly items = new Map<string, SceneItem>();
   private metadata: Metadata = {};
   private readonly listeners = new Set<(change: SceneChange) => void>();
+  public role: PlayerRole;
+  private ready: boolean;
 
-  constructor(
-    public role: PlayerRole = "gm",
-    private ready = true,
-  ) {}
+  constructor(role: PlayerRole = "gm", ready = true) {
+    this.role = role;
+    this.ready = ready;
+  }
 
   onChange(listener: (change: SceneChange) => void): () => void {
     this.listeners.add(listener);

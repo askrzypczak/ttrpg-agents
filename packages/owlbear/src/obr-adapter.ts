@@ -73,7 +73,9 @@ function fromItem(item: Item): SceneItem {
 export function createObrAdapter(): ObrAdapter {
   return {
     onReady: (callback) => {
-      OBR.onReady(callback);
+      // The SDK ignores the callback's return value; a rejection stays unhandled
+      // exactly as before.
+      OBR.onReady(() => void callback());
     },
     getRole: async () =>
       (await OBR.player.getRole()) === "GM" ? "gm" : "player",
