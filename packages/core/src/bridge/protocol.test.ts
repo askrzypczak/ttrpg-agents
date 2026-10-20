@@ -28,7 +28,11 @@ const samples: BridgeMessage[] = [
   { v: 1, type: "hello-ack", payload: { serverVersion: "1.2.3" } },
   { v: 1, type: "ping", payload: {} },
   { v: 1, type: "pong", id: "x", payload: {} },
-  { v: 1, type: "error", payload: { code: "c", message: "m" } },
+  {
+    v: 1,
+    type: "error",
+    payload: { code: "c", message: "m", fatal: true },
+  },
   {
     v: 1,
     type: "encounter-event",
@@ -73,6 +77,14 @@ describe("protocol", () => {
     const r = decodeMessage('{"v":2,"type":"ping","payload":{}}');
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("unsupported-version");
+  });
+
+  it("an error without `fatal` is rejected as invalid-payload", () => {
+    const r = decodeMessage(
+      '{"v":1,"type":"error","payload":{"code":"c","message":"m"}}',
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("invalid-payload");
   });
 
   it("rejects an unknown type", () => {

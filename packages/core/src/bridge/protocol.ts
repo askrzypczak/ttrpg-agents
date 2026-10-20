@@ -11,7 +11,11 @@ const helloPayload = z.object({
 });
 const helloAckPayload = z.object({ serverVersion: z.string() });
 const emptyPayload = z.object({});
-const errorPayload = z.object({ code: z.string(), message: z.string() });
+const errorPayload = z.object({
+  code: z.string(),
+  message: z.string(),
+  fatal: z.boolean().optional(),
+});
 
 // Wire shape of a monster instance; structurally the core `MonsterInstance`.
 const instancePayload = z.object({

@@ -5,7 +5,16 @@ import {
   type BridgeMessage,
 } from "./protocol.js";
 
-export type SocketState = "connecting" | "open" | "reconnecting" | "closed";
+export type SocketState =
+  "connecting" | "open" | "reconnecting" | "closed" | "rejected";
+
+/** Fatal server errors that stop reconnection until the user acts. */
+export type RejectionCode = "bad-token" | "unsupported-version";
+
+/** Idle time after hello-ack (or the last pong) before sending a ping. */
+export const PING_INTERVAL_MS = 15000;
+/** How long to wait for a pong before dropping the socket. */
+export const PONG_TIMEOUT_MS = 5000;
 
 /** Minimal WebSocket surface (satisfied by the browser WebSocket). */
 export interface SocketLike {
@@ -62,6 +71,11 @@ export class ReconnectingSocket {
 
   get state(): SocketState {
     return this.current;
+  }
+
+  /** Why the server rejected us, once state is "rejected"; otherwise null. */
+  get rejection(): RejectionCode | null {
+    throw new Error("not implemented");
   }
 
   start(): void {

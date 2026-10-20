@@ -1,4 +1,4 @@
-import type { SocketState } from "@ttrpg-agents/core/bridge";
+import type { RejectionCode, SocketState } from "@ttrpg-agents/core/bridge";
 
 import type { PlayerRole } from "./scene-model.js";
 
@@ -15,6 +15,8 @@ export interface PanelInput {
   tokenMissing?: boolean;
   /** Description of the latest encounter sync failure, if not yet recovered. */
   syncError?: string;
+  /** Why the bridge rejected us, when socketState is "rejected". */
+  rejection?: RejectionCode;
 }
 
 export interface PanelView {
@@ -24,7 +26,9 @@ export interface PanelView {
     | "connected"
     | "connecting"
     | "reconnecting"
-    | "closed";
+    | "closed"
+    | "rejected-token"
+    | "rejected-version";
   message: string;
   /** Extra explanation when the connection seems stuck. */
   hint?: string;
@@ -81,6 +85,7 @@ function connectionView(input: PanelInput): PanelView {
     case "open":
       return { kind: "connected", message: "Connected to the local bridge." };
     case "closed":
+    case "rejected":
       return { kind: "closed", message: "Disconnected." };
     case "connecting":
     case "reconnecting": {
