@@ -36,6 +36,18 @@ export default tseslint.config(
   tseslint.configs.recommended,
   prettier,
   {
+    // Promise-heavy code (bridge, sockets, sync): needs type information, so
+    // scope it to the sources and scripts the root tsconfig covers.
+    files: ["packages/*/src/**/*.ts", "scripts/**/*.ts"],
+    languageOptions: {
+      parserOptions: { projectService: true },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+    },
+  },
+  {
     // Only the adapter may touch the SDK; everything else uses ObrAdapter so
     // it can be unit-tested with the fake (see packages/owlbear/README.md).
     // The extension runs in the browser, so it must not pull in the core root

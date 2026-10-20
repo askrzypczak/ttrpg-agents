@@ -53,8 +53,10 @@ export class ReconnectingSocket {
   private current: SocketState = "closed";
   private started = false;
   private readonly timers: Timers;
+  private readonly opts: ReconnectingSocketOptions;
 
-  constructor(private readonly opts: ReconnectingSocketOptions) {
+  constructor(opts: ReconnectingSocketOptions) {
+    this.opts = opts;
     this.timers = opts.timers ?? defaultTimers;
   }
 

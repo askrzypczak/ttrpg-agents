@@ -42,13 +42,12 @@ function toInstance(row: InstanceRow): MonsterInstance {
 }
 
 export class SqliteEncounterRepository implements EncounterRepository {
+  private readonly db: DatabaseSync;
   private readonly now: () => number;
   private readonly newId: () => string;
 
-  constructor(
-    private readonly db: DatabaseSync,
-    options: RepositoryOptions = {},
-  ) {
+  constructor(db: DatabaseSync, options: RepositoryOptions = {}) {
+    this.db = db;
     this.now = options.now ?? Date.now;
     this.newId = options.newId ?? randomUUID;
   }
