@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { EncounterRepository } from "./repository.js";
+import { InvalidAmountError, UnknownInstanceError } from "./errors.js";
 import type {
-  Encounter,
-  MonsterInstance,
-  NewMonsterInstance,
-} from "./types.js";
+  EncounterRepository,
+  HpChange,
+  InstanceBuilder,
+} from "./repository.js";
+import type { Encounter, MonsterInstance } from "./types.js";
 
 export interface RepositoryOptions {
   now?: () => number;
@@ -41,6 +42,10 @@ function toInstance(row: InstanceRow): MonsterInstance {
   };
 }
 
+function unknownMessage(id: string): string {
+  return `Unknown monster instance: ${id}`;
+}
+
 export class SqliteEncounterRepository implements EncounterRepository {
   private readonly db: DatabaseSync;
   private readonly now: () => number;
@@ -68,9 +73,11 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  addInstances(items: NewMonsterInstance[]): MonsterInstance[] {
+  addInstances(build: InstanceBuilder): MonsterInstance[] {
     return this.transaction(() => {
       const encounter = this.getOrCreateActiveEncounter();
+      const names = this.listInstances().map((i) => i.displayName);
+      const items = build(names);
       const insert = this.db.prepare(
         `INSERT INTO monster_instances
           (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, group_id, created_at)
@@ -120,22 +127,28 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  applyDamage(id: string, amount: number): MonsterInstance {
+  applyDamage(id: string, amount: number): HpChange {
     return this.adjustHp(id, amount, -1);
   }
 
-  applyHealing(id: string, amount: number): MonsterInstance {
+  applyHealing(id: string, amount: number): HpChange {
     return this.adjustHp(id, amount, 1);
   }
 
-  removeInstance(id: string): boolean {
-    const result = this.db
-      .prepare(
-        `DELETE FROM monster_instances
-         WHERE id = ? AND ${ACTIVE_SCOPE}`,
-      )
-      .run(id);
-    return Number(result.changes) > 0;
+  removeInstances(ids: readonly string[]): MonsterInstance[] {
+    return this.transaction(() => {
+      const existing = this.listInstances();
+      const removed = ids.map((id) => {
+        const instance = existing.find((i) => i.id === id);
+        if (!instance) throw new UnknownInstanceError(unknownMessage(id));
+        return instance;
+      });
+      const del = this.db.prepare(
+        `DELETE FROM monster_instances WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      );
+      for (const instance of removed) del.run(instance.id);
+      return removed;
+    });
   }
 
   clearEncounter(): void {
@@ -159,9 +172,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
     return rows.map(toInstance);
   }
 
-  private adjustHp(id: string, amount: number, sign: 1 | -1): MonsterInstance {
+  private adjustHp(id: string, amount: number, sign: 1 | -1): HpChange {
     if (!Number.isInteger(amount) || amount < 0) {
-      throw new RangeError(
+      throw new InvalidAmountError(
         `amount must be a non-negative integer, got ${amount}`,
       );
     }
@@ -172,7 +185,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
            WHERE id = ? AND ${ACTIVE_SCOPE}`,
         )
         .get(id) as InstanceRow | undefined;
-      if (!row) throw new Error(`Unknown monster instance: ${id}`);
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
       const hp = Math.min(
         row.max_hp,
         Math.max(0, row.current_hp + sign * amount),
@@ -180,7 +193,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET current_hp = ? WHERE id = ?")
         .run(hp, id);
-      return toInstance({ ...row, current_hp: hp });
+      return {
+        before: toInstance(row),
+        after: toInstance({ ...row, current_hp: hp }),
+      };
     });
   }
 

@@ -106,7 +106,7 @@ describe("addMonsters", () => {
     ]);
     const first = repo.listInstances()[0];
     if (!first) throw new Error("expected instance");
-    repo.removeInstance(first.id);
+    repo.removeInstances([first.id]);
     const third = addMonsters(deps(), [{ monster: SHADOW, count: 1 }]);
     expect(third.instances.map((i) => i.name)).toEqual(["Shadow 9"]);
   });

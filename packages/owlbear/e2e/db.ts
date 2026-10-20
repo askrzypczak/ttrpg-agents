@@ -23,7 +23,7 @@ export function seedE2eDatabase(): void {
     const repo = new SqliteEncounterRepository(db, {
       newId: () => ids.shift()!,
     });
-    repo.addInstances(
+    repo.addInstances(() =>
       SHADOW_IDS.map((_, i) => ({
         monsterKey: "shadow",
         displayName: `Shadow ${i + 1}`,

@@ -2,6 +2,8 @@ import {
   SqliteEncounterRepository,
   loadSrdMonsters,
   openDatabase,
+  type EncounterRepository,
+  type MonsterInstance,
   type NewMonsterInstance,
   type Rng,
 } from "@ttrpg-agents/core";
@@ -49,7 +51,34 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): void {
-  ctx.repo.addInstances(items);
+  ctx.repo.addInstances(() => items);
+}
+
+/** Delegates to `inner`, with some methods replaced. */
+function wrapRepo(
+  inner: EncounterRepository,
+  over: Partial<EncounterRepository>,
+): EncounterRepository {
+  return {
+    getOrCreateActiveEncounter: () => inner.getOrCreateActiveEncounter(),
+    addInstances: (build) => inner.addInstances(build),
+    applyDamage: (id, amount) => inner.applyDamage(id, amount),
+    applyHealing: (id, amount) => inner.applyHealing(id, amount),
+    removeInstances: (ids) => inner.removeInstances(ids),
+    clearEncounter: () => inner.clearEncounter(),
+    listInstances: () => inner.listInstances(),
+    ...over,
+  };
+}
+
+/** listInstances keeps returning `snapshot`; writes go to the real store. */
+function staleRepo(
+  inner: EncounterRepository,
+  snapshot: MonsterInstance[],
+): EncounterRepository {
+  return wrapRepo(inner, {
+    listInstances: () => snapshot.map((i) => ({ ...i })),
+  });
 }
 
 function item(
@@ -249,6 +278,20 @@ describe("apply_damage and heal", () => {
     ).toBeUndefined();
   });
 
+  it("apply_damage reports the HP read inside the write, not the HP listed before it", () => {
+    seed(item("Shadow 1", 5, 10));
+    const inner = ctx.repo;
+    const snapshot = inner.listInstances();
+    // Another writer changes HP after the tool listed the encounter.
+    inner.applyDamage(snapshot[0]?.id ?? "", 3);
+    ctx.repo = staleRepo(inner, snapshot);
+
+    const r = call("apply_damage", { target: "Shadow 1", amount: 2 });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain("Shadow 1: 7 -> 5/10 HP");
+    expect(inner.listInstances()[0]?.currentHp).toBe(5);
+  });
+
   it("errors on negative or fractional amounts without changing HP", () => {
     seed(item("Shadow 1", 1));
     for (const amount of [-1, 1.5]) {
@@ -259,6 +302,36 @@ describe("apply_damage and heal", () => {
       }
     }
     expect(ctx.repo.listInstances()[0]?.currentHp).toBe(10);
+  });
+});
+
+describe("tool errors", () => {
+  it("tool handler returns isError for an unknown target, and for an instance removed between resolve and write (UnknownInstanceError)", () => {
+    seed(item("Shadow 1", 5, 10));
+    const unknown = call("apply_damage", { target: "Nobody", amount: 1 });
+    expect(unknown.isError).toBe(true);
+    expect(text(unknown)).toContain('Unknown target "Nobody"');
+
+    const inner = ctx.repo;
+    const snapshot = inner.listInstances();
+    const id = snapshot[0]?.id ?? "";
+    // Removed by another writer after the tool resolved the target.
+    inner.clearEncounter();
+    ctx.repo = staleRepo(inner, snapshot);
+    for (const name of ["apply_damage", "heal"]) {
+      const r = call(name, { target: "Shadow 1", amount: 1 });
+      expect(r.isError).toBe(true);
+      expect(text(r)).toContain(`Unknown monster instance: ${id}`);
+    }
+  });
+
+  it("tool handler rethrows an unexpected RangeError instead of returning isError", () => {
+    ctx.repo = wrapRepo(ctx.repo, {
+      listInstances: () => {
+        throw new RangeError("bug");
+      },
+    });
+    expect(() => call("list_encounter")).toThrow(RangeError);
   });
 });
 
