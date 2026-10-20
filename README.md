@@ -18,8 +18,9 @@ An experiment, not a supported product. Expect rough edges and breaking changes.
 
 | Package                                                               | What it is                                                                                           |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| [`packages/core`](packages/core/README.md)                            | Dice engine, encounter store, SRD monster library, and the browser-safe bridge protocol (`/bridge`). |
-| [`packages/mcp`](packages/mcp/README.md)                              | MCP server (stdio) with the encounter tools, plus a local bridge server for the extension.           |
+| [`packages/core`](packages/core/README.md)                            | Dice engine, encounter store, and SRD monster library.                                               |
+| [`packages/mcp`](packages/mcp/README.md)                              | MCP server (stdio) with the encounter tools.                                                         |
+| [`packages/bridge`](packages/bridge/README.md)                        | Local bridge server (separate process) that serves the extension and pushes encounter snapshots.     |
 | [`packages/owlbear`](packages/owlbear/README.md)                      | Owlbear Rodeo extension (Vite) that shows the encounter, tested browser-free through an SDK adapter. |
 | [`.claude/skills/dm-encounter`](.claude/skills/dm-encounter/SKILL.md) | Skill that turns "goblin 2 takes 7" into the fewest correct tool calls.                              |
 
@@ -34,10 +35,10 @@ npm run check   # build, typecheck, lint, format check, tests
 
 ### Owlbear Rodeo extension (bridge)
 
-The `owlbear` package is an Owlbear Rodeo extension served from a local bridge server that also speaks a versioned WebSocket protocol (`@ttrpg-agents/core/bridge`).
+The `owlbear` package is an Owlbear Rodeo extension served from a local bridge server that also speaks a versioned WebSocket protocol (`@ttrpg-agents/protocol`).
 
 1. `npm run build` (builds the extension into `packages/owlbear/dist`).
-2. `npm run bridge -w @ttrpg-agents/mcp` (serves the extension and `ws://localhost:5199/ws`; override with `BRIDGE_PORT`).
+2. `npm run bridge` (serves the extension and `ws://localhost:5199/ws`; override with `BRIDGE_PORT`).
 3. In Owlbear Rodeo, Profile > Add Custom Extension, and enter `http://localhost:5199/manifest.json`.
 4. Chrome may ask for local network access for `owlbear.rodeo`; allow it, or the panel stays on "Connecting" and shows a hint after a few seconds.
 

@@ -5,11 +5,11 @@ import prettier from "eslint-config-prettier";
 const SDK_MESSAGE =
   "Import the SDK only in obr-adapter.ts; depend on ObrAdapter elsewhere.";
 const CORE_ROOT_MESSAGE =
-  "The @ttrpg-agents/core root pulls in the encounter store and node:sqlite; import a browser-safe subpath such as @ttrpg-agents/core/bridge.";
+  "The @ttrpg-agents/core root pulls in the encounter store and node:sqlite; import the browser-safe @ttrpg-agents/protocol for the wire contract.";
 const NODE_BUILTIN_MESSAGE =
   "The extension runs in the browser; Node builtins are not available.";
-const BRIDGE_MESSAGE =
-  "bridge/** is loaded by the browser extension and must stay browser-safe.";
+const PROTOCOL_MESSAGE =
+  "@ttrpg-agents/protocol is loaded by the browser extension and must stay browser-safe.";
 
 const sdkPath = { name: "@owlbear-rodeo/sdk", message: SDK_MESSAGE };
 const sdkPattern = { group: ["@owlbear-rodeo/sdk/*"], message: SDK_MESSAGE };
@@ -78,27 +78,20 @@ export default tseslint.config(
     },
   },
   {
-    // bridge/** is shipped to the browser extension via @ttrpg-agents/core/bridge.
-    files: ["packages/core/src/bridge/**/*.ts"],
+    // The protocol package is bundled into the browser extension, so it must
+    // stay browser-safe: no Node builtins, no ws or MCP SDK, and no other
+    // workspace package (that would pull in the core root).
+    files: ["packages/protocol/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          paths: [{ name: "ws", message: BRIDGE_MESSAGE }],
+          paths: [{ name: "ws", message: PROTOCOL_MESSAGE }],
           patterns: [
-            { group: ["node:*"], message: BRIDGE_MESSAGE },
-            { group: ["ws/*"], message: BRIDGE_MESSAGE },
-            { group: ["@modelcontextprotocol/*"], message: BRIDGE_MESSAGE },
-            {
-              group: [
-                "../encounter",
-                "../encounter/**",
-                "../monsters",
-                "../monsters/**",
-                "../index.js",
-              ],
-              message: BRIDGE_MESSAGE,
-            },
+            { group: ["node:*"], message: PROTOCOL_MESSAGE },
+            { group: ["ws/*"], message: PROTOCOL_MESSAGE },
+            { group: ["@modelcontextprotocol/*"], message: PROTOCOL_MESSAGE },
+            { group: ["@ttrpg-agents/*"], message: PROTOCOL_MESSAGE },
           ],
         },
       ],

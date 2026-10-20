@@ -47,7 +47,7 @@ fake together. The e2e fake host reuses `SceneModel`.
 Chromium. First time: `npx playwright install chromium`. It is NOT part of
 `npm run check` (needs a browser); CI runs it as the separate `e2e` job.
 
-- The real bridge (`packages/mcp`, an ephemeral port picked per run) serves the
+- The real bridge (`packages/bridge`, an ephemeral port picked per run) serves the
   real built extension (`dist`). A tiny server (`e2e/serve.ts`, 127.0.0.1 on
   another ephemeral port) serves the harness (`dist-e2e`, never the production
   `dist`) on a different origin, which iframes the extension with a proper

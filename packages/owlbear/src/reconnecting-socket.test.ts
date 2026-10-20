@@ -3,7 +3,7 @@ import {
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
-} from "./protocol.js";
+} from "@ttrpg-agents/protocol";
 import {
   PING_INTERVAL_MS,
   PONG_TIMEOUT_MS,

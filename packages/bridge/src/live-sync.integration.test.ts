@@ -1,6 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DatabaseSync } from "node:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -16,7 +16,7 @@ import {
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
-} from "@ttrpg-agents/core/bridge";
+} from "@ttrpg-agents/protocol";
 import {
   broadcastSnapshotsOnChange,
   dataVersion,
@@ -24,7 +24,10 @@ import {
 } from "./encounter-bridge.js";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
-const entry = fileURLToPath(new URL("../../dist/stdio.js", import.meta.url));
+const entry = join(
+  dirname(fileURLToPath(import.meta.resolve("@ttrpg-agents/mcp"))),
+  "stdio.js",
+);
 
 let dir: string;
 let db: DatabaseSync;

@@ -7,7 +7,7 @@ import {
   type EncounterRepository,
   type MonsterInstance,
 } from "@ttrpg-agents/core";
-import type { BridgeMessage } from "@ttrpg-agents/core/bridge";
+import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   broadcastSnapshotsOnChange,
   forwardEncounterEvents,

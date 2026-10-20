@@ -13,7 +13,7 @@ const port = process.env.BRIDGE_PORT
   : DEFAULT_BRIDGE_PORT;
 const staticDir =
   process.env.BRIDGE_STATIC_DIR ??
-  fileURLToPath(new URL("../../../owlbear/dist", import.meta.url));
+  fileURLToPath(new URL("../../owlbear/dist", import.meta.url));
 const tokenPath = process.env.BRIDGE_TOKEN_FILE ?? defaultTokenPath();
 const token = await loadOrCreateToken(tokenPath);
 
