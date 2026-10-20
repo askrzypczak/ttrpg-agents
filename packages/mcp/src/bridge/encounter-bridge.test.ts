@@ -19,10 +19,10 @@ function setup() {
 describe("forwardEncounterEvents", () => {
   it("broadcasts each repository mutation as an encounter-event", () => {
     const { repo, sent } = setup();
-    const [a] = repo.addInstances([
+    const [a] = repo.addInstances(() => [
       { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
     ]);
-    repo.removeInstance(a!.id);
+    repo.removeInstances([a!.id]);
     expect(sent).toEqual([
       {
         v: 1,
@@ -41,7 +41,7 @@ describe("forwardEncounterEvents", () => {
 describe("snapshotMessage", () => {
   it("contains the current instances", () => {
     const { repo, inner } = setup();
-    const created = repo.addInstances([
+    const created = repo.addInstances(() => [
       { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
     ]);
     expect(snapshotMessage(inner)).toEqual({

@@ -243,9 +243,11 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
     run(ctx, { target, amount }) {
       const resolved = resolveTarget(ctx.repo.listInstances(), target);
       if (!resolved.ok) return fail(resolved.error);
-      const updated = damage
-        ? ctx.repo.applyDamage(resolved.instance.id, amount)
-        : ctx.repo.applyHealing(resolved.instance.id, amount);
+      const updated = (
+        damage
+          ? ctx.repo.applyDamage(resolved.instance.id, amount)
+          : ctx.repo.applyHealing(resolved.instance.id, amount)
+      ).after;
       return ok(
         `${updated.displayName}: ${String(resolved.instance.currentHp)} -> ${String(updated.currentHp)}/${String(updated.maxHp)} HP`,
         { instance: instanceView(updated) },
@@ -269,7 +271,7 @@ const removeMonstersTool = defineTool({
         resolved.push(r.instance);
       }
     }
-    for (const i of resolved) ctx.repo.removeInstance(i.id);
+    ctx.repo.removeInstances(resolved.map((i) => i.id));
     const names = resolved.map((i) => i.displayName);
     return ok(`Removed ${String(names.length)}: ${names.join(", ")}`, {
       removed: resolved.map(instanceView),

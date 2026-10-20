@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { EncounterRepository } from "./repository.js";
 import type {
-  Encounter,
-  MonsterInstance,
-  NewMonsterInstance,
-} from "./types.js";
+  EncounterRepository,
+  HpChange,
+  InstanceBuilder,
+} from "./repository.js";
+import type { Encounter, MonsterInstance } from "./types.js";
 
 export interface RepositoryOptions {
   now?: () => number;
@@ -68,7 +68,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  addInstances(items: NewMonsterInstance[]): MonsterInstance[] {
+  addInstances(build: InstanceBuilder): MonsterInstance[] {
+    // Contract stub: the builder still runs outside the transaction and does
+    // not see the existing names.
+    const items = build([]);
     return this.transaction(() => {
       const encounter = this.getOrCreateActiveEncounter();
       const insert = this.db.prepare(
@@ -120,22 +123,17 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  applyDamage(id: string, amount: number): MonsterInstance {
+  applyDamage(id: string, amount: number): HpChange {
     return this.adjustHp(id, amount, -1);
   }
 
-  applyHealing(id: string, amount: number): MonsterInstance {
+  applyHealing(id: string, amount: number): HpChange {
     return this.adjustHp(id, amount, 1);
   }
 
-  removeInstance(id: string): boolean {
-    const result = this.db
-      .prepare(
-        `DELETE FROM monster_instances
-         WHERE id = ? AND ${ACTIVE_SCOPE}`,
-      )
-      .run(id);
-    return Number(result.changes) > 0;
+  removeInstances(ids: readonly string[]): MonsterInstance[] {
+    void ids;
+    throw new Error("not implemented");
   }
 
   clearEncounter(): void {
@@ -159,7 +157,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
     return rows.map(toInstance);
   }
 
-  private adjustHp(id: string, amount: number, sign: 1 | -1): MonsterInstance {
+  private adjustHp(id: string, amount: number, sign: 1 | -1): HpChange {
     if (!Number.isInteger(amount) || amount < 0) {
       throw new RangeError(
         `amount must be a non-negative integer, got ${amount}`,
@@ -180,7 +178,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET current_hp = ? WHERE id = ?")
         .run(hp, id);
-      return toInstance({ ...row, current_hp: hp });
+      // Contract stub: `before` is not captured yet.
+      const after = toInstance({ ...row, current_hp: hp });
+      return { before: after, after };
     });
   }
 

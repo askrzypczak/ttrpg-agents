@@ -4,6 +4,7 @@ import { roll } from "../dice/roll.js";
 import type { Rng } from "../dice/rng.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/loader.js";
+import { DomainError } from "../errors.js";
 import type { EncounterRepository } from "./repository.js";
 import type { NewMonsterInstance } from "./types.js";
 
@@ -65,12 +66,11 @@ export type AddMonstersErrorCode =
   | "invalid_hp"
   | "invalid_initiative";
 
-export class AddMonstersError extends Error {
-  readonly code: AddMonstersErrorCode;
+export class AddMonstersError extends DomainError {
+  declare readonly code: AddMonstersErrorCode;
   constructor(code: AddMonstersErrorCode, message: string) {
-    super(message);
+    super(code, message);
     this.name = "AddMonstersError";
-    this.code = code;
   }
 }
 
@@ -223,7 +223,7 @@ export function addMonsters(
     }
   }
 
-  const saved = repo.addInstances(items);
+  const saved = repo.addInstances(() => items);
   if (saved.length !== items.length) {
     throw new Error(
       `Store persisted ${saved.length} instances, expected ${items.length}`,

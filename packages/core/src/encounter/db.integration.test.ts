@@ -75,7 +75,7 @@ describe("migrations", () => {
     dirs.push(dir);
     const path = join(dir, "nested", "enc.db");
     const db1 = openDatabase(path);
-    new SqliteEncounterRepository(db1).addInstances([
+    new SqliteEncounterRepository(db1).addInstances(() => [
       { monsterKey: "orc", displayName: "Orc", maxHp: 15 },
     ]);
     db1.close();
