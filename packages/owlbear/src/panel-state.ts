@@ -1,4 +1,4 @@
-import type { RejectionCode, SocketState } from "@ttrpg-agents/core/bridge";
+import type { RejectionCode, SocketState } from "./reconnecting-socket.js";
 
 import type { PlayerRole } from "./scene-model.js";
 

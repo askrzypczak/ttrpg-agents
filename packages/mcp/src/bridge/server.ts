@@ -15,7 +15,7 @@ import {
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
-} from "@ttrpg-agents/core/bridge";
+} from "@ttrpg-agents/protocol";
 
 export const DEFAULT_BRIDGE_PORT = 5199;
 export const SERVER_VERSION = "0.0.0";

@@ -16,7 +16,7 @@ import {
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
-} from "@ttrpg-agents/core/bridge";
+} from "@ttrpg-agents/protocol";
 import {
   broadcastSnapshotsOnChange,
   dataVersion,
