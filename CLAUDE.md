@@ -51,4 +51,4 @@ Dispatch, label setup (`setup-labels.sh`) and close-time label cleanup now live 
 - Scope it with e.g. `npm run mutate -- --mutate 'packages/core/src/dice/*.ts,!packages/core/src/dice/*.test.ts'` (a CLI `--mutate` replaces the config's test/`index.ts` exclusions, so repeat them); add `--force` to ignore the incremental cache.
 - Outside `check` and CI. Use it to back up new-module PRs where `grg.sh` says `PASS (weak)`.
 - Noise rules: `StringLiteral` and `OptionalChaining` mutants are excluded globally (config). Silence other equivalent mutants inline with `// Stryker disable next-line <Mutator>: <reason>`.
-- vitest is pinned to `^4`: `@stryker-mutator/vitest-runner` 10.0.0 does not work with vitest 5 (bogus ~9% scores vs ~81%). Revisit and unpin when the runner supports vitest 5.
+- vitest is pinned to `^4`: `@stryker-mutator/vitest-runner` 10.0.0 does not work with vitest 5 (bogus ~9% scores vs ~81%). Revisit and unpin when the runner supports vitest 5 (and drop the vitest `ignore` in `.github/dependabot.yml`).
