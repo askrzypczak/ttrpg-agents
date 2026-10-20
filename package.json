@@ -10,8 +10,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "npm run build --workspaces",
-    "typecheck": "tsc --noEmit && tsc -p packages/owlbear/tsconfig.json --noEmit",
+    "build:ts": "tsc -b packages/mcp/tsconfig.build.json",
+    "build": "npm run build:ts && npm run build -w @ttrpg-agents/owlbear",
+    "typecheck": "npm run build:ts && tsc --noEmit && tsc -p packages/owlbear/tsconfig.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

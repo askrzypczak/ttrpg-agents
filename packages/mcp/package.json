@@ -13,7 +13,6 @@
     "ttrpg-agents-mcp": "./dist/stdio.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
     "bridge": "node dist/bridge/cli.js"
   },
   "dependencies": {
