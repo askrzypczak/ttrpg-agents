@@ -3,6 +3,38 @@ import { createFakeObr } from "./fake-adapter.js";
 import { SceneModel } from "./scene-model.js";
 
 describe("createFakeObr", () => {
+  it("rejects item calls with MissingDataError while the scene is not ready", async () => {
+    const { obr, scene } = createFakeObr(new SceneModel("gm", false), {
+      x: 5,
+      y: 6,
+    });
+    const item = {
+      id: "a",
+      type: "SHAPE",
+      name: "A",
+      visible: true,
+      position: { x: 0, y: 0 },
+      metadata: {},
+    };
+    const calls = [
+      () => obr.getItems(),
+      () => obr.addItems([item]),
+      () => obr.updateItems(["a"], { name: "B" }),
+      () => obr.deleteItems(["a"]),
+    ];
+    for (const call of calls)
+      await expect(call()).rejects.toMatchObject({
+        name: "MissingDataError",
+        message: "No scene found",
+      });
+    expect(await obr.getRole()).toBe("gm");
+    expect(await obr.isSceneReady()).toBe(false);
+    expect(await obr.getViewportCenter()).toEqual({ x: 5, y: 6 });
+    scene.setReady(true);
+    await obr.addItems([item]);
+    expect((await obr.getItems()).map((i) => i.id)).toEqual(["a"]);
+  });
+
   it("runs the onReady callback", async () => {
     const { obr } = createFakeObr();
     await new Promise<void>((resolve) => obr.onReady(resolve));
