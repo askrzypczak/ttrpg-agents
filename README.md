@@ -4,16 +4,9 @@ DM-assist tooling for D&D and other TTRPGs: an MCP server that runs an encounter
 
 ## What this repo is
 
-This is a test pet project for [claude-workflow](https://github.com/askrzypczak/claude-workflow), a ticket-driven Claude Code workflow. The product is real and I use it at my own table, but the point is to exercise the workflow on a codebase with real constraints: a monorepo, a browser extension, a WebSocket protocol, and a security boundary.
+This is a test pet project for [claude-workflow](https://github.com/askrzypczak/claude-workflow), a ticket-driven Claude Code workflow; see that repo for how the workflow works. The product is real and I use it at my own table, but the point is to exercise the workflow on a codebase with real constraints: a monorepo, a browser extension, a WebSocket protocol, and a security boundary.
 
-**Most of the code here was written by AI agents.** Each change starts as a GitHub issue and goes through the same loop:
-
-1. An agent plans the work and I sign off on the plan.
-2. An implementer subagent writes the code, and a reviewer subagent checks complex changes.
-3. Tests are proven with green/red/green evidence, which goes in the PR body.
-4. CI runs `npm run check`, and I review and merge. Agents never push to `main`.
-
-[`CLAUDE.md`](CLAUDE.md) holds the conventions and guardrails the agents follow. The closed [issues](https://github.com/askrzypczak/ttrpg-agents/issues?q=is%3Aissue+is%3Aclosed) and [pull requests](https://github.com/askrzypczak/ttrpg-agents/pulls?q=is%3Apr+is%3Aclosed) are the worked examples.
+**Most of the code here was written by AI agents** working GitHub issues through that workflow. [`CLAUDE.md`](CLAUDE.md) holds this repo's conventions and guardrails. The closed [issues](https://github.com/askrzypczak/ttrpg-agents/issues?q=is%3Aissue+is%3Aclosed) and [pull requests](https://github.com/askrzypczak/ttrpg-agents/pulls?q=is%3Apr+is%3Aclosed) are the worked examples.
 
 ## Status and contributions
 
