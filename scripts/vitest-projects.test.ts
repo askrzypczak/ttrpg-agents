@@ -1,5 +1,5 @@
 import { globSync } from "node:fs";
-import { matchesGlob } from "node:path";
+import { basename, matchesGlob } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
@@ -14,10 +14,32 @@ const any = (file: string, globs: string[]) =>
 const inUnit = (f: string) => any(f, UNIT_INCLUDE) && !any(f, UNIT_EXCLUDE);
 const inIntegration = (f: string) => any(f, INTEGRATION_INCLUDE);
 
-const testFiles = globSync(
-  ["packages/*/{src,e2e}/**/*.test.ts", "scripts/**/*.test.ts"],
-  { cwd: root, exclude: (name) => name === "node_modules" || name === "dist" },
-);
+// Every test file in the repo, whatever its folder, so a test added anywhere
+// must still fit exactly one project. Directories are skipped by name at any
+// depth:
+//   node_modules, dist, dist-e2e, reports: installed packages and build or
+//     report output, not source.
+//   .git: git metadata.
+//   .claude: agent worktrees (.claude/worktrees/<name>) are full copies of the
+//     repo whose paths match no project glob, so they would fail the check.
+//   .stryker-tmp: Stryker sandbox copies of the repo, same problem.
+// globSync passes each entry's path relative to `root`, so match the basename.
+// globSync also skips dot-directories by default, so .claude, .git and
+// .stryker-tmp are listed as belt and braces.
+const SKIPPED_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "dist-e2e",
+  ".claude",
+  "reports",
+  ".git",
+  ".stryker-tmp",
+]);
+
+const testFiles = globSync("**/*.{test,spec}.ts", {
+  cwd: root,
+  exclude: (entry) => SKIPPED_DIRS.has(basename(entry)),
+});
 
 describe("vitest unit/integration projects", () => {
   it("discovers the existing tests", () => {
@@ -43,7 +65,9 @@ describe("vitest unit/integration projects", () => {
   });
 
   it("keeps plain *.test.ts in the unit project", () => {
-    const unit = testFiles.filter((f) => !f.endsWith(".integration.test.ts"));
+    const unit = testFiles.filter(
+      (f) => f.endsWith(".test.ts") && !f.endsWith(".integration.test.ts"),
+    );
     for (const file of unit) {
       expect(inUnit(file), file).toBe(true);
       expect(inIntegration(file), file).toBe(false);

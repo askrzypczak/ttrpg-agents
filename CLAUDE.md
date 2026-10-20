@@ -26,7 +26,7 @@ Hexagonal architecture (ports and adapters) around a domain core: Claude handles
 - Owlbear extension code is tested browser-free via an SDK adapter + fake; see `packages/owlbear/README.md`. Only `obr-adapter.ts` may import `@owlbear-rodeo/sdk` (lint-enforced).
 
 ## Test classification and coverage
-- unit: `*.test.ts` (default). integration: `*.integration.test.ts`, for tests that use real SQLite, sockets, the filesystem or child processes. e2e: Playwright `*.e2e.ts`.
+- unit: `*.test.ts` (default). integration: `*.integration.test.ts`, for tests that open SQLite (including `:memory:`), sockets, child processes or temp dirs, or write files. Unit tests may read files committed to the repo (fixtures, data, source). e2e: Playwright `*.e2e.ts`.
 - `npm test` runs unit + integration (vitest projects in `vitest.config.ts`; `test:unit`, `test:integration` run one). A new test file must fit exactly one project.
 - `npm run coverage` prints lines/branches/functions for unit, integration, e2e and combined; reports in `reports/coverage/<kind>`. Informational only (CI `coverage` job uploads it); not part of `check`. The PR comment headlines combined line coverage with delta vs main plus patch coverage (changed lines), per-kind table collapsed. Baseline = `coverage-summary` artifact from the latest green main run (`COVERAGE_BASELINE`); patch uses `COVERAGE_BASE_REF`.
 
