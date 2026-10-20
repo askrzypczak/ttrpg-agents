@@ -3,9 +3,18 @@
 Agentic tooling for D&D and TTRPGs in general: assistance for the DM during play, plus related experiments.
 
 ## Status
-npm workspaces monorepo in place (`packages/core`, `packages/mcp`, `packages/owlbear`); no domain code yet.
+npm workspaces monorepo under `packages/*` (see Architecture).
 - Stack: Node 24 (`.node-version`), npm, ESM, strict TypeScript (NodeNext), vitest, ESLint (flat config, typescript-eslint) + Prettier.
 - `npm run check` = build, typecheck, lint, format:check, test (fail-fast). It is the definition of done; CI (`.github/workflows/ci.yml`) runs it on PRs and pushes to main.
+
+## Architecture
+Hexagonal architecture (ports and adapters) around a domain core: Claude handles language, the core handles every number.
+- **Domain core** (`@ttrpg-agents/engine`; `@ttrpg-agents/core` until the rename). Holds the game: rules, simulation, use cases, and the ports they need (repository, randomness, clock, ids, monster index). No I/O, no Node built-ins, no transports or SDKs. Imports no other workspace package.
+- **Dependencies point inward.** Driven adapters implement the engine's ports; driving adapters call its use cases and wire adapters up at startup.
+- **Where code goes.** New game logic goes in the engine. Adapters stay thin: translate input, call the engine, format output.
+- **Wire contracts** (bridge messages) live in `protocol`, not in the engine.
+- **Package map** (target): `engine` (domain core); driven adapters `store-sqlite` (encounter store) and `srd` (monster data, loader, import); driving adapters `mcp` and `bridge` (later a CLI); `protocol` (wire contract); `owlbear` (client of the bridge; may import `engine` and `protocol`).
+- In progress under #129: today `packages/core` still holds the store, monster loader and bridge wire code, and `packages/mcp` holds the bridge server. Each child ticket updates this note; the last one removes it.
 
 ## Conventions
 - Owner: Tony (personal GitHub account `askrzypczak`). Public repo, openly an agent-written test project for claude-workflow (see README). Tony is the only contributor: issues are for directing agents, outside PRs are not accepted. No license yet (all rights reserved); the SRD data is CC-BY 4.0.
@@ -13,7 +22,7 @@ npm workspaces monorepo in place (`packages/core`, `packages/mcp`, `packages/owl
 - Never authorize by the client-supplied `role` (bridge `hello`); it only drives UI. Bridge clients authenticate with the token.
 - E2E: `npm run test:e2e` (Playwright + fake Owlbear host, `packages/owlbear/e2e`; see its README) is a separate `e2e` CI job, not part of `npm run check` (browser needed). Needs ports 5199/5200 free.
 - TypeScript: `erasableSyntaxOnly` and `verbatimModuleSyntax` are on because `.ts` files run directly under Node type stripping (no enums, no constructor parameter properties, `import type` for types). Lint runs `no-floating-promises` and `no-misused-promises` (type-aware) on `packages/*/src` and `scripts`; mark intentional fire-and-forget with `void`.
-- Layout: npm workspaces under `packages/*` (`@ttrpg-agents/core`, `@ttrpg-agents/mcp`, `@ttrpg-agents/owlbear`). `core` has no MCP deps; `mcp` depends on `core`; `owlbear` (Vite browser extension) imports only the browser-safe `@ttrpg-agents/core/bridge` subpath (lint-enforced: `packages/owlbear/src` may not import the `@ttrpg-agents/core` root or `node:*`; `packages/core/src/bridge/**` may not import `node:*`, `ws`, `@modelcontextprotocol/*` or `../encounter`, `../monsters`, `../index.js`) and is excluded from the root `tsc` project (`npm run typecheck` runs its own tsconfig, with DOM lib, as a second step). `mcp` resolves `core` through its built `dist/`, so `mcp` declares a TypeScript project reference to `core` (both `tsconfig.build.json` are `composite`). `build:ts` (`tsc -b`) is the single incremental build; `typecheck` and the vitest `globalSetup` (`vitest.global-setup.ts`) run it, so tests and typecheck never see a stale `core`/`mcp` `dist/` and a fresh worktree needs only `npm ci`. Each `tsconfig.build.json` keeps its `tsBuildInfoFile` inside `dist/` so deleting `dist/` also forces a rebuild. `scripts/` stays at the root.
+- Build and boundaries: `owlbear` (Vite browser extension) imports only the browser-safe `@ttrpg-agents/core/bridge` subpath (lint-enforced: `packages/owlbear/src` may not import the `@ttrpg-agents/core` root or `node:*`; `packages/core/src/bridge/**` may not import `node:*`, `ws`, `@modelcontextprotocol/*` or `../encounter`, `../monsters`, `../index.js`) and is excluded from the root `tsc` project (`npm run typecheck` runs its own tsconfig, with DOM lib, as a second step). `mcp` resolves `core` through its built `dist/`, so `mcp` declares a TypeScript project reference to `core` (both `tsconfig.build.json` are `composite`). `build:ts` (`tsc -b`) is the single incremental build; `typecheck` and the vitest `globalSetup` (`vitest.global-setup.ts`) run it, so tests and typecheck never see a stale `core`/`mcp` `dist/` and a fresh worktree needs only `npm ci`. Each `tsconfig.build.json` keeps its `tsBuildInfoFile` inside `dist/` so deleting `dist/` also forces a rebuild. `scripts/` stays at the root.
 - Owlbear extension code is tested browser-free via an SDK adapter + fake; see `packages/owlbear/README.md`. Only `obr-adapter.ts` may import `@owlbear-rodeo/sdk` (lint-enforced).
 
 ## Test classification and coverage
