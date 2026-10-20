@@ -1,4 +1,4 @@
-import type { EncounterRepository } from "./repository.js";
+import type { EncounterRepository, HpChange } from "./repository.js";
 import type { MonsterInstance } from "./types.js";
 
 export type EncounterEvent =
@@ -40,6 +40,15 @@ export function createEncounterEmitter(): EncounterEmitter {
   };
 }
 
+function emitHp(emitter: EncounterEmitter, { after }: HpChange): void {
+  emitter.emit({
+    type: "hp-changed",
+    id: after.id,
+    currentHp: after.currentHp,
+    maxHp: after.maxHp,
+  });
+}
+
 /**
  * Wraps a repository so every successful mutation emits an event afterwards.
  * Failed calls (throws) emit nothing.
@@ -57,18 +66,21 @@ export function observeRepository(
       return instances;
     },
     applyDamage(id, amount) {
-      void id;
-      void amount;
-      throw new Error("not implemented");
+      const change = repo.applyDamage(id, amount);
+      emitHp(emitter, change);
+      return change;
     },
     applyHealing(id, amount) {
-      void id;
-      void amount;
-      throw new Error("not implemented");
+      const change = repo.applyHealing(id, amount);
+      emitHp(emitter, change);
+      return change;
     },
     removeInstances(ids) {
-      void ids;
-      throw new Error("not implemented");
+      const removed = repo.removeInstances(ids);
+      for (const instance of removed) {
+        emitter.emit({ type: "removed", id: instance.id });
+      }
+      return removed;
     },
     clearEncounter() {
       repo.clearEncounter();

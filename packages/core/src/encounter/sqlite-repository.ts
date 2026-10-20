@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import { InvalidAmountError, UnknownInstanceError } from "./errors.js";
 import type {
   EncounterRepository,
   HpChange,
@@ -41,6 +42,10 @@ function toInstance(row: InstanceRow): MonsterInstance {
   };
 }
 
+function unknownMessage(id: string): string {
+  return `Unknown monster instance: ${id}`;
+}
+
 export class SqliteEncounterRepository implements EncounterRepository {
   private readonly db: DatabaseSync;
   private readonly now: () => number;
@@ -69,11 +74,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
   }
 
   addInstances(build: InstanceBuilder): MonsterInstance[] {
-    // Contract stub: the builder still runs outside the transaction and does
-    // not see the existing names.
-    const items = build([]);
     return this.transaction(() => {
       const encounter = this.getOrCreateActiveEncounter();
+      const names = this.listInstances().map((i) => i.displayName);
+      const items = build(names);
       const insert = this.db.prepare(
         `INSERT INTO monster_instances
           (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, group_id, created_at)
@@ -132,8 +136,19 @@ export class SqliteEncounterRepository implements EncounterRepository {
   }
 
   removeInstances(ids: readonly string[]): MonsterInstance[] {
-    void ids;
-    throw new Error("not implemented");
+    return this.transaction(() => {
+      const existing = this.listInstances();
+      const removed = ids.map((id) => {
+        const instance = existing.find((i) => i.id === id);
+        if (!instance) throw new UnknownInstanceError(unknownMessage(id));
+        return instance;
+      });
+      const del = this.db.prepare(
+        `DELETE FROM monster_instances WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      );
+      for (const instance of removed) del.run(instance.id);
+      return removed;
+    });
   }
 
   clearEncounter(): void {
@@ -159,7 +174,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
 
   private adjustHp(id: string, amount: number, sign: 1 | -1): HpChange {
     if (!Number.isInteger(amount) || amount < 0) {
-      throw new RangeError(
+      throw new InvalidAmountError(
         `amount must be a non-negative integer, got ${amount}`,
       );
     }
@@ -170,7 +185,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
            WHERE id = ? AND ${ACTIVE_SCOPE}`,
         )
         .get(id) as InstanceRow | undefined;
-      if (!row) throw new Error(`Unknown monster instance: ${id}`);
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
       const hp = Math.min(
         row.max_hp,
         Math.max(0, row.current_hp + sign * amount),
@@ -178,9 +193,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET current_hp = ? WHERE id = ?")
         .run(hp, id);
-      // Contract stub: `before` is not captured yet.
-      const after = toInstance({ ...row, current_hp: hp });
-      return { before: after, after };
+      return {
+        before: toInstance(row),
+        after: toInstance({ ...row, current_hp: hp }),
+      };
     });
   }
 
