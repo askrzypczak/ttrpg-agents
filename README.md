@@ -12,7 +12,7 @@ This is a test pet project for [claude-workflow](https://github.com/askrzypczak/
 
 An experiment, not a supported product. Expect rough edges and breaking changes.
 
-**I am the only contributor.** Issues are how I direct agents, so they are not an open tracker, and I will not review or merge outside pull requests. Feel free to read, fork and borrow ideas. There is no license yet, so the code is all rights reserved for now (the SRD data below is the exception).
+**I am the only contributor.** Issues are how I direct agents, so they are not an open tracker, and I will not review or merge outside pull requests. Feel free to read, fork and borrow ideas. The code is licensed under the [MIT License](LICENSE); the SRD data is under its own license (see [Attribution](#attribution)).
 
 ## What's in it
 
