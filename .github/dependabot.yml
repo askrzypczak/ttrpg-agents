@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    # npm workspaces: the single root lockfile covers packages/*.
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # @vitest/coverage-v8 declares an exact peer on vitest, so they must move together.
+      vitest:
+        patterns:
+          - vitest
+          - "@vitest/*"
+      stryker:
+        patterns:
+          - "@stryker-mutator/*"
+    ignore:
+      # Stay on vitest 4 until the Stryker vitest runner supports vitest 5
+      # (CLAUDE.md "Mutation testing"); drop these entries when unpinning.
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
