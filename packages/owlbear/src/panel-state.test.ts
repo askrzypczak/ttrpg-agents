@@ -69,6 +69,30 @@ describe("panelView", () => {
     });
     expect(v.hint).toBeDefined();
   });
+
+  it("a bad-token rejection shows the reinstall message with no stalled hint", () => {
+    const v = panelView({
+      role: "gm",
+      socketState: "rejected",
+      rejection: "bad-token",
+      disconnectedMs: 99999,
+    });
+    expect(v.kind).toBe("rejected-token");
+    expect(v.message).toContain("reinstall");
+    expect(v.hint).toBeUndefined();
+  });
+
+  it("a version rejection shows the rebuild message with no stalled hint", () => {
+    const v = panelView({
+      role: "gm",
+      socketState: "rejected",
+      rejection: "unsupported-version",
+      disconnectedMs: 99999,
+    });
+    expect(v.kind).toBe("rejected-version");
+    expect(v.message).toContain("rebuild");
+    expect(v.hint).toBeUndefined();
+  });
 });
 
 describe("panelView sync error", () => {

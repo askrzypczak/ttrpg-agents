@@ -1,6 +1,7 @@
 import {
   PROTOCOL_VERSION,
   ReconnectingSocket,
+  type RejectionCode,
   type SocketLike,
   type SocketState,
 } from "@ttrpg-agents/core/bridge";
@@ -8,7 +9,6 @@ import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { describeError, panelView } from "./panel-state.js";
 
-const BRIDGE_URL = "ws://localhost:5199/ws";
 const EXTENSION_VERSION = "0.0.0";
 
 function el(id: string): HTMLElement {
@@ -30,11 +30,13 @@ obr.onReady(async () => {
   let streakStart = Date.now();
   let syncError: string | undefined;
 
+  let rejection: RejectionCode | undefined;
   const render = () => {
     const view = panelView({
       role,
       tokenMissing,
       socketState,
+      ...(rejection ? { rejection } : {}),
       syncError,
       disconnectedMs: Date.now() - streakStart,
     });
@@ -64,7 +66,7 @@ obr.onReady(async () => {
     },
   );
   const socket = new ReconnectingSocket({
-    url: BRIDGE_URL,
+    url: `ws://${location.host}/ws`,
     createSocket: (url) => new WebSocket(url) as unknown as SocketLike,
     hello: () => ({
       v: PROTOCOL_VERSION,
@@ -77,6 +79,7 @@ obr.onReady(async () => {
       else if (socketState === "open" || socketState === "closed")
         streakStart = Date.now();
       socketState = state;
+      rejection = socket.rejection ?? undefined;
       render();
     },
   });
