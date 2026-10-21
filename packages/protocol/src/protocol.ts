@@ -27,6 +27,53 @@ const encounterSnapshotPayload = z.object({
   instances: z.array(monsterInstanceSchema),
 });
 
+// TODO(#98) contract stub: the shapes below carry the approved types, but the
+// `.refine(notImplemented)` placeholders reject every value at runtime until
+// the implementation replaces them with the real schemas.
+const notImplemented = (): boolean => false;
+
+export const commandSchema = z
+  .discriminatedUnion("name", [z.object({ name: z.literal("scene-status") })])
+  .refine(notImplemented, "not implemented");
+
+export const sceneStatusSchema = z
+  .object({
+    sceneReady: z.boolean(),
+    tokenCount: z.number().int().min(0),
+    appliedInstanceCount: z.number().int().min(0),
+  })
+  .refine(notImplemented, "not implemented");
+
+export const commandResultSchema = z
+  .discriminatedUnion("name", [
+    z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
+  ])
+  .refine(notImplemented, "not implemented");
+
+export const agentErrorCodeSchema = z.enum([
+  "not-connected",
+  "timeout",
+  "command-failed",
+  "bridge-unreachable",
+  "unauthorized",
+  "bad-request",
+]);
+
+export const agentCommandResponseSchema = z
+  .discriminatedUnion("ok", [
+    z.object({ ok: z.literal(true), result: commandResultSchema }),
+    z.object({
+      ok: z.literal(false),
+      error: z.object({ code: agentErrorCodeSchema, message: z.string() }),
+    }),
+  ])
+  .refine(notImplemented, "not implemented");
+
+export type Command = z.infer<typeof commandSchema>;
+export type SceneStatus = z.infer<typeof sceneStatusSchema>;
+export type CommandResult = z.infer<typeof commandResultSchema>;
+export type AgentCommandResponse = z.infer<typeof agentCommandResponseSchema>;
+
 function envelope<T extends string, P extends z.ZodType>(type: T, payload: P) {
   return z.object({
     v: z.literal(PROTOCOL_VERSION),
@@ -44,6 +91,8 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("error", errorPayload),
   envelope("encounter-event", encounterEventSchema),
   envelope("encounter-snapshot", encounterSnapshotPayload),
+  envelope("command", commandSchema),
+  envelope("command-result", commandResultSchema),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;

@@ -31,7 +31,7 @@ export interface ToolDefinition {
   inputSchema: z.ZodRawShape;
   annotations?: ToolAnnotations;
   /** Validates `args` against `inputSchema`; domain errors become isError results. */
-  handler(ctx: ToolContext, args: unknown): ToolResult;
+  handler(ctx: ToolContext, args: unknown): ToolResult | Promise<ToolResult>;
 }
 
 function ok(text: string, structured?: Record<string, unknown>): ToolResult {
@@ -49,7 +49,10 @@ function defineTool<S extends z.ZodRawShape>(def: {
   description: string;
   inputSchema: S;
   annotations?: ToolAnnotations;
-  run(ctx: ToolContext, args: z.infer<z.ZodObject<S>>): ToolResult;
+  run(
+    ctx: ToolContext,
+    args: z.infer<z.ZodObject<S>>,
+  ): ToolResult | Promise<ToolResult>;
 }): ToolDefinition {
   const schema = z.object(def.inputSchema);
   return {
@@ -65,13 +68,19 @@ function defineTool<S extends z.ZodRawShape>(def: {
           .join("; ");
         return fail(`Invalid arguments: ${issues}`);
       }
-      try {
-        return def.run(ctx, parsed.data);
-      } catch (e) {
+      const domainErrorToResult = (e: unknown): ToolResult => {
         if (e instanceof DomainError) {
           return fail(e.message);
         }
         throw e;
+      };
+      try {
+        const result = def.run(ctx, parsed.data);
+        return result instanceof Promise
+          ? result.catch(domainErrorToResult)
+          : result;
+      } catch (e) {
+        return domainErrorToResult(e);
       }
     },
   };
@@ -282,6 +291,17 @@ const clearEncounterTool = defineTool({
   },
 });
 
+const tableStatusTool = defineTool({
+  name: "table_status",
+  annotations: { readOnlyHint: true },
+  description:
+    "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count) and compare it with the encounter. Needs the bridge running.",
+  inputSchema: {},
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -291,4 +311,5 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("heal"),
   removeMonstersTool,
   clearEncounterTool,
+  tableStatusTool,
 ];

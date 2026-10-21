@@ -5,6 +5,7 @@ import {
 } from "@ttrpg-agents/engine";
 import {
   PROTOCOL_VERSION,
+  agentCommandResponseSchema,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -162,6 +163,60 @@ describe("protocol", () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
+  });
+
+  it("`command` and `command-result` messages round-trip through encode/decode (AC6)", () => {
+    const messages: BridgeMessage[] = [
+      { v: 1, type: "command", id: "c1", payload: { name: "scene-status" } },
+      {
+        v: 1,
+        type: "command-result",
+        id: "c1",
+        payload: {
+          name: "scene-status",
+          result: { sceneReady: true, tokenCount: 3, appliedInstanceCount: 2 },
+        },
+      },
+    ];
+    for (const message of messages) {
+      expect(decodeMessage(encodeMessage(message))).toEqual({
+        ok: true,
+        message,
+      });
+    }
+  });
+
+  it("`agentCommandResponseSchema` accepts the ok and error shapes and rejects an unknown error code (AC6)", () => {
+    const okResponse = {
+      ok: true,
+      result: {
+        name: "scene-status",
+        result: { sceneReady: false, tokenCount: 0, appliedInstanceCount: 0 },
+      },
+    };
+    expect(agentCommandResponseSchema.safeParse(okResponse)).toEqual({
+      success: true,
+      data: okResponse,
+    });
+    for (const code of [
+      "not-connected",
+      "timeout",
+      "command-failed",
+      "bridge-unreachable",
+      "unauthorized",
+      "bad-request",
+    ]) {
+      const errorResponse = { ok: false, error: { code, message: "m" } };
+      expect(agentCommandResponseSchema.safeParse(errorResponse), code).toEqual(
+        { success: true, data: errorResponse },
+      );
+    }
+    expect(
+      agentCommandResponseSchema.safeParse({
+        ok: false,
+        error: { code: "exploded", message: "m" },
+      }).success,
+    ).toBe(false);
   });
 
   it("strips unknown extra fields", () => {

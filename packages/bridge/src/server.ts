@@ -45,6 +45,10 @@ export interface BridgeServerOptions {
   token?: string;
   /** Message sent to a client right after each `hello-ack`, so it converges on current state. */
   snapshot?: () => BridgeMessage;
+  /** Bearer secret for `POST /agent/command`. Defaults to a random one. */
+  agentToken?: string;
+  /** How long `POST /agent/command` waits for the client's reply. Default 5000. */
+  commandTimeoutMs?: number;
 }
 
 export interface BridgeServer {

@@ -10,6 +10,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   clear_encounter: { destructiveHint: true },
   apply_damage: undefined,
   heal: undefined,
+  table_status: { readOnlyHint: true },
 };
 
 describe("tool annotations", () => {

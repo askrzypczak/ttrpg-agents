@@ -24,7 +24,8 @@ function instanceIdOf(item: SceneItem): string | undefined {
   return typeof id === "string" ? id : undefined;
 }
 
-const isOurs = (item: SceneItem): boolean => instanceIdOf(item) !== undefined;
+export const isOurs = (item: SceneItem): boolean =>
+  instanceIdOf(item) !== undefined;
 
 /** Pure mapping from an instance to a hidden SHAPE token at `position`. */
 export function instanceToItem(
@@ -113,6 +114,8 @@ export async function applySnapshot(
 export interface EncounterSync {
   /** Resolves once the message is applied, or deferred until the scene is ready. */
   handleMessage(message: BridgeMessage): Promise<void>;
+  /** How many instances the successfully applied messages account for (held or failed ones do not count). */
+  appliedInstanceCount(): number;
 }
 
 type SyncMessage = Extract<
@@ -188,6 +191,9 @@ export function createEncounterSync(
         pending.push(message);
         return drain();
       });
+    },
+    appliedInstanceCount() {
+      throw new Error("not implemented");
     },
   };
 }

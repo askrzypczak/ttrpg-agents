@@ -411,6 +411,48 @@ describe("createEncounterSync", () => {
       expect(applied).toBe(2);
     });
 
+    it("`appliedInstanceCount` follows snapshot / added / removed / cleared, and does not count a held or failed message (AC4)", async () => {
+      const fake = createFakeObr(new SceneModel("gm", false));
+      let failNext = false;
+      const obr: ObrAdapter = {
+        ...fake.obr,
+        addItems: (items) => {
+          if (failNext) {
+            failNext = false;
+            return Promise.reject(new Error("boom"));
+          }
+          return fake.obr.addItems(items);
+        },
+      };
+      const errors: unknown[] = [];
+      const sync = createEncounterSync(obr, (e) => errors.push(e));
+
+      await sync.handleMessage(snapshot(1, 2));
+      expect(sync.appliedInstanceCount(), "held snapshot").toBe(0);
+      fake.scene.setReady(true);
+      await settle();
+      expect(sync.appliedInstanceCount(), "snapshot").toBe(2);
+
+      await sync.handleMessage(event({ type: "added", instances: [inst(3)] }));
+      expect(sync.appliedInstanceCount(), "added").toBe(3);
+      await sync.handleMessage(event({ type: "added", instances: [inst(3)] }));
+      expect(sync.appliedInstanceCount(), "added again").toBe(3);
+
+      await sync.handleMessage(event({ type: "removed", id: "i1" }));
+      expect(sync.appliedInstanceCount(), "removed").toBe(2);
+
+      failNext = true;
+      await sync.handleMessage(event({ type: "added", instances: [inst(4)] }));
+      expect(errors).toHaveLength(1);
+      expect(sync.appliedInstanceCount(), "failed added").toBe(2);
+
+      await sync.handleMessage(snapshot(5));
+      expect(sync.appliedInstanceCount(), "replacing snapshot").toBe(1);
+
+      await sync.handleMessage(event({ type: "cleared" }));
+      expect(sync.appliedInstanceCount(), "cleared").toBe(0);
+    });
+
     it("treats a scene that goes away mid-apply as deferral, not failure", async () => {
       const fake = createFakeObr();
       const errors: unknown[] = [];

@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,7 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   clear_encounter: { destructiveHint: true },
   apply_damage: undefined,
   heal: undefined,
+  table_status: { readOnlyHint: true },
 };
 
 let cleanup: (() => Promise<void>)[] = [];
@@ -26,16 +28,31 @@ afterEach(async () => {
   cleanup = [];
 });
 
+/** A loopback port with nothing listening on it. */
+async function unusedPort(): Promise<number> {
+  const probe = createNetServer();
+  await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  return port;
+}
+
 async function connect(): Promise<Client> {
   const dir = mkdtempSync(join(tmpdir(), "ttrpg-mcp-"));
   cleanup.push(() => {
     rmSync(dir, { recursive: true, force: true });
     return Promise.resolve();
   });
+  // No bridge: an absent agent token file and a port nothing listens on.
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [entry],
-    env: { ...process.env, TTRPG_AGENTS_DB: join(dir, "test.db") },
+    env: {
+      ...process.env,
+      TTRPG_AGENTS_DB: join(dir, "test.db"),
+      BRIDGE_AGENT_TOKEN_FILE: join(dir, "agent-token"),
+      BRIDGE_PORT: String(await unusedPort()),
+    },
   });
   const client = new Client({ name: "smoke", version: "0.0.0" });
   cleanup.push(() => client.close());
@@ -44,7 +61,7 @@ async function connect(): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all eight tools and serves a call", async () => {
+  it("lists all nine tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
@@ -57,6 +74,7 @@ describe("stdio server", () => {
       "list_encounter",
       "remove_monsters",
       "search_monsters",
+      "table_status",
     ]);
 
     const added = await client.callTool({
@@ -66,6 +84,20 @@ describe("stdio server", () => {
     expect(added.isError).toBeFalsy();
     const listed = await client.callTool({ name: "list_encounter" });
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
+  }, 30_000);
+
+  it("stdio server (spawned via `bin/stdio.mjs`) lists nine tools including `table_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result (AC4)", async () => {
+    const client = await connect();
+
+    const { tools } = await client.listTools();
+    expect(tools).toHaveLength(9);
+    const tableStatus = tools.find((t) => t.name === "table_status");
+    expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });
+
+    const result = await client.callTool({ name: "table_status" });
+    expect(result.isError).toBe(true);
+    // The client's bridge-unreachable message (no token file: start the bridge).
+    expect(JSON.stringify(result.content)).toMatch(/bridge/i);
   }, 30_000);
 
   it("listTools carries each tool's annotations", async () => {
