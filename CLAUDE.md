@@ -11,7 +11,7 @@ npm workspaces monorepo under `packages/*` (see Architecture).
 Hexagonal architecture (ports and adapters) around a domain core: Claude handles language, the core handles every number.
 - **Domain core** (`@ttrpg-agents/engine`). Holds the game: rules, simulation, use cases, and the ports they need (repository, randomness, clock, ids, monster index). No I/O, no Node built-ins, no transports or SDKs. Imports no other workspace package.
 - **Dependencies point inward.** Driven adapters implement the engine's ports; driving adapters call its use cases and wire adapters up at startup.
-- **Enforced, not just documented.** The engine's build config sets `types: []` (no Node types), and `eslint.config.js` has per-package `no-restricted-imports` rules for the other directions (listed under Build and boundaries).
+- **Enforced, not just documented.** The engine's build config sets `types: []` (no Node types), and `eslint.config.js` has per-package `no-restricted-imports` rules for the other directions (listed under Build and boundaries). `scripts/architecture.test.ts` holds the allowlist of workspace package-to-package edges (from each `package.json`), so a new edge is a reviewed change.
 - **Where code goes.** New game logic goes in the engine. Adapters stay thin: translate input, call the engine, format output.
 - **Wire contracts** (bridge messages) live in `protocol`, not in the engine.
 - **Package map**: `engine` (domain core); driven adapters `store-sqlite` (encounter store) and `srd` (monster data, loader, import); driving adapters `mcp` and `bridge` (later a CLI); `protocol` (wire contract); `owlbear` (client of the bridge; may import `engine` and `protocol`).
