@@ -69,6 +69,60 @@ describe("SceneModel", () => {
     expect(m.getItems().map((i) => i.id)).toEqual(["b"]);
   });
 
+  describe("setItemMetadata", () => {
+    const withMetadata = () => {
+      const m = new SceneModel();
+      m.addItems([
+        item("a", { metadata: { "other.ext/x": { keep: 1 }, "our/k": 1 } }),
+        item("b", { metadata: { "our/k": 2 } }),
+      ]);
+      return m;
+    };
+
+    it("keeps other keys", () => {
+      const m = withMetadata();
+      m.setItemMetadata([
+        { id: "a", key: "our/k", value: { v: 10 } },
+        { id: "a", key: "our/new", value: "n" },
+      ]);
+      expect(m.getItems().map((i) => i.metadata)).toEqual([
+        { "other.ext/x": { keep: 1 }, "our/k": { v: 10 }, "our/new": "n" },
+        { "our/k": 2 },
+      ]);
+    });
+
+    it("`undefined` clears the key", () => {
+      const m = withMetadata();
+      m.setItemMetadata([{ id: "a", key: "our/k", value: undefined }]);
+      const metadata = m.getItems()[0]!.metadata;
+      expect(Object.keys(metadata)).toEqual(["other.ext/x"]);
+      expect(metadata).toEqual({ "other.ext/x": { keep: 1 } });
+    });
+
+    it("ignores unknown ids", () => {
+      const m = withMetadata();
+      const before = m.getItems();
+      const seen: SceneChange[] = [];
+      m.onChange((c) => seen.push(c));
+      m.setItemMetadata([{ id: "zzz", key: "our/k", value: 3 }]);
+      expect(m.getItems()).toEqual(before);
+      expect(seen).toEqual([]);
+    });
+
+    it("emits one items change", () => {
+      const m = withMetadata();
+      const seen: SceneChange[] = [];
+      m.onChange((c) => seen.push(c));
+      m.setItemMetadata([
+        { id: "a", key: "our/k", value: 5 },
+        { id: "b", key: "our/k", value: 6 },
+        { id: "b", key: "our/j", value: 7 },
+      ]);
+      expect(seen).toEqual([{ kind: "items" }]);
+      expect(m.getItems().map((i) => i.metadata["our/k"])).toEqual([5, 6]);
+    });
+  });
+
   it("sets scene metadata by shallow merge", () => {
     const m = new SceneModel();
     m.setMetadata({ a: 1, b: 1 });

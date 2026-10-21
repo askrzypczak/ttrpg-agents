@@ -141,6 +141,17 @@ export class SceneModel {
     if (changed) this.emit({ kind: "items" });
   }
 
+  /**
+   * Key-level item metadata write: other keys are kept, `undefined` clears
+   * the key, unknown ids are ignored. One items change for the whole call.
+   */
+  setItemMetadata(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    updates: { id: string; key: string; value: unknown }[],
+  ): void {
+    throw new Error("not implemented");
+  }
+
   deleteItems(ids: string[]): void {
     let changed = false;
     for (const id of ids) if (this.items.delete(id)) changed = true;

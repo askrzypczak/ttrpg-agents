@@ -39,31 +39,45 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     await expect.poll(async () => (await readItems(page)).length).toBe(5);
     const before = await readItems(page);
 
-    // The harness (and its scene) outlives the extension iframe. Drop one
-    // token, then reload only the iframe: the extension reconnects and the
-    // bridge sends a fresh snapshot into a scene that already holds 4 of 5.
+    // The harness (and its scene) outlives the extension iframe. The GM
+    // deletes one token, then only the iframe reloads: the extension
+    // reconnects and the bridge sends a fresh snapshot into a scene that
+    // holds 4 of 5.
     const removed = before.find((i) => i.name === "Shadow 3")!;
     await page.evaluate(
       (id) => window.__host!.scene.deleteItems([id]),
       removed.id,
     );
-    await page.evaluate(() => {
-      const iframe = document.getElementById("extension") as HTMLIFrameElement;
-      const url = new URL(iframe.src);
-      url.searchParams.set("reload", "1");
-      iframe.src = url.href + location.hash;
-    });
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          const iframe = document.getElementById(
+            "extension",
+          ) as HTMLIFrameElement;
+          iframe.addEventListener("load", () => resolve(), { once: true });
+          const url = new URL(iframe.src);
+          url.searchParams.set("reload", "1");
+          iframe.src = url.href + location.hash;
+        }),
+    );
+    await expect(page.frameLocator("#extension").locator("#status")).toHaveText(
+      "Connected to the local bridge.",
+    );
 
-    // Back to 5 (the missing one re-created, the other 4 not duplicated).
-    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    // Deletion sticks: the deleted token is not re-created and the other 4
+    // are neither duplicated nor moved.
     await page.waitForTimeout(500);
     const after = await readItems(page);
-    expect(after).toHaveLength(5);
-    expect(new Set(after.map((i) => i.id)).size).toBe(5);
+    expect(after).toHaveLength(4);
+    expect(after.some((i) => i.id === removed.id)).toBe(false);
+    expect(new Set(after.map((i) => i.id)).size).toBe(4);
     for (const item of before.filter((i) => i.id !== removed.id))
       expect(after.find((i) => i.id === item.id)?.position).toEqual(
         item.position,
       );
+    await expect(
+      page.frameLocator("#extension").locator("#sync-error"),
+    ).toHaveText("");
   });
 
   test("a player does not connect and gets no tokens", async ({ page }) => {

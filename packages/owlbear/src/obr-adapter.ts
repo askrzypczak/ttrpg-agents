@@ -18,7 +18,14 @@ export interface ObrAdapter {
   onSceneReadyChange(callback: (ready: boolean) => void): () => void;
   addItems(items: SceneItem[]): Promise<void>;
   getItems(filter?: (item: SceneItem) => boolean): Promise<SceneItem[]>;
-  updateItems(ids: string[], patch: ItemPatch): Promise<void>;
+  updateItems(ids: string[], patch: Omit<ItemPatch, "metadata">): Promise<void>;
+  /**
+   * Key-level item metadata write: sets `key` on item `id` and keeps its other
+   * keys; `undefined` clears the key. Grouped per item in one SDK call.
+   */
+  setItemMetadata(
+    updates: { id: string; key: string; value: unknown }[],
+  ): Promise<void>;
   deleteItems(ids: string[]): Promise<void>;
   getSceneMetadata(): Promise<Metadata>;
   /** Shallow-merges into existing scene metadata. */
@@ -94,10 +101,10 @@ export function createObrAdapter(): ObrAdapter {
             if (patch.name !== undefined) draft.name = patch.name;
             if (patch.visible !== undefined) draft.visible = patch.visible;
             if (patch.position !== undefined) draft.position = patch.position;
-            if (patch.metadata !== undefined) draft.metadata = patch.metadata;
           }
         },
       ),
+    setItemMetadata: () => Promise.reject(new Error("not implemented")),
     deleteItems: (ids) => OBR.scene.items.deleteItems(ids),
     getSceneMetadata: () => OBR.scene.getMetadata(),
     setSceneMetadata: (update) => OBR.scene.setMetadata(update),
