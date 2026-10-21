@@ -2,7 +2,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import process from "node:process";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createBridgeClient } from "@ttrpg-agents/bridge/client";
+import { createBridgeTable } from "@ttrpg-agents/bridge/client";
 import type { Rng } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -15,7 +15,7 @@ const rng: Rng = { nextInt: (maxExclusive) => randomInt(maxExclusive) };
 
 async function main(): Promise<void> {
   const server = createServer({
-    bridge: createBridgeClient(),
+    table: createBridgeTable(),
     repo: new SqliteEncounterRepository(openDatabase()),
     monsters: loadSrdMonsters(),
     rng,

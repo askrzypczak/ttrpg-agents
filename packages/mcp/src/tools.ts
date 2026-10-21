@@ -3,6 +3,7 @@ import {
   TargetError,
   addMonsters,
   compareByInitiative,
+  getTableStatus,
   resolveTargets,
   getMonsterByKey,
   searchMonsters,
@@ -298,15 +299,13 @@ const tableStatusTool = defineTool({
     "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count) and compare it with the encounter. Needs the bridge running.",
   inputSchema: {},
   async run(ctx) {
-    const response = await ctx.bridge.command({ name: "scene-status" });
-    if (!response.ok) return fail(response.error.message);
-    const { sceneReady, tokenCount, appliedInstanceCount } =
-      response.result.result;
-    const encounterCount = ctx.repo.listInstances().length;
-    const inSync =
-      sceneReady &&
-      tokenCount === appliedInstanceCount &&
-      tokenCount === encounterCount;
+    const {
+      sceneReady,
+      tokenCount,
+      appliedInstanceCount,
+      encounterCount,
+      inSync,
+    } = await getTableStatus(ctx.repo, ctx.table);
     const counts = `${String(tokenCount)} tokens on the scene, ${String(appliedInstanceCount)} instances applied, ${String(encounterCount)} in the encounter`;
     const text = inSync
       ? `Owlbear is in sync: scene ready, ${counts}.`

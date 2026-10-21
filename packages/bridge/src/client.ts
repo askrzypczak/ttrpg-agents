@@ -3,6 +3,7 @@
 // imports only Node builtins, `@ttrpg-agents/protocol` and `./token-file.js`.
 import { readFile } from "node:fs/promises";
 import process from "node:process";
+import type { TablePort } from "@ttrpg-agents/engine";
 import {
   agentCommandResponseSchema,
   type AgentCommandResponse,
@@ -77,6 +78,22 @@ export function createBridgeClient(options?: {
       return unreachable(
         `the service on port ${String(port)} did not answer like the bridge (HTTP ${String(res.status)})`,
       );
+    },
+  };
+}
+
+/**
+ * Driven adapter for the engine's `TablePort`: sends `scene-status` through
+ * `client` (default `createBridgeClient()`) and returns the scene counts;
+ * any `{ ok: false }` becomes a `TableUnavailableError` with the bridge's
+ * message.
+ */
+export function createBridgeTable(client?: BridgeClient): TablePort {
+  void client;
+  // Stub: throws on use, not on construction, so stdio.ts can still start.
+  return {
+    sceneStatus() {
+      throw new Error("not implemented");
     },
   };
 }

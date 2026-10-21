@@ -1,9 +1,11 @@
-import type { BridgeClient } from "@ttrpg-agents/bridge/client";
-import type {
-  EncounterRepository,
-  MonsterInstance,
-  NewMonsterInstance,
-  Rng,
+import {
+  TableUnavailableError,
+  type EncounterRepository,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  type Rng,
+  type TablePort,
+  type TableSceneStatus,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -36,9 +38,9 @@ beforeEach(() => {
   tick = 1000;
   groupN = 0;
   ctx = {
-    bridge: {
-      command: () =>
-        Promise.reject(new Error("bridge not stubbed in this test")),
+    table: {
+      sceneStatus: () =>
+        Promise.reject(new Error("table not stubbed in this test")),
     },
     repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
       now: () => tick++,
@@ -56,11 +58,9 @@ async function call(name: string, args: unknown = {}): Promise<ToolResult> {
   return tool.handler(ctx, args);
 }
 
-type AgentCommandResponse = Awaited<ReturnType<BridgeClient["command"]>>;
-
-/** A bridge client stub that answers every command with `response`. */
-function bridgeAnswering(response: AgentCommandResponse): BridgeClient {
-  return { command: () => Promise.resolve(response) };
+/** A table port stub that answers every call with `status`. */
+function tableAnswering(status: TableSceneStatus): TablePort {
+  return { sceneStatus: () => Promise.resolve(status) };
 }
 
 function text(r: ToolResult): string {
@@ -424,65 +424,51 @@ describe("clear_encounter", () => {
 });
 
 describe("table_status", () => {
-  const sceneStatus = (
-    sceneReady: boolean,
-    tokenCount: number,
-    appliedInstanceCount: number,
-  ): AgentCommandResponse => ({
-    ok: true,
-    result: {
-      name: "scene-status",
-      result: { sceneReady, tokenCount, appliedInstanceCount },
-    },
-  });
-
-  it("`table_status` returns scene counts and an in-sync verdict when scene ready and tokens, applied and DB counts all match (AC4, A9)", async () => {
+  it("`table_status` formats text and `structuredContent` from the port and the repo when in sync (AC4, A9)", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
-    const commands: unknown[] = [];
-    ctx.bridge = {
-      command: (command) => {
-        commands.push(command);
-        return Promise.resolve(sceneStatus(true, 3, 3));
-      },
-    };
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+    });
     const r = await call("table_status");
-    expect(commands).toEqual([{ name: "scene-status" }]);
     expect(r.isError).toBeFalsy();
     const out = text(r);
     expect(out).toMatch(/\bin sync\b/i);
     expect(out).not.toMatch(/out of sync|not in sync/i);
     expect(out).toMatch(/\b3\b/);
+    expect(r.structuredContent).toEqual({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      encounterCount: 3,
+      inSync: true,
+    });
   });
 
-  it("`table_status` reports out of sync, with the counts, when any of the three differ or the scene is not ready (A9)", async () => {
-    // DB count 3 throughout; tokens 7 and applied 8 are distinct from it.
+  it("`table_status` reports out of sync with all three counts in the text (A9)", async () => {
+    // Encounter count 3; tokens 7 and applied 8 are distinct from it.
     seed(item("A", 1), item("B", 2), item("C", 3));
-    ctx.bridge = bridgeAnswering(sceneStatus(true, 7, 8));
-    const counts = text(await call("table_status"));
-    expect(counts).toMatch(/out of sync/i);
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 7,
+      appliedInstanceCount: 8,
+    });
+    const r = await call("table_status");
+    expect(r.isError).toBeFalsy();
+    const out = text(r);
+    expect(out).toMatch(/out of sync/i);
     for (const n of [7, 8, 3])
-      expect(counts).toMatch(new RegExp(`\\b${String(n)}\\b`));
-
-    for (const [label, response] of [
-      ["tokens differ", sceneStatus(true, 2, 3)],
-      ["applied differs", sceneStatus(true, 3, 2)],
-      ["DB differs", sceneStatus(true, 4, 4)],
-      ["scene not ready", sceneStatus(false, 3, 3)],
-    ] as const) {
-      ctx.bridge = bridgeAnswering(response);
-      expect(text(await call("table_status")), label).toMatch(/out of sync/i);
-    }
+      expect(out).toMatch(new RegExp(`\\b${String(n)}\\b`));
   });
 
-  it("`table_status` returns an `isError` result carrying the client's message when the client reports `not-connected` or `timeout` (AC3, AC4)", async () => {
-    for (const [code, message] of [
-      ["not-connected", "no Owlbear GM tab is connected to the bridge"],
-      ["timeout", "the GM tab did not answer within 5000 ms"],
-    ] as const) {
-      ctx.bridge = bridgeAnswering({ ok: false, error: { code, message } });
-      const r = await call("table_status");
-      expect(r.isError, code).toBe(true);
-      expect(text(r), code).toContain(message);
-    }
+  it("`table_status` returns an `isError` result carrying the port's `TableUnavailableError` message (AC3, AC4)", async () => {
+    const message = "no Owlbear GM tab is connected to the bridge";
+    ctx.table = {
+      sceneStatus: () => Promise.reject(new TableUnavailableError(message)),
+    };
+    const r = await call("table_status");
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain(message);
   });
 });
