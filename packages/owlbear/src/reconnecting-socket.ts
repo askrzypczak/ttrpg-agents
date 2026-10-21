@@ -10,7 +10,7 @@ export type SocketState =
   "connecting" | "open" | "reconnecting" | "closed" | "rejected";
 
 /** Fatal server errors that stop reconnection until the user acts. */
-export type RejectionCode = "bad-token" | "unsupported-version";
+export type RejectionCode = "bad-token" | "unsupported-version" | "superseded";
 
 /** Idle time after hello-ack (or the last pong) before sending a ping. */
 export const PING_INTERVAL_MS = 15000;

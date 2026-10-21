@@ -28,8 +28,11 @@ export interface PanelView {
     | "reconnecting"
     | "closed"
     | "rejected-token"
-    | "rejected-version";
+    | "rejected-version"
+    | "superseded";
   message: string;
+  /** A user action the panel offers, e.g. reclaiming the bridge from another tab. */
+  action?: "use-this-tab";
   /** Extra explanation when the connection seems stuck. */
   hint?: string;
   /** Visible encounter sync failure. */
