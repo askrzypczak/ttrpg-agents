@@ -10,7 +10,7 @@ export type SocketState =
   "connecting" | "open" | "reconnecting" | "closed" | "rejected";
 
 /** Fatal server errors that stop reconnection until the user acts. */
-export type RejectionCode = "bad-token" | "unsupported-version";
+export type RejectionCode = "bad-token" | "unsupported-version" | "superseded";
 
 /** Idle time after hello-ack (or the last pong) before sending a ping. */
 export const PING_INTERVAL_MS = 15000;
@@ -152,7 +152,11 @@ export class ReconnectingSocket {
         const { code, fatal } = result.message.payload;
         this.opts.onMessage?.(result.message);
         if (!fatal) return;
-        if (code === "bad-token" || code === "unsupported-version") {
+        if (
+          code === "bad-token" ||
+          code === "unsupported-version" ||
+          code === "superseded"
+        ) {
           this.reject(socket, code);
         } else {
           this.fail(socket);

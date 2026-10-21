@@ -298,6 +298,34 @@ describe("ReconnectingSocket", () => {
     expect(sockets).toHaveLength(1);
   });
 
+  it("a fatal superseded error ends in rejected with rejection superseded and schedules no retry", () => {
+    const { rs, sockets, timers, messages, states } = setupOpen();
+    sockets[0]!.serverMessage(errorReply("superseded", true));
+    expect(messages.map((m) => m.type)).toEqual(["hello-ack", "error"]);
+    expect(sockets[0]!.closed).toBe(true);
+    expect(rs.state).toBe("rejected");
+    expect(states.at(-1)).toBe("rejected");
+    expect(rs.rejection).toBe("superseded");
+    expect(timers.pending.size).toBe(0);
+    timers.fireAll();
+    expect(sockets).toHaveLength(1);
+  });
+
+  it("close() then start() after superseded opens a new socket and sends hello", () => {
+    const { rs, sockets } = setupOpen();
+    sockets[0]!.serverMessage(errorReply("superseded", true));
+    expect(rs.state).toBe("rejected");
+    rs.close();
+    rs.start();
+    expect(sockets).toHaveLength(2);
+    expect(rs.state).toBe("connecting");
+    expect(rs.rejection).toBeNull();
+    sockets[1]!.onopen?.();
+    expect(sockets[1]!.sentTypes()).toEqual(["hello"]);
+    sockets[1]!.serverMessage(ack);
+    expect(rs.state).toBe("open");
+  });
+
   it("another fatal error (e.g. code unauthenticated, fatal true) closes the socket and reconnects with backoff", () => {
     const { rs, sockets, timers, messages } = setup();
     rs.start();

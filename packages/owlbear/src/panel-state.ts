@@ -28,8 +28,11 @@ export interface PanelView {
     | "reconnecting"
     | "closed"
     | "rejected-token"
-    | "rejected-version";
+    | "rejected-version"
+    | "superseded";
   message: string;
+  /** A user action the panel offers, e.g. reclaiming the bridge from another tab. */
+  action?: "use-this-tab";
   /** Extra explanation when the connection seems stuck. */
   hint?: string;
   /** Visible encounter sync failure. */
@@ -85,6 +88,13 @@ function connectionView(input: PanelInput): PanelView {
     case "open":
       return { kind: "connected", message: "Connected to the local bridge." };
     case "rejected":
+      if (input.rejection === "superseded") {
+        return {
+          kind: "superseded",
+          message: "Connected in another tab.",
+          action: "use-this-tab",
+        };
+      }
       return input.rejection === "unsupported-version"
         ? {
             kind: "rejected-version",

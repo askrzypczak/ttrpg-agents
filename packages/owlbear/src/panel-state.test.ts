@@ -93,6 +93,19 @@ describe("panelView", () => {
     expect(v.message).toContain("rebuild");
     expect(v.hint).toBeUndefined();
   });
+
+  it('rejected with superseded shows kind superseded, message "Connected in another tab.", action use-this-tab and no hint', () => {
+    const v = panelView({
+      role: "gm",
+      socketState: "rejected",
+      rejection: "superseded",
+      disconnectedMs: 99999,
+    });
+    expect(v.kind).toBe("superseded");
+    expect(v.message).toBe("Connected in another tab.");
+    expect(v.action).toBe("use-this-tab");
+    expect(v.hint).toBeUndefined();
+  });
 });
 
 describe("panelView sync error", () => {

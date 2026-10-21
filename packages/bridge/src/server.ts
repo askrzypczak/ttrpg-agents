@@ -51,7 +51,7 @@ export interface BridgeServer {
   port: number;
   token: string;
   clientCount(): number;
-  /** Sends to every authenticated client; unauthenticated sockets get nothing. */
+  /** Sends to the active (newest authenticated) client; unauthenticated sockets get nothing. */
   broadcast(message: BridgeMessage): void;
   close(): Promise<void>;
 }
@@ -64,6 +64,7 @@ const FATAL_ERROR_CODES = new Set([
   "bad-token",
   "unauthenticated",
   "unsupported-version",
+  "superseded",
 ]);
 
 function errorMessage(code: string, message: string): BridgeMessage {
@@ -184,7 +185,8 @@ export async function startBridgeServer(
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
-  const authenticatedClients = new Set<WebSocket>();
+  // The newest authenticated client; a second one displaces it.
+  let active: WebSocket | null = null;
 
   // DNS rebinding defense: only accept requests addressed to loopback names.
   const hostAllowed = (hostHeader: string | undefined): boolean => {
@@ -253,12 +255,18 @@ export async function startBridgeServer(
       clients.add(ws);
       const forget = () => {
         clients.delete(ws);
-        authenticatedClients.delete(ws);
+        // Stryker disable next-line ConditionalExpression: only the `false` variant is equivalent (broadcast re-checks readyState); `true` is killed by the late-close test
+        if (active === ws) active = null;
       };
       const hooks: Hooks = {
         token,
         snapshot,
-        onAuthenticated: () => authenticatedClients.add(ws),
+        onAuthenticated: () => {
+          if (active !== null) {
+            rejectAndClose(active, "superseded", "another tab connected");
+          }
+          active = ws;
+        },
       };
       ws.on("close", forget);
       ws.on("error", forget);
@@ -282,14 +290,15 @@ export async function startBridgeServer(
     clientCount: () => clients.size,
     broadcast: (message) => {
       const encoded = encodeMessage(message);
-      for (const ws of authenticatedClients) {
-        if (ws.readyState === ws.OPEN) ws.send(encoded);
+      // Stryker disable next-line ConditionalExpression: only the readyState `true` variant is equivalent (ws.send on a non-OPEN socket is a silent no-op); the other variants are killed by the broadcast tests
+      if (active !== null && active.readyState === active.OPEN) {
+        active.send(encoded);
       }
     },
     close: async () => {
       for (const ws of clients) ws.terminate();
       clients.clear();
-      authenticatedClients.clear();
+      active = null;
       wss.close();
       await new Promise<void>((resolve, reject) => {
         http.close((err) => (err ? reject(err) : resolve()));

@@ -44,6 +44,7 @@ obr.onReady(async () => {
     status.textContent = view.message;
     status.dataset.kind = view.kind;
     el("hint").textContent = view.hint ?? "";
+    el("use-this-tab").hidden = view.action !== "use-this-tab";
     el("sync-error").textContent = view.error ?? "";
   };
 
@@ -82,6 +83,10 @@ obr.onReady(async () => {
       rejection = socket.rejection ?? undefined;
       render();
     },
+  });
+  el("use-this-tab").addEventListener("click", () => {
+    socket.close();
+    socket.start();
   });
   socket.start();
   // Re-render periodically so the stalled hint appears without a state change.

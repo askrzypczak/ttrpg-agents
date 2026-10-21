@@ -244,20 +244,6 @@ describe("bridge server", () => {
     expect(await closed).toBe(1008);
   });
 
-  it("serves two simultaneous clients", async () => {
-    const a = await connect();
-    const b = await connect();
-    expect(server.clientCount()).toBe(2);
-    const hello = helloWith(server.token);
-    const [ra, rb] = await Promise.all([request(a, hello), request(b, hello)]);
-    expect(ra.type).toBe("hello-ack");
-    expect(rb.type).toBe("hello-ack");
-    a.close();
-    const rb2 = await request(b, ping);
-    expect(rb2.type).toBe("pong");
-    b.close();
-  });
-
   it("serves the manifest with CORS for owlbear.rodeo", async () => {
     const res = await fetch(`http://127.0.0.1:${server.port}/manifest.json`, {
       headers: { Origin: "https://www.owlbear.rodeo" },
@@ -450,6 +436,21 @@ describe("bridge server broadcast and snapshot", () => {
       payload: { role: "gm", extensionVersion: "0", token: s2.token },
     });
 
+  /** Connects, records every message and the close code, sends hello and settles. */
+  async function authed2(): Promise<{
+    ws: WebSocket;
+    msgs: BridgeMessage[];
+    closed: { code: number | undefined };
+  }> {
+    const ws = await connect2();
+    const msgs = record(ws);
+    const closed: { code: number | undefined } = { code: undefined };
+    ws.on("close", (code) => (closed.code = code));
+    ws.send(hello2());
+    await settle();
+    return { ws, msgs, closed };
+  }
+
   it("sends the snapshot right after hello-ack", async () => {
     const ws = await connect2();
     const received = record(ws);
@@ -582,26 +583,102 @@ describe("bridge server broadcast and snapshot", () => {
     }
   });
 
-  it("rejects a client-sent encounter-event and relays nothing to others", async () => {
-    const a = await connect2();
-    const b = await connect2();
-    const aMsgs = record(a);
-    const bMsgs = record(b);
-    a.send(hello2());
-    b.send(hello2());
+  it("a client-sent encounter-event gets a non-fatal unexpected-type error and the socket stays usable", async () => {
+    const { ws, msgs, closed } = await authed2();
+    msgs.length = 0;
+    ws.send(encodeMessage(cleared));
     await settle();
-    aMsgs.length = 0;
-    bMsgs.length = 0;
-    a.send(encodeMessage(cleared));
+    expect(msgs).toHaveLength(1);
+    const reply = msgs[0];
+    if (reply?.type !== "error") throw new Error("expected error");
+    expect(reply.payload.code).toBe("unexpected-type");
+    expect(reply.payload.fatal).toBe(false);
+    msgs.length = 0;
+    ws.send(ping);
     await settle();
-    expect(aMsgs).toHaveLength(1);
-    const reply = aMsgs[0];
-    expect(reply?.type).toBe("error");
-    if (reply?.type === "error")
-      expect(reply.payload.code).toBe("unexpected-type");
-    expect(bMsgs).toEqual([]);
-    a.close();
-    b.close();
+    expect(msgs.map((m) => m.type)).toEqual(["pong"]);
+    expect(closed.code).toBeUndefined();
+    ws.close();
+  });
+
+  it("a second authenticated client supersedes the first with a fatal superseded error and close 1008", async () => {
+    const first = await authed2();
+    first.msgs.length = 0;
+    const second = await authed2();
+    const errors = first.msgs.flatMap((m) =>
+      m.type === "error"
+        ? [{ code: m.payload.code, fatal: m.payload.fatal }]
+        : [],
+    );
+    expect(errors).toEqual([{ code: "superseded", fatal: true }]);
+    expect(first.closed.code).toBe(1008);
+    expect(second.closed.code).toBeUndefined();
+    second.ws.close();
+  });
+
+  it("after a supersede, broadcast and the snapshot reach only the new client", async () => {
+    const first = await authed2();
+    first.msgs.length = 0;
+    const second = await authed2();
+    expect(second.msgs.map((m) => m.type)).toEqual([
+      "hello-ack",
+      "encounter-snapshot",
+    ]);
+    expect(first.msgs.map((m) => m.type)).not.toContain("encounter-snapshot");
+    first.msgs.length = 0;
+    second.msgs.length = 0;
+    s2.broadcast(cleared);
+    await settle();
+    expect(second.msgs).toEqual([cleared]);
+    expect(first.msgs).toEqual([]);
+    expect(first.closed.code).toBe(1008);
+    second.ws.close();
+  });
+
+  it("a bad-token hello does not displace the active client", async () => {
+    const active = await authed2();
+    active.msgs.length = 0;
+    const { reply } = await requestThenClose(
+      await connect2(),
+      helloWith("wrong"),
+    );
+    if (reply.type !== "error") throw new Error("expected error");
+    expect(reply.payload.code).toBe("bad-token");
+    await settle();
+    expect(active.msgs).toEqual([]);
+    expect(active.closed.code).toBeUndefined();
+    s2.broadcast(cleared);
+    await settle();
+    expect(active.msgs).toEqual([cleared]);
+    active.ws.close();
+  });
+
+  it("a socket rejected as unauthenticated (ping before hello) does not displace the active client", async () => {
+    const active = await authed2();
+    active.msgs.length = 0;
+    const { reply } = await requestThenClose(await connect2(), ping);
+    if (reply.type !== "error") throw new Error("expected error");
+    expect(reply.payload.code).toBe("unauthenticated");
+    await settle();
+    expect(active.msgs).toEqual([]);
+    expect(active.closed.code).toBeUndefined();
+    s2.broadcast(cleared);
+    await settle();
+    expect(active.msgs).toEqual([cleared]);
+    active.ws.close();
+  });
+
+  it("a late close of the superseded socket does not clear the new active client", async () => {
+    const first = await authed2();
+    const second = await authed2();
+    await settle();
+    // The superseded socket has closed, so the server has run its close handling.
+    expect(first.closed.code).toBe(1008);
+    second.msgs.length = 0;
+    s2.broadcast(cleared);
+    await settle();
+    expect(second.msgs).toEqual([cleared]);
+    second.ws.close();
   });
 
   it("stops broadcasting to a client that disconnected", async () => {
@@ -611,5 +688,20 @@ describe("bridge server broadcast and snapshot", () => {
     ws.close();
     await settle();
     expect(() => s2.broadcast(cleared)).not.toThrow();
+  });
+
+  it("a repeated hello on the active socket does not supersede it", async () => {
+    const { ws, msgs, closed } = await authed2();
+    msgs.length = 0;
+    ws.send(hello2());
+    await settle();
+    expect(msgs.map((m) => m.type)).toContain("hello-ack");
+    expect(msgs.map((m) => m.type)).not.toContain("error");
+    expect(closed.code).toBeUndefined();
+    msgs.length = 0;
+    s2.broadcast(cleared);
+    await settle();
+    expect(msgs).toEqual([cleared]);
+    ws.close();
   });
 });
