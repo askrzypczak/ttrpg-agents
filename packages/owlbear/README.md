@@ -47,12 +47,15 @@ fake together. The e2e fake host reuses `SceneModel`.
 Chromium. First time: `npx playwright install chromium`. It is NOT part of
 `npm run check` (needs a browser); CI runs it as the separate `e2e` job.
 
-- The real bridge (`packages/bridge`, an ephemeral port picked per run) serves the
-  real built extension (`dist`). A tiny server (`e2e/serve.ts`, 127.0.0.1 on
+- Each Playwright worker starts its own real bridge (`packages/bridge/dist/cli.js`,
+  `e2e/worker-bridge.ts`) on an ephemeral port, with its own token file and
+  seeded SQLite file in a per-worker subdir of the run temp dir, so parallel
+  workers never share a bridge client. It serves the real built extension
+  (`dist`). A tiny server (`e2e/serve.ts`, 127.0.0.1 on
   another ephemeral port) serves the harness (`dist-e2e`, never the production
   `dist`) on a different origin, which iframes the extension with a proper
-  `?obrref=`. The config sets `E2E_BRIDGE_PORT`, `E2E_HARNESS_PORT` and `E2E_DIR`
-  (`e2e/env.ts`) before workers start, and workers inherit them.
+  `?obrref=`. The harness server is shared. The config sets `E2E_HARNESS_PORT` and
+  `E2E_DIR` (`e2e/env.ts`) before workers start, and workers inherit them.
 - `e2e/fake-host.ts` plays Owlbear over `postMessage` (OBR_READY, then
   `<id>_RESPONSE<nonce>`), backed by `SceneModel`. It answers only the calls
   the extension makes. Any other id gets an `_ERROR` reply and is recorded in
@@ -64,7 +67,7 @@ Chromium. First time: `npx playwright install chromium`. It is NOT part of
   `addHiddenToken` / `writeInitiativeMetadata`.
 - `encounter-sync.e2e.ts` covers encounter -> hidden tokens end to end. The
   bridge runs on a throwaway SQLite file (`TTRPG_AGENTS_DB`, `e2e/db.ts`,
-  created in a per-run temp dir and removed when the run ends) seeded with 5
+  created per worker in the run temp dir and removed when the run ends) seeded with 5
   shadows before it starts, never your real database.
   `openHarness(page, { failItems: "msg" })` makes every item call fail with
   that message (to drive the panel error); those failures are not recorded in

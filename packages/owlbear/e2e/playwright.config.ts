@@ -1,26 +1,16 @@
 import { defineConfig, devices } from "@playwright/test";
 import { rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { e2eDbPath, seedE2eDatabase } from "./db.js";
-import {
-  allocateRunEnv,
-  bridgeOrigin,
-  bridgePort,
-  e2eDir,
-  harnessOrigin,
-} from "./env.js";
-import { writeE2eTokenFile } from "./token.js";
+import { allocateRunEnv, e2eDir, harnessOrigin } from "./env.js";
 
 // Must come first: sets the run's ports and temp dir, which the webServers,
-// fixtures and (inheriting) workers all read.
+// fixtures and (inheriting) workers all read. Each worker starts its own bridge
+// (fixtures.ts), so only the harness server is a shared webServer.
 await allocateRunEnv();
 
-const tokenFile = writeE2eTokenFile(e2eDir());
 // Playwright re-evaluates this config in each worker; only the main process
-// (no TEST_WORKER_INDEX) may recreate the DB the running bridge is using, and
-// it alone removes the run's temp dir when the run ends.
+// (no TEST_WORKER_INDEX) removes the run's temp dir when the run ends.
 if (process.env.TEST_WORKER_INDEX === undefined) {
-  seedE2eDatabase(e2eDir());
   process.on("exit", () => rmSync(e2eDir(), { recursive: true, force: true }));
 }
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
@@ -31,6 +21,7 @@ export default defineConfig({
   outputDir: "../test-results",
   reporter: [["list"]],
   fullyParallel: true,
+  workers: process.env.CI ? 2 : undefined,
   use: {
     ...devices["Desktop Chrome"],
   },
@@ -56,19 +47,6 @@ export default defineConfig({
     },
   ],
   webServer: [
-    {
-      // The real bridge serves the real built extension (packages/owlbear/dist).
-      command: "node packages/bridge/dist/cli.js",
-      cwd: repo,
-      env: {
-        BRIDGE_PORT: String(bridgePort()),
-        BRIDGE_STATIC_DIR: `${repo}packages/owlbear/dist`,
-        BRIDGE_TOKEN_FILE: tokenFile,
-        TTRPG_AGENTS_DB: e2eDbPath(e2eDir()),
-      },
-      url: `${bridgeOrigin()}/manifest.json`,
-      reuseExistingServer: false,
-    },
     {
       // Inherits E2E_HARNESS_PORT from process.env (Playwright merges it in).
       command: "node packages/owlbear/e2e/serve.ts",
