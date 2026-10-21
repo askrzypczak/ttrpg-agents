@@ -9,7 +9,11 @@ export function createServer(ctx: ToolContext): McpServer {
   for (const tool of tools) {
     server.registerTool(
       tool.name,
-      { description: tool.description, inputSchema: tool.inputSchema },
+      {
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
+      },
       (args: unknown) => tool.handler(ctx, args),
     );
   }
