@@ -5,6 +5,7 @@ import {
   type SocketLike,
   type SocketState,
 } from "./reconnecting-socket.js";
+import { replyToCommand } from "./commands.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { describeError, panelView } from "./panel-state.js";
@@ -74,7 +75,15 @@ obr.onReady(async () => {
       type: "hello",
       payload: { role, extensionVersion: EXTENSION_VERSION, token },
     }),
-    onMessage: (message) => void sync.handleMessage(message),
+    onMessage: (message) => {
+      if (message.type === "command" && message.id !== undefined) {
+        void replyToCommand(obr, sync, message.id, message.payload).then(
+          (reply) => socket.send(reply),
+        );
+        return;
+      }
+      void sync.handleMessage(message);
+    },
     onStateChange: (state) => {
       if (state === "open") streakStart = Date.now();
       else if (socketState === "open" || socketState === "closed")

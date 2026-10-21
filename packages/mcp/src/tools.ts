@@ -297,8 +297,27 @@ const tableStatusTool = defineTool({
   description:
     "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count) and compare it with the encounter. Needs the bridge running.",
   inputSchema: {},
-  run() {
-    throw new Error("not implemented");
+  async run(ctx) {
+    const response = await ctx.bridge.command({ name: "scene-status" });
+    if (!response.ok) return fail(response.error.message);
+    const { sceneReady, tokenCount, appliedInstanceCount } =
+      response.result.result;
+    const encounterCount = ctx.repo.listInstances().length;
+    const inSync =
+      sceneReady &&
+      tokenCount === appliedInstanceCount &&
+      tokenCount === encounterCount;
+    const counts = `${String(tokenCount)} tokens on the scene, ${String(appliedInstanceCount)} instances applied, ${String(encounterCount)} in the encounter`;
+    const text = inSync
+      ? `Owlbear is in sync: scene ready, ${counts}.`
+      : `Owlbear is out of sync: ${sceneReady ? "scene ready" : "scene not ready"}, ${counts}.`;
+    return ok(text, {
+      sceneReady,
+      tokenCount,
+      appliedInstanceCount,
+      encounterCount,
+      inSync,
+    });
   },
 });
 

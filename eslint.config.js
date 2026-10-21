@@ -15,7 +15,9 @@ const PROTOCOL_MESSAGE =
 const ADAPTER_MESSAGE =
   "Adapters depend on @ttrpg-agents/engine only (and, in tests, on each other and on srd).";
 const MCP_MESSAGE =
-  "@ttrpg-agents/mcp must not import the bridge; the bridge is a separate process.";
+  "@ttrpg-agents/mcp may import only @ttrpg-agents/bridge/client; the bridge is a separate process.";
+const CLIENT_MESSAGE =
+  "bridge/src/client.ts is imported by mcp: it may use only Node builtins, @ttrpg-agents/protocol and ./token-file.js (no ws, no server code).";
 const BRIDGE_MESSAGE =
   "@ttrpg-agents/bridge must not import mcp; the two are separate entry points.";
 
@@ -131,16 +133,20 @@ export default tseslint.config(
     },
   },
   {
-    // The MCP server and the bridge are separate entry points; neither imports
-    // the other.
+    // The MCP server and the bridge are separate entry points. The bridge
+    // imports nothing from mcp; mcp reaches the bridge only through the
+    // Node-only `@ttrpg-agents/bridge/client` subpath.
     files: ["packages/mcp/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
+          // The bare package is a `paths` entry: a gitignore-style negation
+          // cannot re-allow a child of a pattern that also matches its parent.
+          paths: [{ name: "@ttrpg-agents/bridge", message: MCP_MESSAGE }],
           patterns: [
             {
-              group: ["@ttrpg-agents/bridge", "@ttrpg-agents/bridge/**"],
+              group: ["@ttrpg-agents/bridge/*", "!@ttrpg-agents/bridge/client"],
               message: MCP_MESSAGE,
             },
           ],
@@ -159,6 +165,31 @@ export default tseslint.config(
             {
               group: ["@ttrpg-agents/mcp", "@ttrpg-agents/mcp/**"],
               message: BRIDGE_MESSAGE,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // client.ts is the one bridge module mcp imports, so it must not pull in
+    // ws or server code. Later configs replace earlier rule options, so
+    // restate the mcp ban from the block above.
+    files: ["packages/bridge/src/client.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [{ name: "ws", message: CLIENT_MESSAGE }],
+          patterns: [
+            {
+              group: ["@ttrpg-agents/mcp", "@ttrpg-agents/mcp/**"],
+              message: BRIDGE_MESSAGE,
+            },
+            { group: ["ws/*"], message: CLIENT_MESSAGE },
+            {
+              group: ["./*", "../*", "!./token-file.js"],
+              message: CLIENT_MESSAGE,
             },
           ],
         },

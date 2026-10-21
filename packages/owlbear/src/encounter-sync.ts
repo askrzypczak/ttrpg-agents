@@ -123,6 +123,30 @@ type SyncMessage = Extract<
   { type: "encounter-event" | "encounter-snapshot" }
 >;
 
+/** Mirrors what `applyMessage` just did to the scene into the applied id set. */
+function recordApplied(applied: Set<string>, message: SyncMessage): void {
+  if (message.type === "encounter-snapshot") {
+    applied.clear();
+    for (const i of message.payload.instances) applied.add(i.id);
+    return;
+  }
+  const event = message.payload;
+  switch (event.type) {
+    case "added":
+      for (const i of event.instances) applied.add(i.id);
+      break;
+    case "removed":
+      applied.delete(event.id);
+      break;
+    case "cleared":
+      applied.clear();
+      break;
+    // Stryker disable next-line ConditionalExpression: equivalent, an empty `break` case behaves like the missing one (the switch has no default)
+    case "hp-changed":
+      break;
+  }
+}
+
 function applyMessage(obr: ObrAdapter, message: SyncMessage): Promise<void> {
   return message.type === "encounter-event"
     ? applyEvent(obr, message.payload)
@@ -143,6 +167,7 @@ export function createEncounterSync(
   onApplied: () => void = () => {},
 ): EncounterSync {
   const pending: SyncMessage[] = [];
+  const applied = new Set<string>();
   let tail: Promise<void> = Promise.resolve();
 
   const enqueue = (task: () => Promise<void>): Promise<void> => {
@@ -170,6 +195,7 @@ export function createEncounterSync(
         onError(error);
         continue;
       }
+      recordApplied(applied, pending[0]!);
       pending.shift();
       onApplied();
     }
@@ -193,7 +219,7 @@ export function createEncounterSync(
       });
     },
     appliedInstanceCount() {
-      throw new Error("not implemented");
+      return applied.size;
     },
   };
 }

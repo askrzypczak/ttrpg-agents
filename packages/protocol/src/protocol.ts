@@ -27,28 +27,20 @@ const encounterSnapshotPayload = z.object({
   instances: z.array(monsterInstanceSchema),
 });
 
-// TODO(#98) contract stub: the shapes below carry the approved types, but the
-// `.refine(notImplemented)` placeholders reject every value at runtime until
-// the implementation replaces them with the real schemas.
-const notImplemented = (): boolean => false;
+/** A request the agent can make of the table; also the `/agent/command` body. */
+export const commandSchema = z.discriminatedUnion("name", [
+  z.object({ name: z.literal("scene-status") }),
+]);
 
-export const commandSchema = z
-  .discriminatedUnion("name", [z.object({ name: z.literal("scene-status") })])
-  .refine(notImplemented, "not implemented");
+export const sceneStatusSchema = z.object({
+  sceneReady: z.boolean(),
+  tokenCount: z.number().int().min(0),
+  appliedInstanceCount: z.number().int().min(0),
+});
 
-export const sceneStatusSchema = z
-  .object({
-    sceneReady: z.boolean(),
-    tokenCount: z.number().int().min(0),
-    appliedInstanceCount: z.number().int().min(0),
-  })
-  .refine(notImplemented, "not implemented");
-
-export const commandResultSchema = z
-  .discriminatedUnion("name", [
-    z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
-  ])
-  .refine(notImplemented, "not implemented");
+export const commandResultSchema = z.discriminatedUnion("name", [
+  z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
+]);
 
 export const agentErrorCodeSchema = z.enum([
   "not-connected",
@@ -59,15 +51,13 @@ export const agentErrorCodeSchema = z.enum([
   "bad-request",
 ]);
 
-export const agentCommandResponseSchema = z
-  .discriminatedUnion("ok", [
-    z.object({ ok: z.literal(true), result: commandResultSchema }),
-    z.object({
-      ok: z.literal(false),
-      error: z.object({ code: agentErrorCodeSchema, message: z.string() }),
-    }),
-  ])
-  .refine(notImplemented, "not implemented");
+export const agentCommandResponseSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), result: commandResultSchema }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({ code: agentErrorCodeSchema, message: z.string() }),
+  }),
+]);
 
 export type Command = z.infer<typeof commandSchema>;
 export type SceneStatus = z.infer<typeof sceneStatusSchema>;

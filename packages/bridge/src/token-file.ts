@@ -9,7 +9,7 @@ export function defaultTokenPath(): string {
 
 /** `~/.config/ttrpg-agents/agent-token`: authorises `POST /agent/command` only. */
 export function defaultAgentTokenPath(): string {
-  throw new Error("not implemented");
+  return join(homedir(), ".config", "ttrpg-agents", "agent-token");
 }
 
 /** Reads the persistent bridge token, creating it (mode 0600) on first use. */
