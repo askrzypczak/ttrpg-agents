@@ -32,17 +32,21 @@ function canBind(port: number): Promise<boolean> {
   });
 }
 
-it("allocateRunEnv picks two distinct free ports that can be bound afterwards", async () => {
+it("allocateRunEnv picks a free harness port and keeps preset values (AC1)", async () => {
+  // Fresh env: only the harness port and the temp dir; each worker starts its own bridge.
   const env = await allocateFresh();
-  const bridge = Number(env.E2E_BRIDGE_PORT);
+  expect(Object.keys(env).sort()).toEqual(["E2E_DIR", "E2E_HARNESS_PORT"]);
   const harness = Number(env.E2E_HARNESS_PORT);
-  expect(bridge).toBeGreaterThan(0);
-  expect(bridge).toBeLessThan(65536);
   expect(harness).toBeGreaterThan(0);
   expect(harness).toBeLessThan(65536);
-  expect(harness).not.toBe(bridge);
-  expect(await canBind(bridge)).toBe(true);
   expect(await canBind(harness)).toBe(true);
+
+  // Preset env: values already set (workers inherit the main process's run) stay as they are.
+  const dir = join(tmpdir(), "ttrpg-agents-e2e-preset");
+  const preset = { E2E_HARNESS_PORT: "41002", E2E_DIR: dir };
+  await allocateRunEnv(preset);
+  expect(preset).toEqual({ E2E_HARNESS_PORT: "41002", E2E_DIR: dir });
+  expect(existsSync(dir)).toBe(false);
 });
 
 it("allocateRunEnv creates a fresh temp dir per call on an empty env", async () => {
@@ -55,20 +59,4 @@ it("allocateRunEnv creates a fresh temp dir per call on an empty env", async () 
     expect(basename(dir)).toMatch(/^ttrpg-agents-e2e-/);
     expect(statSync(dir).isDirectory()).toBe(true);
   }
-});
-
-it("allocateRunEnv keeps values that are already set, so workers share the main process's run", async () => {
-  const dir = join(tmpdir(), "ttrpg-agents-e2e-preset");
-  const env = {
-    E2E_BRIDGE_PORT: "41001",
-    E2E_HARNESS_PORT: "41002",
-    E2E_DIR: dir,
-  };
-  await allocateRunEnv(env);
-  expect(env).toEqual({
-    E2E_BRIDGE_PORT: "41001",
-    E2E_HARNESS_PORT: "41002",
-    E2E_DIR: dir,
-  });
-  expect(existsSync(dir)).toBe(false);
 });

@@ -1,33 +1,26 @@
 import { mkdtempSync } from "node:fs";
-import { createServer, type AddressInfo, type Server } from "node:net";
+import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Run-scoped e2e settings. The config sets them in the main process before any
-// worker starts; workers inherit process.env, so they reuse the same run.
-const BRIDGE_PORT = "E2E_BRIDGE_PORT";
+// worker starts; workers inherit process.env, so they reuse the same run. Each
+// worker starts its own bridge on an ephemeral port (worker-bridge.ts), so only
+// the shared harness server needs a port allocated here.
 const HARNESS_PORT = "E2E_HARNESS_PORT";
 const DIR = "E2E_DIR";
 
 /**
- * Sets E2E_BRIDGE_PORT, E2E_HARNESS_PORT and E2E_DIR, each only if unset, so a
- * run never picks fixed ports or a shared temp dir. Ports are held open
- * together (so they differ) and then released; a small reuse race is accepted.
+ * Sets E2E_HARNESS_PORT and E2E_DIR, each only if unset, so a run never picks
+ * a fixed port or a shared temp dir. The port is released after reserving it;
+ * a small reuse race is accepted.
  */
 export async function allocateRunEnv(
   env: Record<string, string | undefined> = process.env,
 ): Promise<void> {
-  const portVars = [BRIDGE_PORT, HARNESS_PORT].filter((name) => !env[name]);
-  const ports = await reserveLoopbackPorts(portVars.length);
-  portVars.forEach((name, i) => {
-    env[name] = String(ports[i]);
-  });
+  if (!env[HARNESS_PORT])
+    env[HARNESS_PORT] = String(await reserveLoopbackPort());
   if (!env[DIR]) env[DIR] = mkdtempSync(join(tmpdir(), "ttrpg-agents-e2e-"));
-}
-
-/** The bridge's port for this run (the real bridge, `BRIDGE_PORT`). */
-export function bridgePort(): number {
-  return Number(requireEnv(BRIDGE_PORT));
 }
 
 /** The harness server's port for this run (`e2e/serve.ts`). */
@@ -35,17 +28,12 @@ export function harnessPort(): number {
   return Number(requireEnv(HARNESS_PORT));
 }
 
-/** Origin of the real bridge: the extension's origin, which owlbear.rodeo frames. */
-export function bridgeOrigin(): string {
-  return `http://localhost:${bridgePort()}`;
-}
-
 /** Origin of the harness server, a different origin from the extension. */
 export function harnessOrigin(): string {
   return `http://127.0.0.1:${harnessPort()}`;
 }
 
-/** Per-run temp dir: holds the throwaway DB and the bridge token file. */
+/** Per-run temp dir: holds a per-worker subdir (DB and token file) for each worker's bridge. */
 export function e2eDir(): string {
   return requireEnv(DIR);
 }
@@ -59,27 +47,14 @@ function requireEnv(name: string): string {
   return value;
 }
 
-/** Reserves `count` distinct loopback ports, all listening at once, then releases them. */
-async function reserveLoopbackPorts(count: number): Promise<number[]> {
-  const servers = Array.from({ length: count }, () => createServer());
-  try {
-    return await Promise.all(servers.map(listenOnFreePort));
-  } finally {
-    await Promise.all(servers.map(closeServer));
-  }
-}
-
-function listenOnFreePort(server: Server): Promise<number> {
+/** Reserves a loopback port by listening on it, then releases it. */
+function reserveLoopbackPort(): Promise<number> {
+  const server = createServer();
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
-      resolve((server.address() as AddressInfo).port);
+      const port = (server.address() as AddressInfo).port;
+      server.close(() => resolve(port));
     });
-  });
-}
-
-function closeServer(server: Server): Promise<void> {
-  return new Promise((resolve) => {
-    server.close(() => resolve());
   });
 }
