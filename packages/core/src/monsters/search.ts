@@ -1,5 +1,5 @@
-import type { MonsterIndex } from "./loader.js";
 import type { Monster } from "./schema.js";
+import type { MonsterIndex } from "./types.js";
 
 /** Look up a monster by its exact key; undefined if absent. */
 export function getMonsterByKey(

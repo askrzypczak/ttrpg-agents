@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/core/tsconfig.build.json" },
+    { "path": "./packages/srd/tsconfig.build.json" },
     { "path": "./packages/protocol/tsconfig.build.json" },
     { "path": "./packages/store-sqlite/tsconfig.build.json" },
     { "path": "./packages/mcp/tsconfig.build.json" },

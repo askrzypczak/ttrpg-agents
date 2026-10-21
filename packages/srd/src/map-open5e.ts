@@ -1,6 +1,6 @@
-// NOTE: only type imports from sibling modules, so Node can run this file
+// NOTE: only type imports (from @ttrpg-agents/core), so Node can run this file
 // directly (type stripping) from scripts/import-srd.ts.
-import type { Monster, MonsterEntry } from "./schema.js";
+import type { Monster, MonsterEntry } from "@ttrpg-agents/core";
 
 type Abilities = Record<
   | "strength"

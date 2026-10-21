@@ -1,10 +1,10 @@
-import {
-  loadSrdMonsters,
-  type EncounterRepository,
-  type MonsterInstance,
-  type NewMonsterInstance,
-  type Rng,
+import type {
+  EncounterRepository,
+  MonsterInstance,
+  NewMonsterInstance,
+  Rng,
 } from "@ttrpg-agents/core";
+import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
   openDatabase,

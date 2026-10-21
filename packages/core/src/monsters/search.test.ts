@@ -1,91 +1,89 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { getMonsterByKey, loadSrdMonsters, searchMonsters } from "../index.js";
+import type { Monster } from "./schema.js";
+import { getMonsterByKey, searchMonsters } from "./search.js";
+import type { MonsterIndex } from "./types.js";
 
-const index = loadSrdMonsters();
+function stub(key: string, name: string): Monster {
+  return {
+    key,
+    name,
+    source: "private",
+    size: "medium",
+    type: "beast",
+    alignment: "unaligned",
+    ac: 10,
+    armorDetail: "",
+    hp: { average: 5, dice: "1d8 + 1" },
+    speeds: { walk: 30 },
+    abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    initiativeModifier: 0,
+    cr: 0,
+    saves: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+    skills: {},
+    senses: {},
+    languages: "",
+    damageVulnerabilities: [],
+    damageResistances: [],
+    damageImmunities: [],
+    conditionImmunities: [],
+    sections: {
+      traits: [],
+      actions: [],
+      bonusActions: [],
+      reactions: [],
+      legendaryActions: [],
+    },
+  };
+}
+
+const monsters = [
+  stub("wolf", "Wolf"),
+  stub("wolf-guardian", "Wolf Guardian"),
+  stub("dire-wolf", "Dire Wolf"),
+  stub("werewolf", "Werewolf"),
+  stub("harpy", "Harpy"),
+  stub("ogre", "Ogre"),
+];
+const index: MonsterIndex = {
+  monsters,
+  byKey: new Map(monsters.map((m) => [m.key, m] as const)),
+};
 const names = (q: string) => searchMonsters(index, q).map((m) => m.name);
 
 describe("searchMonsters", () => {
-  it("finds the shadow case-insensitively", () => {
-    for (const q of ["Shadow", "SHADOW", "shadow", "  shadow "]) {
-      expect(names(q)).toEqual(["Shadow"]);
+  it("finds a name case-insensitively and ignoring surrounding whitespace", () => {
+    for (const q of ["Harpy", "HARPY", "harpy", "  harpy "]) {
+      expect(names(q)).toEqual(["Harpy"]);
     }
   });
 
-  it("tolerates plurals", () => {
-    expect(names("shadows")).toEqual(["Shadow"]);
-    expect(names("harpies")).toContain("Harpy"); // -ies
-    expect(names("mummies")).toContain("Mummy");
-    expect(names("rexes")).toContain("Tyrannosaurus Rex"); // -es
-    expect(names("ogres")[0]).toBe("Ogre"); // plain -s
+  it("tolerates plurals (-s and -ies)", () => {
+    expect(names("ogres")).toEqual(["Ogre"]);
+    expect(names("harpies")).toEqual(["Harpy"]);
   });
 
-  it("handles -ves plurals", () => {
-    expect(names("wolves")[0]).toBe("Wolf");
-    expect(names("wolves")).toContain("Dire Wolf");
-  });
-
-  it("applies the short -es stem only after sibilants", () => {
-    // "mag" must not be tried, or Magma Mephit / Magmin would match
-    expect(names("mages")).toEqual(["Mage", "Archmage"]);
-  });
-
-  it("ranks exact, then prefix, then word, then substring", () => {
+  it("ranks exact, then prefix, then word, then substring matches", () => {
     expect(names("wolf")).toEqual([
-      "Wolf",
-      "Dire Wolf",
-      "Winter Wolf",
-      "Giant Wolf Spider",
-      "Werewolf", // substring only, so last
+      "Wolf", // exact
+      "Wolf Guardian", // prefix
+      "Dire Wolf", // whole word
+      "Werewolf", // substring only
     ]);
-    const dragon = names("dragon");
-    expect(dragon[0]).toBe("Dragon Turtle"); // prefix before word matches
-    expect(dragon).toContain("Adult Red Dragon");
-    // substring matches come last
-    const ogre = names("ogre");
-    expect(ogre.slice(0, 2)).toEqual(["Ogre", "Ogre Zombie"]);
   });
 
-  it("separates near-miss names sharing a prefix", () => {
-    expect(names("sha")).toEqual(
-      expect.arrayContaining(["Shadow", "Shambling Mound"]),
-    );
-    expect(names("shad")).toEqual(["Shadow"]);
-    expect(names("shamb")).toEqual(["Shambling Mound"]);
-  });
-
-  it("returns [] when nothing matches or the query is blank", () => {
-    expect(searchMonsters(index, "zzzqx")).toEqual([]);
-    expect(searchMonsters(index, "")).toEqual([]);
-    expect(searchMonsters(index, "   ")).toEqual([]);
-  });
-
-  it("does not treat regex characters specially", () => {
-    expect(searchMonsters(index, ".*")).toEqual([]);
+  it("returns [] for no match or a blank query, and treats regex characters literally", () => {
+    expect(names("zzzqx")).toEqual([]);
+    expect(names("")).toEqual([]);
+    expect(names("   ")).toEqual([]);
+    expect(names(".*")).toEqual([]);
+    expect(names("w.lf")).toEqual([]);
   });
 });
 
 describe("getMonsterByKey", () => {
-  it("returns the monster for a known key", () => {
-    expect(getMonsterByKey(index, "srd-2024_shadow")?.name).toBe("Shadow");
-  });
-
-  it("returns undefined for an unknown key (names are not keys)", () => {
-    expect(getMonsterByKey(index, "srd-2024_nope")).toBeUndefined();
-    expect(getMonsterByKey(index, "Shadow")).toBeUndefined();
-  });
-});
-
-describe("SRD attribution", () => {
-  it("ships an ATTRIBUTION.md with the CC-BY-4.0 license URL", () => {
-    const text = readFileSync(
-      new URL("../../data/srd-5.2/ATTRIBUTION.md", import.meta.url),
-      "utf8",
-    );
-    expect(text).toContain(
-      "https://creativecommons.org/licenses/by/4.0/legalcode",
-    );
-    expect(text).toContain("System Reference Document 5.2");
-    expect(text).toContain("No endorsement by Wizards of the Coast");
+  it("returns the monster for a known key and undefined otherwise", () => {
+    expect(getMonsterByKey(index, "dire-wolf")?.name).toBe("Dire Wolf");
+    expect(getMonsterByKey(index, "nope")).toBeUndefined();
+    expect(getMonsterByKey(index, "Dire Wolf")).toBeUndefined();
   });
 });

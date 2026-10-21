@@ -1,17 +1,14 @@
 /**
  * Regenerates data/srd-5.2/monsters.json from the Open5e v2 API.
- * Usage: npm run import:srd -w @ttrpg-agents/core
+ * Usage: npm run import:srd -w @ttrpg-agents/srd
  * Output is deterministic (sorted by key), so re-running yields no diff
  * unless upstream data changed.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  mapOpen5eCreature,
-  type Open5eCreature,
-} from "../src/monsters/map-open5e.ts";
-import { monsterSchema } from "../src/monsters/schema.ts";
+import { monsterSchema } from "@ttrpg-agents/core";
+import { mapOpen5eCreature, type Open5eCreature } from "../src/map-open5e.ts";
 
 const START_URL =
   "https://api.open5e.com/v2/creatures/?document__key=srd-2024&limit=100";

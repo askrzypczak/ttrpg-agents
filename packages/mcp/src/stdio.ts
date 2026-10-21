@@ -2,7 +2,8 @@
 import { randomInt } from "node:crypto";
 import process from "node:process";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { loadSrdMonsters, type Rng } from "@ttrpg-agents/core";
+import type { Rng } from "@ttrpg-agents/core";
+import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
   openDatabase,
