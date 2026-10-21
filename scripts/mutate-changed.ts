@@ -4,14 +4,19 @@
 // body for the CI sticky PR comment (posted by the comment job in ci.yml).
 // Pure selection/formatting logic lives in mutate-lib.ts.
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { formatMutationComment, selectMutateFiles } from "./mutate-lib.ts";
+import {
+  formatMutationSummary,
+  selectMutateFiles,
+  type MutationReport,
+} from "./mutate-lib.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "reports", "mutation");
 const commentFile = join(outDir, "comment.md");
+const jsonFile = join(outDir, "mutation.json");
 const HEADING = "## Mutation testing (changed files)\n\n";
 
 function writeComment(body: string): void {
@@ -58,6 +63,8 @@ async function main(): Promise<void> {
   console.log(`mutate:changed: mutating ${files.length} file(s):`);
   for (const f of files) console.log(`  ${f}`);
   mkdirSync(outDir, { recursive: true });
+  // A stale report from an earlier run must not be mistaken for this one.
+  rmSync(jsonFile, { force: true });
 
   const child = spawn(
     "npx",
@@ -71,11 +78,7 @@ async function main(): Promise<void> {
     ],
     { cwd: root, stdio: ["inherit", "pipe", "inherit"] },
   );
-  let stdout = "";
-  child.stdout.on("data", (chunk: Buffer) => {
-    stdout += chunk.toString();
-    process.stdout.write(chunk);
-  });
+  child.stdout.on("data", (chunk: Buffer) => process.stdout.write(chunk));
   const result = await new Promise<{ code: number | null; error?: Error }>(
     (done) => {
       child.on("error", (error) => done({ code: null, error }));
@@ -84,20 +87,23 @@ async function main(): Promise<void> {
   );
   if (result.error) {
     failed(`could not start stryker: ${result.error.message}`);
-  } else if (stdout.trim() === "") {
-    failed(`stryker produced no output (exit code ${result.code})`);
-  } else if (result.code !== 0) {
-    // Stryker logs to stdout, so keep its output but flag the failure.
+    return;
+  }
+  let summary: string;
+  try {
+    summary = formatMutationSummary(
+      JSON.parse(readFileSync(jsonFile, "utf8")) as MutationReport,
+    );
+  } catch {
+    failed(`stryker wrote no readable report (exit code ${result.code})`);
+    return;
+  }
+  if (result.code !== 0) {
     const line = `The mutation run failed (exit code ${result.code}).`;
     console.error(`mutate:changed: ${line}`);
-    const body = formatMutationComment(stdout);
-    writeComment(
-      body.startsWith(HEADING)
-        ? `${HEADING}${line}\n\n${body.slice(HEADING.length)}`
-        : `${HEADING}${line}\n\n${body}`,
-    );
+    writeComment(`${HEADING}${line}\n\n${summary.slice(HEADING.length)}`);
   } else {
-    writeComment(formatMutationComment(stdout));
+    writeComment(summary);
   }
 }
 

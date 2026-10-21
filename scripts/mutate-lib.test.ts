@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  COMMENT_LIMIT,
-  formatMutationComment,
+  formatMutationSummary,
+  MAX_LISTED,
+  type MutationReport,
   selectMutateFiles,
 } from "./mutate-lib.ts";
 
@@ -105,39 +106,64 @@ describe("selectMutateFiles", () => {
   });
 });
 
-describe("formatMutationComment", () => {
-  const fenced = (body: string): string => {
-    const open = body.indexOf("```");
-    const close = body.lastIndexOf("```");
-    expect(open).toBeGreaterThanOrEqual(0);
-    expect(close).toBeGreaterThan(open);
-    return body.slice(open, close + 3);
+const mutant = (
+  status: string,
+  line: number,
+  mutatorName = "BlockStatement",
+) => ({ status, mutatorName, location: { start: { line } } });
+
+describe("formatMutationSummary", () => {
+  const report: MutationReport = {
+    files: {
+      "packages/a/src/b.ts": {
+        mutants: [
+          mutant("Killed", 1),
+          mutant("Timeout", 2),
+          mutant("Survived", 5, "EqualityOperator"),
+          mutant("NoCoverage", 9),
+          mutant("NoCoverage", 9),
+          mutant("CompileError", 11),
+        ],
+      },
+      "packages/a/src/a.ts": { mutants: [mutant("Killed", 3)] },
+    },
   };
 
-  it("formatMutationComment strips ANSI colour codes", () => {
-    const out = formatMutationComment(
-      "\u001b[32mKilled\u001b[39m: 3\n\u001b[31mSurvived\u001b[39m: 1\n",
-    );
-    expect(out).not.toContain("\u001b");
-    expect(out).toContain("Killed: 3");
-    expect(out).toContain("Survived: 1");
+  it("reports totals, score and per-file counts without any source", () => {
+    const out = formatMutationSummary(report);
+    // 3 detected of 6 valid overall; b.ts alone is 2 of 5 (compile error excluded)
+    expect(out).toContain("**Score 50.0%** over 7 mutants");
+    expect(out).toContain("2 killed, 1 timeout, 1 survived, 2 no coverage");
+    expect(out).toContain("| packages/a/src/b.ts | 6 | 3 | 40.0% |");
+    expect(out).toContain("| packages/a/src/a.ts | 1 | 0 | 100.0% |");
   });
 
-  it("formatMutationComment truncates input longer than COMMENT_LIMIT with a notice", () => {
-    const report = "Survived mutant line\n".repeat(
-      Math.ceil((COMMENT_LIMIT * 2) / 21),
+  it("lists uncaught locations compactly, grouped per line and sorted", () => {
+    const out = formatMutationSummary(report);
+    expect(out).toContain(
+      "packages/a/src/b.ts:5 EqualityOperator (Survived)\n" +
+        "packages/a/src/b.ts:9 BlockStatement (NoCoverage) x2\n",
     );
-    const out = formatMutationComment(report);
-    expect(out.length).toBeLessThanOrEqual(COMMENT_LIMIT);
-    expect(fenced(out)).toContain("Survived mutant line");
-    expect(out).toMatch(/artifact/i);
   });
 
-  it("formatMutationComment keeps a short report whole in a fenced block", () => {
-    const report =
-      "Mutation score: 81.25%\nSurvived: src/a.ts:3 ConditionalExpression";
-    const out = formatMutationComment(report);
-    expect(fenced(out)).toContain(report);
-    expect(out.length).toBeLessThanOrEqual(COMMENT_LIMIT);
+  it("omits the location list when nothing is uncaught", () => {
+    const out = formatMutationSummary({
+      files: { "x.ts": { mutants: [mutant("Killed", 1)] } },
+    });
+    expect(out).not.toContain("```");
+    expect(out).toContain("**Score 100.0%**");
+  });
+
+  it("caps the location list and counts the rest", () => {
+    const mutants = Array.from({ length: MAX_LISTED + 5 }, (_, i) =>
+      mutant("Survived", i + 1),
+    );
+    const out = formatMutationSummary({ files: { "x.ts": { mutants } } });
+    expect(out.match(/^x\.ts:\d+ /gm)).toHaveLength(MAX_LISTED);
+    expect(out).toContain("... and 5 more locations");
+  });
+
+  it("shows n/a for a report with no valid mutants", () => {
+    expect(formatMutationSummary({ files: {} })).toContain("**Score n/a**");
   });
 });
