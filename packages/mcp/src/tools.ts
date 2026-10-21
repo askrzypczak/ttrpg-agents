@@ -19,11 +19,17 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+export interface ToolAnnotations {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+}
+
 /** A transport-free tool: the server layer only registers these. */
 export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: z.ZodRawShape;
+  annotations?: ToolAnnotations;
   /** Validates `args` against `inputSchema`; domain errors become isError results. */
   handler(ctx: ToolContext, args: unknown): ToolResult;
 }
@@ -42,6 +48,7 @@ function defineTool<S extends z.ZodRawShape>(def: {
   name: string;
   description: string;
   inputSchema: S;
+  annotations?: ToolAnnotations;
   run(ctx: ToolContext, args: z.infer<z.ZodObject<S>>): ToolResult;
 }): ToolDefinition {
   const schema = z.object(def.inputSchema);
@@ -49,6 +56,7 @@ function defineTool<S extends z.ZodRawShape>(def: {
     name: def.name,
     description: def.description,
     inputSchema: def.inputSchema,
+    annotations: def.annotations,
     handler(ctx, args) {
       const parsed = schema.safeParse(args);
       if (!parsed.success) {
