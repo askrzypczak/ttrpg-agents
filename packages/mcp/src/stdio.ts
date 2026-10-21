@@ -2,12 +2,11 @@
 import { randomInt } from "node:crypto";
 import process from "node:process";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { loadSrdMonsters, type Rng } from "@ttrpg-agents/core";
 import {
   SqliteEncounterRepository,
-  loadSrdMonsters,
   openDatabase,
-  type Rng,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/store-sqlite";
 import { createServer } from "./server.js";
 
 const rng: Rng = { nextInt: (maxExclusive) => randomInt(maxExclusive) };

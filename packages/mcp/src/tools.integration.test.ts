@@ -1,12 +1,14 @@
 import {
-  SqliteEncounterRepository,
   loadSrdMonsters,
-  openDatabase,
   type EncounterRepository,
   type MonsterInstance,
   type NewMonsterInstance,
   type Rng,
 } from "@ttrpg-agents/core";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";

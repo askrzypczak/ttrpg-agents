@@ -15,6 +15,7 @@
     "@ttrpg-agents/protocol": "*"
   },
   "devDependencies": {
+    "@ttrpg-agents/store-sqlite": "*",
     "vite": "^8.3.4"
   }
 }

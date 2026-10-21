@@ -1,0 +1,16 @@
+{
+  "name": "@ttrpg-agents/store-sqlite",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@ttrpg-agents/core": "*"
+  }
+}

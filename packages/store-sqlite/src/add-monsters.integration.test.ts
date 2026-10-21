@@ -3,20 +3,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Rng } from "../dice/rng.js";
-import { loadSrdMonsters } from "../monsters/index.js";
 import {
   AddMonstersError,
   MAX_GROUP_COUNT,
   addMonsters,
   createNumberedNaming,
+  loadSrdMonsters,
   type AddMonstersDeps,
   type AddMonstersErrorCode,
   type AddMonstersGroup,
+  type EncounterRepository,
   type NamingStrategy,
-} from "./add-monsters.js";
+  type Rng,
+} from "@ttrpg-agents/core";
 import { openDatabase } from "./db.js";
-import type { EncounterRepository } from "./repository.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const SHADOW = "srd-2024_shadow";

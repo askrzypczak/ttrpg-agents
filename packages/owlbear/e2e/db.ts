@@ -1,6 +1,9 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { SqliteEncounterRepository, openDatabase } from "@ttrpg-agents/core";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
 import { e2eDir } from "./env.js";
 
 /** Throwaway SQLite file for the e2e bridge (TTRPG_AGENTS_DB); never the real one. */

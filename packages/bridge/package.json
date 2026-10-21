@@ -10,6 +10,7 @@
   "dependencies": {
     "@ttrpg-agents/core": "*",
     "@ttrpg-agents/protocol": "*",
+    "@ttrpg-agents/store-sqlite": "*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

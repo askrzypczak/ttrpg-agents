@@ -7,11 +7,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
+import type { MonsterInstance } from "@ttrpg-agents/core";
 import {
   SqliteEncounterRepository,
   openDatabase,
-  type MonsterInstance,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/store-sqlite";
 import {
   decodeMessage,
   encodeMessage,

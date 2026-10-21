@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  SqliteEncounterRepository,
   createEncounterEmitter,
   observeRepository,
-  openDatabase,
   type EncounterRepository,
   type MonsterInstance,
 } from "@ttrpg-agents/core";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   broadcastSnapshotsOnChange,

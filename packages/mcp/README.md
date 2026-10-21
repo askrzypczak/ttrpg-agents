@@ -12,7 +12,7 @@ node packages/mcp/dist/stdio.js
 The repo-root `.mcp.json` registers it as `ttrpg-agents` for Claude Code
 (approve the project server on first use).
 
-The encounter is stored in SQLite at `$TTRPG_AGENTS_DB`, else
+The encounter is stored in SQLite (implemented by [`@ttrpg-agents/store-sqlite`](../store-sqlite/README.md)) at `$TTRPG_AGENTS_DB`, else
 `$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else
 `~/.local/share/ttrpg-agents/encounters.db`.
 
