@@ -95,12 +95,34 @@ describe("loadMonsters", () => {
       MonsterLoadError,
     );
   });
+
+  it("load fails naming the monster key and hp.dice for an unparseable hp.dice", () => {
+    const bad = { ...monster("bad-dice"), hp: { average: 5, dice: "lots" } };
+    const path = write(tmp(), "bad-dice.json", [monster("ok"), bad]);
+    const err = (() => {
+      try {
+        loadMonsters([{ path }]);
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(err).toBeInstanceOf(MonsterLoadError);
+    expect((err as Error).message).toContain('"bad-dice"');
+    expect((err as Error).message).toContain("hp.dice");
+  });
 });
 
 describe("SRD snapshot", () => {
-  const index = loadSrdMonsters();
+  it("loadSrdMonsters does not throw: every SRD monster passes the refined schema", () => {
+    expect(() => loadSrdMonsters()).not.toThrow();
+  });
+
+  // Lazy so a load failure shows as the test above failing, not a collection error.
+  let loaded: ReturnType<typeof loadSrdMonsters> | undefined;
+  const srd = () => (loaded ??= loadSrdMonsters());
 
   it("has the full creature list with unique keys", () => {
+    const index = srd();
     expect(index.monsters.length).toBeGreaterThanOrEqual(300);
     expect(new Set(index.monsters.map((m) => m.key)).size).toBe(
       index.monsters.length,
@@ -109,13 +131,13 @@ describe("SRD snapshot", () => {
   });
 
   it("contains the shadow with known stats", () => {
-    const shadow = index.byKey.get("srd-2024_shadow");
+    const shadow = srd().byKey.get("srd-2024_shadow");
     expect(shadow?.ac).toBe(12);
     expect(shadow?.hp).toEqual({ average: 27, dice: "5d8 + 5" });
   });
 
   it("keeps usage limits such as recharge on dragon breath", () => {
-    const dragon = index.byKey.get("srd-2024_adult-red-dragon");
+    const dragon = srd().byKey.get("srd-2024_adult-red-dragon");
     const breath = dragon?.sections.actions.find(
       (a) => a.name === "Fire Breath",
     );
@@ -123,7 +145,7 @@ describe("SRD snapshot", () => {
   });
 
   it("is sorted by key so regeneration diffs stay clean", () => {
-    const keys = index.monsters.map((m) => m.key);
+    const keys = srd().monsters.map((m) => m.key);
     expect(keys).toEqual([...keys].sort());
   });
 });
