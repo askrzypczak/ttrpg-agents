@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { createLogEntry, type RollLogEntry } from "../dice/log.js";
 import { roll } from "../dice/roll.js";
 import type { Rng } from "../dice/rng.js";
@@ -39,8 +38,8 @@ export interface AddMonstersDeps {
   rng: Rng;
   now: () => Date;
   naming?: NamingStrategy;
-  /** Defaults to `crypto.randomUUID`. */
-  newGroupId?: () => string;
+  /** Source of group ids; injected so the engine stays free of Node. */
+  newGroupId: () => string;
 }
 
 export interface AddedInstance {
@@ -164,7 +163,7 @@ export function addMonsters(
 ): AddMonstersResult {
   const { repo, monsters, rng, now } = deps;
   const naming = deps.naming ?? createNumberedNaming();
-  const newGroupId = deps.newGroupId ?? randomUUID;
+  const newGroupId = deps.newGroupId;
   const initiativeMode = options.initiative ?? "group";
 
   validate(

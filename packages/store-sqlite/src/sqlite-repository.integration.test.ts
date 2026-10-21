@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DatabaseSync } from "node:sqlite";
 import { openDatabase } from "./db.js";
-import { InvalidAmountError, UnknownInstanceError } from "@ttrpg-agents/core";
+import { InvalidAmountError, UnknownInstanceError } from "@ttrpg-agents/engine";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 let db: DatabaseSync;

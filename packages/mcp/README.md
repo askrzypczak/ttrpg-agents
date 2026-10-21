@@ -1,6 +1,6 @@
 # @ttrpg-agents/mcp
 
-MCP server (stdio) exposing the encounter tools from `@ttrpg-agents/core`.
+MCP server (stdio) exposing the encounter tools from `@ttrpg-agents/engine`.
 
 ## Run
 

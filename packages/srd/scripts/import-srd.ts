@@ -7,7 +7,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { monsterSchema } from "@ttrpg-agents/core";
+import { monsterSchema } from "@ttrpg-agents/engine";
 import { mapOpen5eCreature, type Open5eCreature } from "../src/map-open5e.ts";
 
 const START_URL =

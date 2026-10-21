@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { getMonsterByKey, searchMonsters } from "@ttrpg-agents/core";
+import { getMonsterByKey, searchMonsters } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "./loader.js";
 
 const index = loadSrdMonsters();

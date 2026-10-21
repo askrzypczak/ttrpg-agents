@@ -55,7 +55,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # mcp tests resolve core through its built dist/.
+      # mcp tests resolve engine through its built dist/.
       - run: npm run build
       # Baseline = coverage-summary artifact of the latest green main run.
       # Missing or expired is fine: the comment then says "no baseline".

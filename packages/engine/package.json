@@ -1,5 +1,5 @@
 {
-  "name": "@ttrpg-agents/core",
+  "name": "@ttrpg-agents/engine",
   "version": "0.0.0",
   "private": true,
   "license": "MIT",
