@@ -3,7 +3,7 @@ import { createLogEntry, type RollLogEntry } from "../dice/log.js";
 import { roll } from "../dice/roll.js";
 import type { Rng } from "../dice/rng.js";
 import type { Monster } from "../monsters/schema.js";
-import type { MonsterIndex } from "../monsters/loader.js";
+import type { MonsterIndex } from "../monsters/types.js";
 import { DomainError } from "../errors.js";
 import type { EncounterRepository } from "./repository.js";
 import type { NewMonsterInstance } from "./types.js";

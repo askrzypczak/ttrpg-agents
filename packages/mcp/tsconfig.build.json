@@ -12,6 +12,7 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     { "path": "../core/tsconfig.build.json" },
+    { "path": "../srd/tsconfig.build.json" },
     { "path": "../store-sqlite/tsconfig.build.json" }
   ]
 }

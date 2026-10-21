@@ -1,0 +1,23 @@
+{
+  "name": "@ttrpg-agents/srd",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "import:srd": "tsc -b tsconfig.build.json && node scripts/import-srd.ts"
+  },
+  "dependencies": {
+    "@ttrpg-agents/core": "*"
+  },
+  "files": [
+    "dist",
+    "data"
+  ]
+}

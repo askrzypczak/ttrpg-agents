@@ -2,12 +2,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  MonsterLoadError,
-  loadMonsters,
-  loadSrdMonsters,
-  type Monster,
-} from "../index.js";
+import type { Monster } from "@ttrpg-agents/core";
+import { MonsterLoadError, loadMonsters, loadSrdMonsters } from "./loader.js";
 
 function monster(key: string, name = key): Monster {
   return {

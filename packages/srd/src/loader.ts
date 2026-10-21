@@ -1,7 +1,11 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { monsterSchema, type Monster } from "./schema.js";
+import {
+  monsterSchema,
+  type Monster,
+  type MonsterIndex,
+} from "@ttrpg-agents/core";
 
 /**
  * A place to load monsters from: a JSON file holding an array of monsters, or
@@ -9,12 +13,6 @@ import { monsterSchema, type Monster } from "./schema.js";
  */
 export interface MonsterFileSource {
   path: string;
-}
-
-export interface MonsterIndex {
-  /** All monsters, in source order. */
-  monsters: Monster[];
-  byKey: Map<string, Monster>;
 }
 
 export class MonsterLoadError extends Error {
@@ -95,7 +93,7 @@ export function loadMonsters(sources: MonsterFileSource[]): MonsterIndex {
 /** Path of the committed SRD 5.2 snapshot (works from src/ and dist/). */
 export const SRD_MONSTERS_PATH = resolve(
   fileURLToPath(import.meta.url),
-  "../../../data/srd-5.2/monsters.json",
+  "../../data/srd-5.2/monsters.json",
 );
 
 export function loadSrdMonsters(): MonsterIndex {

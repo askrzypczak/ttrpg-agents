@@ -3,7 +3,7 @@ node_modules
 package-lock.json
 CLAUDE.md
 scripts/README.md
-packages/core/data/
+packages/srd/data/
 .stryker-tmp
 reports
 stryker.incremental.json

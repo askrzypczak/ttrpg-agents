@@ -8,7 +8,6 @@ import {
   MAX_GROUP_COUNT,
   addMonsters,
   createNumberedNaming,
-  loadSrdMonsters,
   type AddMonstersDeps,
   type AddMonstersErrorCode,
   type AddMonstersGroup,
@@ -16,6 +15,7 @@ import {
   type NamingStrategy,
   type Rng,
 } from "@ttrpg-agents/core";
+import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 

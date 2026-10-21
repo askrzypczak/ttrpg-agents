@@ -1,10 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import {
-  mapOpen5eCreature,
-  monsterSchema,
-  type Open5eCreature,
-} from "../index.js";
+import { monsterSchema } from "@ttrpg-agents/core";
+import { mapOpen5eCreature, type Open5eCreature } from "./map-open5e.js";
 
 function fixture(name: string): Open5eCreature {
   const url = new URL(`./fixtures/${name}.json`, import.meta.url);

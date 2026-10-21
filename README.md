@@ -18,7 +18,8 @@ An experiment, not a supported product. Expect rough edges and breaking changes.
 
 | Package                                                               | What it is                                                                                           |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| [`packages/core`](packages/core/README.md)                            | Dice engine and SRD monster library.                                                                 |
+| [`packages/core`](packages/core/README.md)                            | Dice engine and monster schema and search.                                                           |
+| [`packages/srd`](packages/srd/README.md)                              | SRD 5.2 monster data, loader and import script.                                                      |
 | [`packages/store-sqlite`](packages/store-sqlite/README.md)            | SQLite encounter store (database path, migrations).                                                  |
 | [`packages/mcp`](packages/mcp/README.md)                              | MCP server (stdio) with the encounter tools.                                                         |
 | [`packages/bridge`](packages/bridge/README.md)                        | Local bridge server (separate process) that serves the extension and pushes encounter snapshots.     |
@@ -51,4 +52,4 @@ The bridge polls the SQLite file every 250 ms and pushes a fresh snapshot when t
 
 ## Attribution
 
-Monster data is from the System Reference Document 5.2 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode); see [`ATTRIBUTION.md`](packages/core/data/srd-5.2/ATTRIBUTION.md). This project is not affiliated with or endorsed by Wizards of the Coast or Owlbear Rodeo.
+Monster data is from the System Reference Document 5.2 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode); see [`ATTRIBUTION.md`](packages/srd/data/srd-5.2/ATTRIBUTION.md). This project is not affiliated with or endorsed by Wizards of the Coast or Owlbear Rodeo.
