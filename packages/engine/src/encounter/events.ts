@@ -1,11 +1,24 @@
+import { z } from "zod";
 import type { EncounterRepository, HpChange } from "./repository.js";
-import type { MonsterInstance } from "./types.js";
+import { monsterInstanceSchema } from "./types.js";
 
-export type EncounterEvent =
-  | { type: "added"; instances: MonsterInstance[] }
-  | { type: "removed"; id: string }
-  | { type: "cleared" }
-  | { type: "hp-changed"; id: string; currentHp: number; maxHp: number };
+/** Source of truth for `EncounterEvent`; the protocol reuses it as the wire shape. */
+export const encounterEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("added"),
+    instances: z.array(monsterInstanceSchema),
+  }),
+  z.object({ type: z.literal("removed"), id: z.string() }),
+  z.object({ type: z.literal("cleared") }),
+  z.object({
+    type: z.literal("hp-changed"),
+    id: z.string(),
+    currentHp: z.number(),
+    maxHp: z.number(),
+  }),
+]);
+
+export type EncounterEvent = z.infer<typeof encounterEventSchema>;
 
 export type EncounterListener = (event: EncounterEvent) => void;
 
