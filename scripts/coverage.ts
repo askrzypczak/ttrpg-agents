@@ -24,6 +24,7 @@ import {
   formatMarkdown,
   formatPatch,
   formatTable,
+  isCompleteRun,
   makeBaseline,
   mergeCoverage,
   parseBaseline,
@@ -88,9 +89,14 @@ function vitestKind(kind: "unit" | "integration"): CoverageMapData | null {
 
 async function e2eKind(): Promise<CoverageMapData | null> {
   const dir = join(out, "e2e");
-  const rawDir = join(out, "e2e-raw");
-  const ok = run("npm", ["run", "test:e2e"], { E2E_COVERAGE: "1" });
-  if (!ok) console.error("coverage: e2e tests failed");
+  // COVERAGE_E2E_RAW_DIR: raw data already collected (the CI e2e job); do not
+  // re-run the e2e suite.
+  const given = process.env.COVERAGE_E2E_RAW_DIR;
+  const rawDir = given ? resolve(root, given) : join(out, "e2e-raw");
+  if (!given) {
+    const ok = run("npm", ["run", "test:e2e"], { E2E_COVERAGE: "1" });
+    if (!ok) console.error("coverage: e2e tests failed");
+  }
   const files = existsSync(rawDir)
     ? readdirSync(rawDir).filter((f) => f.endsWith(".json"))
     : [];
@@ -192,11 +198,19 @@ async function main(): Promise<void> {
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatMarkdown(rows));
   }
-  // Body for the CI sticky PR comment (see the coverage job in ci.yml).
+  // Body for the CI sticky PR comment (posted by the comment job in ci.yml).
   const combined = total ? summarize(total) : null;
   if (total && combined) {
     // The summary is the baseline artifact uploaded from main (see ci.yml).
-    writeFileSync(join(out, "coverage-summary.json"), makeBaseline(combined));
+    // Only a complete run may be the baseline: a partial total would skew it.
+    if (isCompleteRun(maps)) {
+      writeFileSync(join(out, "coverage-summary.json"), makeBaseline(combined));
+    } else {
+      const missing = Object.keys(maps).filter((k) => maps[k] === null);
+      console.error(
+        `coverage: not writing coverage-summary.json, missing: ${missing.join(", ")}`,
+      );
+    }
     writeFileSync(
       join(out, "total", "coverage-final.json"),
       JSON.stringify(total),

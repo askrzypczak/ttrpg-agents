@@ -7,6 +7,7 @@ import {
   formatMarkdown,
   formatPatch,
   formatTable,
+  isCompleteRun,
   makeBaseline,
   mergeCoverage,
   parseBaseline,
@@ -337,5 +338,27 @@ describe("formatHeadline", () => {
     expect(formatHeadline({ delta: "d", patch: "p" })).toBe(
       "**Line coverage:** d\n**Patch coverage:** p\n",
     );
+  });
+});
+
+describe("isCompleteRun", () => {
+  const map: CoverageMapData = {};
+  it("isCompleteRun is true when unit, integration and e2e maps are all present", () => {
+    expect(isCompleteRun({ unit: map, integration: map, e2e: map })).toBe(true);
+    expect(
+      isCompleteRun({ unit: map, integration: map, e2e: map, x: null }),
+    ).toBe(true);
+  });
+  it("isCompleteRun is false when any one kind's map is null", () => {
+    expect(isCompleteRun({ unit: null, integration: map, e2e: map })).toBe(
+      false,
+    );
+    expect(isCompleteRun({ unit: map, integration: null, e2e: map })).toBe(
+      false,
+    );
+    expect(isCompleteRun({ unit: map, integration: map, e2e: null })).toBe(
+      false,
+    );
+    expect(isCompleteRun({ unit: map, integration: map })).toBe(false);
   });
 });
