@@ -5,7 +5,12 @@
   "mutate": [
     "packages/*/src/**/*.ts",
     "!packages/*/src/**/*.test.ts",
-    "!packages/*/src/**/index.ts"
+    "!packages/*/src/**/index.ts",
+    "!packages/owlbear/src/obr-adapter.ts",
+    "!packages/owlbear/src/main.ts",
+    "!packages/bridge/src/cli.ts",
+    "!packages/mcp/src/server.ts",
+    "!packages/mcp/src/stdio.ts"
   ],
   "incremental": true,
   "reporters": ["clear-text", "html"],
