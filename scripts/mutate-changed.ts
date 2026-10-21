@@ -66,6 +66,18 @@ async function main(): Promise<void> {
   // A stale report from an earlier run must not be mistaken for this one.
   rmSync(jsonFile, { force: true });
 
+  // Stryker selects tests with `vitest related` before vitest's globalSetup
+  // runs, so dist/ must already be current or the bridge tests are not found
+  // and their files report NoCoverage (#158).
+  const build = spawnSync("npm", ["run", "build:ts", "--silent"], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  if (build.status !== 0) {
+    failed(`npm run build:ts failed (exit code ${build.status})`);
+    return;
+  }
+
   const child = spawn(
     "npx",
     [
