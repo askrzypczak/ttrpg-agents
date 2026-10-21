@@ -1,12 +1,15 @@
-// Tiny static server for the e2e harness (dist-e2e) on 127.0.0.1:5200, a
-// different origin than the extension (localhost:5199), like owlbear.rodeo.
+// Tiny static server for the e2e harness (dist-e2e) on 127.0.0.1, on the port
+// the run picked (E2E_HARNESS_PORT). A different origin than the extension (the
+// bridge's localhost port), like owlbear.rodeo.
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+// Run directly by node (type stripping), so the import needs the .ts suffix.
+import { harnessPort } from "./env.ts";
 
 const root = fileURLToPath(new URL("../dist-e2e", import.meta.url));
-const port = 5200;
+const port = harnessPort();
 const types: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",

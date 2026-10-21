@@ -8,7 +8,7 @@ import {
   type CoveragePage,
 } from "./coverage.ts";
 
-const ORIGIN = "http://localhost:5199/";
+const ORIGIN = "http://localhost:4001/";
 let dir: string;
 
 beforeEach(() => {
@@ -51,7 +51,7 @@ describe("withCoverage", () => {
   it("writes only entries from the extension origin when enabled", async () => {
     const { page, coverage } = fakePage([
       { url: `${ORIGIN}assets/index.js` },
-      { url: "http://127.0.0.1:5200/harness.js" },
+      { url: "http://127.0.0.1:4002/harness.js" },
     ]);
     const file = await withCoverage(
       page,
@@ -67,7 +67,7 @@ describe("withCoverage", () => {
   });
 
   it("writes nothing when no script from the origin loaded", async () => {
-    const { page } = fakePage([{ url: "http://127.0.0.1:5200/x.js" }]);
+    const { page } = fakePage([{ url: "http://127.0.0.1:4002/x.js" }]);
     const file = await withCoverage(
       page,
       { origin: ORIGIN, outDir: dir, env: { E2E_COVERAGE: "1" } },
