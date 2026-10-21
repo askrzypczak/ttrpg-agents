@@ -152,7 +152,11 @@ export class ReconnectingSocket {
         const { code, fatal } = result.message.payload;
         this.opts.onMessage?.(result.message);
         if (!fatal) return;
-        if (code === "bad-token" || code === "unsupported-version") {
+        if (
+          code === "bad-token" ||
+          code === "unsupported-version" ||
+          code === "superseded"
+        ) {
           this.reject(socket, code);
         } else {
           this.fail(socket);

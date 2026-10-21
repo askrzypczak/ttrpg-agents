@@ -689,4 +689,19 @@ describe("bridge server broadcast and snapshot", () => {
     await settle();
     expect(() => s2.broadcast(cleared)).not.toThrow();
   });
+
+  it("a repeated hello on the active socket does not supersede it", async () => {
+    const { ws, msgs, closed } = await authed2();
+    msgs.length = 0;
+    ws.send(hello2());
+    await settle();
+    expect(msgs.map((m) => m.type)).toContain("hello-ack");
+    expect(msgs.map((m) => m.type)).not.toContain("error");
+    expect(closed.code).toBeUndefined();
+    msgs.length = 0;
+    s2.broadcast(cleared);
+    await settle();
+    expect(msgs).toEqual([cleared]);
+    ws.close();
+  });
 });

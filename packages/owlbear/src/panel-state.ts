@@ -88,6 +88,13 @@ function connectionView(input: PanelInput): PanelView {
     case "open":
       return { kind: "connected", message: "Connected to the local bridge." };
     case "rejected":
+      if (input.rejection === "superseded") {
+        return {
+          kind: "superseded",
+          message: "Connected in another tab.",
+          action: "use-this-tab",
+        };
+      }
       return input.rejection === "unsupported-version"
         ? {
             kind: "rejected-version",
