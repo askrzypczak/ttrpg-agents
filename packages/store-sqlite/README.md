@@ -1,6 +1,6 @@
 # @ttrpg-agents/store-sqlite
 
-SQLite encounter store: `SqliteEncounterRepository` implements the `EncounterRepository` port from `@ttrpg-agents/core`, and `openDatabase` opens and migrates the database. Uses Node's built-in `node:sqlite`.
+SQLite encounter store: `SqliteEncounterRepository` implements the `EncounterRepository` port from `@ttrpg-agents/engine`, and `openDatabase` opens and migrates the database. Uses Node's built-in `node:sqlite`.
 
 ## Database path
 

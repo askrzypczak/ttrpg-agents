@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { monsterSchema } from "@ttrpg-agents/core";
+import { monsterSchema } from "@ttrpg-agents/engine";
 import { mapOpen5eCreature, type Open5eCreature } from "./map-open5e.js";
 
 function fixture(name: string): Open5eCreature {

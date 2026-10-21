@@ -2,7 +2,7 @@ import type {
   EncounterRepository,
   MonsterIndex,
   Rng,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/engine";
 
 /** Everything a tool handler needs; injected so tests stay deterministic. */
 export interface ToolContext {
@@ -10,4 +10,5 @@ export interface ToolContext {
   monsters: MonsterIndex;
   rng: Rng;
   now: () => Date;
+  newGroupId: () => string;
 }

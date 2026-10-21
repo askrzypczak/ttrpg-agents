@@ -7,7 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import type { MonsterInstance } from "@ttrpg-agents/core";
+import type { MonsterInstance } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
   openDatabase,

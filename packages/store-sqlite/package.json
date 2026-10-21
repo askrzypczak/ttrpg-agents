@@ -11,7 +11,7 @@
     }
   },
   "dependencies": {
-    "@ttrpg-agents/core": "*"
+    "@ttrpg-agents/engine": "*"
   },
   "devDependencies": {
     "@ttrpg-agents/srd": "*"

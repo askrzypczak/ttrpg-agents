@@ -14,7 +14,7 @@ import {
   type EncounterRepository,
   type NamingStrategy,
   type Rng,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
@@ -246,13 +246,6 @@ describe("addMonsters", () => {
     expect(rolls[0]?.label).toBe("Weakling 1 HP");
     expect(rolls[0]?.total).toBe(-4);
   });
-
-  it("falls back to a random UUID group id by default", () => {
-    const { instances } = addMonsters({ ...deps(), newGroupId: undefined }, [
-      { monster: SHADOW, count: 1 },
-    ]);
-    expect(instances[0]?.groupId).toMatch(/^[0-9a-f-]{36}$/);
-  });
 });
 
 describe("addMonsters validation", () => {
@@ -423,6 +416,7 @@ function depsFor(
     monsters,
     rng: zeroRng,
     now: () => new Date("2026-01-01T00:00:00.000Z"),
+    newGroupId: () => "group-x",
     ...(naming ? { naming } : {}),
   };
 }

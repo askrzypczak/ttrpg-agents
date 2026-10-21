@@ -4,7 +4,7 @@ import {
   observeRepository,
   type EncounterRepository,
   type MonsterInstance,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
   openDatabase,

@@ -5,7 +5,7 @@ import {
   monsterSchema,
   type Monster,
   type MonsterIndex,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/engine";
 
 /**
  * A place to load monsters from: a JSON file holding an array of monsters, or

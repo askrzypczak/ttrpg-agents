@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@owlbear-rodeo/sdk": "^3.1.0",
-    "@ttrpg-agents/core": "*",
+    "@ttrpg-agents/engine": "*",
     "@ttrpg-agents/protocol": "*"
   },
   "devDependencies": {
