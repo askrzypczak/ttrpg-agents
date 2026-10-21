@@ -14,7 +14,7 @@
     "build:ts": "tsc -b tsconfig.build.json",
     "build": "npm run build:ts && npm run build -w @ttrpg-agents/owlbear",
     "typecheck": "npm run build:ts && tsc --noEmit && tsc -p packages/owlbear/tsconfig.json --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
