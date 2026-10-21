@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DiceParseError, average, parseDice } from "../dice/index.js";
 
 export const MONSTER_SOURCES = ["srd-5.2", "private"] as const;
 
@@ -28,10 +29,30 @@ export const monsterSchema = z.object({
   alignment: z.string(),
   ac: z.number().int().min(0),
   armorDetail: z.string(),
-  hp: z.object({
-    average: z.number().int().min(0),
-    dice: z.string(),
-  }),
+  hp: z
+    .object({
+      average: z.number().int().min(0),
+      dice: z.string(),
+    })
+    .superRefine((hp, ctx) => {
+      let parsed;
+      try {
+        parsed = parseDice(hp.dice);
+      } catch (e) {
+        // Stryker disable next-line ConditionalExpression: parseDice only throws DiceParseError; the rethrow is defensive
+        if (!(e instanceof DiceParseError)) throw e;
+        ctx.addIssue({ code: "custom", path: ["dice"], message: e.message });
+        return;
+      }
+      const expected = average(parsed);
+      if (hp.average !== expected) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["average"],
+          message: `average ${hp.average} does not match dice "${hp.dice}" (average ${expected})`,
+        });
+      }
+    }),
   speeds: z.object({
     walk: feet.optional(),
     fly: feet.optional(),

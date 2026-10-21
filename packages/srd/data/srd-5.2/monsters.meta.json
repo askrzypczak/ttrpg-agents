@@ -1,0 +1,6 @@
+{
+  "source": "open5e-v2",
+  "url": "https://api.open5e.com/v2/creatures/?document__key=srd-2024&limit=100",
+  "fetchedAt": "2026-10-17",
+  "count": 331
+}

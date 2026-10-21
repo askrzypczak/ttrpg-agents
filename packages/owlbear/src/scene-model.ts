@@ -141,6 +141,24 @@ export class SceneModel {
     if (changed) this.emit({ kind: "items" });
   }
 
+  /**
+   * Key-level item metadata write: other keys are kept, `undefined` clears
+   * the key, unknown ids are ignored. One items change for the whole call.
+   */
+  setItemMetadata(
+    updates: { id: string; key: string; value: unknown }[],
+  ): void {
+    let changed = false;
+    for (const { id, key, value } of updates) {
+      const item = this.items.get(id);
+      if (!item) continue;
+      if (value === undefined) delete item.metadata[key];
+      else item.metadata[key] = structuredClone(value);
+      changed = true;
+    }
+    if (changed) this.emit({ kind: "items" });
+  }
+
   deleteItems(ids: string[]): void {
     let changed = false;
     for (const id of ids) if (this.items.delete(id)) changed = true;

@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION, type CommandResult } from "@ttrpg-agents/protocol";
 import { commandReply, handleCommand } from "./commands.js";
-import {
-  createEncounterSync,
-  instanceToItem,
-  type EncounterInstance,
-} from "./encounter-sync.js";
+import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import { SceneModel, type SceneItem } from "./scene-model.js";
+import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
 
 const inst = (n: number): EncounterInstance => ({
   id: `i${n}`,
@@ -30,6 +27,15 @@ const foreign: SceneItem = {
   metadata: { "other.ext/thing": { instanceId: "i9" } },
 };
 
+const unplaced: SceneItem = {
+  id: "ttrpg-instance-i3",
+  type: "SHAPE",
+  name: "Shadow 3",
+  visible: false,
+  position: { x: 0, y: 0 },
+  metadata: { [INSTANCE_METADATA_KEY]: { instanceId: "i3" } },
+};
+
 describe("handleCommand scene-status", () => {
   it("`scene-status` on a ready scene counts only our tokens and reports `sceneReady: true` (AC4)", async () => {
     const { obr, scene } = createFakeObr();
@@ -40,7 +46,7 @@ describe("handleCommand scene-status", () => {
       payload: { instances: [inst(1), inst(2)] },
     });
     // A foreign item, and one of our tokens the sync did not place.
-    scene.addItems([foreign, instanceToItem(inst(3), { x: 0, y: 0 })]);
+    scene.addItems([foreign, unplaced]);
 
     expect(await handleCommand(obr, sync, { name: "scene-status" })).toEqual({
       name: "scene-status",

@@ -57,6 +57,61 @@ describe("createFakeObr", () => {
     expect(await obr.isSceneReady()).toBe(false);
   });
 
+  describe("setItemMetadata", () => {
+    const withMetadata = () => {
+      const fake = createFakeObr();
+      fake.scene.addItems([
+        {
+          id: "a",
+          type: "SHAPE",
+          name: "A",
+          visible: false,
+          position: { x: 0, y: 0 },
+          metadata: { "other.ext/x": { keep: 1 }, "our/k": 1 },
+        },
+      ]);
+      return fake;
+    };
+
+    it("keeps other keys", async () => {
+      const { obr, scene } = withMetadata();
+      await obr.setItemMetadata([{ id: "a", key: "our/k", value: { v: 2 } }]);
+      expect(scene.getItems()[0]!.metadata).toEqual({
+        "other.ext/x": { keep: 1 },
+        "our/k": { v: 2 },
+      });
+    });
+
+    it("`undefined` clears the key", async () => {
+      const { obr, scene } = withMetadata();
+      await obr.setItemMetadata([{ id: "a", key: "our/k", value: undefined }]);
+      const metadata = scene.getItems()[0]!.metadata;
+      expect(Object.keys(metadata)).toEqual(["other.ext/x"]);
+    });
+
+    it("ignores unknown ids", async () => {
+      const { obr, scene } = withMetadata();
+      const before = scene.getItems();
+      await obr.setItemMetadata([{ id: "zzz", key: "our/k", value: 3 }]);
+      expect(scene.getItems()).toEqual(before);
+    });
+
+    it("emits one items change", async () => {
+      const { obr, scene } = withMetadata();
+      const seen: string[] = [];
+      scene.onChange((c) => seen.push(c.kind));
+      await obr.setItemMetadata([
+        { id: "a", key: "our/k", value: 5 },
+        { id: "a", key: "our/j", value: 6 },
+      ]);
+      expect(seen).toEqual(["items"]);
+      expect(scene.getItems()[0]!.metadata).toMatchObject({
+        "our/k": 5,
+        "our/j": 6,
+      });
+    });
+  });
+
   it("round-trips items and metadata through the scene model", async () => {
     const { obr, scene } = createFakeObr();
     await obr.addItems([
