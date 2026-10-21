@@ -21,6 +21,18 @@ export interface Row {
   summary: Summary | null;
 }
 
+/**
+ * True when unit, integration and e2e were all collected. Only a complete run
+ * may become the main baseline; extra keys are ignored.
+ */
+export function isCompleteRun(
+  maps: Record<string, CoverageMapData | null>,
+): boolean {
+  return ["unit", "integration", "e2e"].every(
+    (k) => (maps[k] ?? null) !== null,
+  );
+}
+
 export function summarize(data: CoverageMapData): Summary {
   const s = libCoverage.createCoverageMap(data).getCoverageSummary();
   const pick = (m: Metric): Metric => ({

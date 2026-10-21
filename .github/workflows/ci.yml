@@ -15,6 +15,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -26,6 +27,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -34,15 +36,28 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # E2E_COVERAGE=1 collects raw coverage for the coverage job, so the
+      # suite runs once in CI.
       - run: npm run test:e2e
+        env:
+          E2E_COVERAGE: "1"
+      # Informational data: a failed upload must not fail the required e2e check.
+      - uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: e2e-raw-coverage
+          path: reports/coverage/e2e-raw
+          if-no-files-found: warn
 
   # Informational only: not required by (or blocking) check/e2e. On PRs the
-  # table is posted as one sticky comment, edited in place on each push.
+  # table is posted as one sticky comment by the comment job, edited in place
+  # on each push.
   coverage:
+    needs: e2e
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: write
       actions: read
     steps:
       # Full history so `git diff origin/<base>...HEAD` works for patch coverage.
@@ -54,9 +69,14 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      # mcp tests resolve core through its built dist/.
-      - run: npm run build
+      # Raw e2e coverage from the e2e job. If it is missing the comment is
+      # partial, and the baseline guard in coverage.ts stops that run from
+      # becoming the main baseline.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: e2e-raw-coverage
+          path: reports/e2e-raw
       # Baseline = coverage-summary artifact of the latest green main run.
       # Missing or expired is fine: the comment then says "no baseline".
       - name: Download baseline coverage from main
@@ -67,16 +87,18 @@ jobs:
         run: |
           id=$(gh run list --branch main --workflow ci.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -n "$id" ]; then gh run download "$id" -n coverage-summary -D reports/baseline; fi
+      # vitest's globalSetup builds what the tests need.
       - run: npm run coverage
         env:
+          COVERAGE_E2E_RAW_DIR: reports/e2e-raw
           COVERAGE_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
           COVERAGE_BASELINE: ${{ github.event_name == 'pull_request' && 'reports/baseline/coverage-summary.json' || '' }}
-      - name: Comment coverage on PR
+      # Handed to the comment job, which alone has pull-requests: write.
+      - uses: actions/upload-artifact@v7
         if: always() && github.event_name == 'pull_request' && hashFiles('reports/coverage/summary.md') != ''
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr comment ${{ github.event.pull_request.number }} --edit-last --create-if-none --body-file reports/coverage/summary.md
+        with:
+          name: coverage-comment
+          path: reports/coverage/summary.md
       # Small separate artifact so PR runs can download the baseline cheaply.
       - uses: actions/upload-artifact@v7
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && hashFiles('reports/coverage/coverage-summary.json') != ''
@@ -88,3 +110,28 @@ jobs:
         with:
           name: coverage
           path: reports/coverage/
+
+  # Posts the coverage table. Separate so no job that runs repo code holds
+  # pull-requests: write. No checkout.
+  comment:
+    needs: coverage
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: coverage-comment
+          path: comment
+      - name: Comment coverage on PR
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f comment/summary.md ]; then
+            gh pr comment ${{ github.event.pull_request.number }} --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file comment/summary.md
+          fi
