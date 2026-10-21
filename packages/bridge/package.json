@@ -8,7 +8,7 @@
     "start": "node dist/cli.js"
   },
   "dependencies": {
-    "@ttrpg-agents/core": "*",
+    "@ttrpg-agents/engine": "*",
     "@ttrpg-agents/protocol": "*",
     "@ttrpg-agents/store-sqlite": "*",
     "ws": "^8.18.0"

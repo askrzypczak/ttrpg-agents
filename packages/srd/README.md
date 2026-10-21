@@ -1,6 +1,6 @@
 # @ttrpg-agents/srd
 
-SRD 5.2 monster data adapter: the committed snapshot, its loader and the import script. Implements the `MonsterIndex` port from `@ttrpg-agents/core`.
+SRD 5.2 monster data adapter: the committed snapshot, its loader and the import script. Implements the `MonsterIndex` port from `@ttrpg-agents/engine`.
 
 ## Monsters
 

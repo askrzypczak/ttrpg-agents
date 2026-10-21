@@ -3,7 +3,7 @@ import type {
   MonsterInstance,
   NewMonsterInstance,
   Rng,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
@@ -29,9 +29,11 @@ function cycleRng(...values: number[]): Rng {
 
 let ctx: ToolContext;
 let tick: number;
+let groupN: number;
 
 beforeEach(() => {
   tick = 1000;
+  groupN = 0;
   ctx = {
     repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
       now: () => tick++,
@@ -39,6 +41,7 @@ beforeEach(() => {
     monsters,
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
+    newGroupId: () => `group-${++groupN}`,
   };
 });
 
@@ -180,6 +183,22 @@ describe("add_monsters", () => {
     expect(text(r)).toContain("| Shadow 1 |");
     expect(text(r)).toContain("Shadow 1 HP");
     expect(text(r)).toContain("Shadow initiative (group)");
+  });
+
+  it("add_monsters takes group ids from the context id source", () => {
+    const r = call("add_monsters", {
+      groups: [
+        { monster: SHADOW, count: 2 },
+        { monster: "srd-2024_goblin-warrior", count: 1, hp: "average" },
+      ],
+    });
+    expect(r.isError).toBeUndefined();
+    const added = r.structuredContent?.["instances"] as { groupId: string }[];
+    expect(added.map((i) => i.groupId)).toEqual([
+      "group-1",
+      "group-1",
+      "group-2",
+    ]);
   });
 
   it("lists each roll under Rolls: with its label, expression and total", () => {

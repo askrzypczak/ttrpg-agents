@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import process from "node:process";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { Rng } from "@ttrpg-agents/core";
+import type { Rng } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
@@ -18,6 +18,7 @@ async function main(): Promise<void> {
     monsters: loadSrdMonsters(),
     rng,
     now: () => new Date(),
+    newGroupId: randomUUID,
   });
   await server.connect(new StdioServerTransport());
 }

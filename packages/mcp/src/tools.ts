@@ -7,7 +7,7 @@ import {
   getMonsterByKey,
   searchMonsters,
   type MonsterInstance,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolContext } from "./context.js";
 import { formatStatblock } from "./statblock.js";
@@ -153,7 +153,13 @@ const addMonstersTool = defineTool({
   },
   run(ctx, { groups, initiative }) {
     const result = addMonsters(
-      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+      {
+        repo: ctx.repo,
+        monsters: ctx.monsters,
+        rng: ctx.rng,
+        now: ctx.now,
+        newGroupId: ctx.newGroupId,
+      },
       groups,
       initiative === undefined ? {} : { initiative },
     );

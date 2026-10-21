@@ -4,7 +4,7 @@ import {
   createEncounterEmitter,
   observeRepository,
   type EncounterEvent,
-} from "@ttrpg-agents/core";
+} from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 

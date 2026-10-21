@@ -1,4 +1,4 @@
-import type { Monster, MonsterEntry } from "@ttrpg-agents/core";
+import type { Monster, MonsterEntry } from "@ttrpg-agents/engine";
 
 function signed(n: number): string {
   return n >= 0 ? `+${String(n)}` : String(n);

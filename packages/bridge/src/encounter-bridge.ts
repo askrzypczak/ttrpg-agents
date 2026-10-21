@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { EncounterRepository } from "@ttrpg-agents/core";
+import type { EncounterRepository } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 
 /** Full current instance list, for a client that just connected. */

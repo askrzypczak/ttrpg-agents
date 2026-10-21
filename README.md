@@ -18,7 +18,7 @@ An experiment, not a supported product. Expect rough edges and breaking changes.
 
 | Package                                                               | What it is                                                                                           |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| [`packages/core`](packages/core/README.md)                            | Dice engine and monster schema and search.                                                           |
+| [`packages/engine`](packages/engine/README.md)                        | Domain engine: dice, monster schema and search, and encounter events.                                |
 | [`packages/srd`](packages/srd/README.md)                              | SRD 5.2 monster data, loader and import script.                                                      |
 | [`packages/store-sqlite`](packages/store-sqlite/README.md)            | SQLite encounter store (database path, migrations).                                                  |
 | [`packages/mcp`](packages/mcp/README.md)                              | MCP server (stdio) with the encounter tools.                                                         |
