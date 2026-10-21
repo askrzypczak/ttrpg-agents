@@ -15,12 +15,12 @@ import { writeE2eTokenFile } from "./token.js";
 // fixtures and (inheriting) workers all read.
 await allocateRunEnv();
 
-const tokenFile = writeE2eTokenFile();
+const tokenFile = writeE2eTokenFile(e2eDir());
 // Playwright re-evaluates this config in each worker; only the main process
 // (no TEST_WORKER_INDEX) may recreate the DB the running bridge is using, and
 // it alone removes the run's temp dir when the run ends.
 if (process.env.TEST_WORKER_INDEX === undefined) {
-  seedE2eDatabase();
+  seedE2eDatabase(e2eDir());
   process.on("exit", () => rmSync(e2eDir(), { recursive: true, force: true }));
 }
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
@@ -64,7 +64,7 @@ export default defineConfig({
         BRIDGE_PORT: String(bridgePort()),
         BRIDGE_STATIC_DIR: `${repo}packages/owlbear/dist`,
         BRIDGE_TOKEN_FILE: tokenFile,
-        TTRPG_AGENTS_DB: e2eDbPath(),
+        TTRPG_AGENTS_DB: e2eDbPath(e2eDir()),
       },
       url: `${bridgeOrigin()}/manifest.json`,
       reuseExistingServer: false,
