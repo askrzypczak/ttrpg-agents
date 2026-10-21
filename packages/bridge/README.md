@@ -39,7 +39,8 @@ to the connected Owlbear tab and returns its `command-result`. Errors: 401, 400,
 [`docs/architecture.md`](../../docs/architecture.md).
 
 `@ttrpg-agents/bridge/client` (`createBridgeClient`) is the Node-only client the
-MCP server uses; it reads the agent token file on every call.
+MCP server's `stdio.ts` wires in; `createBridgeTable` implements the engine's
+`TablePort` with it; it reads the agent token file on every call.
 
 The bridge polls SQLite's `data_version` every 250 ms and pushes a snapshot
 when another process commits, so tokens appear without reloading the panel.

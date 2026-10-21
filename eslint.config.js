@@ -15,9 +15,9 @@ const PROTOCOL_MESSAGE =
 const ADAPTER_MESSAGE =
   "Adapters depend on @ttrpg-agents/engine only (and, in tests, on each other and on srd).";
 const MCP_MESSAGE =
-  "@ttrpg-agents/mcp may import only @ttrpg-agents/bridge/client; the bridge is a separate process.";
+  "@ttrpg-agents/mcp must not import the bridge (a separate process); only mcp/src/stdio.ts, the composition root, may import @ttrpg-agents/bridge/client.";
 const CLIENT_MESSAGE =
-  "bridge/src/client.ts is imported by mcp: it may use only Node builtins, @ttrpg-agents/protocol and ./token-file.js (no ws, no server code).";
+  "bridge/src/client.ts is imported by mcp: it may use only Node builtins, @ttrpg-agents/engine, @ttrpg-agents/protocol and ./token-file.js (no ws, no server code).";
 const BRIDGE_MESSAGE =
   "@ttrpg-agents/bridge must not import mcp; the two are separate entry points.";
 
@@ -134,15 +134,32 @@ export default tseslint.config(
   },
   {
     // The MCP server and the bridge are separate entry points. The bridge
-    // imports nothing from mcp; mcp reaches the bridge only through the
-    // Node-only `@ttrpg-agents/bridge/client` subpath.
+    // imports nothing from mcp; mcp imports nothing from the bridge except in
+    // its composition root (stdio.ts, next block).
     files: ["packages/mcp/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          // The bare package is a `paths` entry: a gitignore-style negation
-          // cannot re-allow a child of a pattern that also matches its parent.
+          patterns: [
+            {
+              group: ["@ttrpg-agents/bridge", "@ttrpg-agents/bridge/*"],
+              message: MCP_MESSAGE,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The composition root wires the bridge client in as the TablePort. Later
+    // configs replace earlier rule options, so restate the ban, minus
+    // `@ttrpg-agents/bridge/client`.
+    files: ["packages/mcp/src/stdio.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
           paths: [{ name: "@ttrpg-agents/bridge", message: MCP_MESSAGE }],
           patterns: [
             {

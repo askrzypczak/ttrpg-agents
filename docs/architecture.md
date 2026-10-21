@@ -32,15 +32,15 @@ Both processes use one SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DA
 
 ## Commands to the table
 
-The bridge otherwise only pushes. To let the agent ask the table something (first use: `table_status`), the MCP server calls `POST /agent/command` on the bridge with `Authorization: Bearer <agent token>` and a JSON command (`{"name":"scene-status"}`). The route has no CORS headers, keeps the Host check, and caps the body at 1 MiB.
+The bridge otherwise only pushes. To let the agent ask the table something (first use: `table_status`), the MCP tool calls the engine's `getTableStatus`, which asks the `TablePort`; the bridge client (`@ttrpg-agents/bridge/client`, wired in by `mcp/src/stdio.ts`) implements the port and calls `POST /agent/command` on the bridge with `Authorization: Bearer <agent token>` and a JSON command (`{"name":"scene-status"}`). The route has no CORS headers, keeps the Host check, and caps the body at 1 MiB.
 
 1. The bridge sends the command as a `command` message with a fresh id to the one active extension client.
 2. The extension answers with a `command-result` carrying the same id (or a non-fatal `error` with that id if the handler threw). A reply with another or no id does not complete the call; the bridge answers it with a non-fatal `error`.
 3. The bridge returns the result as the HTTP body: `{ ok: true, result }` or `{ ok: false, error: { code, message } }`.
 
-Errors: 401 `unauthorized`, 400 `bad-request`, 503 `not-connected` (no GM tab), 504 `timeout` (no reply within 5 s), 502 `command-failed`. The MCP side (`@ttrpg-agents/bridge/client`) adds `bridge-unreachable` when the bridge is not running or the agent token file is missing. Only one GM tab is connected at a time, so there is one recipient.
+Errors: 401 `unauthorized`, 400 `bad-request`, 503 `not-connected` (no GM tab), 504 `timeout` (no reply within 5 s), 502 `command-failed`. The bridge client adds `bridge-unreachable` when the bridge is not running or the agent token file is missing; the adapter (`createBridgeTable`) turns any `{ ok: false }` into a `TableUnavailableError`. Only one GM tab is connected at a time, so there is one recipient.
 
-`scene-status` returns whether the scene is ready, how many of our tokens are on it, and how many instances the extension has applied. `table_status` compares those with the encounter in the database and says whether Owlbear is in sync.
+`scene-status` returns whether the scene is ready, how many of our tokens are on it, and how many instances the extension has applied. `getTableStatus` (engine) compares those with the encounter in the database to give the in-sync verdict; `table_status` only formats it.
 
 ## What reaches the table
 

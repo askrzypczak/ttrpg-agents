@@ -12,11 +12,18 @@ export interface TableStatus extends TableSceneStatus {
  * `inSync` = scene ready and token, applied and encounter counts all equal.
  * The port's errors (`TableUnavailableError`) propagate.
  */
-export function getTableStatus(
+export async function getTableStatus(
   repo: Pick<EncounterRepository, "listInstances">,
   table: TablePort,
 ): Promise<TableStatus> {
-  void repo;
-  void table;
-  throw new Error("not implemented");
+  const scene = await table.sceneStatus();
+  const encounterCount = repo.listInstances().length;
+  return {
+    ...scene,
+    encounterCount,
+    inSync:
+      scene.sceneReady &&
+      scene.tokenCount === scene.appliedInstanceCount &&
+      scene.tokenCount === encounterCount,
+  };
 }

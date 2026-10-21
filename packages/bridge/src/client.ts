@@ -1,9 +1,10 @@
 // Node-only client for the bridge's `POST /agent/command`, the one bridge
-// module `@ttrpg-agents/mcp` may import (`@ttrpg-agents/bridge/client`). It
-// imports only Node builtins, `@ttrpg-agents/protocol` and `./token-file.js`.
+// module `@ttrpg-agents/mcp` may import (`@ttrpg-agents/bridge/client`, from
+// its composition root only). It imports only Node builtins,
+// `@ttrpg-agents/engine`, `@ttrpg-agents/protocol` and `./token-file.js`.
 import { readFile } from "node:fs/promises";
 import process from "node:process";
-import type { TablePort } from "@ttrpg-agents/engine";
+import { TableUnavailableError, type TablePort } from "@ttrpg-agents/engine";
 import {
   agentCommandResponseSchema,
   type AgentCommandResponse,
@@ -88,12 +89,16 @@ export function createBridgeClient(options?: {
  * any `{ ok: false }` becomes a `TableUnavailableError` with the bridge's
  * message.
  */
-export function createBridgeTable(client?: BridgeClient): TablePort {
-  void client;
-  // Stub: throws on use, not on construction, so stdio.ts can still start.
+export function createBridgeTable(
+  client: BridgeClient = createBridgeClient(),
+): TablePort {
   return {
-    sceneStatus() {
-      throw new Error("not implemented");
+    async sceneStatus() {
+      const res = await client.command({ name: "scene-status" });
+      if (!res.ok) throw new TableUnavailableError(res.error.message);
+      const { sceneReady, tokenCount, appliedInstanceCount } =
+        res.result.result;
+      return { sceneReady, tokenCount, appliedInstanceCount };
     },
   };
 }

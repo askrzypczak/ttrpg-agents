@@ -34,7 +34,8 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `table_status`    | Ask the Owlbear tab for its scene status; reports in sync or not |
 
 `table_status` needs the bridge running (`npm run bridge`) and a GM tab open: it
-calls the bridge through `@ttrpg-agents/bridge/client`, and a stopped bridge, no
+asks the table through the engine's `TablePort` (wired to the bridge client in
+`src/stdio.ts`), and a stopped bridge, no
 tab or a slow tab come back as `isError` results.
 
 Domain errors (unknown monster, ambiguous target, bad amount) come back as
