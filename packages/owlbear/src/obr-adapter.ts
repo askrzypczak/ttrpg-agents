@@ -104,7 +104,22 @@ export function createObrAdapter(): ObrAdapter {
           }
         },
       ),
-    setItemMetadata: () => Promise.reject(new Error("not implemented")),
+    setItemMetadata: (updates) => {
+      const byId = new Map<string, { key: string; value: unknown }[]>();
+      for (const { id, key, value } of updates)
+        byId.set(id, [...(byId.get(id) ?? []), { key, value }]);
+      if (byId.size === 0) return Promise.resolve();
+      return OBR.scene.items.updateItems(
+        (item) => byId.has(item.id),
+        (drafts) => {
+          for (const draft of drafts)
+            for (const { key, value } of byId.get(draft.id)!) {
+              if (value === undefined) delete draft.metadata[key];
+              else draft.metadata[key] = value as Metadata[string];
+            }
+        },
+      );
+    },
     deleteItems: (ids) => OBR.scene.items.deleteItems(ids),
     getSceneMetadata: () => OBR.scene.getMetadata(),
     setSceneMetadata: (update) => OBR.scene.setMetadata(update),

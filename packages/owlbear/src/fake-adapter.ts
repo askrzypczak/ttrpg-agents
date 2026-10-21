@@ -27,7 +27,8 @@ export function createFakeObr(
     addItems: (items) => whenReady(() => scene.addItems(items)),
     getItems: (filter) => whenReady(() => scene.getItems(filter)),
     updateItems: (ids, patch) => whenReady(() => scene.updateItems(ids, patch)),
-    setItemMetadata: () => Promise.reject(new Error("not implemented")),
+    setItemMetadata: (updates) =>
+      whenReady(() => scene.setItemMetadata(updates)),
     deleteItems: (ids) => whenReady(() => scene.deleteItems(ids)),
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),

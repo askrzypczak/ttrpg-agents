@@ -146,10 +146,17 @@ export class SceneModel {
    * the key, unknown ids are ignored. One items change for the whole call.
    */
   setItemMetadata(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     updates: { id: string; key: string; value: unknown }[],
   ): void {
-    throw new Error("not implemented");
+    let changed = false;
+    for (const { id, key, value } of updates) {
+      const item = this.items.get(id);
+      if (!item) continue;
+      if (value === undefined) delete item.metadata[key];
+      else item.metadata[key] = structuredClone(value);
+      changed = true;
+    }
+    if (changed) this.emit({ kind: "items" });
   }
 
   deleteItems(ids: string[]): void {
