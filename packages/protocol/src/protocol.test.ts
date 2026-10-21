@@ -1,10 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
+  monsterInstanceSchema,
+  type MonsterInstance,
+} from "@ttrpg-agents/engine";
+import {
   PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
 } from "./protocol.js";
+
+// One value per schema key, the first of these that its field accepts. A new
+// field type needs a new candidate here.
+function sampleInstance(): MonsterInstance {
+  const candidates: unknown[] = ["s", 1, null];
+  const instance: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(monsterInstanceSchema.shape)) {
+    const value = candidates.find((c) => field.safeParse(c).success);
+    if (value === undefined) {
+      throw new Error(`no sample value for ${key}; extend the generator`);
+    }
+    instance[key] = value;
+  }
+  return instance as MonsterInstance;
+}
 
 const instance = {
   id: "i1",
@@ -56,6 +75,26 @@ describe("protocol", () => {
   it.each(samples)("round-trips $type", (message) => {
     const decoded = decodeMessage(encodeMessage(message));
     expect(decoded).toEqual({ ok: true, message });
+  });
+
+  it("an encounter-snapshot round-trips every key of the engine's instance schema", () => {
+    const sample = sampleInstance();
+    const decoded = decodeMessage(
+      encodeMessage({
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances: [sample] },
+      }),
+    );
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok || decoded.message.type !== "encounter-snapshot") {
+      throw new Error("expected a decoded encounter-snapshot");
+    }
+    const [decodedInstance] = decoded.message.payload.instances;
+    expect(decodedInstance).toEqual(sample);
+    expect(Object.keys(decodedInstance ?? {}).sort()).toEqual(
+      Object.keys(monsterInstanceSchema.shape).sort(),
+    );
   });
 
   it("rejects malformed JSON", () => {

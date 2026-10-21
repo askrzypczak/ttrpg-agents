@@ -1,3 +1,7 @@
+import {
+  encounterEventSchema,
+  monsterInstanceSchema,
+} from "@ttrpg-agents/engine";
 import { z } from "zod";
 
 export const PROTOCOL_VERSION = 1;
@@ -17,31 +21,10 @@ const errorPayload = z.object({
   fatal: z.boolean(),
 });
 
-// Wire shape of a monster instance; structurally the core `MonsterInstance`.
-const instancePayload = z.object({
-  id: z.string(),
-  encounterId: z.string(),
-  monsterKey: z.string(),
-  displayName: z.string(),
-  maxHp: z.number(),
-  currentHp: z.number(),
-  initiative: z.number().nullable(),
-  groupId: z.string().nullable(),
-  createdAt: z.number(),
-});
-const encounterEventPayload = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("added"), instances: z.array(instancePayload) }),
-  z.object({ type: z.literal("removed"), id: z.string() }),
-  z.object({ type: z.literal("cleared") }),
-  z.object({
-    type: z.literal("hp-changed"),
-    id: z.string(),
-    currentHp: z.number(),
-    maxHp: z.number(),
-  }),
-]);
+// Monster instance and encounter event payloads are the engine's schemas, so
+// the wire shape cannot drift from the domain types.
 const encounterSnapshotPayload = z.object({
-  instances: z.array(instancePayload),
+  instances: z.array(monsterInstanceSchema),
 });
 
 function envelope<T extends string, P extends z.ZodType>(type: T, payload: P) {
@@ -59,7 +42,7 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("ping", emptyPayload),
   envelope("pong", emptyPayload),
   envelope("error", errorPayload),
-  envelope("encounter-event", encounterEventPayload),
+  envelope("encounter-event", encounterEventSchema),
   envelope("encounter-snapshot", encounterSnapshotPayload),
 ]);
 

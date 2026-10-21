@@ -3,6 +3,7 @@ export type {
   MonsterInstance,
   NewMonsterInstance,
 } from "./types.js";
+export { monsterInstanceSchema } from "./types.js";
 export type {
   EncounterRepository,
   HpChange,
