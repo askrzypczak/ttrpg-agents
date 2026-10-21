@@ -102,6 +102,7 @@ function instanceView(i: MonsterInstance): Record<string, unknown> {
 
 const searchMonstersTool = defineTool({
   name: "search_monsters",
+  annotations: { readOnlyHint: true },
   description:
     "Search monsters by name (case-insensitive, plural-tolerant). Returns up to 10 matches with their keys.",
   inputSchema: { query: z.string() },
@@ -129,6 +130,7 @@ const searchMonstersTool = defineTool({
 
 const getStatblockTool = defineTool({
   name: "get_statblock",
+  annotations: { readOnlyHint: true },
   description: "Get the full statblock of a monster by its exact key.",
   inputSchema: { key: z.string() },
   run(ctx, { key }) {
@@ -144,6 +146,7 @@ const getStatblockTool = defineTool({
 
 const addMonstersTool = defineTool({
   name: "add_monsters",
+  annotations: { destructiveHint: false },
   description:
     "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically.",
   inputSchema: {
@@ -195,6 +198,7 @@ const addMonstersTool = defineTool({
 
 const listEncounterTool = defineTool({
   name: "list_encounter",
+  annotations: { readOnlyHint: true },
   description: "List the encounter in initiative order (highest first).",
   inputSchema: {},
   run(ctx) {
@@ -241,6 +245,7 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
 
 const removeMonstersTool = defineTool({
   name: "remove_monsters",
+  annotations: { destructiveHint: true },
   description:
     "Remove monsters by instance id or exact name. All targets must resolve, otherwise nothing is removed.",
   inputSchema: { targets: z.array(z.string()).min(1) },
@@ -264,6 +269,7 @@ const removeMonstersTool = defineTool({
 
 const clearEncounterTool = defineTool({
   name: "clear_encounter",
+  annotations: { destructiveHint: true },
   description: "Remove every monster from the encounter.",
   inputSchema: {},
   run(ctx) {

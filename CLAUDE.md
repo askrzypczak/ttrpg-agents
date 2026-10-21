@@ -16,6 +16,8 @@ Hexagonal architecture (ports and adapters) around a domain core: Claude handles
 - **Wire contracts** (bridge messages) live in `protocol`, not in the engine.
 - **Package map**: `engine` (domain core); driven adapters `store-sqlite` (encounter store) and `srd` (monster data, loader, import); driving adapters `mcp` and `bridge` (later a CLI); `protocol` (wire contract); `owlbear` (client of the bridge; may import `engine` and `protocol`).
 
+Runtime view (processes, ports, auth, data flow): [`docs/architecture.md`](docs/architecture.md). Update that page when processes, ports, auth or the data flow change.
+
 ## Conventions
 - Owner: Tony (personal GitHub account `askrzypczak`). Public repo, openly an agent-written test project for claude-workflow (see README). Tony is the only contributor: issues are for directing agents, outside PRs are not accepted. No license yet (all rights reserved); the SRD data is CC-BY 4.0.
 - Keep this file short; record decisions here as they are made.
@@ -54,7 +56,7 @@ Dispatch, label setup (`setup-labels.sh`) and close-time label cleanup now live 
 - Tests are mandatory. The contract tests are written first and shown red, then green after implementation, then the mutation result on the changed files (`npm run mutate:changed`) is checked. Evidence goes in the PR body.
 - "Complex" = branching logic, new abstractions, shared code, security/data handling; complexity decides whether the reviewer runs.
 - Agents may push their own `issue-N-*` branch. Humans merge; nobody pushes to `main`, force-pushes, or runs `gh pr merge`. Enforced locally by the `ticket-workflow` plugin's git guard (claude-workflow `plugins/ticket-workflow/hooks/guard-git.sh`; change it there, not here) plus the deny rules in `.claude/settings.json`. Also enforced server-side by the `protect-main` ruleset (no bypass actors): `main` cannot be deleted or force-pushed, changes need a PR (0 required approvals), and the `check` and `e2e` CI jobs must pass. `coverage` is informational and not required. The ruleset lives in GitHub settings, not in the repo.
-- PRs are opened as active (not draft): this is a team of one human, so draft would only signal "review needed", which the `needs-review` label already does. `npm run check` (once scaffolded) is the single definition of done and what CI runs.
+- PRs are opened as active (not draft): this is a team of one human, so draft would only signal "review needed", which the `needs-review` label already does. `npm run check` is the single definition of done and what CI runs.
 
 ## Mutation testing
 - `npm run mutate` runs Stryker (`stryker.config.json`, incremental; results in `reports/`, HTML at `reports/mutation/index.html`). No manual build needed: the vitest `globalSetup` rebuilds `dist/` in the Stryker sandbox.

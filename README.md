@@ -41,14 +41,16 @@ The `owlbear` package is an Owlbear Rodeo extension served from a local bridge s
 
 1. `npm run build` (builds the extension into `packages/owlbear/dist`).
 2. `npm run bridge` (serves the extension and `ws://localhost:5199/ws`; override with `BRIDGE_PORT`).
-3. In Owlbear Rodeo, Profile > Add Custom Extension, and enter `http://localhost:5199/manifest.json`.
+3. In Owlbear Rodeo, Profile > Add Custom Extension, and enter the `install in Owlbear` URL the bridge prints: `http://localhost:5199/manifest.json?token=<token>`.
 4. Chrome may ask for local network access for `owlbear.rodeo`; allow it, or the panel stays on "Connecting" and shows a hint after a few seconds.
+
+The token lives in a file; see [`packages/bridge/README.md`](packages/bridge/README.md) for its path and `BRIDGE_TOKEN_FILE`. To rotate it, delete the token file, restart the bridge, and reinstall the extension.
 
 Warning: `BRIDGE_STATIC_DIR` overrides the served folder, and the bridge serves whatever it points at, readable by owlbear.rodeo pages; only point it at the built extension.
 
 The panel is GM-only and shows connection status; it reconnects with backoff if the bridge restarts.
 
-The bridge polls the SQLite file every 250 ms and pushes a fresh snapshot when the MCP server changes it, so tokens appear without reloading the panel.
+The bridge polls the SQLite file every 250 ms and pushes a fresh snapshot when the MCP server changes it, so tokens appear without reloading the panel. For the processes, ports and data flow, see [`docs/architecture.md`](docs/architecture.md).
 
 ## Attribution
 

@@ -62,9 +62,9 @@ Chromium. First time: `npx playwright install chromium`. It is NOT part of
   `window.__host.errors`; an auto fixture fails every test that leaves errors
   behind, so the fake cannot drift silently. When you add an SDK call, add it
   to `ObrAdapter`, the unit fake, and `fake-host.ts` together.
-- `main.ts` does not yet call `addItems`/`setMetadata`, so `e2e/driver.html`
-  is a test-only page that runs the real `createObrAdapter()` through
-  `addHiddenToken` / `writeInitiativeMetadata`.
+- The extension adds items through `encounter-sync.ts`. `e2e/driver.html` is
+  a test-only page that runs the real `createObrAdapter()` through the
+  `addHiddenToken` / `writeInitiativeMetadata` helpers.
 - `encounter-sync.e2e.ts` covers encounter -> hidden tokens end to end. The
   bridge runs on a throwaway SQLite file (`TTRPG_AGENTS_DB`, `e2e/db.ts`,
   created per worker in the run temp dir and removed when the run ends) seeded with 5
