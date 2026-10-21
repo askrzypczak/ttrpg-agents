@@ -13,7 +13,8 @@
     "!packages/mcp/src/stdio.ts"
   ],
   "incremental": true,
-  "reporters": ["clear-text", "html"],
+  "reporters": ["clear-text", "html", "json"],
   "htmlReporter": { "fileName": "reports/mutation/index.html" },
+  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
   "mutator": { "excludedMutations": ["StringLiteral", "OptionalChaining"] }
 }
