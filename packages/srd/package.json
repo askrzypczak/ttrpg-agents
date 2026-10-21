@@ -14,7 +14,8 @@
     "import:srd": "tsc -b tsconfig.build.json && node scripts/import-srd.ts"
   },
   "dependencies": {
-    "@ttrpg-agents/engine": "*"
+    "@ttrpg-agents/engine": "*",
+    "zod": "^4.6.7"
   },
   "files": [
     "dist",
