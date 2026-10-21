@@ -1,20 +1,19 @@
 import { describe, expect, it } from "vitest";
+import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { nextDelay } from "./backoff.js";
 import {
-  INSTANCE_METADATA_KEY,
-  applyEvent,
-  applySnapshot,
   createEncounterSync,
-  rowPositions,
   type EncounterEventPayload,
-  type EncounterInstance,
 } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
+import type { Timers } from "./reconnecting-socket.js";
 import {
   MissingSceneError,
   SceneModel,
   type SceneItem,
 } from "./scene-model.js";
+import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
 
 const inst = (n: number): EncounterInstance => ({
   id: `i${n}`,
@@ -28,6 +27,20 @@ const inst = (n: number): EncounterInstance => ({
   createdAt: n,
 });
 
+const snapshot = (...ns: number[]): BridgeMessage => ({
+  v: 1,
+  type: "encounter-snapshot",
+  payload: { instances: ns.map(inst) },
+});
+const event = (payload: EncounterEventPayload): BridgeMessage => ({
+  v: 1,
+  type: "encounter-event",
+  payload,
+});
+const added = (...ns: number[]) =>
+  event({ type: "added", instances: ns.map(inst) });
+const removed = (n: number) => event({ type: "removed", id: `i${n}` });
+
 const foreign: SceneItem = {
   id: "map",
   type: "IMAGE",
@@ -37,409 +50,395 @@ const foreign: SceneItem = {
   metadata: { "other.ext/thing": { instanceId: "i1" } },
 };
 
-const instanceIds = (items: SceneItem[]) =>
-  items.map(
-    (i) =>
-      (i.metadata[INSTANCE_METADATA_KEY] as { instanceId: string }).instanceId,
-  );
+/** Instance ids of our tokens on the scene, sorted. */
+const instanceIds = (scene: SceneModel): string[] =>
+  scene
+    .getItems((i) => i.metadata[INSTANCE_METADATA_KEY] !== undefined)
+    .map(
+      (i) =>
+        (i.metadata[INSTANCE_METADATA_KEY] as { instanceId: string })
+          .instanceId,
+    )
+    .sort();
 
-describe("rowPositions", () => {
-  it("centres a row on the given point", () => {
-    expect(rowPositions(3, { x: 1000, y: 500 })).toEqual([
-      { x: 850, y: 500 },
-      { x: 1000, y: 500 },
-      { x: 1150, y: 500 },
-    ]);
-    expect(rowPositions(1, { x: 10, y: 20 })).toEqual([{ x: 10, y: 20 }]);
-  });
-});
+/** Lets fire-and-forget reconciles (ready flips, retries) finish. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
-describe("applyEvent added", () => {
-  it("creates one hidden, named, linked shape token per instance in a row near the viewport centre", async () => {
-    const { obr, scene } = createFakeObr(undefined, { x: 1000, y: 500 });
-    await applyEvent(obr, {
-      type: "added",
-      instances: [inst(1), inst(2), inst(3)],
+class FakeTimers implements Timers {
+  pending = new Map<number, { fn: () => void; ms: number }>();
+  private next = 1;
+  setTimeout(fn: () => void, ms: number) {
+    const id = this.next++;
+    this.pending.set(id, { fn, ms });
+    return id;
+  }
+  clearTimeout(handle: unknown) {
+    this.pending.delete(handle as number);
+  }
+  fireAll() {
+    const all = [...this.pending.values()];
+    this.pending.clear();
+    for (const t of all) t.fn();
+  }
+  pendingDelays(): number[] {
+    return [...this.pending.values()].map((t) => t.ms);
+  }
+}
+
+const backoff = { baseMs: 100, random: () => 0 };
+
+/** Fake adapter that records items API calls; `fail` makes addItems reject. */
+function recording(scene: SceneModel = new SceneModel()) {
+  const fake = createFakeObr(scene);
+  const calls: string[] = [];
+  let failures = 0;
+  const obr: ObrAdapter = {
+    ...fake.obr,
+    getItems: (f) => (calls.push("getItems"), fake.obr.getItems(f)),
+    addItems: (i) => {
+      calls.push("addItems");
+      if (failures > 0) {
+        failures--;
+        return Promise.reject(new Error("boom"));
+      }
+      return fake.obr.addItems(i);
+    },
+    updateItems: (ids, p) => (
+      calls.push("updateItems"),
+      fake.obr.updateItems(ids, p)
+    ),
+    setItemMetadata: (u) => (
+      calls.push("setItemMetadata"),
+      fake.obr.setItemMetadata(u)
+    ),
+    deleteItems: (i) => (calls.push("deleteItems"), fake.obr.deleteItems(i)),
+  };
+  return {
+    obr,
+    scene: fake.scene,
+    calls,
+    failNextAdds: (n: number) => {
+      failures = n;
+    },
+  };
+}
+
+/** Adapter whose reads and writes yield to the event loop, widening races. */
+function slowObr() {
+  const { obr, scene } = createFakeObr();
+  const later = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const slow: ObrAdapter = {
+    ...obr,
+    getItems: async (filter) => (await later(), obr.getItems(filter)),
+    addItems: async (items) => (await later(), obr.addItems(items)),
+  };
+  return { obr: slow, scene };
+}
+
+/**
+ * One adapter over two scenes, A (ready) and B (not ready), as when the GM
+ * switches scenes: `switchToB` makes A unready, then B current and ready.
+ */
+function twoScenes() {
+  const a = createFakeObr();
+  const b = createFakeObr(new SceneModel("gm", false));
+  let current = a;
+  const listeners = new Set<(ready: boolean) => void>();
+  for (const fake of [a, b])
+    fake.obr.onSceneReadyChange((ready) => {
+      if (fake === current) for (const l of [...listeners]) l(ready);
     });
-    const items = scene.getItems();
-    expect(items).toHaveLength(3);
-    expect(items.map((i) => i.name)).toEqual([
-      "Shadow 1",
-      "Shadow 2",
-      "Shadow 3",
-    ]);
-    expect(items.every((i) => i.visible === false && i.type === "SHAPE")).toBe(
-      true,
-    );
-    expect(items.every((i) => i.shape?.shapeType === "CIRCLE")).toBe(true);
-    expect(instanceIds(items)).toEqual(["i1", "i2", "i3"]);
-    expect(items.map((i) => i.position)).toEqual([
-      { x: 850, y: 500 },
-      { x: 1000, y: 500 },
-      { x: 1150, y: 500 },
-    ]);
-    expect(new Set(items.map((i) => i.id)).size).toBe(3);
-  });
-
-  it("is idempotent: replaying creates no duplicates", async () => {
-    const { obr, scene } = createFakeObr();
-    const event = { type: "added" as const, instances: [inst(1), inst(2)] };
-    await applyEvent(obr, event);
-    await applyEvent(obr, event);
-    expect(instanceIds(scene.getItems())).toEqual(["i1", "i2"]);
-  });
-
-  it("only adds the instances that are missing", async () => {
-    const { obr, scene } = createFakeObr();
-    await applyEvent(obr, { type: "added", instances: [inst(1)] });
-    await applyEvent(obr, { type: "added", instances: [inst(1), inst(2)] });
-    expect(instanceIds(scene.getItems())).toEqual(["i1", "i2"]);
-  });
-});
-
-describe("applyEvent removed/cleared/hp-changed", () => {
-  it("removed deletes only the matching instance token, not foreign items", async () => {
-    const { obr, scene } = createFakeObr();
-    scene.addItems([foreign]);
-    await applyEvent(obr, { type: "added", instances: [inst(1), inst(2)] });
-    await applyEvent(obr, { type: "removed", id: "i1" });
-    expect(
-      scene
-        .getItems()
-        .map((i) => i.id)
-        .sort(),
-    ).toEqual(["map", "ttrpg-instance-i2"].sort());
-  });
-
-  it("removed for an unknown instance is a no-op", async () => {
-    const { obr, scene } = createFakeObr();
-    await applyEvent(obr, { type: "added", instances: [inst(1)] });
-    await applyEvent(obr, { type: "removed", id: "nope" });
-    expect(instanceIds(scene.getItems())).toEqual(["i1"]);
-  });
-
-  it("cleared deletes all our tokens and leaves foreign items", async () => {
-    const { obr, scene } = createFakeObr();
-    scene.addItems([foreign]);
-    await applyEvent(obr, { type: "added", instances: [inst(1), inst(2)] });
-    await applyEvent(obr, { type: "cleared" });
-    expect(scene.getItems().map((i) => i.id)).toEqual(["map"]);
-  });
-
-  it("hp-changed leaves tokens untouched (documented v1 no-op)", async () => {
-    const { obr, scene } = createFakeObr();
-    await applyEvent(obr, { type: "added", instances: [inst(1)] });
-    const before = scene.getItems();
-    await applyEvent(obr, {
-      type: "hp-changed",
-      id: "i1",
-      currentHp: 3,
-      maxHp: 16,
-    });
-    expect(scene.getItems()).toEqual(before);
-  });
-});
-
-describe("applySnapshot", () => {
-  it("adds missing tokens and deletes stale ones, leaving foreign items", async () => {
-    const { obr, scene } = createFakeObr();
-    scene.addItems([foreign]);
-    await applyEvent(obr, { type: "added", instances: [inst(1), inst(2)] });
-    await applySnapshot(obr, [inst(2), inst(3)]);
-    expect(instanceIds(scene.getItems((i) => i.id !== "map")).sort()).toEqual([
-      "i2",
-      "i3",
-    ]);
-    expect(scene.getItems().some((i) => i.id === "map")).toBe(true);
-  });
-
-  it("is idempotent", async () => {
-    const { obr, scene } = createFakeObr();
-    await applySnapshot(obr, [inst(1), inst(2)]);
-    const first = scene.getItems();
-    await applySnapshot(obr, [inst(1), inst(2)]);
-    expect(scene.getItems()).toEqual(first);
-  });
-
-  it("an empty snapshot removes all our tokens", async () => {
-    const { obr, scene } = createFakeObr();
-    await applyEvent(obr, { type: "added", instances: [inst(1)] });
-    await applySnapshot(obr, []);
-    expect(scene.getItems()).toEqual([]);
-  });
-});
+  const obr: ObrAdapter = {
+    onReady: (cb) => current.obr.onReady(cb),
+    getRole: () => current.obr.getRole(),
+    isSceneReady: () => current.obr.isSceneReady(),
+    onSceneReadyChange: (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    addItems: (i) => current.obr.addItems(i),
+    getItems: (f) => current.obr.getItems(f),
+    updateItems: (ids, p) => current.obr.updateItems(ids, p),
+    setItemMetadata: (u) => current.obr.setItemMetadata(u),
+    deleteItems: (ids) => current.obr.deleteItems(ids),
+    getSceneMetadata: () => current.obr.getSceneMetadata(),
+    setSceneMetadata: (u) => current.obr.setSceneMetadata(u),
+    getViewportCenter: () => current.obr.getViewportCenter(),
+  };
+  return {
+    obr,
+    a: a.scene,
+    b: b.scene,
+    switchToB: () => {
+      a.scene.setReady(false);
+      current = b;
+      b.scene.setReady(true);
+    },
+  };
+}
 
 describe("createEncounterSync", () => {
-  /** Adapter whose getItems yields to the event loop, widening any race window. */
-  function slowObr(): {
-    obr: ObrAdapter;
-    scene: ReturnType<typeof createFakeObr>["scene"];
-  } {
+  it("recreates tokens when the scene becomes ready on a scene never populated, without a new message", async () => {
+    const { obr, a, b, switchToB } = twoScenes();
+    const errors: unknown[] = [];
+    const sync = createEncounterSync(obr, (e) => errors.push(e));
+    await sync.handleMessage(snapshot(1, 2));
+    expect(instanceIds(a)).toEqual(["i1", "i2"]);
+    switchToB();
+    await settle();
+    expect(errors).toEqual([]);
+    expect(instanceIds(b)).toEqual(["i1", "i2"]);
+    expect(instanceIds(a)).toEqual(["i1", "i2"]);
+  });
+
+  it("does not recreate a token the GM deleted, also after a ready flip", async () => {
     const { obr, scene } = createFakeObr();
-    return {
-      scene,
-      obr: {
-        ...obr,
-        getItems: async (filter) => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          return obr.getItems(filter);
-        },
-        addItems: async (items) => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          return obr.addItems(items);
-        },
+    const sync = createEncounterSync(obr);
+    await sync.handleMessage(snapshot(1, 2));
+    const gone = scene.getItems().find((i) => i.name === "Shadow 1")!;
+    scene.deleteItems([gone.id]);
+
+    await sync.handleMessage(snapshot(1, 2));
+    expect(instanceIds(scene)).toEqual(["i2"]);
+    await sync.handleMessage(
+      event({ type: "hp-changed", id: "i1", currentHp: 3, maxHp: 16 }),
+    );
+    expect(instanceIds(scene)).toEqual(["i2"]);
+    scene.setReady(false);
+    scene.setReady(true);
+    await settle();
+    expect(instanceIds(scene)).toEqual(["i2"]);
+  });
+
+  it("records placed instance ids and prunes removed ones", async () => {
+    const { obr, scene } = createFakeObr();
+    const first = createEncounterSync(obr);
+    await first.handleMessage(snapshot(1, 2));
+    await first.handleMessage(removed(1));
+    expect(instanceIds(scene)).toEqual(["i2"]);
+    // The GM deletes i2's token; then the extension reloads (a new sync on
+    // the same scene) and the bridge sends a snapshot that has i1 again.
+    scene.deleteItems(scene.getItems().map((i) => i.id));
+    const second = createEncounterSync(obr);
+    await second.handleMessage(snapshot(1, 2));
+    // i2 is still recorded as placed, so it stays deleted; i1 was pruned
+    // when it was removed, so it counts as never placed and is created.
+    expect(instanceIds(scene)).toEqual(["i1"]);
+  });
+
+  it("a failed apply is retried with backoff and converges", async () => {
+    const { obr, scene, failNextAdds } = recording();
+    const timers = new FakeTimers();
+    const errors: unknown[] = [];
+    let applied = 0;
+    const sync = createEncounterSync(
+      obr,
+      (e) => errors.push(e),
+      () => applied++,
+      { timers, backoff },
+    );
+    failNextAdds(2);
+    await sync.handleMessage(snapshot(1));
+    expect(errors).toHaveLength(1);
+    expect(timers.pendingDelays()).toEqual([nextDelay(0, backoff)]);
+
+    timers.fireAll();
+    await settle();
+    expect(errors).toHaveLength(2);
+    expect(timers.pendingDelays()).toEqual([nextDelay(1, backoff)]);
+
+    timers.fireAll();
+    await settle();
+    expect(errors).toHaveLength(2);
+    expect(timers.pendingDelays()).toEqual([]);
+    expect(applied).toBe(1);
+    expect(instanceIds(scene)).toEqual(["i1"]);
+
+    // Success reset the attempt counter: the next failure waits the base delay.
+    failNextAdds(1);
+    await sync.handleMessage(added(2));
+    expect(errors).toHaveLength(3);
+    expect(timers.pendingDelays()).toEqual([nextDelay(0, backoff)]);
+  });
+
+  it("a scene that goes away mid-apply defers without `onError` and converges on ready", async () => {
+    const fake = createFakeObr();
+    const timers = new FakeTimers();
+    const errors: unknown[] = [];
+    let failOnce = true;
+    const obr: ObrAdapter = {
+      ...fake.obr,
+      addItems: (items) => {
+        if (failOnce) {
+          failOnce = false;
+          fake.scene.setReady(false);
+          return Promise.reject(new MissingSceneError());
+        }
+        return fake.obr.addItems(items);
       },
     };
-  }
+    let applied = 0;
+    const sync = createEncounterSync(
+      obr,
+      (e) => errors.push(e),
+      () => applied++,
+      { timers, backoff },
+    );
+    await sync.handleMessage(snapshot(1));
+    expect(errors).toEqual([]);
+    expect(applied).toBe(0);
+    expect(timers.pendingDelays()).toEqual([]);
+    fake.scene.setReady(true);
+    await settle();
+    expect(errors).toEqual([]);
+    expect(applied).toBe(1);
+    expect(instanceIds(fake.scene)).toEqual(["i1"]);
+  });
 
-  it("serialises concurrent messages so duplicates are never created", async () => {
+  it("a new message cancels the pending retry", async () => {
+    const { obr, scene, failNextAdds } = recording();
+    const timers = new FakeTimers();
+    const errors: unknown[] = [];
+    const sync = createEncounterSync(obr, (e) => errors.push(e), undefined, {
+      timers,
+      backoff,
+    });
+    failNextAdds(1);
+    await sync.handleMessage(snapshot(1));
+    expect(timers.pendingDelays()).toHaveLength(1);
+    await sync.handleMessage(added(2));
+    expect(timers.pendingDelays()).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(instanceIds(scene)).toEqual(["i1", "i2"]);
+  });
+
+  it("folds added, removed, cleared and hp-changed events into the desired state", async () => {
+    const { obr, scene } = createFakeObr();
+    scene.addItems([foreign]);
+    const sync = createEncounterSync(obr);
+    await sync.handleMessage(snapshot(1));
+    await sync.handleMessage(added(2, 3));
+    expect(instanceIds(scene)).toEqual(["i1", "i2", "i3"]);
+    await sync.handleMessage(added(2, 3));
+    expect(instanceIds(scene)).toEqual(["i1", "i2", "i3"]);
+    await sync.handleMessage(removed(1));
+    expect(instanceIds(scene)).toEqual(["i2", "i3"]);
+    await sync.handleMessage(removed(99));
+    expect(instanceIds(scene)).toEqual(["i2", "i3"]);
+    const before = scene.getItems();
+    await sync.handleMessage(
+      event({ type: "hp-changed", id: "i2", currentHp: 3, maxHp: 16 }),
+    );
+    expect(scene.getItems()).toEqual(before);
+    await sync.handleMessage(event({ type: "cleared" }));
+    expect(instanceIds(scene)).toEqual([]);
+    await sync.handleMessage(added(4));
+    expect(instanceIds(scene)).toEqual(["i4"]);
+    expect(scene.getItems().some((i) => i.id === foreign.id)).toBe(true);
+  });
+
+  it("ignores events before the first snapshot", async () => {
+    const { obr, scene } = createFakeObr();
+    const sync = createEncounterSync(obr);
+    await sync.handleMessage(added(1));
+    expect(instanceIds(scene)).toEqual([]);
+    await sync.handleMessage(snapshot(2));
+    expect(instanceIds(scene)).toEqual(["i2"]);
+  });
+
+  it("serialises concurrent messages", async () => {
     const { obr, scene } = slowObr();
     const errors: unknown[] = [];
     const sync = createEncounterSync(obr, (e) => errors.push(e));
-    const added = {
-      v: 1 as const,
-      type: "encounter-event" as const,
-      payload: { type: "added" as const, instances: [inst(1), inst(2)] },
-    };
     await Promise.all([
-      sync.handleMessage(added),
-      sync.handleMessage(added),
-      sync.handleMessage({
-        v: 1,
-        type: "encounter-snapshot",
-        payload: { instances: [inst(1), inst(2)] },
-      }),
+      sync.handleMessage(snapshot(1, 2)),
+      sync.handleMessage(added(1, 2)),
+      sync.handleMessage(added(1, 2)),
     ]);
     expect(errors).toEqual([]);
-    expect(instanceIds(scene.getItems())).toEqual(["i1", "i2"]);
+    expect(scene.getItems()).toHaveLength(2);
+    expect(instanceIds(scene)).toEqual(["i1", "i2"]);
   });
 
-  it("applies messages in arrival order", async () => {
+  it("applies in arrival order", async () => {
     const { obr, scene } = slowObr();
     const sync = createEncounterSync(obr);
     await Promise.all([
-      sync.handleMessage({
-        v: 1,
-        type: "encounter-event",
-        payload: { type: "added", instances: [inst(1)] },
-      }),
-      sync.handleMessage({
-        v: 1,
-        type: "encounter-event",
-        payload: { type: "removed", id: "i1" },
-      }),
+      sync.handleMessage(snapshot(1, 2)),
+      sync.handleMessage(removed(1)),
     ]);
-    expect(scene.getItems()).toEqual([]);
+    expect(instanceIds(scene)).toEqual(["i2"]);
   });
 
-  it("survives isSceneReady rejecting and still applies later messages", async () => {
-    const { obr, scene } = createFakeObr();
-    let first = true;
-    const flaky: ObrAdapter = {
-      ...obr,
-      isSceneReady: () => {
-        if (first) {
-          first = false;
-          return Promise.reject(new Error("not ready"));
-        }
-        return obr.isSceneReady();
+  it("keeps reconciling when `onError` throws", async () => {
+    const { obr, scene, failNextAdds } = recording();
+    const timers = new FakeTimers();
+    const sync = createEncounterSync(
+      obr,
+      () => {
+        throw new Error("handler broke");
       },
-    };
+      undefined,
+      { timers, backoff },
+    );
+    failNextAdds(1);
+    await expect(sync.handleMessage(snapshot(1))).resolves.toBeUndefined();
+    await expect(sync.handleMessage(added(2))).resolves.toBeUndefined();
+    expect(instanceIds(scene)).toEqual(["i1", "i2"]);
+  });
+
+  it("no items API calls while not ready", async () => {
+    const { obr, calls } = recording(new SceneModel("gm", false));
+    const timers = new FakeTimers();
     const errors: unknown[] = [];
-    const sync = createEncounterSync(flaky, (e) => errors.push(e));
-    const snap = (n: number) => ({
-      v: 1 as const,
-      type: "encounter-snapshot" as const,
-      payload: { instances: [inst(n)] },
+    const sync = createEncounterSync(obr, (e) => errors.push(e), undefined, {
+      timers,
+      backoff,
     });
-    await sync.handleMessage(snap(1));
-    expect(errors).toHaveLength(1);
-    await sync.handleMessage(snap(2));
-    expect(instanceIds(scene.getItems())).toEqual(["i2"]);
+    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(added(3));
+    await sync.handleMessage(removed(1));
+    expect(calls).toEqual([]);
+    expect(errors).toEqual([]);
+    expect(timers.pendingDelays()).toEqual([]);
   });
 
-  it("keeps processing when onError itself throws", async () => {
-    const { obr, scene } = createFakeObr();
-    let failNext = true;
-    const flaky: ObrAdapter = {
-      ...obr,
-      addItems: (items) => {
-        if (failNext) {
-          failNext = false;
-          return Promise.reject(new Error("boom"));
-        }
-        return obr.addItems(items);
-      },
-    };
-    const sync = createEncounterSync(flaky, () => {
-      throw new Error("handler broke");
-    });
-    const msg = (n: number) => ({
-      v: 1 as const,
-      type: "encounter-event" as const,
-      payload: { type: "added" as const, instances: [inst(n)] },
-    });
-    await sync.handleMessage(msg(1));
-    await sync.handleMessage(msg(2));
-    expect(instanceIds(scene.getItems())).toEqual(["i2"]);
-  });
-
-  it("reports a failure and keeps processing later messages", async () => {
-    const { obr, scene } = createFakeObr();
-    let failNext = true;
-    const flaky: ObrAdapter = {
-      ...obr,
-      addItems: (items) => {
-        if (failNext) {
-          failNext = false;
-          return Promise.reject(new Error("boom"));
-        }
-        return obr.addItems(items);
-      },
-    };
-    const errors: unknown[] = [];
-    const sync = createEncounterSync(flaky, (e) => errors.push(e));
-    const msg = (n: number) => ({
-      v: 1 as const,
-      type: "encounter-event" as const,
-      payload: { type: "added" as const, instances: [inst(n)] },
-    });
-    await sync.handleMessage(msg(1));
-    await sync.handleMessage(msg(2));
-    expect(errors).toHaveLength(1);
-    expect(instanceIds(scene.getItems())).toEqual(["i2"]);
+  it("`onApplied` per successful reconcile", async () => {
+    const { obr, scene, failNextAdds } = recording(new SceneModel("gm", false));
+    const timers = new FakeTimers();
+    let applied = 0;
+    const sync = createEncounterSync(
+      obr,
+      () => {},
+      () => applied++,
+      { timers, backoff },
+    );
+    await sync.handleMessage(snapshot(1));
+    expect(applied).toBe(0);
+    scene.setReady(true);
+    await settle();
+    expect(applied).toBe(1);
+    await sync.handleMessage(added(2));
+    expect(applied).toBe(2);
+    failNextAdds(1);
+    await sync.handleMessage(added(3));
+    expect(applied).toBe(2);
   });
 
   it("ignores non-encounter messages", async () => {
-    const { obr, scene } = createFakeObr();
-    const sync = createEncounterSync(obr);
+    const { obr, scene, calls } = recording();
+    let applied = 0;
+    const sync = createEncounterSync(
+      obr,
+      () => {},
+      () => applied++,
+    );
+    await sync.handleMessage(snapshot(1));
+    expect(applied).toBe(1);
+    calls.length = 0;
     await sync.handleMessage({ v: 1, type: "pong", payload: {} });
-    expect(scene.getItems()).toEqual([]);
-  });
-
-  describe("while the scene is not ready", () => {
-    const snapshot = (...ns: number[]) => ({
-      v: 1 as const,
-      type: "encounter-snapshot" as const,
-      payload: { instances: ns.map(inst) },
-    });
-    const event = (payload: EncounterEventPayload) => ({
-      v: 1 as const,
-      type: "encounter-event" as const,
-      payload,
-    });
-    const notReady = () => {
-      const fake = createFakeObr(new SceneModel("gm", false));
-      const calls: string[] = [];
-      const obr: ObrAdapter = {
-        ...fake.obr,
-        getItems: (f) => (calls.push("getItems"), fake.obr.getItems(f)),
-        addItems: (i) => (calls.push("addItems"), fake.obr.addItems(i)),
-        deleteItems: (i) => (
-          calls.push("deleteItems"),
-          fake.obr.deleteItems(i)
-        ),
-      };
-      return { obr, scene: fake.scene, calls };
-    };
-    const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
-
-    it("defers a snapshot without calling the items API or reporting an error", async () => {
-      const { obr, scene, calls } = notReady();
-      const errors: unknown[] = [];
-      const sync = createEncounterSync(obr, (e) => errors.push(e));
-      await sync.handleMessage(snapshot(1, 2));
-      expect(calls).toEqual([]);
-      expect(errors).toEqual([]);
-      scene.setReady(true);
-      await settle();
-      expect(errors).toEqual([]);
-      expect(instanceIds(scene.getItems())).toEqual(["i1", "i2"]);
-    });
-
-    it("applies deferred events in arrival order", async () => {
-      const { obr, scene } = notReady();
-      const sync = createEncounterSync(obr);
-      await sync.handleMessage(event({ type: "added", instances: [inst(1)] }));
-      await sync.handleMessage(event({ type: "added", instances: [inst(2)] }));
-      await sync.handleMessage(event({ type: "removed", id: "i1" }));
-      scene.setReady(true);
-      await settle();
-      expect(instanceIds(scene.getItems())).toEqual(["i2"]);
-    });
-
-    it("lets a snapshot supersede earlier pending messages", async () => {
-      const { obr, scene, calls } = notReady();
-      const sync = createEncounterSync(obr);
-      await sync.handleMessage(event({ type: "added", instances: [inst(1)] }));
-      await sync.handleMessage(snapshot(2));
-      await sync.handleMessage(event({ type: "added", instances: [inst(3)] }));
-      scene.setReady(true);
-      await settle();
-      expect(instanceIds(scene.getItems())).toEqual(["i2", "i3"]);
-      // The superseded event was never applied (no add-then-delete of i1).
-      expect(calls.filter((c) => c === "deleteItems")).toEqual([]);
-    });
-
-    it("does not replay applied messages on later ready flips", async () => {
-      const { obr, scene } = notReady();
-      const sync = createEncounterSync(obr);
-      await sync.handleMessage(snapshot(1, 2));
-      scene.setReady(true);
-      await settle();
-      scene.deleteItems([scene.getItems()[0]!.id]);
-      expect(instanceIds(scene.getItems())).toEqual(["i2"]);
-      scene.setReady(false);
-      scene.setReady(true);
-      await settle();
-      expect(instanceIds(scene.getItems())).toEqual(["i2"]);
-    });
-
-    it("calls onApplied per applied message, not for deferred ones", async () => {
-      const { obr, scene } = notReady();
-      let applied = 0;
-      const sync = createEncounterSync(
-        obr,
-        () => {},
-        () => applied++,
-      );
-      await sync.handleMessage(event({ type: "added", instances: [inst(1)] }));
-      await sync.handleMessage(event({ type: "added", instances: [inst(2)] }));
-      expect(applied).toBe(0);
-      scene.setReady(true);
-      await settle();
-      expect(applied).toBe(2);
-    });
-
-    it("treats a scene that goes away mid-apply as deferral, not failure", async () => {
-      const fake = createFakeObr();
-      const errors: unknown[] = [];
-      let failOnce = true;
-      const obr: ObrAdapter = {
-        ...fake.obr,
-        addItems: (items) => {
-          if (failOnce) {
-            failOnce = false;
-            fake.scene.setReady(false);
-            return Promise.reject(new MissingSceneError());
-          }
-          return fake.obr.addItems(items);
-        },
-      };
-      let applied = 0;
-      const sync = createEncounterSync(
-        obr,
-        (e) => errors.push(e),
-        () => applied++,
-      );
-      await sync.handleMessage(snapshot(1));
-      expect(errors).toEqual([]);
-      expect(applied).toBe(0);
-      fake.scene.setReady(true);
-      await settle();
-      expect(errors).toEqual([]);
-      expect(applied).toBe(1);
-      expect(instanceIds(fake.scene.getItems())).toEqual(["i1"]);
-    });
+    expect(calls).toEqual([]);
+    expect(applied).toBe(1);
+    expect(instanceIds(scene)).toEqual(["i1"]);
   });
 });

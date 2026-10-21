@@ -1,193 +1,163 @@
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
-import type { SceneItem } from "./scene-model.js";
+import type { Timers } from "./reconnecting-socket.js";
+import {
+  PLACED_METADATA_KEY,
+  defaultSyncConfig,
+  instanceIdOf,
+  planSync,
+  type EncounterInstance,
+} from "./sync-plan.js";
 
 export type EncounterEventPayload = Extract<
   BridgeMessage,
   { type: "encounter-event" }
 >["payload"];
-export type EncounterInstance = Extract<
-  BridgeMessage,
-  { type: "encounter-snapshot" }
->["payload"]["instances"][number];
-
-/** Our own metadata namespace; value is `{ instanceId }`. */
-export const INSTANCE_METADATA_KEY = "com.ttrpg-agents/instance";
-/** One grid cell at Owlbear's default 150 dpi. */
-export const TOKEN_SIZE = 150;
-const TOKEN_SPACING = TOKEN_SIZE;
-
-function instanceIdOf(item: SceneItem): string | undefined {
-  const value = item.metadata[INSTANCE_METADATA_KEY];
-  if (typeof value !== "object" || value === null) return undefined;
-  const id = (value as { instanceId?: unknown }).instanceId;
-  return typeof id === "string" ? id : undefined;
-}
-
-const isOurs = (item: SceneItem): boolean => instanceIdOf(item) !== undefined;
-
-/** Pure mapping from an instance to a hidden SHAPE token at `position`. */
-export function instanceToItem(
-  instance: Pick<EncounterInstance, "id" | "displayName">,
-  position: { x: number; y: number },
-): SceneItem {
-  return {
-    id: `ttrpg-instance-${instance.id}`,
-    type: "SHAPE",
-    name: instance.displayName,
-    visible: false,
-    position,
-    metadata: { [INSTANCE_METADATA_KEY]: { instanceId: instance.id } },
-    shape: { shapeType: "CIRCLE", width: TOKEN_SIZE, height: TOKEN_SIZE },
-  };
-}
-
-/** Row of `count` positions centred horizontally on `center`. */
-export function rowPositions(
-  count: number,
-  center: { x: number; y: number },
-): { x: number; y: number }[] {
-  const startX = center.x - ((count - 1) * TOKEN_SPACING) / 2;
-  return Array.from({ length: count }, (_, i) => ({
-    x: startX + i * TOKEN_SPACING,
-    y: center.y,
-  }));
-}
-
-async function addMissing(
-  obr: ObrAdapter,
-  instances: Pick<EncounterInstance, "id" | "displayName">[],
-): Promise<void> {
-  const existing = new Set(
-    (await obr.getItems(isOurs)).map((item) => instanceIdOf(item)),
-  );
-  const missing = instances.filter((i) => !existing.has(i.id));
-  if (missing.length === 0) return;
-  const positions = rowPositions(missing.length, await obr.getViewportCenter());
-  await obr.addItems(missing.map((i, n) => instanceToItem(i, positions[n]!)));
-}
-
-async function deleteWhere(
-  obr: ObrAdapter,
-  predicate: (instanceId: string) => boolean,
-): Promise<void> {
-  const doomed = await obr.getItems((item) => {
-    const id = instanceIdOf(item);
-    return id !== undefined && predicate(id);
-  });
-  if (doomed.length > 0) await obr.deleteItems(doomed.map((i) => i.id));
-}
-
-/**
- * Applies one event to the scene. Idempotent: replaying an event never
- * duplicates tokens. `hp-changed` is intentionally a no-op in v1 (tokens carry
- * only name, hidden flag and instance link). Not safe to call concurrently;
- * use `createEncounterSync` for that.
- */
-export async function applyEvent(
-  obr: ObrAdapter,
-  event: EncounterEventPayload,
-): Promise<void> {
-  switch (event.type) {
-    case "added":
-      return addMissing(obr, event.instances);
-    case "removed":
-      return deleteWhere(obr, (id) => id === event.id);
-    case "cleared":
-      return deleteWhere(obr, () => true);
-    case "hp-changed":
-      return;
-  }
-}
-
-/** Makes the scene's instance tokens match `instances` exactly (ours only). */
-export async function applySnapshot(
-  obr: ObrAdapter,
-  instances: EncounterInstance[],
-): Promise<void> {
-  const wanted = new Set(instances.map((i) => i.id));
-  await deleteWhere(obr, (id) => !wanted.has(id));
-  await addMissing(obr, instances);
-}
 
 export interface EncounterSync {
   /** Resolves once the message is applied, or deferred until the scene is ready. */
   handleMessage(message: BridgeMessage): Promise<void>;
 }
 
-type SyncMessage = Extract<
-  BridgeMessage,
-  { type: "encounter-event" | "encounter-snapshot" }
->;
+// Stryker disable all: real timers are only used in the browser; tests inject Timers
+const defaultTimers: Timers = {
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+};
+// Stryker restore all
 
-function applyMessage(obr: ObrAdapter, message: SyncMessage): Promise<void> {
-  return message.type === "encounter-event"
-    ? applyEvent(obr, message.payload)
-    : applySnapshot(obr, message.payload.instances);
+function fold(
+  desired: EncounterInstance[],
+  event: EncounterEventPayload,
+): EncounterInstance[] {
+  switch (event.type) {
+    case "added": {
+      const have = new Set(desired.map((i) => i.id));
+      return [...desired, ...event.instances.filter((i) => !have.has(i.id))];
+    }
+    case "removed":
+      return desired.filter((i) => i.id !== event.id);
+    case "cleared":
+      return [];
+    // Stryker disable all: no projector reads hp until #67
+    case "hp-changed":
+      return desired.map((i) =>
+        i.id === event.id
+          ? { ...i, currentHp: event.currentHp, maxHp: event.maxHp }
+          : i,
+      );
+    // Stryker restore all
+  }
 }
 
 /**
- * Feeds bridge messages into the scene one at a time, in arrival order, so the
- * read-then-write idempotence checks never interleave. Messages that arrive
- * while the scene is not ready (e.g. right after a room reload) are held and
- * applied once it is; a snapshot supersedes anything still held. A failing
- * message on a ready scene is reported to `onError` and does not block later
- * ones. `onApplied` fires after each message is applied.
+ * Holds the desired encounter (the latest snapshot folded with later events)
+ * and reconciles the scene against it on every trigger: a message, the scene
+ * becoming ready, or a retry. Reconciles run one at a time, in arrival order.
+ * One on a scene that is not ready is skipped (the ready flip runs it). A
+ * failing one on a ready scene is reported to `onError` and retried with
+ * backoff until a later trigger or success; a scene that goes away mid-apply
+ * is deferred silently. `onApplied` fires after each successful reconcile.
+ * Events before the first snapshot are ignored (the bridge sends a snapshot
+ * on connect).
  */
 export function createEncounterSync(
   obr: ObrAdapter,
   onError: (error: unknown) => void = () => {},
   onApplied: () => void = () => {},
+  options: { timers?: Timers; backoff?: BackoffOptions } = {},
 ): EncounterSync {
-  const pending: SyncMessage[] = [];
+  const timers = options.timers ?? defaultTimers;
+  let desired: EncounterInstance[] | null = null;
   let tail: Promise<void> = Promise.resolve();
+  let retry: unknown = null;
+  let attempt = 0;
 
   const enqueue = (task: () => Promise<void>): Promise<void> => {
-    // Never let the chain reject, or every later message would be skipped.
-    tail = tail.then(task).catch((error) => {
-      try {
-        onError(error);
-      } catch {
-        // A throwing handler must not stop later messages.
-      }
-    });
+    // Never let the chain reject, or every later trigger would be skipped.
+    tail = tail.then(task).catch(() => {});
     return tail;
   };
 
-  async function drain(): Promise<void> {
-    while (pending.length > 0 && (await obr.isSceneReady())) {
-      try {
-        await applyMessage(obr, pending[0]!);
-      } catch (error) {
-        // The scene went away mid-apply: keep the message (replay is safe).
-        // Known race: if it is ready again by now, this is reported as a
-        // genuine failure and the message dropped; the next snapshot repairs it.
-        if (!(await obr.isSceneReady())) return;
-        pending.shift();
-        onError(error);
-        continue;
-      }
-      pending.shift();
-      onApplied();
+  async function apply(wanted: EncounterInstance[]): Promise<void> {
+    const items = await obr.getItems();
+    const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
+    const placed = new Set(
+      Array.isArray(stored)
+        ? stored.filter((id): id is string => typeof id === "string")
+        : [],
+    );
+    const plan = planSync(wanted, items, defaultSyncConfig, {
+      viewportCenter: await obr.getViewportCenter(),
+      placed,
+    });
+    if (plan.delete.length > 0) await obr.deleteItems(plan.delete);
+    if (plan.add.length > 0) await obr.addItems(plan.add);
+    if (plan.update.length > 0) await obr.setItemMetadata(plan.update);
+
+    // Remember which instances now have a token, so a token the GM deletes
+    // later stays deleted; forget instances that left the encounter.
+    const doomed = new Set(plan.delete);
+    const present = [
+      // Stryker disable next-line all: equivalent, a deleted token's id is not wanted or is also on a kept token
+      ...items.filter((item) => !doomed.has(item.id)),
+      ...plan.add,
+    ].map(instanceIdOf);
+    const wantedIds = new Set(wanted.map((i) => i.id));
+    const next = new Set(
+      [...placed, ...present].filter(
+        (id): id is string => id !== undefined && wantedIds.has(id),
+      ),
+    );
+    if (next.size !== placed.size || [...next].some((id) => !placed.has(id)))
+      await obr.setSceneMetadata({ [PLACED_METADATA_KEY]: [...next] });
+  }
+
+  async function reconcile(): Promise<void> {
+    if (retry !== null) {
+      timers.clearTimeout(retry);
+      retry = null;
     }
+    if (desired === null || !(await obr.isSceneReady())) return;
+    try {
+      await apply(desired);
+    } catch (error) {
+      // The scene went away mid-apply: the ready flip reconciles again.
+      if (!(await obr.isSceneReady())) return;
+      try {
+        onError(error);
+      } catch {
+        // A throwing handler must not stop later reconciles.
+      }
+      retry = timers.setTimeout(
+        () => {
+          retry = null;
+          void enqueue(reconcile);
+        },
+        nextDelay(attempt++, options.backoff),
+      );
+      return;
+    }
+    attempt = 0;
+    onApplied();
   }
 
   obr.onSceneReadyChange((ready) => {
-    if (ready) void enqueue(drain);
+    if (ready) void enqueue(reconcile);
   });
 
   return {
     handleMessage(message) {
-      if (
-        message.type !== "encounter-event" &&
-        message.type !== "encounter-snapshot"
-      )
+      if (message.type === "encounter-snapshot") {
+        desired = message.payload.instances;
+      } else if (message.type === "encounter-event") {
+        if (desired === null) return Promise.resolve();
+        desired = fold(desired, message.payload);
+      } else {
         return Promise.resolve();
-      return enqueue(() => {
-        if (message.type === "encounter-snapshot") pending.length = 0;
-        pending.push(message);
-        return drain();
-      });
+      }
+      return enqueue(reconcile);
     },
   };
 }

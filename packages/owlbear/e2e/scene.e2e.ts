@@ -86,6 +86,44 @@ test.describe("scene writes through the real adapter", () => {
     );
   });
 
+  test("key-level metadata write through the real adapter keeps other keys and clears on undefined", async ({
+    page,
+  }) => {
+    const driver = await openDriver(page);
+    await driver.evaluate(() =>
+      window.__e2e!.addHiddenToken({
+        id: "wight-1",
+        name: "Wight",
+        position: { x: 0, y: 0 },
+      }),
+    );
+    await page.evaluate(() =>
+      window.__host!.scene.updateItems(["wight-1"], {
+        metadata: {
+          "other.ext/thing": { keep: 1 },
+          "com.ttrpg-agents/a": "old",
+          "com.ttrpg-agents/b": 2,
+        },
+      }),
+    );
+    await driver.evaluate(() =>
+      window.__e2e!.obr.setItemMetadata([
+        { id: "wight-1", key: "com.ttrpg-agents/a", value: { v: "new" } },
+        { id: "wight-1", key: "com.ttrpg-agents/b", value: undefined },
+      ]),
+    );
+    const items = await page.evaluate(() => window.__host!.scene.getItems());
+    expect(items).toHaveLength(1);
+    expect(Object.keys(items[0]!.metadata).sort()).toEqual([
+      "com.ttrpg-agents/a",
+      "other.ext/thing",
+    ]);
+    expect(items[0]!.metadata).toEqual({
+      "other.ext/thing": { keep: 1 },
+      "com.ttrpg-agents/a": { v: "new" },
+    });
+  });
+
   test("a message with an unknown ref is rejected and recorded", async ({
     page,
     hostErrors,
