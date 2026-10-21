@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { InvalidAmountError, UnknownInstanceError } from "./errors.js";
+import { InvalidAmountError, UnknownInstanceError } from "@ttrpg-agents/core";
 import type {
+  Encounter,
   EncounterRepository,
   HpChange,
   InstanceBuilder,
-} from "./repository.js";
-import type { Encounter, MonsterInstance } from "./types.js";
+  MonsterInstance,
+} from "@ttrpg-agents/core";
 
 export interface RepositoryOptions {
   now?: () => number;

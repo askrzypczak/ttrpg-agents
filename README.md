@@ -18,7 +18,8 @@ An experiment, not a supported product. Expect rough edges and breaking changes.
 
 | Package                                                               | What it is                                                                                           |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| [`packages/core`](packages/core/README.md)                            | Dice engine, encounter store, and SRD monster library.                                               |
+| [`packages/core`](packages/core/README.md)                            | Dice engine and SRD monster library.                                                                 |
+| [`packages/store-sqlite`](packages/store-sqlite/README.md)            | SQLite encounter store (database path, migrations).                                                  |
 | [`packages/mcp`](packages/mcp/README.md)                              | MCP server (stdio) with the encounter tools.                                                         |
 | [`packages/bridge`](packages/bridge/README.md)                        | Local bridge server (separate process) that serves the extension and pushes encounter snapshots.     |
 | [`packages/owlbear`](packages/owlbear/README.md)                      | Owlbear Rodeo extension (Vite) that shows the encounter, tested browser-free through an SDK adapter. |

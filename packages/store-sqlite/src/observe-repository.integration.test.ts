@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { openDatabase } from "./db.js";
-import { UnknownInstanceError } from "./errors.js";
 import {
+  UnknownInstanceError,
   createEncounterEmitter,
   observeRepository,
   type EncounterEvent,
-} from "./events.js";
+} from "@ttrpg-agents/core";
+import { openDatabase } from "./db.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 function setup() {
@@ -101,37 +101,5 @@ describe("observeRepository", () => {
     expect(repo.listInstances()).toHaveLength(1);
     repo.getOrCreateActiveEncounter();
     expect(events).toEqual([]);
-  });
-});
-
-describe("createEncounterEmitter", () => {
-  it("calls listeners in subscription order", () => {
-    const emitter = createEncounterEmitter();
-    const calls: string[] = [];
-    emitter.subscribe(() => calls.push("a"));
-    emitter.subscribe(() => calls.push("b"));
-    emitter.emit({ type: "cleared" });
-    expect(calls).toEqual(["a", "b"]);
-  });
-
-  it("stops calling a listener after unsubscribe", () => {
-    const emitter = createEncounterEmitter();
-    const calls: string[] = [];
-    const off = emitter.subscribe(() => calls.push("a"));
-    emitter.emit({ type: "cleared" });
-    off();
-    emitter.emit({ type: "cleared" });
-    expect(calls).toEqual(["a"]);
-  });
-
-  it("isolates a throwing listener from the others", () => {
-    const emitter = createEncounterEmitter();
-    const calls: string[] = [];
-    emitter.subscribe(() => {
-      throw new Error("boom");
-    });
-    emitter.subscribe(() => calls.push("ok"));
-    expect(() => emitter.emit({ type: "cleared" })).not.toThrow();
-    expect(calls).toEqual(["ok"]);
   });
 });

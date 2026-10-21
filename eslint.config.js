@@ -5,7 +5,7 @@ import prettier from "eslint-config-prettier";
 const SDK_MESSAGE =
   "Import the SDK only in obr-adapter.ts; depend on ObrAdapter elsewhere.";
 const CORE_ROOT_MESSAGE =
-  "The @ttrpg-agents/core root pulls in the encounter store and node:sqlite; import the browser-safe @ttrpg-agents/protocol for the wire contract.";
+  "The @ttrpg-agents/core root is not browser-safe yet (it imports Node builtins); import the browser-safe @ttrpg-agents/protocol for the wire contract.";
 const NODE_BUILTIN_MESSAGE =
   "The extension runs in the browser; Node builtins are not available.";
 const PROTOCOL_MESSAGE =
@@ -51,7 +51,7 @@ export default tseslint.config(
     // Only the adapter may touch the SDK; everything else uses ObrAdapter so
     // it can be unit-tested with the fake (see packages/owlbear/README.md).
     // The extension runs in the browser, so it must not pull in the core root
-    // (encounter store, node:sqlite) or Node builtins either.
+    // (it imports Node builtins) or Node builtins itself.
     files: ["packages/owlbear/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [

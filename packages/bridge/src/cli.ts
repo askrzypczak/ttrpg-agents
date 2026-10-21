@@ -1,5 +1,8 @@
 import { fileURLToPath } from "node:url";
-import { SqliteEncounterRepository, openDatabase } from "@ttrpg-agents/core";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
 import {
   broadcastSnapshotsOnChange,
   dataVersion,

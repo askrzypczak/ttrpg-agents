@@ -1,6 +1,6 @@
 # @ttrpg-agents/core
 
-Shared domain code: dice engine, encounter store, and the monster library.
+Shared domain code: dice engine and the monster library.
 
 ## Monsters
 
