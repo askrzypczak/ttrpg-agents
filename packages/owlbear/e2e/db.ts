@@ -38,3 +38,43 @@ export function seedE2eDatabase(dir: string): void {
     db.close();
   }
 }
+
+/** Ids of the instances in the e2e DB's active encounter, in creation order. */
+export function listE2eInstanceIds(dir: string): string[] {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    return new SqliteEncounterRepository(db).listInstances().map((i) => i.id);
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Puts the 5 seeded shadows back in place. A worker's bridge (and its DB)
+ * outlives a test, and specs expect all 5.
+ */
+export function restoreE2eSeed(dir: string): void {
+  const have = listE2eInstanceIds(dir);
+  if (
+    have.length === SHADOW_IDS.length &&
+    SHADOW_IDS.every((id) => have.includes(id))
+  )
+    return;
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    const ids = [...SHADOW_IDS];
+    const repo = new SqliteEncounterRepository(db, {
+      newId: () => ids.shift()!,
+    });
+    repo.clearEncounter();
+    repo.addInstances(() =>
+      SHADOW_IDS.map((_, i) => ({
+        monsterKey: "shadow",
+        displayName: `Shadow ${i + 1}`,
+        maxHp: 16,
+      })),
+    );
+  } finally {
+    db.close();
+  }
+}

@@ -3,6 +3,7 @@ import "./globals.d.ts";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withCoverage } from "./coverage.js";
+import { restoreE2eSeed } from "./db.js";
 import { e2eDir, harnessOrigin } from "./env.js";
 import { startWorkerBridge, type WorkerBridge } from "./worker-bridge.js";
 
@@ -65,7 +66,7 @@ export async function openDriver(page: Page): Promise<Frame> {
 }
 
 export const test = base.extend<
-  { hostErrors: { allow: boolean } },
+  { hostErrors: { allow: boolean }; seed: void },
   { bridge: WorkerBridge }
 >({
   // Each worker runs its own real bridge (own port, token file and DB).
@@ -87,6 +88,17 @@ export const test = base.extend<
       }
     },
     { scope: "worker" },
+  ],
+
+  // Auto fixture: tests may remove instances (a deleted token is written back
+  // to the store), so each starts from the 5 seeded shadows.
+  seed: [
+    async ({ bridge }, use, workerInfo) => {
+      void bridge;
+      restoreE2eSeed(join(e2eDir(), `worker-${workerInfo.workerIndex}`));
+      await use();
+    },
+    { auto: true },
   ],
 
   // The bridge only lets owlbear.rodeo frame the extension (frame-ancestors).

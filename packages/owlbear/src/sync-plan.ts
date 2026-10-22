@@ -76,6 +76,8 @@ export type SyncPlan = {
   delete: string[];
   /** Token renames (a top-level item field, not metadata). */
   rename: { id: string; name: string }[];
+  /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
+  deleted: string[];
 };
 
 /** The instance id a scene item is linked to, if it is one of our tokens. */
@@ -134,7 +136,13 @@ export function planSync(
   config: SyncConfig,
   context: { viewportCenter: Vec2; placed: ReadonlySet<string> },
 ): SyncPlan {
-  const plan: SyncPlan = { add: [], update: [], delete: [], rename: [] };
+  const plan: SyncPlan = {
+    add: [],
+    update: [],
+    delete: [],
+    rename: [],
+    deleted: [],
+  };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();
   for (const item of observed) {
@@ -183,6 +191,10 @@ export function planSync(
     if (!deepEqual(next, baseline))
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
   }
+
+  for (const instance of desired)
+    if (!tokens.has(instance.id) && context.placed.has(instance.id))
+      plan.deleted.push(instance.id);
 
   const missing = desired.filter(
     (i) => !tokens.has(i.id) && !context.placed.has(i.id),

@@ -171,7 +171,13 @@ describe("planSync", () => {
       defaultSyncConfig,
       ctx(["i1", "i2"]),
     );
-    expect(plan).toEqual({ add: [], update: [], delete: [], rename: [] });
+    expect(plan).toEqual({
+      add: [],
+      update: [],
+      delete: [],
+      rename: [],
+      deleted: [],
+    });
   });
 
   it("pushes an owned key when the encounter changed and the table did not", () => {
@@ -210,7 +216,13 @@ describe("planSync", () => {
       config(link, hp),
       ctx(["i1"]),
     );
-    expect(plan).toEqual({ add: [], update: [], delete: [], rename: [] });
+    expect(plan).toEqual({
+      add: [],
+      update: [],
+      delete: [],
+      rename: [],
+      deleted: [],
+    });
   });
 
   it("pushes after a table edit once the encounter changes again", () => {
@@ -307,7 +319,12 @@ describe("planSync", () => {
       defaultSyncConfig,
       ctx(["i1", "i2"]),
     );
-    expect(plan).toEqual({ add: [], update: [], delete: [], rename: [] });
+    expect(plan).toMatchObject({
+      add: [],
+      update: [],
+      delete: [],
+      rename: [],
+    });
   });
 
   it("plans a non-default token kind (IMAGE on CHARACTER)", () => {
@@ -351,6 +368,50 @@ describe("planSync", () => {
       [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
       [HP_KEY]: 12,
     });
+  });
+});
+
+describe("planSync deleted", () => {
+  it("reports a wanted instance that is placed and has no token as deleted", () => {
+    const plan = planSync(
+      [inst(1), inst(2)],
+      [token(2, { [SYNCED_METADATA_KEY]: linkBaseline(2) })],
+      defaultSyncConfig,
+      ctx(["i1", "i2"]),
+    );
+    expect(plan.deleted).toEqual(["i1"]);
+    expect(plan.add).toEqual([]);
+  });
+
+  it("does not report one that is not placed (fresh scene is populated)", () => {
+    // i1 is the placed control; i2 was never placed on this scene.
+    const plan = planSync(
+      [inst(1), inst(2)],
+      [],
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(plan.deleted).toEqual(["i1"]);
+    expect(plan.add.map((i) => i.metadata[INSTANCE_METADATA_KEY])).toEqual([
+      { instanceId: "i2" },
+    ]);
+  });
+
+  it("does not report one that still has a token", () => {
+    // i2's token has no baseline yet, i3's has one; i1's token is gone.
+    const plan = planSync(
+      [inst(1), inst(2), inst(3)],
+      [token(2), token(3, { [SYNCED_METADATA_KEY]: linkBaseline(3) })],
+      defaultSyncConfig,
+      ctx(["i1", "i2", "i3"]),
+    );
+    expect(plan.deleted).toEqual(["i1"]);
+  });
+
+  it("does not report an instance that is no longer wanted", () => {
+    // i9 is still in the placed record but has left the encounter.
+    const plan = planSync([inst(1)], [], defaultSyncConfig, ctx(["i1", "i9"]));
+    expect(plan.deleted).toEqual(["i1"]);
   });
 });
 

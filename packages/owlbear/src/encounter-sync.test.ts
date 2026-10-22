@@ -185,6 +185,14 @@ function twoScenes() {
       listeners.add(cb);
       return () => listeners.delete(cb);
     },
+    onItemsChange: (cb) => {
+      const offs = [a, b].map((fake) =>
+        fake.obr.onItemsChange(() => {
+          if (fake === current) cb();
+        }),
+      );
+      return () => offs.forEach((off) => off());
+    },
     addItems: (i) => current.obr.addItems(i),
     getItems: (f) => current.obr.getItems(f),
     updateItems: (ids, p) => current.obr.updateItems(ids, p),

@@ -52,9 +52,13 @@ describe("createEncounterSync guards", () => {
     await sync.handleMessage(snapshot(1, 2));
     expect(calls).toContain("addItems");
     expect(calls).toContain("setSceneMetadata");
+    await settle();
     calls.length = 0;
     await sync.handleMessage(snapshot(1, 2));
-    expect(calls).toEqual(["getItems"]);
+    await settle();
+    // Only reads: the scene's own item changes also trigger reconciles.
+    expect(calls).toContain("getItems");
+    expect(calls.filter((c) => c !== "getItems")).toEqual([]);
   });
 
   it("only deletes when something is stale, and prunes the placed ids", async () => {
@@ -63,9 +67,14 @@ describe("createEncounterSync guards", () => {
     await sync.handleMessage(snapshot(1, 2));
     expect(calls).not.toContain("deleteItems");
     expect(placedOf(scene)).toEqual(["i1", "i2"]);
+    await settle();
     calls.length = 0;
     await sync.handleMessage(snapshot(1));
-    expect(calls).toEqual(["getItems", "deleteItems", "setSceneMetadata"]);
+    await settle();
+    expect(calls.filter((c) => c !== "getItems")).toEqual([
+      "deleteItems",
+      "setSceneMetadata",
+    ]);
     expect(placedOf(scene)).toEqual(["i1"]);
   });
 

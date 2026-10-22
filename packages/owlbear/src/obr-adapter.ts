@@ -16,6 +16,8 @@ export interface ObrAdapter {
   isSceneReady(): Promise<boolean>;
   /** Returns an unsubscribe function. */
   onSceneReadyChange(callback: (ready: boolean) => void): () => void;
+  /** Fires on any change to the scene's items. Returns an unsubscribe function. */
+  onItemsChange(callback: () => void): () => void;
   addItems(items: SceneItem[]): Promise<void>;
   getItems(filter?: (item: SceneItem) => boolean): Promise<SceneItem[]>;
   updateItems(ids: string[], patch: Omit<ItemPatch, "metadata">): Promise<void>;
@@ -97,6 +99,7 @@ export function createObrAdapter(): ObrAdapter {
       (await OBR.player.getRole()) === "GM" ? "gm" : "player",
     isSceneReady: () => OBR.scene.isReady(),
     onSceneReadyChange: (callback) => OBR.scene.onReadyChange(callback),
+    onItemsChange: (callback) => OBR.scene.items.onChange(() => callback()),
     addItems: (items) => OBR.scene.items.addItems(items.map(toItem)),
     getItems: async (filter) => {
       const items = (await OBR.scene.items.getItems()).map(fromItem);

@@ -14,6 +14,8 @@ const helloPayload = z.object({
   token: z.string(),
 });
 const helloAckPayload = z.object({ serverVersion: z.string() });
+// Extension -> bridge: the GM deleted this instance's token on the table.
+const tokenDeletedPayload = z.object({ instanceId: z.string() });
 const emptyPayload = z.object({});
 const errorPayload = z.object({
   code: z.string(),
@@ -89,6 +91,7 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("encounter-snapshot", encounterSnapshotPayload),
   envelope("query", querySchema),
   envelope("query-result", queryResultSchema),
+  envelope("token-deleted", tokenDeletedPayload),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;

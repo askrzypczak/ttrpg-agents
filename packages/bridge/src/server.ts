@@ -65,7 +65,12 @@ export interface BridgeServerOptions {
   agentToken?: string;
   /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
   queryTimeoutMs?: number;
+  /** Removes an instance from the store when the GM deletes its token on the table. */
+  removeInstance?: (instanceId: string) => RemoveInstanceResult;
 }
+
+export type RemoveInstanceResult =
+  { ok: true } | { ok: false; code: string; message: string };
 
 export interface BridgeServer {
   port: number;
@@ -87,10 +92,16 @@ const FATAL_ERROR_CODES = new Set([
   "superseded",
 ]);
 
-function errorMessage(code: string, message: string): BridgeMessage {
+function errorMessage(
+  code: string,
+  message: string,
+  id?: string,
+): BridgeMessage {
   return {
     v: PROTOCOL_VERSION,
     type: "error",
+    // Stryker disable next-line ConditionalExpression: equivalent, an undefined id is dropped when the message is encoded
+    ...(id !== undefined ? { id } : {}),
     payload: { code, message, fatal: FATAL_ERROR_CODES.has(code) },
   };
 }
@@ -120,7 +131,24 @@ interface Hooks {
   token: string;
   pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
+  removeInstance: ((instanceId: string) => RemoveInstanceResult) | undefined;
   onAuthenticated: () => void;
+}
+
+/** Sends the current snapshot, if configured; a failing one is a non-fatal error. */
+function sendSnapshot(ws: WebSocket, hooks: Hooks): void {
+  if (!hooks.snapshot) return;
+  try {
+    send(ws, hooks.snapshot());
+  } catch (e) {
+    send(
+      ws,
+      errorMessage(
+        "snapshot-failed",
+        e instanceof Error ? e.message : String(e),
+      ),
+    );
+  }
 }
 
 // Authorization is decided only by the token. The client-supplied `role` in
@@ -166,20 +194,42 @@ function handleMessage(
         ...(message.id !== undefined ? { id: message.id } : {}),
         payload: { serverVersion: SERVER_VERSION },
       });
-      if (hooks.snapshot) {
-        try {
-          send(ws, hooks.snapshot());
-        } catch (e) {
-          send(
-            ws,
-            errorMessage(
-              "snapshot-failed",
-              e instanceof Error ? e.message : String(e),
-            ),
-          );
-        }
+      sendSnapshot(ws, hooks);
+      break;
+    case "token-deleted": {
+      if (!hooks.removeInstance) {
+        send(
+          ws,
+          errorMessage(
+            "unexpected-type",
+            `server does not accept "${message.type}"`,
+          ),
+        );
+        break;
+      }
+      let outcome: RemoveInstanceResult;
+      try {
+        outcome = hooks.removeInstance(message.payload.instanceId);
+      } catch (e) {
+        send(
+          ws,
+          errorMessage(
+            "remove-failed",
+            e instanceof Error ? e.message : String(e),
+            message.id,
+          ),
+        );
+        break;
+      }
+      if (outcome.ok) {
+        // The bridge's own commit does not bump data_version, so the poller
+        // would not tell the client; send the new state directly.
+        sendSnapshot(ws, hooks);
+      } else {
+        send(ws, errorMessage(outcome.code, outcome.message, message.id));
       }
       break;
+    }
     case "query-result": {
       const waiting = hooks.pending.get(message.id ?? "");
       if (waiting === undefined) {
@@ -237,6 +287,7 @@ export async function startBridgeServer(
     snapshot,
     agentToken = randomBytes(32).toString("hex"),
     queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS,
+    removeInstance,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
@@ -367,6 +418,7 @@ export async function startBridgeServer(
         token,
         pending,
         snapshot,
+        removeInstance,
         onAuthenticated: () => {
           if (active !== null) {
             rejectAndClose(active, "superseded", "another tab connected");

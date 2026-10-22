@@ -24,6 +24,10 @@ export function createFakeObr(
       scene.onChange((change) => {
         if (change.kind === "ready") callback(change.ready);
       }),
+    onItemsChange: (callback) =>
+      scene.onChange((change) => {
+        if (change.kind === "items") callback();
+      }),
     addItems: (items) => whenReady(() => scene.addItems(items)),
     getItems: (filter) => whenReady(() => scene.getItems(filter)),
     updateItems: (ids, patch) => whenReady(() => scene.updateItems(ids, patch)),

@@ -141,6 +141,32 @@ describe("panelView sync error", () => {
   });
 });
 
+describe("panelView remove error", () => {
+  it("a removeError shows as the panel error, together with a syncError, and not for gm-only or token-missing", () => {
+    const removeError = "Could not remove i7 from the encounter: gone";
+    const base: PanelInput = {
+      role: "gm",
+      socketState: "open",
+      disconnectedMs: 0,
+      removeError,
+    };
+    const alone = panelView(base);
+    expect(alone.kind).toBe("connected");
+    expect(alone.error).toContain(removeError);
+
+    const both = panelView({ ...base, syncError: "boom" });
+    expect(both.error).toContain(removeError);
+    expect(both.error).toContain("Encounter sync failed: boom");
+
+    const player = panelView({ ...base, role: "player", syncError: "boom" });
+    expect(player.kind).toBe("gm-only");
+    expect(player.error).toBeUndefined();
+    const noToken = panelView({ ...base, tokenMissing: true });
+    expect(noToken.kind).toBe("token-missing");
+    expect(noToken.error).toBeUndefined();
+  });
+});
+
 describe("describeError", () => {
   it("handles Errors, SDK-style objects, strings and anything else", () => {
     expect(describeError(new Error("bad"))).toBe("bad");

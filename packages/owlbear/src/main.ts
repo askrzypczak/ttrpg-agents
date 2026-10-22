@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   ReconnectingSocket,
   type RejectionCode,
@@ -9,6 +9,7 @@ import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { describeError, panelView } from "./panel-state.js";
+import { tokenDeletedErrorText, tokenDeletedMessage } from "./token-deleted.js";
 
 const EXTENSION_VERSION = "0.0.0";
 
@@ -30,6 +31,7 @@ obr.onReady(async () => {
   let socketState: SocketState = "connecting";
   let streakStart = Date.now();
   let syncError: string | undefined;
+  let removeError: string | undefined;
 
   let rejection: RejectionCode | undefined;
   const render = () => {
@@ -39,6 +41,7 @@ obr.onReady(async () => {
       socketState,
       ...(rejection ? { rejection } : {}),
       syncError,
+      ...(removeError !== undefined ? { removeError } : {}),
       disconnectedMs: Date.now() - streakStart,
     });
     const status = el("status");
@@ -54,6 +57,8 @@ obr.onReady(async () => {
     return;
   }
 
+  // The socket is created after the sync, which reports deletions through it.
+  let sendToBridge: (message: BridgeMessage) => void = () => {};
   const sync = createEncounterSync(
     obr,
     (e) => {
@@ -66,6 +71,7 @@ obr.onReady(async () => {
       syncError = undefined;
       render();
     },
+    { onTokenDeleted: (id) => sendToBridge(tokenDeletedMessage(id)) },
   );
   const socket = new ReconnectingSocket({
     url: `ws://${location.host}/ws`,
@@ -82,6 +88,16 @@ obr.onReady(async () => {
         );
         return;
       }
+      if (message.type === "encounter-snapshot") {
+        removeError = undefined;
+        render();
+      } else {
+        const text = tokenDeletedErrorText(message);
+        if (text !== undefined) {
+          removeError = text;
+          render();
+        }
+      }
       void sync.handleMessage(message);
     },
     onStateChange: (state) => {
@@ -93,6 +109,7 @@ obr.onReady(async () => {
       render();
     },
   });
+  sendToBridge = (message) => socket.send(message);
   el("use-this-tab").addEventListener("click", () => {
     socket.close();
     socket.start();

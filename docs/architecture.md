@@ -55,7 +55,7 @@ flowchart LR
 
 ## Shared database
 
-Both processes use one SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else `~/.local/share/ttrpg-agents/encounters.db`. The MCP server writes; the bridge only reads.
+Both processes use one SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else `~/.local/share/ttrpg-agents/encounters.db`. The MCP server writes. The bridge reads, and removes one instance when the extension reports (`token-deleted`) that the GM deleted its token.
 
 ## Token and auth
 
@@ -86,4 +86,4 @@ The extension (GM role only) reconciles the scene against the latest encounter. 
 - **Tokens.** Our tokens carry the metadata key `com.ttrpg-agents/instance`; anything else on the scene is never touched. By default each instance is a hidden circle SHAPE token. Per-feature values are set by projectors (`owned` or `create-only`) and written one metadata key at a time, so other extensions' keys survive.
 - **The table wins.** Each token records the value last written for every `owned` key (metadata key `com.ttrpg-agents/synced`). A value is pushed only when the encounter changed since then. A table edit stands until the encounter's value changes again, and then the encounter overwrites it.
 - **Deleted tokens stay deleted.** The scene metadata key `com.ttrpg-agents/placed` lists the instances already placed on the scene, so a token the GM deleted is not recreated. A scene with no record is populated.
-- **Not yet written back.** Table edits and token deletions do not reach the store (open tickets #162 and #163).
+- **Token deletion is written back.** A deleted token (a wanted instance in `placed` with no token) is reported to the bridge, which removes the instance from the store and replies with a fresh snapshot, so the `placed` record is pruned. Table edits do not reach the store yet (open ticket #162).

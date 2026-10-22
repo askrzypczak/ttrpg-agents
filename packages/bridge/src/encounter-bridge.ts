@@ -1,6 +1,28 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { EncounterRepository } from "@ttrpg-agents/engine";
+import {
+  UnknownInstanceError,
+  type EncounterRepository,
+} from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import type { RemoveInstanceResult } from "./server.js";
+
+/**
+ * Removes one instance for a `token-deleted` request: an unknown id is a
+ * refusal (`unknown-instance`), any other failure is rethrown.
+ */
+export function removeInstance(
+  repo: EncounterRepository,
+  instanceId: string,
+): RemoveInstanceResult {
+  try {
+    repo.removeInstances([instanceId]);
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof UnknownInstanceError)
+      return { ok: false, code: "unknown-instance", message: e.message };
+    throw e;
+  }
+}
 
 /** Full current instance list, for a client that just connected. */
 export function snapshotMessage(repo: EncounterRepository): BridgeMessage {
