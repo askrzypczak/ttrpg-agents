@@ -22,7 +22,7 @@ test.describe("scene writes through the real adapter", () => {
     });
   });
 
-  test("initiative metadata is written and other metadata survives", async ({
+  test("setSceneMetadata merges and keeps other scene metadata", async ({
     page,
   }) => {
     const driver = await openDriver(page);
@@ -30,14 +30,14 @@ test.describe("scene writes through the real adapter", () => {
       window.__host!.scene.setMetadata({ "other.ext/metadata": { keep: 1 } }),
     );
     await driver.evaluate(() =>
-      window.__e2e!.writeInitiativeMetadata({ round: 2 }),
+      window.__e2e!.obr.setSceneMetadata({ "com.ttrpg-agents/placed": ["x"] }),
     );
     const metadata = await page.evaluate(() =>
       window.__host!.scene.getMetadata(),
     );
     expect(metadata).toEqual({
       "other.ext/metadata": { keep: 1 },
-      "rodeo.owlbear.initiative-tracker/metadata": { round: 2 },
+      "com.ttrpg-agents/placed": ["x"],
     });
   });
 

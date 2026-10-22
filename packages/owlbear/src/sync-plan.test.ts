@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { INITIATIVE_METADATA_KEY } from "./initiative.js";
 import type { SceneItem } from "./scene-model.js";
 import {
   INSTANCE_METADATA_KEY,
@@ -513,6 +514,81 @@ describe("planSync token name", () => {
       ...linkBaseline(1),
       [NAME_BASELINE_KEY]: "Ghost",
     });
+  });
+});
+
+describe("planSync initiative tracker", () => {
+  const tracker = (count: string) => ({ count, active: false });
+  const syncedOf = (item: SceneItem) =>
+    item.metadata[SYNCED_METADATA_KEY] as Record<string, unknown>;
+
+  it("a new token from the default config carries the tracker metadata and is hidden", () => {
+    const plan = planSync(
+      [inst(1, { initiative: 14 })],
+      [],
+      defaultSyncConfig,
+      ctx(),
+    );
+    expect(plan.add).toHaveLength(1);
+    expect(plan.add[0]!.metadata[INITIATIVE_METADATA_KEY]).toEqual(
+      tracker("14"),
+    );
+    expect(plan.add[0]!.visible).toBe(false);
+  });
+
+  it("a null initiative on a new token has no tracker key and no baseline entry", () => {
+    const plan = planSync(
+      [inst(1, { initiative: null }), inst(2, { initiative: 12 })],
+      [],
+      defaultSyncConfig,
+      ctx(),
+    );
+    const [none, rolled] = plan.add;
+    expect(Object.hasOwn(none!.metadata, INITIATIVE_METADATA_KEY)).toBe(false);
+    expect(Object.hasOwn(syncedOf(none!), INITIATIVE_METADATA_KEY)).toBe(false);
+    // Control: the projector is active in the default config.
+    expect(rolled!.metadata[INITIATIVE_METADATA_KEY]).toEqual(tracker("12"));
+  });
+
+  it("a null initiative on an existing token writes nothing and records no baseline", () => {
+    const observed = [
+      token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }),
+      token(2, { [SYNCED_METADATA_KEY]: linkBaseline(2) }),
+    ];
+    const plan = planSync(
+      [inst(1, { initiative: null }), inst(2, { initiative: 12 })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1", "i2"]),
+    );
+    expect(plan.update.filter((u) => u.id === "token-1")).toEqual([]);
+    const after = applyUpdates(observed, plan);
+    expect(
+      Object.hasOwn(metadataOf(after, "token-1"), INITIATIVE_METADATA_KEY),
+    ).toBe(false);
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
+    // Control: the projector is active in the default config.
+    expect(metadataOf(after, "token-2")[INITIATIVE_METADATA_KEY]).toEqual(
+      tracker("12"),
+    );
+  });
+
+  it("a null initiative drops an existing tracker baseline", () => {
+    const observed = [
+      token(1, {
+        [SYNCED_METADATA_KEY]: {
+          ...linkBaseline(1),
+          [INITIATIVE_METADATA_KEY]: tracker("14"),
+        },
+      }),
+    ];
+    const plan = planSync(
+      [inst(1, { initiative: null })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
   });
 });
 
