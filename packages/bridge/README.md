@@ -44,3 +44,12 @@ MCP server's `stdio.ts` wires in; `createBridgeTable` implements the engine's
 
 The bridge polls SQLite's `data_version` every 250 ms and pushes a snapshot
 when another process commits, so tokens appear without reloading the panel.
+
+An authenticated client can send `token-deleted` (`{ instanceId }`, sent by the
+extension when the GM deletes one of our tokens). The server's optional
+`removeInstance` option performs the removal (`cli.ts` wires
+`removeInstance(repo, id)` from `encounter-bridge.ts`) and the bridge replies
+with a fresh snapshot, since its own commits do not bump `data_version`. A
+refusal (`unknown-instance`) or a failed write (`remove-failed`) is a non-fatal
+`error` that echoes the request id. Without the option the type is
+`unexpected-type`. The client's `role` is never read.

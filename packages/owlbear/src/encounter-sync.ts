@@ -54,18 +54,19 @@ function fold(
           ? { ...i, currentHp: event.currentHp, maxHp: event.maxHp }
           : i,
       );
-    // Stryker restore all
   }
 }
 
+// Stryker restore all
 /**
  * Holds the desired encounter (the latest snapshot folded with later events)
  * and reconciles the scene against it on every trigger: a message, the scene
- * becoming ready, or a retry. Reconciles run one at a time, in arrival order.
- * One on a scene that is not ready is skipped (the ready flip runs it). A
+ * becoming ready, an item change, or a retry. Reconciles run one at a time,
+ * in arrival order. One on a scene that is not ready is skipped (the ready flip runs it). A
  * failing one on a ready scene is reported to `onError` and retried with
  * backoff until a later trigger or success; a scene that goes away mid-apply
- * is deferred silently. `onApplied` fires after each successful reconcile.
+ * is deferred silently. `onApplied` fires after each successful reconcile, except a quiet one (from an
+ * item change) that was not recovering from a failure.
  * Events before the first snapshot are ignored (the bridge sends a snapshot
  * on connect).
  */
@@ -86,6 +87,12 @@ export function createEncounterSync(
   let tail: Promise<void> = Promise.resolve();
   let retry: unknown = null;
   let attempt = 0;
+  // Deleted tokens already reported since the last snapshot.
+  const reported = new Set<string>();
+  // Item changes coalesce: at most one quiet reconcile is `queued`. Changes
+  // raised synchronously by our own write calls (`writing`) are ignored.
+  let writing = false;
+  let queued = false;
 
   const enqueue = (task: () => Promise<void>): Promise<void> => {
     // Never let the chain reject, or every later trigger would be skipped.
@@ -93,7 +100,16 @@ export function createEncounterSync(
     return tail;
   };
 
-  async function apply(wanted: EncounterInstance[]): Promise<void> {
+  async function write(call: () => Promise<void>): Promise<void> {
+    writing = true;
+    try {
+      await call();
+    } finally {
+      writing = false;
+    }
+  }
+
+  async function apply(wanted: EncounterInstance[]): Promise<string[]> {
     const items = await obr.getItems();
     const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
     const placed = new Set(
@@ -105,9 +121,10 @@ export function createEncounterSync(
       viewportCenter: await obr.getViewportCenter(),
       placed,
     });
-    if (plan.delete.length > 0) await obr.deleteItems(plan.delete);
-    if (plan.add.length > 0) await obr.addItems(plan.add);
-    if (plan.update.length > 0) await obr.setItemMetadata(plan.update);
+    if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
+    if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
+    if (plan.update.length > 0)
+      await write(() => obr.setItemMetadata(plan.update));
 
     // Remember which instances now have a token, so a token the GM deletes
     // later stays deleted; forget instances that left the encounter.
@@ -125,17 +142,19 @@ export function createEncounterSync(
     );
     if (next.size !== placed.size || [...next].some((id) => !placed.has(id)))
       await obr.setSceneMetadata({ [PLACED_METADATA_KEY]: [...next] });
+    return plan.deleted;
   }
 
-  async function reconcile(): Promise<void> {
+  async function reconcile(quiet = false): Promise<void> {
     if (retry !== null) {
       timers.clearTimeout(retry);
       retry = null;
     }
     if (desired === null || !(await obr.isSceneReady())) return;
     const applying = desired;
+    let deleted: string[];
     try {
-      await apply(applying);
+      deleted = await apply(applying);
     } catch (error) {
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
@@ -153,11 +172,35 @@ export function createEncounterSync(
       );
       return;
     }
+    const recovered = attempt > 0;
     attempt = 0;
     appliedCount = applying.length;
-    onApplied();
+    if (!quiet || recovered) onApplied();
+    for (const id of deleted) {
+      if (reported.has(id)) continue;
+      reported.add(id);
+      options.onTokenDeleted?.(id);
+    }
   }
 
+  // A table change (including our own writes) reconciles quietly: it reports
+  // deleted tokens but is not an apply the panel should hear about.
+  function queueQuiet(): void {
+    if (queued) return;
+    queued = true;
+    // Yield a macrotask (real timer, not the injectable retry timers) so a
+    // burst coalesces and two syncs on one scene cannot starve the event loop.
+    defaultTimers.setTimeout(() => {
+      void enqueue(() => {
+        queued = false;
+        return reconcile(true);
+      });
+    }, 0);
+  }
+  obr.onItemsChange(() => {
+    if (writing) return;
+    queueQuiet();
+  });
   obr.onSceneReadyChange((ready) => {
     if (ready) void enqueue(reconcile);
   });
@@ -166,6 +209,7 @@ export function createEncounterSync(
     handleMessage(message) {
       if (message.type === "encounter-snapshot") {
         desired = message.payload.instances;
+        reported.clear();
       } else if (message.type === "encounter-event") {
         if (desired === null) return Promise.resolve();
         desired = fold(desired, message.payload);

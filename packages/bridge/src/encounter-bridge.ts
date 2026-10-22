@@ -1,5 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { EncounterRepository } from "@ttrpg-agents/engine";
+import {
+  UnknownInstanceError,
+  type EncounterRepository,
+} from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import type { RemoveInstanceResult } from "./server.js";
 
@@ -11,9 +14,14 @@ export function removeInstance(
   repo: EncounterRepository,
   instanceId: string,
 ): RemoveInstanceResult {
-  void repo;
-  void instanceId;
-  throw new Error("not implemented");
+  try {
+    repo.removeInstances([instanceId]);
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof UnknownInstanceError)
+      return { ok: false, code: "unknown-instance", message: e.message };
+    throw e;
+  }
 }
 
 /** Full current instance list, for a client that just connected. */

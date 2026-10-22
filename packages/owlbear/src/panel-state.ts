@@ -65,11 +65,12 @@ export const STALLED_HINT =
 
 export function panelView(input: PanelInput): PanelView {
   const view = connectionView(input);
-  return input.syncError &&
-    view.kind !== "gm-only" &&
-    view.kind !== "token-missing"
-    ? { ...view, error: `Encounter sync failed: ${input.syncError}` }
-    : view;
+  if (view.kind === "gm-only" || view.kind === "token-missing") return view;
+  const errors = [
+    input.syncError ? `Encounter sync failed: ${input.syncError}` : undefined,
+    input.removeError,
+  ].filter((e): e is string => !!e);
+  return errors.length > 0 ? { ...view, error: errors.join(" ") } : view;
 }
 
 function connectionView(input: PanelInput): PanelView {

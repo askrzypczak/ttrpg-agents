@@ -160,6 +160,10 @@ export function planSync(
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
   }
 
+  for (const instance of desired)
+    if (!tokens.has(instance.id) && context.placed.has(instance.id))
+      plan.deleted.push(instance.id);
+
   const missing = desired.filter(
     (i) => !tokens.has(i.id) && !context.placed.has(i.id),
   );

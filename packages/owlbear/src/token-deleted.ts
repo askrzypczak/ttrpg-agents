@@ -1,13 +1,19 @@
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 
+const ID_PREFIX = "token-deleted:";
+
 /**
  * The `token-deleted` request for an instance whose token the GM deleted.
  * Its envelope id is `token-deleted:<instanceId>`, so the bridge's error
  * reply can be matched back to it.
  */
 export function tokenDeletedMessage(instanceId: string): BridgeMessage {
-  void instanceId;
-  throw new Error("not implemented");
+  return {
+    v: 1,
+    type: "token-deleted",
+    id: `${ID_PREFIX}${instanceId}`,
+    payload: { instanceId },
+  };
 }
 
 /**
@@ -17,6 +23,12 @@ export function tokenDeletedMessage(instanceId: string): BridgeMessage {
 export function tokenDeletedErrorText(
   message: BridgeMessage,
 ): string | undefined {
-  void message;
-  throw new Error("not implemented");
+  if (
+    message.type !== "error" ||
+    message.payload.fatal ||
+    !message.id?.startsWith(ID_PREFIX)
+  )
+    return undefined;
+  const instanceId = message.id.slice(ID_PREFIX.length);
+  return `Could not remove ${instanceId} from the encounter: ${message.payload.message}`;
 }
