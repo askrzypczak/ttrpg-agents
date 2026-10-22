@@ -7,6 +7,7 @@ import { SHADOW_IDS } from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
 
 const INSTANCE_KEY = "com.ttrpg-agents/instance";
+const INITIATIVE_KEY = "rodeo.owlbear.initiative-tracker/metadata";
 
 const readItems = (page: import("@playwright/test").Page) =>
   page.evaluate(() => window.__host!.scene.getItems());
@@ -51,6 +52,20 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     // One row: same y, distinct x.
     expect(new Set(items.map((i) => i.position.y)).size).toBe(1);
     expect(new Set(items.map((i) => i.position.x)).size).toBe(5);
+  });
+
+  test("synced tokens carry the group initiative metadata", async ({
+    page,
+  }) => {
+    await openHarness(page, { role: "gm" });
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+
+    const items = await readItems(page);
+    for (const id of SHADOW_IDS)
+      expect(tokenOf(items, id).metadata[INITIATIVE_KEY]).toEqual({
+        count: "14",
+        active: false,
+      });
   });
 
   test("a second snapshot only adds what is missing", async ({ page }) => {

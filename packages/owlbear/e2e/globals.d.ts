@@ -13,7 +13,6 @@ declare global {
         name: string;
         position: { x: number; y: number };
       }): Promise<SceneItem>;
-      writeInitiativeMetadata(value: unknown): Promise<void>;
       /** Send a raw SDK-shaped message; resolves with the host's reply. */
       sendRaw(id: string): Promise<{ id: string; data: unknown }>;
     };

@@ -3,7 +3,6 @@
 // logic modules (the API is published only once OBR_READY has arrived), and lets sendRaw probe the fake host's strictness.
 import { createObrAdapter } from "../src/obr-adapter.js";
 import { addHiddenToken } from "../src/hidden-token.js";
-import { writeInitiativeMetadata } from "../src/initiative.js";
 import "./globals.d.ts";
 
 const obr = createObrAdapter();
@@ -28,7 +27,6 @@ obr.onReady(() => {
         },
         grid: { dpi: 150, offset: { x: 75, y: 75 } },
       }),
-    writeInitiativeMetadata: (value) => writeInitiativeMetadata(obr, value),
     sendRaw: (id) =>
       new Promise((resolve, reject) => {
         const nonce = `_raw-${Math.random()}`;
