@@ -10,6 +10,8 @@ export type EncounterInstance = Extract<
 export const INSTANCE_METADATA_KEY = "com.ttrpg-agents/instance";
 /** Item metadata: the values we last wrote, `{ [projectorKey]: value }`. */
 export const SYNCED_METADATA_KEY = "com.ttrpg-agents/synced";
+/** Reserved key in the synced record: the token name we last wrote. */
+export const NAME_BASELINE_KEY = "name";
 /** Scene metadata: the instance ids already placed on this scene. */
 export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 
@@ -67,6 +69,8 @@ export type SyncPlan = {
   /** Key-level item metadata writes; `value: undefined` clears the key. */
   update: { id: string; key: string; value: unknown }[];
   delete: string[];
+  /** Token renames (a top-level item field, not metadata). */
+  rename: { id: string; name: string }[];
 };
 
 /** The instance id a scene item is linked to, if it is one of our tokens. */
@@ -121,7 +125,7 @@ export function planSync(
   config: SyncConfig,
   context: { viewportCenter: Vec2; placed: ReadonlySet<string> },
 ): SyncPlan {
-  const plan: SyncPlan = { add: [], update: [], delete: [] };
+  const plan: SyncPlan = { add: [], update: [], delete: [], rename: [] };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();
   for (const item of observed) {

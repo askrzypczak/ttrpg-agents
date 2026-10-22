@@ -14,6 +14,8 @@ export interface WorkerBridge {
   token: string;
   /** Bearer token for `POST /agent/query`. */
   agentToken: string;
+  /** The seeded SQLite file the bridge serves (`e2eDbPath(dir)`). */
+  dbPath: string;
   stop(): Promise<void>;
 }
 
@@ -34,6 +36,7 @@ export async function startWorkerBridge(options: {
   const tokenFile = writeE2eTokenFile(dir);
   const agentTokenFile = writeE2eAgentTokenFile(dir);
   seedE2eDatabase(dir);
+  const dbPath = e2eDbPath(dir);
 
   const child = spawn(
     process.execPath,
@@ -46,7 +49,7 @@ export async function startWorkerBridge(options: {
         BRIDGE_STATIC_DIR: staticDir,
         BRIDGE_TOKEN_FILE: tokenFile,
         BRIDGE_AGENT_TOKEN_FILE: agentTokenFile,
-        TTRPG_AGENTS_DB: e2eDbPath(dir),
+        TTRPG_AGENTS_DB: dbPath,
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -67,7 +70,13 @@ export async function startWorkerBridge(options: {
     await stop();
     throw error;
   }
-  return { origin, token: E2E_TOKEN, agentToken: E2E_AGENT_TOKEN, stop };
+  return {
+    origin,
+    token: E2E_TOKEN,
+    agentToken: E2E_AGENT_TOKEN,
+    dbPath,
+    stop,
+  };
 }
 
 function waitForOrigin(child: ChildProcess): Promise<string> {

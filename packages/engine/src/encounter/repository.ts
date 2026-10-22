@@ -31,6 +31,13 @@ export interface EncounterRepository {
    * UnknownInstanceError, removing nothing, if any id is not in the active encounter.
    */
   removeInstances(ids: readonly string[]): MonsterInstance[];
+  /**
+   * Renames an instance of the active encounter in one transaction and returns
+   * it updated; the name is trimmed. Throws UnknownInstanceError for an id not
+   * in the active encounter, InvalidNameError for an empty name or one another
+   * instance has; nothing changes on a throw.
+   */
+  renameInstance(id: string, name: string): MonsterInstance;
   /** Deletes all instances of the active encounter. */
   clearEncounter(): void;
   /** Instances of the active encounter, ordered by creation. */

@@ -277,6 +277,17 @@ const removeMonstersTool = defineTool({
   },
 });
 
+const renameMonsterTool = defineTool({
+  name: "rename_monster",
+  annotations: { destructiveHint: true },
+  description:
+    "Rename a monster. Target is an instance id or exact name; the new name must be non-empty and not used by another monster.",
+  inputSchema: { target: z.string(), name: z.string() },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 const clearEncounterTool = defineTool({
   name: "clear_encounter",
   annotations: { destructiveHint: true },
@@ -328,6 +339,7 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("damage"),
   hpTool("heal"),
   removeMonstersTool,
+  renameMonsterTool,
   clearEncounterTool,
   tableStatusTool,
 ];

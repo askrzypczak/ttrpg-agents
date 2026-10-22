@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SceneItem } from "./scene-model.js";
 import {
   INSTANCE_METADATA_KEY,
+  NAME_BASELINE_KEY,
   SYNCED_METADATA_KEY,
   defaultSyncConfig,
   planSync,
@@ -38,7 +39,7 @@ const configFor = (project: () => unknown): SyncConfig => ({
 const itemWith = (metadata: Record<string, unknown>): SceneItem => ({
   id: "t1",
   type: "SHAPE",
-  name: "x",
+  name: "Shadow 1",
   visible: false,
   position: { x: 0, y: 0 },
   metadata,
@@ -108,6 +109,7 @@ describe("planSync guards", () => {
           [KEY]: structuredClone(value),
           [SYNCED_METADATA_KEY]: {
             [INSTANCE_METADATA_KEY]: linkValue,
+            [NAME_BASELINE_KEY]: "Shadow 1",
             [KEY]: structuredClone(value),
           },
         }),
@@ -139,7 +141,11 @@ describe("planSync guards", () => {
       {
         id: "t1",
         key: SYNCED_METADATA_KEY,
-        value: { [INSTANCE_METADATA_KEY]: linkValue, [KEY]: "db" },
+        value: {
+          [INSTANCE_METADATA_KEY]: linkValue,
+          [NAME_BASELINE_KEY]: "Shadow 1",
+          [KEY]: "db",
+        },
       },
     ]);
   });
@@ -155,8 +161,8 @@ describe("planSync guards", () => {
       context,
     );
     expect(plan.add[0]!.metadata[KEY]).toBe(1);
-    expect(plan.add[0]!.metadata[SYNCED_METADATA_KEY]).toEqual({
-      [INSTANCE_METADATA_KEY]: linkValue,
-    });
+    const synced = plan.add[0]!.metadata[SYNCED_METADATA_KEY];
+    expect(synced).toMatchObject({ [INSTANCE_METADATA_KEY]: linkValue });
+    expect(synced).not.toHaveProperty([KEY]);
   });
 });

@@ -95,6 +95,10 @@ export function observeRepository(
       }
       return removed;
     },
+    // Snapshot-only: a rename emits no event.
+    renameInstance() {
+      throw new Error("not implemented");
+    },
     clearEncounter() {
       repo.clearEncounter();
       emitter.emit({ type: "cleared" });
