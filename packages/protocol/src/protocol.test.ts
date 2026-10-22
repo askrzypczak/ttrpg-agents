@@ -220,6 +220,28 @@ describe("protocol", () => {
     ).toBe(false);
   });
 
+  it("token-deleted round-trips through encode/decode", () => {
+    const raw = {
+      v: 1,
+      type: "token-deleted",
+      id: "token-deleted:i1",
+      payload: { instanceId: "i1" },
+    };
+    const first = decodeMessage(JSON.stringify(raw));
+    expect(first).toEqual({ ok: true, message: raw });
+    if (!first.ok) return;
+    expect(decodeMessage(encodeMessage(first.message))).toEqual({
+      ok: true,
+      message: raw,
+    });
+  });
+
+  it("token-deleted without an instanceId is invalid-payload", () => {
+    const r = decodeMessage('{"v":1,"type":"token-deleted","payload":{}}');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("invalid-payload");
+  });
+
   it("strips unknown extra fields", () => {
     const r = decodeMessage('{"v":1,"type":"ping","payload":{},"extra":true}');
     expect(r).toEqual({

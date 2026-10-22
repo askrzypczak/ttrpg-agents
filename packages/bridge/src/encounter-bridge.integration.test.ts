@@ -12,6 +12,7 @@ import {
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   broadcastSnapshotsOnChange,
+  removeInstance,
   snapshotMessage,
 } from "./encounter-bridge.js";
 
@@ -32,6 +33,47 @@ describe("snapshotMessage", () => {
       type: "encounter-snapshot",
       payload: { instances: created },
     });
+  });
+});
+
+describe("removeInstance", () => {
+  const addTwo = (repo: EncounterRepository) =>
+    repo.addInstances(() => [
+      { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
+      { monsterKey: "shadow", displayName: "Shadow 2", maxHp: 16 },
+    ]);
+
+  it("removes and returns ok", () => {
+    const { inner } = setup();
+    const [first, second] = addTwo(inner);
+    expect(removeInstance(inner, first!.id)).toEqual({ ok: true });
+    expect(inner.listInstances().map((i) => i.id)).toEqual([second!.id]);
+  });
+
+  it("maps UnknownInstanceError to unknown-instance", () => {
+    const { inner } = setup();
+    const before = addTwo(inner);
+    const result = removeInstance(inner, "no-such-instance");
+    expect(result).toMatchObject({ ok: false, code: "unknown-instance" });
+    if (result.ok) return;
+    expect(typeof result.message).toBe("string");
+    expect(inner.listInstances()).toEqual(before);
+  });
+
+  it("rethrows other errors", () => {
+    const boom = new Error("disk I/O error");
+    const stub: Pick<EncounterRepository, "removeInstances"> = {
+      removeInstances: () => {
+        throw boom;
+      },
+    };
+    let caught: unknown;
+    try {
+      removeInstance(stub as EncounterRepository, "i1");
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBe(boom);
   });
 });
 

@@ -49,6 +49,7 @@ export class FakeHost {
   private readonly userId: string;
   private readonly failItems: string | undefined;
   private readonly readySubscribed = { value: false };
+  private readonly itemsSubscribed = { value: false };
 
   constructor(options: FakeHostOptions) {
     this.scene = options.scene;
@@ -61,6 +62,11 @@ export class FakeHost {
         this.post({
           id: "OBR_SCENE_EVENT_READY_CHANGE",
           data: { ready: change.ready },
+        });
+      if (change.kind === "items" && this.itemsSubscribed.value)
+        this.post({
+          id: "OBR_SCENE_ITEMS_EVENT_CHANGE",
+          data: { items: this.scene.getItems() },
         });
     });
     this.iframe.addEventListener("load", () => {
@@ -107,6 +113,16 @@ export class FakeHost {
 
   private handle(message: SdkMessage): unknown {
     const data = (message.data ?? {}) as Record<string, unknown>;
+    // Subscribing is fire-and-forget in the SDK and works whether or not a
+    // scene is loaded, so it is answered before the item-call guards.
+    if (message.id === "OBR_SCENE_ITEMS_SUBSCRIBE") {
+      this.itemsSubscribed.value = true;
+      return NO_REPLY;
+    }
+    if (message.id === "OBR_SCENE_ITEMS_UNSUBSCRIBE") {
+      this.itemsSubscribed.value = false;
+      return NO_REPLY;
+    }
     if (message.id.startsWith("OBR_SCENE_ITEMS_")) {
       if (this.failItems !== undefined) throw new Error(this.failItems);
       if (!this.scene.isReady()) throw new MissingSceneError();

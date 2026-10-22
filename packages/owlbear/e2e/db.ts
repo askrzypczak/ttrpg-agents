@@ -37,3 +37,13 @@ export function seedE2eDatabase(dir: string): void {
     db.close();
   }
 }
+
+/** Ids of the instances in the e2e DB's active encounter, in creation order. */
+export function listE2eInstanceIds(dir: string): string[] {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    return new SqliteEncounterRepository(db).listInstances().map((i) => i.id);
+  } finally {
+    db.close();
+  }
+}

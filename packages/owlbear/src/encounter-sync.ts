@@ -73,7 +73,12 @@ export function createEncounterSync(
   obr: ObrAdapter,
   onError: (error: unknown) => void = () => {},
   onApplied: () => void = () => {},
-  options: { timers?: Timers; backoff?: BackoffOptions } = {},
+  options: {
+    timers?: Timers;
+    backoff?: BackoffOptions;
+    /** Called once per snapshot for each wanted, placed instance whose token the GM deleted. */
+    onTokenDeleted?: (instanceId: string) => void;
+  } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
   let desired: EncounterInstance[] | null = null;

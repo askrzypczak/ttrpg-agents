@@ -67,6 +67,8 @@ export type SyncPlan = {
   /** Key-level item metadata writes; `value: undefined` clears the key. */
   update: { id: string; key: string; value: unknown }[];
   delete: string[];
+  /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
+  deleted: string[];
 };
 
 /** The instance id a scene item is linked to, if it is one of our tokens. */
@@ -121,7 +123,7 @@ export function planSync(
   config: SyncConfig,
   context: { viewportCenter: Vec2; placed: ReadonlySet<string> },
 ): SyncPlan {
-  const plan: SyncPlan = { add: [], update: [], delete: [] };
+  const plan: SyncPlan = { add: [], update: [], delete: [], deleted: [] };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();
   for (const item of observed) {

@@ -15,6 +15,8 @@ export interface PanelInput {
   tokenMissing?: boolean;
   /** Description of the latest encounter sync failure, if not yet recovered. */
   syncError?: string;
+  /** The bridge's refusal of the latest token deletion, if any (see token-deleted.ts). */
+  removeError?: string;
   /** Why the bridge rejected us, when socketState is "rejected". */
   rejection?: RejectionCode;
 }

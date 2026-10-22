@@ -65,7 +65,12 @@ export interface BridgeServerOptions {
   agentToken?: string;
   /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
   queryTimeoutMs?: number;
+  /** Removes an instance from the store when the GM deletes its token on the table. */
+  removeInstance?: (instanceId: string) => RemoveInstanceResult;
 }
+
+export type RemoveInstanceResult =
+  { ok: true } | { ok: false; code: string; message: string };
 
 export interface BridgeServer {
   port: number;
@@ -87,10 +92,15 @@ const FATAL_ERROR_CODES = new Set([
   "superseded",
 ]);
 
-function errorMessage(code: string, message: string): BridgeMessage {
+function errorMessage(
+  code: string,
+  message: string,
+  id?: string,
+): BridgeMessage {
   return {
     v: PROTOCOL_VERSION,
     type: "error",
+    ...(id !== undefined ? { id } : {}),
     payload: { code, message, fatal: FATAL_ERROR_CODES.has(code) },
   };
 }
