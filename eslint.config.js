@@ -45,6 +45,14 @@ function workspaceBan(allowed, message) {
 
 export default tseslint.config(
   {
+    // Inline directives are ignored in production source, so a boundary rule
+    // (no-restricted-imports) cannot be bypassed with a comment. Tests, e2e and
+    // scripts may still use them. See CLAUDE.md, Architecture.
+    files: ["packages/*/src/**/*.ts"],
+    ignores: ["packages/*/src/**/*.test.ts"],
+    linterOptions: { noInlineConfig: true },
+  },
+  {
     ignores: [
       "**/dist/",
       "**/dist-e2e/",
