@@ -176,6 +176,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
+  setInitiative(id: string, initiative: number): MonsterInstance {
+    void id;
+    void initiative;
+    throw new Error("not implemented");
+  }
+
   clearEncounter(): void {
     this.db
       .prepare(

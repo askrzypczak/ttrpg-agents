@@ -64,8 +64,8 @@ function emitHp(emitter: EncounterEmitter, { after }: HpChange): void {
 
 /**
  * Wraps a repository so every successful mutation emits an event afterwards,
- * except renameInstance (the bridge syncs renames by snapshot). Failed calls
- * (throws) emit nothing.
+ * except renameInstance and setInitiative (the bridge syncs those by
+ * snapshot). Failed calls (throws) emit nothing.
  */
 export function observeRepository(
   repo: EncounterRepository,
@@ -98,6 +98,8 @@ export function observeRepository(
     },
     // Snapshot-only: a rename emits no event.
     renameInstance: (id, name) => repo.renameInstance(id, name),
+    // Snapshot-only: setting initiative emits no event.
+    setInitiative: (id, initiative) => repo.setInitiative(id, initiative),
     clearEncounter() {
       repo.clearEncounter();
       emitter.emit({ type: "cleared" });

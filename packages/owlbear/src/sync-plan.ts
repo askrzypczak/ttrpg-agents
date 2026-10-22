@@ -36,7 +36,7 @@ export function rowPositions(count: number, center: Vec2): Vec2[] {
 export type Projector = {
   key: string;
   mode: "owned" | "create-only";
-  project(instance: EncounterInstance): unknown;
+  project(instance: EncounterInstance, current?: unknown): unknown;
 };
 
 export type TokenKind = Pick<

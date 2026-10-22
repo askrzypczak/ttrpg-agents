@@ -60,6 +60,7 @@ describe("observeRepository", () => {
       removeInstances: unexpected,
       clearEncounter: unexpected,
       listInstances: unexpected,
+      setInitiative: unexpected,
       renameInstance: (id, name) => {
         calls.push([id, name]);
         return renamed;

@@ -23,3 +23,11 @@ export class InvalidNameError extends DomainError {
     this.name = "InvalidNameError";
   }
 }
+
+/** An initiative value that is not an integer. */
+export class InvalidInitiativeError extends DomainError {
+  constructor(message: string) {
+    super("invalid_initiative", message);
+    this.name = "InvalidInitiativeError";
+  }
+}

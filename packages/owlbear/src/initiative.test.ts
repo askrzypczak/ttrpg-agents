@@ -37,6 +37,30 @@ describe("initiativeProjector", () => {
     expect(initiativeProjector.project(inst(null))).toBeUndefined();
   });
 
+  it("the initiative projector keeps active true from the token's current value", () => {
+    expect(
+      initiativeProjector.project(inst(14), { count: "10", active: true }),
+    ).toEqual({ count: "14", active: true });
+  });
+
+  it("the initiative projector gives active false when the token has no usable current value", () => {
+    const unusable: [string, unknown][] = [
+      ["absent", undefined],
+      ["null", null],
+      ["a string", "active"],
+      ["an array", [true]],
+      ["an empty object", {}],
+      ["active false", { count: "10", active: false }],
+      ["active as the string true", { count: "10", active: "true" }],
+    ];
+    for (const [label, current] of unusable) {
+      expect(initiativeProjector.project(inst(14), current), label).toEqual({
+        count: "14",
+        active: false,
+      });
+    }
+  });
+
   it("uses the tracker's exact metadata key", () => {
     expect(INITIATIVE_METADATA_KEY).toBe(
       "rodeo.owlbear.initiative-tracker/metadata",

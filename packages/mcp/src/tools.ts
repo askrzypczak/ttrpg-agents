@@ -294,6 +294,17 @@ const renameMonsterTool = defineTool({
   },
 });
 
+const setInitiativeTool = defineTool({
+  name: "set_initiative",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's initiative to an exact value. Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), initiative: z.number().int() },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 const clearEncounterTool = defineTool({
   name: "clear_encounter",
   annotations: { destructiveHint: true },
@@ -346,6 +357,7 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("heal"),
   removeMonstersTool,
   renameMonsterTool,
+  setInitiativeTool,
   clearEncounterTool,
   tableStatusTool,
 ];
