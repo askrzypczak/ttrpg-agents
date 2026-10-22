@@ -11,7 +11,7 @@ import {
 } from "@ttrpg-agents/protocol";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
-// Edge cases of POST /agent/command: body cap, routing, bearer parsing, close
+// Edge cases of POST /agent/query: body cap, routing, bearer parsing, close
 // and timeout cleanup, and replies the bridge cannot match.
 const AGENT_TOKEN = "b7".repeat(32);
 const SCENE_STATUS = JSON.stringify({ name: "scene-status" });
@@ -21,12 +21,12 @@ let dir: string;
 let server: BridgeServer | undefined;
 const sockets: WebSocket[] = [];
 
-async function start(commandTimeoutMs?: number): Promise<BridgeServer> {
+async function start(queryTimeoutMs?: number): Promise<BridgeServer> {
   server = await startBridgeServer({
     port: 0,
     staticDir: dir,
     agentToken: AGENT_TOKEN,
-    ...(commandTimeoutMs !== undefined ? { commandTimeoutMs } : {}),
+    ...(queryTimeoutMs !== undefined ? { queryTimeoutMs } : {}),
   });
   return server;
 }
@@ -43,7 +43,7 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-const url = (path = "/agent/command") =>
+const url = (path = "/agent/query") =>
   `http://127.0.0.1:${String(server?.port)}${path}`;
 
 async function post(
@@ -157,14 +157,14 @@ describe("body cap", () => {
 });
 
 describe("routing and headers", () => {
-  it("POST to another path is not the command route", async () => {
+  it("POST to another path is not the query route", async () => {
     await start();
     const res = await post(SCENE_STATUS, undefined, "/agent/other");
     expect(res.status).toBe(405);
     expect((await post(SCENE_STATUS, undefined, "/")).status).toBe(405);
   });
 
-  it("GET /agent/command is not the command route", async () => {
+  it("GET /agent/query is not the query route", async () => {
     await start();
     const res = await fetch(url(), {
       headers: { Authorization: `Bearer ${AGENT_TOKEN}` },
@@ -197,7 +197,7 @@ describe("routing and headers", () => {
     await cors.text();
   });
 
-  it("a wrong Host is still refused on the command route", async () => {
+  it("a wrong Host is still refused on the query route", async () => {
     await start();
     const status = await new Promise<number | undefined>((resolve) => {
       const req = request(
@@ -238,14 +238,14 @@ describe("routing and headers", () => {
   });
 });
 
-describe("pending commands", () => {
-  it("a `command-result` with an unknown id gets a non-fatal `unknown-command-id` error", async () => {
+describe("pending queries", () => {
+  it("a `query-result` with an unknown id gets a non-fatal `unknown-query-id` error", async () => {
     await start();
     const ext = await extension();
     ext.ws.send(
       encodeMessage({
         v: 1,
-        type: "command-result",
+        type: "query-result",
         id: "nope",
         payload: statusResult(1),
       }),
@@ -253,17 +253,17 @@ describe("pending commands", () => {
     const err = await ext.waitFor("error");
     expect(err).toMatchObject({
       type: "error",
-      payload: { code: "unknown-command-id", fatal: false },
+      payload: { code: "unknown-query-id", fatal: false },
     });
     ext.ws.send(
       encodeMessage({
         v: 1,
-        type: "command-result",
+        type: "query-result",
         payload: statusResult(1),
       }),
     );
     expect(await ext.waitFor("error")).toMatchObject({
-      payload: { code: "unknown-command-id" },
+      payload: { code: "unknown-query-id" },
     });
   });
 
@@ -289,48 +289,48 @@ describe("pending commands", () => {
     await start();
     const ext = await extension();
     const pending = post(SCENE_STATUS);
-    const sent = await ext.waitFor("command");
+    const sent = await ext.waitFor("query");
     ext.ws.send(
       encodeMessage({
         v: 1,
         type: "error",
         ...(sent.id !== undefined ? { id: sent.id } : {}),
-        payload: { code: "command-failed", message: "boom!", fatal: false },
+        payload: { code: "query-failed", message: "boom!", fatal: false },
       }),
     );
     const res = await pending;
     expect(res.status).toBe(502);
     expect(res.json).toEqual({
       ok: false,
-      error: { code: "command-failed", message: "boom!" },
+      error: { code: "query-failed", message: "boom!" },
     });
   });
 
-  it("a late `command-result` after the timeout is unknown, and a second command still works", async () => {
+  it("a late `query-result` after the timeout is unknown, and a second query still works", async () => {
     await start(150);
     const ext = await extension();
     const first = await post(SCENE_STATUS);
     expect(first.status).toBe(504);
-    const late = await ext.waitFor("command");
+    const late = await ext.waitFor("query");
     ext.ws.send(
       encodeMessage({
         v: 1,
-        type: "command-result",
+        type: "query-result",
         ...(late.id !== undefined ? { id: late.id } : {}),
         payload: statusResult(1),
       }),
     );
     expect(await ext.waitFor("error")).toMatchObject({
-      payload: { code: "unknown-command-id" },
+      payload: { code: "unknown-query-id" },
     });
 
     const second = post(SCENE_STATUS);
-    const next = await ext.waitFor("command");
+    const next = await ext.waitFor("query");
     expect(next.id).not.toBe(late.id);
     ext.ws.send(
       encodeMessage({
         v: 1,
-        type: "command-result",
+        type: "query-result",
         ...(next.id !== undefined ? { id: next.id } : {}),
         payload: statusResult(2),
       }),
@@ -341,14 +341,14 @@ describe("pending commands", () => {
     });
   });
 
-  it("a completed command's id is forgotten", async () => {
+  it("a completed query's id is forgotten", async () => {
     await start(5000);
     const ext = await extension();
     const pending = post(SCENE_STATUS);
-    const sent = await ext.waitFor("command");
+    const sent = await ext.waitFor("query");
     const reply = encodeMessage({
       v: 1,
-      type: "command-result",
+      type: "query-result",
       ...(sent.id !== undefined ? { id: sent.id } : {}),
       payload: statusResult(3),
     });
@@ -356,11 +356,11 @@ describe("pending commands", () => {
     await pending;
     ext.ws.send(reply);
     expect(await ext.waitFor("error")).toMatchObject({
-      payload: { code: "unknown-command-id" },
+      payload: { code: "unknown-query-id" },
     });
   });
 
-  it("with the client gone the command is `not-connected`", async () => {
+  it("with the client gone the query is `not-connected`", async () => {
     const s = await start();
     const ext = await extension();
     ext.ws.close();

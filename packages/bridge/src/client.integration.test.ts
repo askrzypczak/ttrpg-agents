@@ -10,7 +10,7 @@ import { createBridgeClient } from "./client.js";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
 // Real bridge on an ephemeral port; a `ws` client stands in for the extension
-// and answers every `command` with a fixed scene-status.
+// and answers every `query` with a fixed scene-status.
 const AGENT_TOKEN = "c1".repeat(32);
 const RESULT = {
   name: "scene-status" as const,
@@ -56,11 +56,11 @@ async function startWithExtension(): Promise<BridgeServer> {
       const r = decodeMessage(data.toString());
       if (!r.ok) return;
       if (r.message.type === "hello-ack") resolve();
-      if (r.message.type === "command" && r.message.id !== undefined) {
+      if (r.message.type === "query" && r.message.id !== undefined) {
         ws.send(
           encodeMessage({
             v: 1,
-            type: "command-result",
+            type: "query-result",
             id: r.message.id,
             payload: RESULT,
           }),
@@ -92,7 +92,7 @@ describe("bridge client", () => {
   it("returns the extension's result (AC2)", async () => {
     const s = await startWithExtension();
     const client = createBridgeClient({ port: s.port, tokenPath });
-    expect(await client.command({ name: "scene-status" })).toEqual({
+    expect(await client.query({ name: "scene-status" })).toEqual({
       ok: true,
       result: RESULT,
     });
@@ -100,7 +100,7 @@ describe("bridge client", () => {
 
   it("bridge not listening -> `bridge-unreachable` (AC3)", async () => {
     const client = createBridgeClient({ port: await unusedPort(), tokenPath });
-    expect(await client.command({ name: "scene-status" })).toMatchObject({
+    expect(await client.query({ name: "scene-status" })).toMatchObject({
       ok: false,
       error: { code: "bridge-unreachable" },
     });
@@ -112,7 +112,7 @@ describe("bridge client", () => {
       port: s.port,
       tokenPath: join(dir, "missing", "agent-token"),
     });
-    const response = await client.command({ name: "scene-status" });
+    const response = await client.query({ name: "scene-status" });
     if (response.ok) throw new Error("expected an error response");
     expect(response.error.code).toBe("bridge-unreachable");
     expect(response.error.message).toMatch(/start/i);

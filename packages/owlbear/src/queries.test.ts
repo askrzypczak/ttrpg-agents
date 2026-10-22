@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION, type CommandResult } from "@ttrpg-agents/protocol";
-import { commandReply, handleCommand } from "./commands.js";
+import { describe, expect, it, vi } from "vitest";
+import { PROTOCOL_VERSION, type QueryResult } from "@ttrpg-agents/protocol";
+import { queryReply, handleQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import { SceneModel, type SceneItem } from "./scene-model.js";
@@ -36,7 +36,7 @@ const unplaced: SceneItem = {
   metadata: { [INSTANCE_METADATA_KEY]: { instanceId: "i3" } },
 };
 
-describe("handleCommand scene-status", () => {
+describe("handleQuery scene-status", () => {
   it("`scene-status` on a ready scene counts only our tokens and reports `sceneReady: true` (AC4)", async () => {
     const { obr, scene } = createFakeObr();
     const sync = createEncounterSync(obr);
@@ -48,7 +48,7 @@ describe("handleCommand scene-status", () => {
     // A foreign item, and one of our tokens the sync did not place.
     scene.addItems([foreign, unplaced]);
 
-    expect(await handleCommand(obr, sync, { name: "scene-status" })).toEqual({
+    expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
       name: "scene-status",
       result: { sceneReady: true, tokenCount: 3, appliedInstanceCount: 2 },
     });
@@ -58,22 +58,46 @@ describe("handleCommand scene-status", () => {
     const { obr } = createFakeObr(new SceneModel("gm", false));
     const sync = createEncounterSync(obr);
 
-    expect(await handleCommand(obr, sync, { name: "scene-status" })).toEqual({
+    expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
       name: "scene-status",
       result: { sceneReady: false, tokenCount: 0, appliedInstanceCount: 0 },
     });
   });
 });
 
-describe("commandReply", () => {
-  it("`commandReply` carries the command's id and result (AC4)", () => {
-    const result: CommandResult = {
+describe("handleQuery read-only guard", () => {
+  it("handleQuery makes no write call on the adapter", async () => {
+    const { obr: base } = createFakeObr();
+    const write = vi.fn(() => {
+      throw new Error("write call during a query");
+    });
+    const obr = {
+      ...base,
+      addItems: write,
+      updateItems: write,
+      setItemMetadata: write,
+      deleteItems: write,
+      setSceneMetadata: write,
+    };
+
+    const sync = createEncounterSync(obr);
+
+    const result = await handleQuery(obr, sync, { name: "scene-status" });
+
+    expect(result.name).toBe("scene-status");
+    expect(write).not.toHaveBeenCalled();
+  });
+});
+
+describe("queryReply", () => {
+  it("`queryReply` carries the query's id and result (AC4)", () => {
+    const result: QueryResult = {
       name: "scene-status",
       result: { sceneReady: true, tokenCount: 4, appliedInstanceCount: 4 },
     };
-    expect(commandReply("c7", result)).toEqual({
+    expect(queryReply("c7", result)).toEqual({
       v: PROTOCOL_VERSION,
-      type: "command-result",
+      type: "query-result",
       id: "c7",
       payload: result,
     });

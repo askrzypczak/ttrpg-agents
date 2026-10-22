@@ -27,7 +27,7 @@ const agentTokenPath =
   process.env.BRIDGE_AGENT_TOKEN_FILE ?? defaultAgentTokenPath();
 if (resolve(tokenPath) === resolve(agentTokenPath)) {
   console.error(
-    `BRIDGE_TOKEN_FILE and BRIDGE_AGENT_TOKEN_FILE must be different files (both are ${resolve(tokenPath)}): the extension token travels in the manifest URL and must not authorise /agent/command.`,
+    `BRIDGE_TOKEN_FILE and BRIDGE_AGENT_TOKEN_FILE must be different files (both are ${resolve(tokenPath)}): the extension token travels in the manifest URL and must not authorise /agent/query.`,
   );
   process.exit(1);
 }

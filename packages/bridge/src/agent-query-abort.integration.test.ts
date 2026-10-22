@@ -25,7 +25,7 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("POST /agent/command with an aborted body", () => {
+describe("POST /agent/query with an aborted body", () => {
   it("a request dropped mid-body does not take the bridge down", async () => {
     // An unhandled rejection in the bridge would fail this test run.
     const socket = connect(server.port, "127.0.0.1");
@@ -34,7 +34,7 @@ describe("POST /agent/command with an aborted body", () => {
       socket.once("error", reject);
     });
     socket.write(
-      "POST /agent/command HTTP/1.1\r\n" +
+      "POST /agent/query HTTP/1.1\r\n" +
         `Host: 127.0.0.1:${String(server.port)}\r\n` +
         `Authorization: Bearer ${AGENT_TOKEN}\r\n` +
         "Content-Type: application/json\r\n" +
@@ -45,7 +45,7 @@ describe("POST /agent/command with an aborted body", () => {
     socket.destroy();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const res = await fetch(`http://127.0.0.1:${server.port}/agent/command`, {
+    const res = await fetch(`http://127.0.0.1:${server.port}/agent/query`, {
       method: "POST",
       headers: { Authorization: `Bearer ${AGENT_TOKEN}` },
       body: JSON.stringify({ name: "scene-status" }),

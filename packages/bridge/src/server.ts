@@ -24,10 +24,10 @@ import {
   PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
-  commandSchema,
-  type AgentCommandResponse,
+  querySchema,
+  type AgentQueryResponse,
   type BridgeMessage,
-  type Command,
+  type Query,
 } from "@ttrpg-agents/protocol";
 
 export const DEFAULT_BRIDGE_PORT = 5199;
@@ -43,8 +43,8 @@ const CONTENT_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-const MAX_COMMAND_BODY_BYTES = 1024 * 1024;
-const DEFAULT_COMMAND_TIMEOUT_MS = 5000;
+const MAX_QUERY_BODY_BYTES = 1024 * 1024;
+const DEFAULT_QUERY_TIMEOUT_MS = 5000;
 
 const ALLOWED_ORIGINS = new Set([
   "https://www.owlbear.rodeo",
@@ -61,10 +61,10 @@ export interface BridgeServerOptions {
   token?: string;
   /** Message sent to a client right after each `hello-ack`, so it converges on current state. */
   snapshot?: () => BridgeMessage;
-  /** Bearer secret for `POST /agent/command`. Defaults to a random one. */
+  /** Bearer secret for `POST /agent/query`. Defaults to a random one. */
   agentToken?: string;
-  /** How long `POST /agent/command` waits for the client's reply. Default 5000. */
-  commandTimeoutMs?: number;
+  /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
+  queryTimeoutMs?: number;
 }
 
 export interface BridgeServer {
@@ -111,9 +111,9 @@ interface Session {
   authenticated: boolean;
 }
 
-/** A command awaiting the client's `command-result` or `error`, keyed by id. */
+/** A query awaiting the client's `query-result` or `error`, keyed by id. */
 interface Pending {
-  resolve(response: AgentCommandResponse): void;
+  resolve(response: AgentQueryResponse): void;
 }
 
 interface Hooks {
@@ -180,15 +180,12 @@ function handleMessage(
         }
       }
       break;
-    case "command-result": {
+    case "query-result": {
       const waiting = hooks.pending.get(message.id ?? "");
       if (waiting === undefined) {
         send(
           ws,
-          errorMessage(
-            "unknown-command-id",
-            "no command is waiting for that id",
-          ),
+          errorMessage("unknown-query-id", "no query is waiting for that id"),
         );
         break;
       }
@@ -206,7 +203,7 @@ function handleMessage(
       }
       waiting.resolve({
         ok: false,
-        error: { code: "command-failed", message: message.payload.message },
+        error: { code: "query-failed", message: message.payload.message },
       });
       break;
     }
@@ -239,7 +236,7 @@ export async function startBridgeServer(
     token = randomBytes(32).toString("hex"),
     snapshot,
     agentToken = randomBytes(32).toString("hex"),
-    commandTimeoutMs = DEFAULT_COMMAND_TIMEOUT_MS,
+    queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
@@ -247,8 +244,8 @@ export async function startBridgeServer(
   let active: WebSocket | null = null;
   const pending = new Map<string, Pending>();
 
-  /** Relays `command` to the active client and awaits its reply or the timeout. */
-  const sendCommand = (command: Command): Promise<AgentCommandResponse> => {
+  /** Relays `query` to the active client and awaits its reply or the timeout. */
+  const sendQuery = (query: Query): Promise<AgentQueryResponse> => {
     const target = active;
     // Stryker disable next-line ConditionalExpression,EqualityOperator: only the `readyState` half is equivalent (`active` is cleared on close, so a non-OPEN target is a sub-millisecond race); the `null` half is killed by the not-connected test
     if (target === null || target.readyState !== target.OPEN) {
@@ -262,7 +259,7 @@ export async function startBridgeServer(
     }
     const id = randomUUID();
     return new Promise((resolve) => {
-      const finish = (response: AgentCommandResponse): void => {
+      const finish = (response: AgentQueryResponse): void => {
         // Stryker disable next-line all: a leftover timer would only re-run this idempotent cleanup; it just delays process exit
         clearTimeout(timer);
         pending.delete(id);
@@ -274,17 +271,17 @@ export async function startBridgeServer(
             ok: false,
             error: {
               code: "timeout",
-              message: `the Owlbear tab did not reply within ${String(commandTimeoutMs)} ms`,
+              message: `the Owlbear tab did not reply within ${String(queryTimeoutMs)} ms`,
             },
           }),
-        commandTimeoutMs,
+        queryTimeoutMs,
       );
       pending.set(id, { resolve: finish });
       send(target, {
         v: PROTOCOL_VERSION,
-        type: "command",
+        type: "query",
         id,
-        payload: command,
+        payload: query,
       });
     });
   };
@@ -304,9 +301,9 @@ export async function startBridgeServer(
       res.end("forbidden host");
       return;
     }
-    if (req.method === "POST" && req.url === "/agent/command") {
+    if (req.method === "POST" && req.url === "/agent/query") {
       // A body aborted mid-request rejects the read; the caller is gone.
-      handleAgentCommand(req, res, agentToken, sendCommand).catch(() => {
+      handleAgentQuery(req, res, agentToken, sendQuery).catch(() => {
         res.destroy();
       });
       return;
@@ -430,13 +427,13 @@ const STATUS_FOR_CODE: Record<string, number> = {
   "bad-request": 400,
   "not-connected": 503,
   timeout: 504,
-  "command-failed": 502,
+  "query-failed": 502,
 };
 
 function respondJson(
   res: ServerResponse,
   status: number,
-  body: AgentCommandResponse,
+  body: AgentQueryResponse,
 ): void {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
@@ -462,19 +459,19 @@ async function readBody(req: IncomingMessage): Promise<string | null> {
     size += buf.length;
     // Keep draining (without storing) so the 400 can still be sent.
     // Stryker disable next-line ConditionalExpression: the `true` variant (store everything) is equivalent, the size check below still rejects
-    if (size <= MAX_COMMAND_BODY_BYTES) chunks.push(buf);
+    if (size <= MAX_QUERY_BODY_BYTES) chunks.push(buf);
   }
-  return size > MAX_COMMAND_BODY_BYTES
+  return size > MAX_QUERY_BODY_BYTES
     ? null
     : Buffer.concat(chunks).toString("utf8");
 }
 
 // No CORS headers: only a non-browser caller holding the agent token uses this.
-async function handleAgentCommand(
+async function handleAgentQuery(
   req: IncomingMessage,
   res: ServerResponse,
   agentToken: string,
-  sendCommand: (command: Command) => Promise<AgentCommandResponse>,
+  sendQuery: (query: Query) => Promise<AgentQueryResponse>,
 ): Promise<void> {
   const auth = req.headers.authorization ?? "";
   const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
@@ -494,12 +491,12 @@ async function handleAgentCommand(
     respondError(res, "bad-request", "body is not valid JSON");
     return;
   }
-  const parsed = commandSchema.safeParse(json);
+  const parsed = querySchema.safeParse(json);
   if (!parsed.success) {
-    respondError(res, "bad-request", "not a known command");
+    respondError(res, "bad-request", "not a known query");
     return;
   }
-  const response = await sendCommand(parsed.data);
+  const response = await sendQuery(parsed.data);
   respondJson(
     res,
     response.ok ? 200 : (STATUS_FOR_CODE[response.error.code] ?? 502),

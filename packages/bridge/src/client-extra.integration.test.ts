@@ -51,7 +51,7 @@ describe("readAgentToken", () => {
 });
 
 describe("bridge client request", () => {
-  it("sends the trimmed token as a bearer and the command as JSON", async () => {
+  it("sends the trimmed token as a bearer and the query as JSON", async () => {
     const seen: { auth?: string; body?: string } = {};
     const port = await fakeBridge(
       200,
@@ -65,7 +65,7 @@ describe("bridge client request", () => {
       seen,
     );
     const client = createBridgeClient({ port, tokenPath });
-    const response = await client.command({ name: "scene-status" });
+    const response = await client.query({ name: "scene-status" });
     expect(response.ok).toBe(true);
     expect(seen.auth).toBe("Bearer tok");
     expect(JSON.parse(seen.body ?? "")).toEqual({ name: "scene-status" });
@@ -80,7 +80,7 @@ describe("bridge client request", () => {
       }),
     );
     const client = createBridgeClient({ port, tokenPath });
-    expect(await client.command({ name: "scene-status" })).toEqual({
+    expect(await client.query({ name: "scene-status" })).toEqual({
       ok: false,
       error: { code: "not-connected", message: "no tab" },
     });
@@ -95,7 +95,7 @@ describe("bridge client request", () => {
     async (_label, body) => {
       const port = await fakeBridge(200, body);
       const client = createBridgeClient({ port, tokenPath });
-      const response = await client.command({ name: "scene-status" });
+      const response = await client.query({ name: "scene-status" });
       if (response.ok) throw new Error("expected an error response");
       expect(response.error.code).toBe("bridge-unreachable");
       expect(response.error.message).toContain(String(port));

@@ -24,18 +24,18 @@ Environment:
   point it at the built extension.
 - `BRIDGE_TOKEN_FILE`: persistent token, created with mode 0600 on first run
   (default `~/.config/ttrpg-agents/bridge-token`).
-- `BRIDGE_AGENT_TOKEN_FILE`: agent token for `POST /agent/command`, created
+- `BRIDGE_AGENT_TOKEN_FILE`: agent token for `POST /agent/query`, created
   with mode 0600 on first run (default `~/.config/ttrpg-agents/agent-token`).
   It is never served and is separate from the extension token.
 - `TTRPG_AGENTS_DB`: the encounter database to watch, the same file the MCP
   server writes (see `packages/mcp/README.md` for the default location).
 
-## Commands
+## Queries
 
-`POST /agent/command` (`Authorization: Bearer <agent token>`, body a command
-from `@ttrpg-agents/protocol`, e.g. `{"name":"scene-status"}`) relays the command
-to the connected Owlbear tab and returns its `command-result`. Errors: 401, 400,
-503 (no tab), 504 (no reply in 5 s), 502. See "Commands to the table" in
+`POST /agent/query` (`Authorization: Bearer <agent token>`, body a query
+from `@ttrpg-agents/protocol`, e.g. `{"name":"scene-status"}`) relays the query
+to the connected Owlbear tab and returns its `query-result`. Errors: 401, 400,
+503 (no tab), 504 (no reply in 5 s), 502. See "Queries to the table" in
 [`docs/architecture.md`](../../docs/architecture.md).
 
 `@ttrpg-agents/bridge/client` (`createBridgeClient`) is the Node-only client the

@@ -1,20 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
-  agentCommandResponseSchema,
-  commandResultSchema,
-  commandSchema,
+  agentQueryResponseSchema,
+  queryResultSchema,
+  querySchema,
   sceneStatusSchema,
 } from "./protocol.js";
 
 const status = { sceneReady: true, tokenCount: 2, appliedInstanceCount: 2 };
 
-describe("command schemas", () => {
-  it("accepts only the known command", () => {
-    expect(commandSchema.safeParse({ name: "scene-status" }).success).toBe(
-      true,
-    );
+describe("query schemas", () => {
+  it("accepts only the known query", () => {
+    expect(querySchema.safeParse({ name: "scene-status" }).success).toBe(true);
     for (const bad of [{ name: "nope" }, {}, [], null, "scene-status"]) {
-      expect(commandSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(
+      expect(querySchema.safeParse(bad).success, JSON.stringify(bad)).toBe(
         false,
       );
     }
@@ -42,9 +40,9 @@ describe("command schemas", () => {
     }
   });
 
-  it("a command result carries its name and a valid result", () => {
+  it("a query result carries its name and a valid result", () => {
     expect(
-      commandResultSchema.safeParse({ name: "scene-status", result: status })
+      queryResultSchema.safeParse({ name: "scene-status", result: status })
         .success,
     ).toBe(true);
     for (const bad of [
@@ -54,7 +52,7 @@ describe("command schemas", () => {
       { result: status },
     ]) {
       expect(
-        commandResultSchema.safeParse(bad).success,
+        queryResultSchema.safeParse(bad).success,
         JSON.stringify(bad),
       ).toBe(false);
     }
@@ -63,7 +61,7 @@ describe("command schemas", () => {
   it("an ok response needs a result and an error response needs code and message", () => {
     const result = { name: "scene-status", result: status };
     expect(
-      agentCommandResponseSchema.safeParse({ ok: true, result }).success,
+      agentQueryResponseSchema.safeParse({ ok: true, result }).success,
     ).toBe(true);
     for (const bad of [
       { ok: true },
@@ -75,7 +73,7 @@ describe("command schemas", () => {
       { error: { code: "timeout", message: "m" } },
     ]) {
       expect(
-        agentCommandResponseSchema.safeParse(bad).success,
+        agentQueryResponseSchema.safeParse(bad).success,
         JSON.stringify(bad),
       ).toBe(false);
     }

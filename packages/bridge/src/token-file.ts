@@ -7,7 +7,7 @@ export function defaultTokenPath(): string {
   return join(homedir(), ".config", "ttrpg-agents", "bridge-token");
 }
 
-/** `~/.config/ttrpg-agents/agent-token`: authorises `POST /agent/command` only. */
+/** `~/.config/ttrpg-agents/agent-token`: authorises `POST /agent/query` only. */
 export function defaultAgentTokenPath(): string {
   return join(homedir(), ".config", "ttrpg-agents", "agent-token");
 }

@@ -19,12 +19,12 @@ let dir: string;
 let server: BridgeServer;
 const sockets: WebSocket[] = [];
 
-async function start(commandTimeoutMs?: number): Promise<void> {
+async function start(queryTimeoutMs?: number): Promise<void> {
   server = await startBridgeServer({
     port: 0,
     staticDir: dir,
     agentToken: AGENT_TOKEN,
-    ...(commandTimeoutMs !== undefined ? { commandTimeoutMs } : {}),
+    ...(queryTimeoutMs !== undefined ? { queryTimeoutMs } : {}),
   });
 }
 
@@ -43,7 +43,7 @@ afterEach(async () => {
 async function extension(): Promise<{
   ws: WebSocket;
   received: BridgeMessage[];
-  nextCommand: () => Promise<BridgeMessage>;
+  nextQuery: () => Promise<BridgeMessage>;
 }> {
   const ws = await new Promise<WebSocket>((resolve, reject) => {
     const s = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, {
@@ -59,7 +59,7 @@ async function extension(): Promise<{
     const r = decodeMessage(data.toString());
     if (!r.ok) return;
     received.push(r.message);
-    if (r.message.type === "command") waiters.shift()?.(r.message);
+    if (r.message.type === "query") waiters.shift()?.(r.message);
   });
   const acked = new Promise<void>((resolve) => {
     const onAck = (data: unknown) => {
@@ -79,16 +79,16 @@ async function extension(): Promise<{
     }),
   );
   await acked;
-  const nextCommand = () =>
+  const nextQuery = () =>
     new Promise<BridgeMessage>((resolve) => waiters.push(resolve));
-  return { ws, received, nextCommand };
+  return { ws, received, nextQuery };
 }
 
 function post(
   body: string,
   token?: string,
 ): Promise<{ status: number; json: unknown }> {
-  return fetch(`http://127.0.0.1:${server.port}/agent/command`, {
+  return fetch(`http://127.0.0.1:${server.port}/agent/query`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -107,16 +107,16 @@ function post(
   });
 }
 
-/** The command the client received, failing fast if the HTTP call ends first. */
-function commandBefore(
-  command: Promise<BridgeMessage>,
+/** The query the client received, failing fast if the HTTP call ends first. */
+function queryBefore(
+  query: Promise<BridgeMessage>,
   pending: Promise<{ status: number; json: unknown }>,
 ): Promise<BridgeMessage> {
   return Promise.race([
-    command,
+    query,
     pending.then((res) => {
       throw new Error(
-        `the call ended (${String(res.status)}) before a command reached the client`,
+        `the call ended (${String(res.status)}) before a query reached the client`,
       );
     }),
   ]);
@@ -131,14 +131,14 @@ function reply(ws: WebSocket, id: string | undefined, tokenCount: number) {
   ws.send(
     encodeMessage({
       v: 1,
-      type: "command-result",
+      type: "query-result",
       ...(id !== undefined ? { id } : {}),
       payload: sceneStatusResult(tokenCount),
     }),
   );
 }
 
-describe("POST /agent/command", () => {
+describe("POST /agent/query", () => {
   it("POST with no token -> 401 (AC1)", async () => {
     await start();
     const res = await post(JSON.stringify(SCENE_STATUS));
@@ -151,13 +151,13 @@ describe("POST /agent/command", () => {
     expect(res.status).toBe(401);
   });
 
-  it("POST with the agent token reaches the connected client as a `command` with an id, and the client's `command-result` is the HTTP body (AC2)", async () => {
+  it("POST with the agent token reaches the connected client as a `query` with an id, and the client's `query-result` is the HTTP body (AC2)", async () => {
     await start();
     const ext = await extension();
-    const command = ext.nextCommand();
+    const query = ext.nextQuery();
     const pending = post(JSON.stringify(SCENE_STATUS), AGENT_TOKEN);
-    const sent = await commandBefore(command, pending);
-    if (sent.type !== "command") throw new Error("expected a command");
+    const sent = await queryBefore(query, pending);
+    if (sent.type !== "query") throw new Error("expected a query");
     expect(sent.payload).toEqual(SCENE_STATUS);
     expect(typeof sent.id).toBe("string");
     expect(sent.id).not.toBe("");
@@ -167,14 +167,14 @@ describe("POST /agent/command", () => {
     expect(res.json).toEqual({ ok: true, result: sceneStatusResult(4) });
   });
 
-  it("a `command-result` with a different id does not complete the call (AC2)", async () => {
+  it("a `query-result` with a different id does not complete the call (AC2)", async () => {
     await start(2000);
     const ext = await extension();
-    const command = ext.nextCommand();
+    const query = ext.nextQuery();
     const pending = post(JSON.stringify(SCENE_STATUS), AGENT_TOKEN);
-    const sent = await commandBefore(command, pending);
-    if (sent.type !== "command" || sent.id === undefined)
-      throw new Error("expected a command with an id");
+    const sent = await queryBefore(query, pending);
+    if (sent.type !== "query" || sent.id === undefined)
+      throw new Error("expected a query with an id");
     reply(ext.ws, `${sent.id}-other`, 99);
     reply(ext.ws, undefined, 98);
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -184,27 +184,27 @@ describe("POST /agent/command", () => {
     expect(res.json).toEqual({ ok: true, result: sceneStatusResult(1) });
   });
 
-  it("a client `error` carrying the command's id -> 502 `command-failed` (AC2)", async () => {
+  it("a client `error` carrying the query's id -> 502 `query-failed` (AC2)", async () => {
     await start();
     const ext = await extension();
-    const command = ext.nextCommand();
+    const query = ext.nextQuery();
     const pending = post(JSON.stringify(SCENE_STATUS), AGENT_TOKEN);
-    const sent = await commandBefore(command, pending);
-    if (sent.type !== "command" || sent.id === undefined)
-      throw new Error("expected a command with an id");
+    const sent = await queryBefore(query, pending);
+    if (sent.type !== "query" || sent.id === undefined)
+      throw new Error("expected a query with an id");
     ext.ws.send(
       encodeMessage({
         v: 1,
         type: "error",
         id: sent.id,
-        payload: { code: "command-failed", message: "boom", fatal: false },
+        payload: { code: "query-failed", message: "boom", fatal: false },
       }),
     );
     const res = await pending;
     expect(res.status).toBe(502);
     expect(res.json).toMatchObject({
       ok: false,
-      error: { code: "command-failed" },
+      error: { code: "query-failed" },
     });
   });
 
@@ -219,7 +219,7 @@ describe("POST /agent/command", () => {
         error: { code: "bad-request" },
       });
     }
-    expect(ext.received.filter((m) => m.type === "command")).toEqual([]);
+    expect(ext.received.filter((m) => m.type === "query")).toEqual([]);
   });
 
   it("no connected client -> 503 `not-connected` (AC3)", async () => {
@@ -232,7 +232,7 @@ describe("POST /agent/command", () => {
     });
   });
 
-  it("no reply within `commandTimeoutMs` -> 504 `timeout` (AC3)", async () => {
+  it("no reply within `queryTimeoutMs` -> 504 `timeout` (AC3)", async () => {
     await start(200);
     const ext = await extension();
     const started = Date.now();
@@ -240,7 +240,7 @@ describe("POST /agent/command", () => {
     expect(res.status).toBe(504);
     expect(res.json).toMatchObject({ ok: false, error: { code: "timeout" } });
     expect(Date.now() - started).toBeGreaterThanOrEqual(150);
-    expect(ext.received.some((m) => m.type === "command")).toBe(true);
+    expect(ext.received.some((m) => m.type === "query")).toBe(true);
   });
 
   it("manifest.json requested with no token, with the bridge token and with the agent token never contains the agent token (AC5)", async () => {

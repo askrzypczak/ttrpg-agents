@@ -5,7 +5,7 @@ import {
   type SocketLike,
   type SocketState,
 } from "./reconnecting-socket.js";
-import { replyToCommand } from "./commands.js";
+import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { describeError, panelView } from "./panel-state.js";
@@ -76,8 +76,8 @@ obr.onReady(async () => {
       payload: { role, extensionVersion: EXTENSION_VERSION, token },
     }),
     onMessage: (message) => {
-      if (message.type === "command" && message.id !== undefined) {
-        void replyToCommand(obr, sync, message.id, message.payload).then(
+      if (message.type === "query" && message.id !== undefined) {
+        void replyToQuery(obr, sync, message.id, message.payload).then(
           (reply) => socket.send(reply),
         );
         return;

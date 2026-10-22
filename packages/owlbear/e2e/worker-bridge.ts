@@ -12,7 +12,7 @@ import {
 export interface WorkerBridge {
   origin: string;
   token: string;
-  /** Bearer token for `POST /agent/command`. */
+  /** Bearer token for `POST /agent/query`. */
   agentToken: string;
   stop(): Promise<void>;
 }

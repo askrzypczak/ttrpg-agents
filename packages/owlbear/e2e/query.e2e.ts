@@ -3,7 +3,7 @@ import { test, expect, openHarness } from "./fixtures.js";
 const readItems = (page: import("@playwright/test").Page) =>
   page.evaluate(() => window.__host!.scene.getItems());
 
-test.describe("agent command -> bridge -> extension", () => {
+test.describe("agent query -> bridge -> extension", () => {
   test("POST `scene-status` to the worker bridge with the agent token returns the real extension's counts (A10)", async ({
     page,
     bridge,
@@ -13,7 +13,7 @@ test.describe("agent command -> bridge -> extension", () => {
     await expect.poll(async () => (await readItems(page)).length).toBe(5);
 
     const post = async () => {
-      const res = await fetch(`${bridge.origin}/agent/command`, {
+      const res = await fetch(`${bridge.origin}/agent/query`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${bridge.agentToken}`,

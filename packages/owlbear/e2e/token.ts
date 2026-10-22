@@ -4,7 +4,7 @@ import { join } from "node:path";
 /** Fixed bridge token for e2e runs (64 hex chars, as main.ts expects). */
 export const E2E_TOKEN = "e2e0".repeat(16);
 
-/** Fixed agent token for e2e runs (authorises `POST /agent/command`). */
+/** Fixed agent token for e2e runs (authorises `POST /agent/query`). */
 export const E2E_AGENT_TOKEN = "a9e0".repeat(16);
 
 /** Agent token file in `dir`, handed to the bridge via BRIDGE_AGENT_TOKEN_FILE. */

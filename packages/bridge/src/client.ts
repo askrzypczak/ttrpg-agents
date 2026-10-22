@@ -1,4 +1,4 @@
-// Node-only client for the bridge's `POST /agent/command`, the one bridge
+// Node-only client for the bridge's `POST /agent/query`, the one bridge
 // module `@ttrpg-agents/mcp` may import (`@ttrpg-agents/bridge/client`, from
 // its composition root only). It imports only Node builtins,
 // `@ttrpg-agents/engine`, `@ttrpg-agents/protocol` and `./token-file.js`.
@@ -6,14 +6,14 @@ import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { TableUnavailableError, type TablePort } from "@ttrpg-agents/engine";
 import {
-  agentCommandResponseSchema,
-  type AgentCommandResponse,
-  type Command,
+  agentQueryResponseSchema,
+  type AgentQueryResponse,
+  type Query,
 } from "@ttrpg-agents/protocol";
 import { defaultAgentTokenPath } from "./token-file.js";
 
 export interface BridgeClient {
-  command(command: Command): Promise<AgentCommandResponse>;
+  query(query: Query): Promise<AgentQueryResponse>;
 }
 
 const DEFAULT_PORT = 5199;
@@ -23,7 +23,7 @@ export async function readAgentToken(path: string): Promise<string> {
   return (await readFile(path, "utf8")).trim();
 }
 
-function unreachable(message: string): AgentCommandResponse {
+function unreachable(message: string): AgentQueryResponse {
   return { ok: false, error: { code: "bridge-unreachable", message } };
 }
 
@@ -37,7 +37,7 @@ export function createBridgeClient(options?: {
   tokenPath?: string;
 }): BridgeClient {
   return {
-    async command(command) {
+    async query(query) {
       const port =
         options?.port ??
         (process.env.BRIDGE_PORT
@@ -57,13 +57,13 @@ export function createBridgeClient(options?: {
       }
       let res: Response;
       try {
-        res = await fetch(`http://127.0.0.1:${String(port)}/agent/command`, {
+        res = await fetch(`http://127.0.0.1:${String(port)}/agent/query`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(command),
+          body: JSON.stringify(query),
         });
       } catch {
         return unreachable(
@@ -71,7 +71,7 @@ export function createBridgeClient(options?: {
         );
       }
       try {
-        const parsed = agentCommandResponseSchema.safeParse(await res.json());
+        const parsed = agentQueryResponseSchema.safeParse(await res.json());
         if (parsed.success) return parsed.data;
       } catch {
         // fall through to the generic error
@@ -94,7 +94,7 @@ export function createBridgeTable(
 ): TablePort {
   return {
     async sceneStatus() {
-      const res = await client.command({ name: "scene-status" });
+      const res = await client.query({ name: "scene-status" });
       if (!res.ok) throw new TableUnavailableError(res.error.message);
       const { sceneReady, tokenCount, appliedInstanceCount } =
         res.result.result;

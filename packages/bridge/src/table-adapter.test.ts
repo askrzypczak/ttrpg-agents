@@ -1,23 +1,23 @@
 import { TableUnavailableError } from "@ttrpg-agents/engine";
 import {
   agentErrorCodeSchema,
-  type AgentCommandResponse,
-  type Command,
+  type AgentQueryResponse,
+  type Query,
 } from "@ttrpg-agents/protocol";
 import { describe, expect, it } from "vitest";
 import { createBridgeTable, type BridgeClient } from "./client.js";
 
-/** A stub client that records commands and answers each with `response`. */
-function clientAnswering(response: AgentCommandResponse): {
+/** A stub client that records queries and answers each with `response`. */
+function clientAnswering(response: AgentQueryResponse): {
   client: BridgeClient;
-  commands: Command[];
+  queries: Query[];
 } {
-  const commands: Command[] = [];
+  const queries: Query[] = [];
   return {
-    commands,
+    queries,
     client: {
-      command: (command) => {
-        commands.push(command);
+      query: (query) => {
+        queries.push(query);
         return Promise.resolve(response);
       },
     },
@@ -26,7 +26,7 @@ function clientAnswering(response: AgentCommandResponse): {
 
 describe("createBridgeTable", () => {
   it("returns the scene counts from an ok `scene-status` result (A11, AC4)", async () => {
-    const { client, commands } = clientAnswering({
+    const { client, queries } = clientAnswering({
       ok: true,
       result: {
         name: "scene-status",
@@ -39,7 +39,7 @@ describe("createBridgeTable", () => {
       tokenCount: 4,
       appliedInstanceCount: 3,
     });
-    expect(commands).toEqual([{ name: "scene-status" }]);
+    expect(queries).toEqual([{ name: "scene-status" }]);
   });
 
   it("throws `TableUnavailableError` carrying the bridge's message for any `{ ok: false }` response, each error code (A11, AC3)", async () => {
