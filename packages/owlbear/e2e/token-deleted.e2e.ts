@@ -45,6 +45,65 @@ test.describe("deleting a token on the table", () => {
     ).toHaveText("");
   });
 
+  test("a token deleted while the extension is away is removed from the store when it reconnects, and not recreated", async ({
+    page,
+  }) => {
+    await openHarness(page, { role: "gm" });
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    const tokenId = (await readItems(page)).find(
+      (i) => i.name === "Shadow 4",
+    )!.id;
+
+    // Navigate the iframe away: the extension's socket closes. Keep its URL
+    // to bring it back later. The fake host posts to the iframe's origin, so
+    // go to a page on the same origin rather than about:blank (origin null).
+    const extensionUrl = await page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          const iframe = document.getElementById(
+            "extension",
+          ) as HTMLIFrameElement;
+          const url = iframe.src;
+          iframe.addEventListener("load", () => resolve(url), { once: true });
+          iframe.src = new URL("/away.html", url).href;
+        }),
+    );
+
+    // Nobody is listening: the deletion changes the scene, not the store.
+    const instanceId = await deleteToken(page, "Shadow 4");
+    await page.waitForTimeout(500);
+    expect(storedIds()).toEqual([...SHADOW_IDS].sort());
+
+    // The extension comes back, sees the token missing and reports it.
+    await page.evaluate(
+      (src) =>
+        new Promise<void>((resolve) => {
+          const iframe = document.getElementById(
+            "extension",
+          ) as HTMLIFrameElement;
+          iframe.addEventListener("load", () => resolve(), { once: true });
+          const url = new URL(src);
+          url.searchParams.set("reload", "1");
+          iframe.src = url.href + location.hash;
+        }),
+      extensionUrl,
+    );
+    await expect(page.frameLocator("#extension").locator("#status")).toHaveText(
+      "Connected to the local bridge.",
+    );
+
+    await expect
+      .poll(storedIds)
+      .toEqual(SHADOW_IDS.filter((id) => id !== instanceId).sort());
+    await page.waitForTimeout(500);
+    const after = await readItems(page);
+    expect(after).toHaveLength(4);
+    expect(after.some((i) => i.id === tokenId)).toBe(false);
+    await expect(
+      page.frameLocator("#extension").locator("#sync-error"),
+    ).toHaveText("");
+  });
+
   test("a scene that goes not ready, loses its items and its placed metadata, and becomes ready removes nothing from the store", async ({
     page,
   }) => {
