@@ -30,6 +30,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `apply_damage`    | Damage by instance id or exact name (clamped at 0)               |
 | `heal`            | Heal by instance id or exact name (clamped at max)               |
 | `remove_monsters` | Remove several targets, all-or-nothing                           |
+| `rename_monster`  | Rename by instance id or exact name; unique, non-empty           |
 | `clear_encounter` | Remove every monster                                             |
 | `table_status`    | Ask the Owlbear tab for its scene status; reports in sync or not |
 

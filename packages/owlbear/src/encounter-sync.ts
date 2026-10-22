@@ -123,6 +123,10 @@ export function createEncounterSync(
     });
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
+    // Before the metadata write, so a failed rename leaves the baseline
+    // unwritten and the retry renames.
+    for (const r of plan.rename)
+      await write(() => obr.updateItems([r.id], { name: r.name }));
     if (plan.update.length > 0)
       await write(() => obr.setItemMetadata(plan.update));
 

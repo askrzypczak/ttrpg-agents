@@ -10,6 +10,8 @@ export type EncounterInstance = Extract<
 export const INSTANCE_METADATA_KEY = "com.ttrpg-agents/instance";
 /** Item metadata: the values we last wrote, `{ [projectorKey]: value }`. */
 export const SYNCED_METADATA_KEY = "com.ttrpg-agents/synced";
+/** Reserved key in the synced record: the token name we last wrote. */
+export const NAME_BASELINE_KEY = "name";
 /** Scene metadata: the instance ids already placed on this scene. */
 export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 
@@ -67,6 +69,8 @@ export type SyncPlan = {
   /** Key-level item metadata writes; `value: undefined` clears the key. */
   update: { id: string; key: string; value: unknown }[];
   delete: string[];
+  /** Token renames (a top-level item field, not metadata). */
+  rename: { id: string; name: string }[];
   /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
   deleted: string[];
 };
@@ -113,7 +117,9 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * - d != o, b present, d != b (the encounter changed): push d, b := d.
  * - d != o, b present, d == b (the table was edited): leave it.
  * - d != o, no b: push d if o is absent, else keep o; either way b := d.
- * `create-only` keys, name, position and visibility are set at creation only.
+ * The token name follows the same rule, with its baseline under
+ * NAME_BASELINE_KEY in the synced record.
+ * `create-only` keys, position and visibility are set at creation only.
  * An instance in `context.placed` whose token is missing was deleted by the
  * GM and is not recreated.
  */
@@ -123,7 +129,13 @@ export function planSync(
   config: SyncConfig,
   context: { viewportCenter: Vec2; placed: ReadonlySet<string> },
 ): SyncPlan {
-  const plan: SyncPlan = { add: [], update: [], delete: [], deleted: [] };
+  const plan: SyncPlan = {
+    add: [],
+    update: [],
+    delete: [],
+    rename: [],
+    deleted: [],
+  };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();
   for (const item of observed) {
@@ -156,6 +168,17 @@ export function planSync(
         next[key] = d;
       }
     }
+    const d = instance.displayName;
+    if (d === token.name) {
+      next[NAME_BASELINE_KEY] = d;
+    } else if (Object.hasOwn(baseline, NAME_BASELINE_KEY)) {
+      if (d !== baseline[NAME_BASELINE_KEY]) {
+        plan.rename.push({ id: token.id, name: d });
+        next[NAME_BASELINE_KEY] = d;
+      }
+    } else {
+      next[NAME_BASELINE_KEY] = d;
+    }
     if (!deepEqual(next, baseline))
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
   }
@@ -176,6 +199,7 @@ export function planSync(
       metadata[p.key] = value;
       if (p.mode === "owned") synced[p.key] = value;
     }
+    synced[NAME_BASELINE_KEY] = instance.displayName;
     metadata[SYNCED_METADATA_KEY] = synced;
     plan.add.push({
       ...config.tokenKind(instance),

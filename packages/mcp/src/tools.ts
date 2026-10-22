@@ -277,6 +277,23 @@ const removeMonstersTool = defineTool({
   },
 });
 
+const renameMonsterTool = defineTool({
+  name: "rename_monster",
+  annotations: { destructiveHint: true },
+  description:
+    "Rename a monster. Target is an instance id or exact name; the new name must be non-empty and not used by another monster.",
+  inputSchema: { target: z.string(), name: z.string() },
+  run(ctx, { target, name }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Stryker disable next-line ConditionalExpression: equivalent, resolveTargets throws for an unknown target
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const updated = ctx.repo.renameInstance(instance.id, name);
+    return ok(`${instance.displayName} renamed to ${updated.displayName}`, {
+      instance: instanceView(updated),
+    });
+  },
+});
+
 const clearEncounterTool = defineTool({
   name: "clear_encounter",
   annotations: { destructiveHint: true },
@@ -328,6 +345,7 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("damage"),
   hpTool("heal"),
   removeMonstersTool,
+  renameMonsterTool,
   clearEncounterTool,
   tableStatusTool,
 ];

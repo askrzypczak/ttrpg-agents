@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DatabaseSync } from "node:sqlite";
 import { openDatabase } from "./db.js";
-import { InvalidAmountError, UnknownInstanceError } from "@ttrpg-agents/engine";
+import {
+  InvalidAmountError,
+  InvalidNameError,
+  UnknownInstanceError,
+} from "@ttrpg-agents/engine";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 let db: DatabaseSync;
@@ -189,6 +193,59 @@ describe("removeInstances", () => {
     );
     expect(repo.listInstances()).toEqual(added);
     expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("renameInstance", () => {
+  it("renames and persists the display name", () => {
+    const [a, b] = repo.addInstances(() => [
+      goblin({ displayName: "Goblin 1" }),
+      goblin({ displayName: "Goblin 2" }),
+    ]);
+    const renamed = repo.renameInstance(a!.id, "  Boss  ");
+    expect(renamed).toEqual({ ...a, displayName: "Boss" });
+    expect(repo.listInstances()).toEqual([renamed, b]);
+    // Renaming to its own current name is allowed.
+    expect(repo.renameInstance(a!.id, "Boss")).toEqual(renamed);
+  });
+
+  it("unknown id throws UnknownInstanceError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin()]);
+    expect(() => repo.renameInstance("nope", "Boss")).toThrow(
+      UnknownInstanceError,
+    );
+    expect(repo.listInstances()).toEqual(added);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("duplicate or empty name rejected, changes nothing", () => {
+    const added = repo.addInstances(() => [
+      goblin({ displayName: "Goblin 1" }),
+      goblin({ displayName: "Goblin 2" }),
+    ]);
+    const id = added[0]!.id;
+    for (const name of ["Goblin 2", " Goblin 2 ", "", "   "]) {
+      expect(() => repo.renameInstance(id, name), name).toThrow(
+        InvalidNameError,
+      );
+    }
+    expect(repo.listInstances()).toEqual(added);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("does not rename an instance outside the active encounter", () => {
+    const [old] = repo.addInstances(() => [goblin({ displayName: "Old" })]);
+    db.exec("UPDATE encounters SET active = 0");
+    repo.addInstances(() => [goblin({ displayName: "New" })]);
+    expect(() => repo.renameInstance(old!.id, "Boss")).toThrow(
+      UnknownInstanceError,
+    );
+    expect(
+      db
+        .prepare("SELECT display_name FROM monster_instances WHERE id = ?")
+        .get(old!.id),
+    ).toEqual({ display_name: "Old" });
+    expect(repo.listInstances().map((i) => i.displayName)).toEqual(["New"]);
   });
 });
 

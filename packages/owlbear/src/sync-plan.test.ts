@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SceneItem } from "./scene-model.js";
 import {
   INSTANCE_METADATA_KEY,
+  NAME_BASELINE_KEY,
   SYNCED_METADATA_KEY,
   defaultSyncConfig,
   planSync,
@@ -79,9 +80,10 @@ const token = (
   ...over,
 });
 
-/** The link baseline a token of ours has once we wrote it. */
+/** The link and name baseline a token of ours has once we wrote it. */
 const linkBaseline = (n: number) => ({
   [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+  [NAME_BASELINE_KEY]: `Shadow ${n}`,
 });
 
 const foreign: SceneItem = {
@@ -168,7 +170,13 @@ describe("planSync", () => {
       defaultSyncConfig,
       ctx(["i1", "i2"]),
     );
-    expect(plan).toEqual({ add: [], update: [], delete: [], deleted: [] });
+    expect(plan).toEqual({
+      add: [],
+      update: [],
+      delete: [],
+      rename: [],
+      deleted: [],
+    });
   });
 
   it("pushes an owned key when the encounter changed and the table did not", () => {
@@ -207,7 +215,13 @@ describe("planSync", () => {
       config(link, hp),
       ctx(["i1"]),
     );
-    expect(plan).toEqual({ add: [], update: [], delete: [], deleted: [] });
+    expect(plan).toEqual({
+      add: [],
+      update: [],
+      delete: [],
+      rename: [],
+      deleted: [],
+    });
   });
 
   it("pushes after a table edit once the encounter changes again", () => {
@@ -304,7 +318,12 @@ describe("planSync", () => {
       defaultSyncConfig,
       ctx(["i1", "i2"]),
     );
-    expect(plan).toMatchObject({ add: [], update: [], delete: [] });
+    expect(plan).toMatchObject({
+      add: [],
+      update: [],
+      delete: [],
+      rename: [],
+    });
   });
 
   it("plans a non-default token kind (IMAGE on CHARACTER)", () => {
@@ -345,7 +364,7 @@ describe("planSync", () => {
     expect(metadata[HP_KEY]).toBe(12);
     expect(metadata[NOTE_KEY]).toBe("Shadow 1");
     expect(metadata[SYNCED_METADATA_KEY]).toMatchObject({
-      ...linkBaseline(1),
+      [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
       [HP_KEY]: 12,
     });
   });
@@ -392,6 +411,108 @@ describe("planSync deleted", () => {
     // i9 is still in the placed record but has left the encounter.
     const plan = planSync([inst(1)], [], defaultSyncConfig, ctx(["i1", "i9"]));
     expect(plan.deleted).toEqual(["i1"]);
+  });
+});
+
+/** The synced record of `id` after applying the plan's metadata updates. */
+const syncedAfter = (items: SceneItem[], plan: SyncPlan, id: string) =>
+  metadataOf(applyUpdates(items, plan), id)[SYNCED_METADATA_KEY];
+
+describe("planSync token name", () => {
+  it("renames a token whose name equals its baseline when the store name changed", () => {
+    const observed = [token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) })];
+    const plan = planSync(
+      [inst(1, { displayName: "Boss" })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(plan.add).toEqual([]);
+    expect(plan.delete).toEqual([]);
+    expect(plan.rename).toEqual([{ id: "token-1", name: "Boss" }]);
+    expect(syncedAfter(observed, plan, "token-1")).toEqual({
+      ...linkBaseline(1),
+      [NAME_BASELINE_KEY]: "Boss",
+    });
+  });
+
+  it("records a name baseline on creation", () => {
+    const plan = planSync([inst(1)], [], defaultSyncConfig, ctx());
+    expect(plan.add).toHaveLength(1);
+    expect(plan.add[0]!.name).toBe("Shadow 1");
+    expect(plan.add[0]!.metadata[SYNCED_METADATA_KEY]).toMatchObject({
+      [NAME_BASELINE_KEY]: "Shadow 1",
+    });
+    expect(plan.rename).toEqual([]);
+  });
+
+  it("leaves a GM-renamed token alone while the store name is unchanged", () => {
+    const observed = [
+      // The GM renamed token 1 on the table; its store name is unchanged.
+      token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }, { name: "Boss" }),
+      // Control: token 2's store name changed, so it is renamed.
+      token(2, { [SYNCED_METADATA_KEY]: linkBaseline(2) }),
+    ];
+    const plan = planSync(
+      [inst(1), inst(2, { displayName: "Ghost" })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1", "i2"]),
+    );
+    expect(plan.rename).toEqual([{ id: "token-2", name: "Ghost" }]);
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
+  });
+
+  it("renames again after a further store change even if the GM had renamed it", () => {
+    const observed = [
+      token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }, { name: "Boss" }),
+    ];
+    const plan = planSync(
+      [inst(1, { displayName: "Ghost" })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(plan.rename).toEqual([{ id: "token-1", name: "Ghost" }]);
+    expect(syncedAfter(observed, plan, "token-1")).toEqual({
+      ...linkBaseline(1),
+      [NAME_BASELINE_KEY]: "Ghost",
+    });
+  });
+
+  it("keeps the token name and adopts the baseline when there is no name baseline", () => {
+    const observed = [
+      // A token from before name sync: no name in its synced record.
+      token(
+        1,
+        {
+          [SYNCED_METADATA_KEY]: {
+            [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+          },
+        },
+        { name: "Boss" },
+      ),
+    ];
+    const plan = planSync([inst(1)], observed, defaultSyncConfig, ctx(["i1"]));
+    expect(plan.rename).toEqual([]);
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
+  });
+
+  it("re-baselines when token name already equals the store name", () => {
+    const observed = [
+      token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }, { name: "Ghost" }),
+    ];
+    const plan = planSync(
+      [inst(1, { displayName: "Ghost" })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(plan.rename).toEqual([]);
+    expect(syncedAfter(observed, plan, "token-1")).toEqual({
+      ...linkBaseline(1),
+      [NAME_BASELINE_KEY]: "Ghost",
+    });
   });
 });
 
