@@ -59,7 +59,12 @@ const ALLOWED: Record<string, Edges> = {
     // Tests only: live-sync.integration.test.ts drives the MCP server.
     devDependencies: ["mcp"],
   }),
-  mcp: edges({ dependencies: ["engine", "srd", "store-sqlite"] }),
+  mcp: edges({
+    // bridge: only mcp/src/stdio.ts (the composition root) imports
+    // @ttrpg-agents/bridge/client, the adapter that implements the engine's
+    // TablePort; lint enforces that file-level rule.
+    dependencies: ["bridge", "engine", "srd", "store-sqlite"],
+  }),
 };
 
 /** The short-named workspace edges declared in a parsed package.json, sorted. */
