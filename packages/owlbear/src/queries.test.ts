@@ -37,7 +37,7 @@ const unplaced: SceneItem = {
 };
 
 describe("handleQuery scene-status", () => {
-  it("`scene-status` on a ready scene counts only our tokens and reports `sceneReady: true` (AC4)", async () => {
+  it("`scene-status` on a ready scene counts only our tokens and reports `sceneReady: true`", async () => {
     const { obr, scene } = createFakeObr();
     const sync = createEncounterSync(obr);
     await sync.handleMessage({
@@ -54,7 +54,7 @@ describe("handleQuery scene-status", () => {
     });
   });
 
-  it("`scene-status` on a scene that is not ready reports `sceneReady: false` and zero tokens (AC4)", async () => {
+  it("`scene-status` on a scene that is not ready reports `sceneReady: false` and zero tokens", async () => {
     const { obr } = createFakeObr(new SceneModel("gm", false));
     const sync = createEncounterSync(obr);
 
@@ -90,7 +90,7 @@ describe("handleQuery read-only guard", () => {
 });
 
 describe("queryReply", () => {
-  it("`queryReply` carries the query's id and result (AC4)", () => {
+  it("`queryReply` carries the query's id and result", () => {
     const result: QueryResult = {
       name: "scene-status",
       result: { sceneReady: true, tokenCount: 4, appliedInstanceCount: 4 },

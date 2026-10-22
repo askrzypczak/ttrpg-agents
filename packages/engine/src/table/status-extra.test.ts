@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { getTableStatus } from "./index.js";
 
 describe("getTableStatus (mutation-test additions)", () => {
-  it("reports out of sync when the token count equals the encounter count but the applied count differs (A11)", async () => {
+  it("reports out of sync when the token count equals the encounter count but the applied count differs", async () => {
     const repo = {
       listInstances: () =>
         Array.from({ length: 3 }, (_, i) => ({

@@ -165,7 +165,7 @@ describe("protocol", () => {
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
   });
 
-  it("`query` and `query-result` messages round-trip through encode/decode (AC6)", () => {
+  it("`query` and `query-result` messages round-trip through encode/decode", () => {
     const messages: BridgeMessage[] = [
       { v: 1, type: "query", id: "c1", payload: { name: "scene-status" } },
       {
@@ -186,7 +186,7 @@ describe("protocol", () => {
     }
   });
 
-  it("`agentQueryResponseSchema` accepts the ok and error shapes and rejects an unknown error code (AC6)", () => {
+  it("`agentQueryResponseSchema` accepts the ok and error shapes and rejects an unknown error code", () => {
     const okResponse = {
       ok: true,
       result: {

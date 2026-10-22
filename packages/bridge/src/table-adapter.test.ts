@@ -25,7 +25,7 @@ function clientAnswering(response: AgentQueryResponse): {
 }
 
 describe("createBridgeTable", () => {
-  it("returns the scene counts from an ok `scene-status` result (A11, AC4)", async () => {
+  it("returns the scene counts from an ok `scene-status` result", async () => {
     const { client, queries } = clientAnswering({
       ok: true,
       result: {
@@ -42,7 +42,7 @@ describe("createBridgeTable", () => {
     expect(queries).toEqual([{ name: "scene-status" }]);
   });
 
-  it("throws `TableUnavailableError` carrying the bridge's message for any `{ ok: false }` response, each error code (A11, AC3)", async () => {
+  it("throws `TableUnavailableError` carrying the bridge's message for any `{ ok: false }` response, each error code", async () => {
     for (const code of agentErrorCodeSchema.options) {
       const message = `bridge says ${code}`;
       const { client } = clientAnswering({

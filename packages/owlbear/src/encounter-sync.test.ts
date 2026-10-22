@@ -425,7 +425,7 @@ describe("createEncounterSync", () => {
     expect(applied).toBe(2);
   });
 
-  it("`appliedInstanceCount` follows snapshot / added / removed / cleared, and does not count a held or failed message (AC4)", async () => {
+  it("`appliedInstanceCount` follows snapshot / added / removed / cleared, and does not count a held or failed message", async () => {
     const { obr, scene, failNextAdds } = recording(new SceneModel("gm", false));
     const errors: unknown[] = [];
     const sync = createEncounterSync(

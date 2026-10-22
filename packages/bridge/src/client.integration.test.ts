@@ -89,7 +89,7 @@ async function unusedPort(): Promise<number> {
 }
 
 describe("bridge client", () => {
-  it("returns the extension's result (AC2)", async () => {
+  it("returns the extension's result", async () => {
     const s = await startWithExtension();
     const client = createBridgeClient({ port: s.port, tokenPath });
     expect(await client.query({ name: "scene-status" })).toEqual({
@@ -98,7 +98,7 @@ describe("bridge client", () => {
     });
   });
 
-  it("bridge not listening -> `bridge-unreachable` (AC3)", async () => {
+  it("bridge not listening -> `bridge-unreachable`", async () => {
     const client = createBridgeClient({ port: await unusedPort(), tokenPath });
     expect(await client.query({ name: "scene-status" })).toMatchObject({
       ok: false,
@@ -106,7 +106,7 @@ describe("bridge client", () => {
     });
   });
 
-  it("missing token file -> `bridge-unreachable` with a start-the-bridge message (AC3)", async () => {
+  it("missing token file -> `bridge-unreachable` with a start-the-bridge message", async () => {
     const s = await startWithExtension();
     const client = createBridgeClient({
       port: s.port,

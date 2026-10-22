@@ -424,7 +424,7 @@ describe("clear_encounter", () => {
 });
 
 describe("table_status", () => {
-  it("`table_status` formats text and `structuredContent` from the port and the repo when in sync (AC4, A9)", async () => {
+  it("`table_status` formats text and `structuredContent` from the port and the repo when in sync", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
     ctx.table = tableAnswering({
       sceneReady: true,
@@ -446,7 +446,7 @@ describe("table_status", () => {
     });
   });
 
-  it("`table_status` reports out of sync with all three counts in the text (A9)", async () => {
+  it("`table_status` reports out of sync with all three counts in the text", async () => {
     // Encounter count 3; tokens 7 and applied 8 are distinct from it.
     seed(item("A", 1), item("B", 2), item("C", 3));
     ctx.table = tableAnswering({
@@ -462,7 +462,7 @@ describe("table_status", () => {
       expect(out).toMatch(new RegExp(`\\b${String(n)}\\b`));
   });
 
-  it("`table_status` returns an `isError` result carrying the port's `TableUnavailableError` message (AC3, AC4)", async () => {
+  it("`table_status` returns an `isError` result carrying the port's `TableUnavailableError` message", async () => {
     const message = "no Owlbear GM tab is connected to the bridge";
     ctx.table = {
       sceneStatus: () => Promise.reject(new TableUnavailableError(message)),

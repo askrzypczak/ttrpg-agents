@@ -40,7 +40,7 @@ const scene = (
 ): TableSceneStatus => ({ sceneReady, tokenCount, appliedInstanceCount });
 
 describe("getTableStatus", () => {
-  it("reports in sync, with the full status (`sceneReady`, the three counts, `inSync`), when the scene is ready and token, applied and encounter counts match (A11, AC4)", async () => {
+  it("reports in sync, with the full status (`sceneReady`, the three counts, `inSync`), when the scene is ready and token, applied and encounter counts match", async () => {
     const status = await getTableStatus(
       repoWith(3),
       tableAnswering(scene(true, 3, 3)),
@@ -54,7 +54,7 @@ describe("getTableStatus", () => {
     });
   });
 
-  it("an empty scene and an empty encounter are in sync (A11)", async () => {
+  it("an empty scene and an empty encounter are in sync", async () => {
     const status = await getTableStatus(
       repoWith(0),
       tableAnswering(scene(true, 0, 0)),
@@ -68,7 +68,7 @@ describe("getTableStatus", () => {
     });
   });
 
-  it("reports out of sync when the scene is not ready, even if all counts match (A11)", async () => {
+  it("reports out of sync when the scene is not ready, even if all counts match", async () => {
     const status = await getTableStatus(
       repoWith(2),
       tableAnswering(scene(false, 2, 2)),
@@ -82,7 +82,7 @@ describe("getTableStatus", () => {
     });
   });
 
-  it("reports out of sync when the token count differs from the applied count (A11)", async () => {
+  it("reports out of sync when the token count differs from the applied count", async () => {
     // Token count differs from applied; applied equals the encounter count.
     const status = await getTableStatus(
       repoWith(3),
@@ -97,7 +97,7 @@ describe("getTableStatus", () => {
     });
   });
 
-  it("reports out of sync when the applied count differs from the encounter count (A11)", async () => {
+  it("reports out of sync when the applied count differs from the encounter count", async () => {
     // Token and applied counts agree; the encounter has one more.
     const status = await getTableStatus(
       repoWith(4),
@@ -112,7 +112,7 @@ describe("getTableStatus", () => {
     });
   });
 
-  it("lets `TableUnavailableError` from the port propagate (A11)", async () => {
+  it("lets `TableUnavailableError` from the port propagate", async () => {
     const error = new TableUnavailableError(
       "no Owlbear GM tab is connected to the bridge",
     );

@@ -139,19 +139,19 @@ function reply(ws: WebSocket, id: string | undefined, tokenCount: number) {
 }
 
 describe("POST /agent/query", () => {
-  it("POST with no token -> 401 (AC1)", async () => {
+  it("POST with no token -> 401", async () => {
     await start();
     const res = await post(JSON.stringify(SCENE_STATUS));
     expect(res.status).toBe(401);
   });
 
-  it("POST with the extension (bridge) token -> 401 (AC1)", async () => {
+  it("POST with the extension (bridge) token -> 401", async () => {
     await start();
     const res = await post(JSON.stringify(SCENE_STATUS), server.token);
     expect(res.status).toBe(401);
   });
 
-  it("POST with the agent token reaches the connected client as a `query` with an id, and the client's `query-result` is the HTTP body (AC2)", async () => {
+  it("POST with the agent token reaches the connected client as a `query` with an id, and the client's `query-result` is the HTTP body", async () => {
     await start();
     const ext = await extension();
     const query = ext.nextQuery();
@@ -167,7 +167,7 @@ describe("POST /agent/query", () => {
     expect(res.json).toEqual({ ok: true, result: sceneStatusResult(4) });
   });
 
-  it("a `query-result` with a different id does not complete the call (AC2)", async () => {
+  it("a `query-result` with a different id does not complete the call", async () => {
     await start(2000);
     const ext = await extension();
     const query = ext.nextQuery();
@@ -184,7 +184,7 @@ describe("POST /agent/query", () => {
     expect(res.json).toEqual({ ok: true, result: sceneStatusResult(1) });
   });
 
-  it("a client `error` carrying the query's id -> 502 `query-failed` (AC2)", async () => {
+  it("a client `error` carrying the query's id -> 502 `query-failed`", async () => {
     await start();
     const ext = await extension();
     const query = ext.nextQuery();
@@ -208,7 +208,7 @@ describe("POST /agent/query", () => {
     });
   });
 
-  it("a malformed body -> 400 `bad-request` (AC2)", async () => {
+  it("a malformed body -> 400 `bad-request`", async () => {
     await start();
     const ext = await extension();
     for (const body of ["{nope", "[]", '{"name":"launch"}', "{}"]) {
@@ -222,7 +222,7 @@ describe("POST /agent/query", () => {
     expect(ext.received.filter((m) => m.type === "query")).toEqual([]);
   });
 
-  it("no connected client -> 503 `not-connected` (AC3)", async () => {
+  it("no connected client -> 503 `not-connected`", async () => {
     await start();
     const res = await post(JSON.stringify(SCENE_STATUS), AGENT_TOKEN);
     expect(res.status).toBe(503);
@@ -232,7 +232,7 @@ describe("POST /agent/query", () => {
     });
   });
 
-  it("no reply within `queryTimeoutMs` -> 504 `timeout` (AC3)", async () => {
+  it("no reply within `queryTimeoutMs` -> 504 `timeout`", async () => {
     await start(200);
     const ext = await extension();
     const started = Date.now();
@@ -243,7 +243,7 @@ describe("POST /agent/query", () => {
     expect(ext.received.some((m) => m.type === "query")).toBe(true);
   });
 
-  it("manifest.json requested with no token, with the bridge token and with the agent token never contains the agent token (AC5)", async () => {
+  it("manifest.json requested with no token, with the bridge token and with the agent token never contains the agent token", async () => {
     await start();
     // The agent token is live on this server (no client yet, so 503 not 401).
     expect((await post(JSON.stringify(SCENE_STATUS), AGENT_TOKEN)).status).toBe(

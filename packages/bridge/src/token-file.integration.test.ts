@@ -26,7 +26,7 @@ describe("loadOrCreateToken", () => {
     expect((await readFile(path, "utf8")).trim()).toBe(first);
   });
 
-  it("the agent token file is created with mode 0600 and reused (AC5)", async () => {
+  it("the agent token file is created with mode 0600 and reused", async () => {
     expect(basename(defaultAgentTokenPath())).toBe("agent-token");
     expect(dirname(defaultAgentTokenPath())).toBe(dirname(defaultTokenPath()));
     expect(defaultAgentTokenPath()).not.toBe(defaultTokenPath());
