@@ -31,6 +31,7 @@ export function seedE2eDatabase(dir: string): void {
         monsterKey: "shadow",
         displayName: `Shadow ${i + 1}`,
         maxHp: 16,
+        initiative: 14,
       })),
     );
   } finally {

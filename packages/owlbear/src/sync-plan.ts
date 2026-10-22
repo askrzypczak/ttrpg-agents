@@ -1,4 +1,5 @@
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { initiativeProjector } from "./initiative.js";
 import type { SceneItem, Vec2 } from "./scene-model.js";
 
 export type EncounterInstance = Extract<
@@ -48,7 +49,10 @@ export type SyncConfig = {
   tokenKind(instance: EncounterInstance): TokenKind;
 };
 
-/** Link projector plus a hidden SHAPE circle on the CHARACTER layer. */
+/**
+ * Link and Initiative Tracker projectors plus a hidden SHAPE circle on the
+ * CHARACTER layer.
+ */
 export const defaultSyncConfig: SyncConfig = {
   projectors: [
     {
@@ -56,6 +60,7 @@ export const defaultSyncConfig: SyncConfig = {
       mode: "owned",
       project: (instance) => ({ instanceId: instance.id }),
     },
+    initiativeProjector,
   ],
   tokenKind: () => ({
     type: "SHAPE",
@@ -115,6 +120,8 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * - d != o, b present, d != b (the encounter changed): push d, b := d.
  * - d != o, b present, d == b (the table was edited): leave it.
  * - d != o, no b: push d if o is absent, else keep o; either way b := d.
+ * An undefined d means no key: it is never written or baselined, and its
+ * baseline is dropped (the token's value is left alone).
  * The token name follows the same rule, with its baseline under
  * NAME_BASELINE_KEY in the synced record.
  * `create-only` keys, position and visibility are set at creation only.
@@ -148,7 +155,9 @@ export function planSync(
       const d = project(instance);
       const o = token.metadata[key];
       const hasBaseline = Object.hasOwn(baseline, key);
-      if (deepEqual(d, o)) {
+      if (d === undefined) {
+        delete next[key];
+      } else if (deepEqual(d, o)) {
         next[key] = d;
       } else if (hasBaseline) {
         if (!deepEqual(d, baseline[key])) {
@@ -184,6 +193,7 @@ export function planSync(
     const synced: Record<string, unknown> = {};
     for (const p of config.projectors) {
       const value = p.project(instance);
+      if (value === undefined) continue;
       metadata[p.key] = value;
       if (p.mode === "owned") synced[p.key] = value;
     }
