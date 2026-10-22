@@ -6,13 +6,10 @@ export const INITIATIVE_METADATA_KEY =
 
 /** Registers a token in the Initiative Tracker with its stored initiative. */
 export const initiativeProjector: Projector = {
-  get key(): string {
-    throw new Error("not implemented");
-  },
-  get mode(): Projector["mode"] {
-    throw new Error("not implemented");
-  },
-  project: () => {
-    throw new Error("not implemented");
-  },
+  key: INITIATIVE_METADATA_KEY,
+  mode: "owned",
+  project: (instance) =>
+    instance.initiative === null
+      ? undefined
+      : { count: String(instance.initiative), active: false },
 };

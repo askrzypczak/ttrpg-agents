@@ -511,6 +511,24 @@ describe("planSync initiative tracker", () => {
       tracker("12"),
     );
   });
+
+  it("a null initiative drops an existing tracker baseline", () => {
+    const observed = [
+      token(1, {
+        [SYNCED_METADATA_KEY]: {
+          ...linkBaseline(1),
+          [INITIATIVE_METADATA_KEY]: tracker("14"),
+        },
+      }),
+    ];
+    const plan = planSync(
+      [inst(1, { initiative: null })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
+  });
 });
 
 describe("rowPositions", () => {
