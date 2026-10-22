@@ -82,6 +82,7 @@ function wrapRepo(
     applyDamage: (id, amount) => inner.applyDamage(id, amount),
     applyHealing: (id, amount) => inner.applyHealing(id, amount),
     removeInstances: (ids) => inner.removeInstances(ids),
+    renameInstance: (id, name) => inner.renameInstance(id, name),
     clearEncounter: () => inner.clearEncounter(),
     listInstances: () => inner.listInstances(),
     ...over,
@@ -111,7 +112,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the nine tools", () => {
+  it("exposes the ten tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -120,6 +121,7 @@ describe("tool registry", () => {
       "heal",
       "list_encounter",
       "remove_monsters",
+      "rename_monster",
       "search_monsters",
       "table_status",
     ]);
@@ -406,6 +408,58 @@ describe("remove_monsters validation", () => {
     expect(r.isError).toBe(true);
     expect(text(r)).toContain("Invalid arguments");
     expect(names()).toEqual(["A"]);
+  });
+});
+
+describe("rename_monster", () => {
+  it("renames by id and by exact name, reports old and new name", async () => {
+    seed(item("Shadow 1", 5), item("Shadow 2", 3));
+    const id = ctx.repo.listInstances()[0]?.id ?? "";
+
+    const byId = await call("rename_monster", { target: id, name: "Boss" });
+    expect(byId.isError).toBeUndefined();
+    expect(text(byId)).toContain("Shadow 1 renamed to Boss");
+    expect(byId.structuredContent?.["instance"]).toMatchObject({
+      id,
+      name: "Boss",
+    });
+
+    const byName = await call("rename_monster", {
+      target: "Shadow 2",
+      name: "Lackey",
+    });
+    expect(byName.isError).toBeUndefined();
+    expect(text(byName)).toContain("Shadow 2 renamed to Lackey");
+    expect(names()).toEqual(["Boss", "Lackey"]);
+  });
+
+  it("reports an unknown target", async () => {
+    seed(item("Shadow 1", 5));
+    const r = await call("rename_monster", { target: "Nobody", name: "Boss" });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("Nobody");
+    expect(names()).toEqual(["Shadow 1"]);
+  });
+
+  it("reports a duplicate name", async () => {
+    seed(item("Shadow 1", 5), item("Shadow 2", 3));
+    const r = await call("rename_monster", {
+      target: "Shadow 1",
+      name: "Shadow 2",
+    });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("Shadow 2");
+    expect(names()).toEqual(["Shadow 1", "Shadow 2"]);
+  });
+
+  it("reports an empty name", async () => {
+    seed(item("Shadow 1", 5));
+    for (const name of ["", "   "]) {
+      const r = await call("rename_monster", { target: "Shadow 1", name });
+      expect(r.isError).toBe(true);
+      expect(text(r)).toMatch(/name/i);
+    }
+    expect(names()).toEqual(["Shadow 1"]);
   });
 });
 

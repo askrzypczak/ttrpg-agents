@@ -13,7 +13,12 @@ import {
   SceneModel,
   type SceneItem,
 } from "./scene-model.js";
-import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
+import {
+  INSTANCE_METADATA_KEY,
+  NAME_BASELINE_KEY,
+  SYNCED_METADATA_KEY,
+  type EncounterInstance,
+} from "./sync-plan.js";
 
 const inst = (n: number): EncounterInstance => ({
   id: `i${n}`,
@@ -31,6 +36,11 @@ const snapshot = (...ns: number[]): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
   payload: { instances: ns.map(inst) },
+});
+const snapshotOf = (...instances: EncounterInstance[]): BridgeMessage => ({
+  v: 1,
+  type: "encounter-snapshot",
+  payload: { instances },
 });
 const event = (payload: EncounterEventPayload): BridgeMessage => ({
   v: 1,
@@ -60,6 +70,25 @@ const instanceIds = (scene: SceneModel): string[] =>
           .instanceId,
     )
     .sort();
+
+/** Our token for instance `n`. */
+const tokenOf = (scene: SceneModel, n: number): SceneItem => {
+  const found = scene
+    .getItems()
+    .find(
+      (i) =>
+        (
+          i.metadata[INSTANCE_METADATA_KEY] as
+            { instanceId?: string } | undefined
+        )?.instanceId === `i${n}`,
+    );
+  if (!found) throw new Error(`no token for i${n}`);
+  return found;
+};
+
+/** Token names keyed by item id. */
+const namesById = (scene: SceneModel): Record<string, string> =>
+  Object.fromEntries(scene.getItems().map((i) => [i.id, i.name]));
 
 /** Lets fire-and-forget reconciles (ready flips, retries) finish. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
@@ -462,6 +491,74 @@ describe("createEncounterSync", () => {
 
     await sync.handleMessage(event({ type: "cleared" }));
     expect(sync.appliedInstanceCount(), "cleared").toBe(0);
+  });
+
+  it("a snapshot with a renamed instance renames only that token", async () => {
+    const { obr, scene } = createFakeObr();
+    const sync = createEncounterSync(obr);
+    await sync.handleMessage(snapshot(1, 2, 3));
+    const before = scene.getItems();
+
+    await sync.handleMessage(
+      snapshotOf(inst(1), { ...inst(2), displayName: "Boss" }, inst(3)),
+    );
+    const after = scene.getItems();
+    expect(after.map((i) => i.id)).toEqual(before.map((i) => i.id));
+    expect(namesById(scene)).toEqual({
+      [tokenOf(scene, 1).id]: "Shadow 1",
+      [tokenOf(scene, 2).id]: "Boss",
+      [tokenOf(scene, 3).id]: "Shadow 3",
+    });
+  });
+
+  it("a GM-renamed token keeps its name across an unrelated snapshot", async () => {
+    const { obr, scene } = createFakeObr();
+    const sync = createEncounterSync(obr);
+    await sync.handleMessage(snapshot(1, 2));
+    scene.updateItems([tokenOf(scene, 1).id], { name: "Boss" });
+
+    // Unrelated to token 1: instance 2 is renamed in the store (control).
+    await sync.handleMessage(
+      snapshotOf(inst(1), { ...inst(2), displayName: "Ghost" }),
+    );
+    expect(tokenOf(scene, 1).name).toBe("Boss");
+    expect(tokenOf(scene, 2).name).toBe("Ghost");
+  });
+
+  it("a failed rename leaves the baseline unwritten so the retry renames", async () => {
+    const fake = createFakeObr();
+    let failRenames = 0;
+    const obr: ObrAdapter = {
+      ...fake.obr,
+      updateItems: (ids, patch) => {
+        if (patch.name !== undefined && failRenames > 0) {
+          failRenames--;
+          return Promise.reject(new Error("boom"));
+        }
+        return fake.obr.updateItems(ids, patch);
+      },
+    };
+    const timers = new FakeTimers();
+    const errors: unknown[] = [];
+    const sync = createEncounterSync(obr, (e) => errors.push(e), undefined, {
+      timers,
+      backoff,
+    });
+    await sync.handleMessage(snapshot(1));
+
+    failRenames = 1;
+    await sync.handleMessage(snapshotOf({ ...inst(1), displayName: "Boss" }));
+    expect(errors).toHaveLength(1);
+    const failed = tokenOf(fake.scene, 1);
+    expect(failed.name).toBe("Shadow 1");
+    expect(failed.metadata[SYNCED_METADATA_KEY]).toMatchObject({
+      [NAME_BASELINE_KEY]: "Shadow 1",
+    });
+
+    timers.fireAll();
+    await settle();
+    expect(errors).toHaveLength(1);
+    expect(tokenOf(fake.scene, 1).name).toBe("Boss");
   });
 
   it("ignores non-encounter messages", async () => {

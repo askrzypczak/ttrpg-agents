@@ -15,3 +15,11 @@ export class UnknownInstanceError extends DomainError {
     this.name = "UnknownInstanceError";
   }
 }
+
+/** A display name that is empty or already used by another instance. */
+export class InvalidNameError extends DomainError {
+  constructor(message: string) {
+    super("invalid_name", message);
+    this.name = "InvalidNameError";
+  }
+}
