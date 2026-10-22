@@ -1,5 +1,15 @@
-import { createServer, type Server } from "node:http";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
   extname,
@@ -14,7 +24,10 @@ import {
   PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
+  querySchema,
+  type AgentQueryResponse,
   type BridgeMessage,
+  type Query,
 } from "@ttrpg-agents/protocol";
 
 export const DEFAULT_BRIDGE_PORT = 5199;
@@ -29,6 +42,9 @@ const CONTENT_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".ico": "image/x-icon",
 };
+
+const MAX_QUERY_BODY_BYTES = 1024 * 1024;
+const DEFAULT_QUERY_TIMEOUT_MS = 5000;
 
 const ALLOWED_ORIGINS = new Set([
   "https://www.owlbear.rodeo",
@@ -45,6 +61,10 @@ export interface BridgeServerOptions {
   token?: string;
   /** Message sent to a client right after each `hello-ack`, so it converges on current state. */
   snapshot?: () => BridgeMessage;
+  /** Bearer secret for `POST /agent/query`. Defaults to a random one. */
+  agentToken?: string;
+  /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
+  queryTimeoutMs?: number;
 }
 
 export interface BridgeServer {
@@ -91,8 +111,14 @@ interface Session {
   authenticated: boolean;
 }
 
+/** A query awaiting the client's `query-result` or `error`, keyed by id. */
+interface Pending {
+  resolve(response: AgentQueryResponse): void;
+}
+
 interface Hooks {
   token: string;
+  pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
   onAuthenticated: () => void;
 }
@@ -154,6 +180,33 @@ function handleMessage(
         }
       }
       break;
+    case "query-result": {
+      const waiting = hooks.pending.get(message.id ?? "");
+      if (waiting === undefined) {
+        send(
+          ws,
+          errorMessage("unknown-query-id", "no query is waiting for that id"),
+        );
+        break;
+      }
+      waiting.resolve({ ok: true, result: message.payload });
+      break;
+    }
+    case "error": {
+      const waiting = hooks.pending.get(message.id ?? "");
+      if (waiting === undefined) {
+        send(
+          ws,
+          errorMessage("unexpected-type", 'server does not accept "error"'),
+        );
+        break;
+      }
+      waiting.resolve({
+        ok: false,
+        error: { code: "query-failed", message: message.payload.message },
+      });
+      break;
+    }
     case "ping":
       send(ws, {
         v: PROTOCOL_VERSION,
@@ -182,11 +235,56 @@ export async function startBridgeServer(
     host = "127.0.0.1",
     token = randomBytes(32).toString("hex"),
     snapshot,
+    agentToken = randomBytes(32).toString("hex"),
+    queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
   // The newest authenticated client; a second one displaces it.
   let active: WebSocket | null = null;
+  const pending = new Map<string, Pending>();
+
+  /** Relays `query` to the active client and awaits its reply or the timeout. */
+  const sendQuery = (query: Query): Promise<AgentQueryResponse> => {
+    const target = active;
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: only the `readyState` half is equivalent (`active` is cleared on close, so a non-OPEN target is a sub-millisecond race); the `null` half is killed by the not-connected test
+    if (target === null || target.readyState !== target.OPEN) {
+      return Promise.resolve({
+        ok: false,
+        error: {
+          code: "not-connected",
+          message: "no Owlbear GM tab is connected to the bridge",
+        },
+      });
+    }
+    const id = randomUUID();
+    return new Promise((resolve) => {
+      const finish = (response: AgentQueryResponse): void => {
+        // Stryker disable next-line all: a leftover timer would only re-run this idempotent cleanup; it just delays process exit
+        clearTimeout(timer);
+        pending.delete(id);
+        resolve(response);
+      };
+      const timer = setTimeout(
+        () =>
+          finish({
+            ok: false,
+            error: {
+              code: "timeout",
+              message: `the Owlbear tab did not reply within ${String(queryTimeoutMs)} ms`,
+            },
+          }),
+        queryTimeoutMs,
+      );
+      pending.set(id, { resolve: finish });
+      send(target, {
+        v: PROTOCOL_VERSION,
+        type: "query",
+        id,
+        payload: query,
+      });
+    });
+  };
 
   // DNS rebinding defense: only accept requests addressed to loopback names.
   const hostAllowed = (hostHeader: string | undefined): boolean => {
@@ -201,6 +299,13 @@ export async function startBridgeServer(
     if (!hostAllowed(req.headers.host)) {
       res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("forbidden host");
+      return;
+    }
+    if (req.method === "POST" && req.url === "/agent/query") {
+      // A body aborted mid-request rejects the read; the caller is gone.
+      handleAgentQuery(req, res, agentToken, sendQuery).catch(() => {
+        res.destroy();
+      });
       return;
     }
     res.setHeader(
@@ -260,6 +365,7 @@ export async function startBridgeServer(
       };
       const hooks: Hooks = {
         token,
+        pending,
         snapshot,
         onAuthenticated: () => {
           if (active !== null) {
@@ -299,6 +405,14 @@ export async function startBridgeServer(
       for (const ws of clients) ws.terminate();
       clients.clear();
       active = null;
+      // Stryker disable all: the sockets are destroyed right after, so a pending call's HTTP response is never observable; this only releases its timer.
+      for (const waiting of [...pending.values()]) {
+        waiting.resolve({
+          ok: false,
+          error: { code: "not-connected", message: "the bridge is closing" },
+        });
+      }
+      // Stryker restore all
       wss.close();
       await new Promise<void>((resolve, reject) => {
         http.close((err) => (err ? reject(err) : resolve()));
@@ -306,6 +420,88 @@ export async function startBridgeServer(
       });
     },
   };
+}
+
+const STATUS_FOR_CODE: Record<string, number> = {
+  unauthorized: 401,
+  "bad-request": 400,
+  "not-connected": 503,
+  timeout: 504,
+  "query-failed": 502,
+};
+
+function respondJson(
+  res: ServerResponse,
+  status: number,
+  body: AgentQueryResponse,
+): void {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}
+
+function respondError(
+  res: ServerResponse,
+  code: "unauthorized" | "bad-request",
+  message: string,
+): void {
+  respondJson(res, STATUS_FOR_CODE[code] ?? 400, {
+    ok: false,
+    error: { code, message },
+  });
+}
+
+/** Reads the body up to the cap; `null` when it is larger. */
+async function readBody(req: IncomingMessage): Promise<string | null> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buf = chunk as Buffer;
+    size += buf.length;
+    // Keep draining (without storing) so the 400 can still be sent.
+    // Stryker disable next-line ConditionalExpression: the `true` variant (store everything) is equivalent, the size check below still rejects
+    if (size <= MAX_QUERY_BODY_BYTES) chunks.push(buf);
+  }
+  return size > MAX_QUERY_BODY_BYTES
+    ? null
+    : Buffer.concat(chunks).toString("utf8");
+}
+
+// No CORS headers: only a non-browser caller holding the agent token uses this.
+async function handleAgentQuery(
+  req: IncomingMessage,
+  res: ServerResponse,
+  agentToken: string,
+  sendQuery: (query: Query) => Promise<AgentQueryResponse>,
+): Promise<void> {
+  const auth = req.headers.authorization ?? "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
+  if (!tokenMatches(agentToken, bearer)) {
+    respondError(res, "unauthorized", "missing or invalid agent token");
+    return;
+  }
+  const body = await readBody(req);
+  if (body === null) {
+    respondError(res, "bad-request", "body too large");
+    return;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    respondError(res, "bad-request", "body is not valid JSON");
+    return;
+  }
+  const parsed = querySchema.safeParse(json);
+  if (!parsed.success) {
+    respondError(res, "bad-request", "not a known query");
+    return;
+  }
+  const response = await sendQuery(parsed.data);
+  respondJson(
+    res,
+    response.ok ? 200 : (STATUS_FOR_CODE[response.error.code] ?? 502),
+    response,
+  );
 }
 
 function withTokenPopover(manifestJson: string, token: string): string {

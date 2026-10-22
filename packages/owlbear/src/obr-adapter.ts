@@ -34,6 +34,15 @@ export interface ObrAdapter {
   getViewportCenter(): Promise<Vec2>;
 }
 
+/**
+ * The read-only view of the adapter that query handling gets. A query never
+ * changes the table, so a write through it does not compile.
+ */
+export type ObrReader = Pick<
+  ObrAdapter,
+  "isSceneReady" | "getItems" | "getSceneMetadata" | "getViewportCenter"
+>;
+
 function toItem(item: SceneItem): Item {
   if (item.type === "SHAPE") {
     if (!item.shape)

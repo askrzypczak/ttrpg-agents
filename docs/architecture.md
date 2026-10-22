@@ -1,11 +1,47 @@
-# Architecture (runtime view)
+# Architecture
 
-Which processes run, how they talk, and what reaches the table. For the package and dependency rules, see the Architecture section of [`CLAUDE.md`](../CLAUDE.md).
+## Hexagon (packages and ports)
+
+The packages and the ports between them. For the dependency rules, see the Architecture section of [`CLAUDE.md`](../CLAUDE.md).
+
+```mermaid
+flowchart LR
+  claude["Claude Code"] --> mcp
+  subgraph driving["Driving adapters"]
+    mcp["mcp: tools, formatting"]
+    bsrv["bridge server: serves extension, pushes snapshots, relays queries"]
+  end
+  subgraph core["Engine (no I/O)"]
+    uc["use cases: addMonsters, getTableStatus, ..."]
+    ports["ports: EncounterRepository, MonsterIndex, TablePort"]
+  end
+  subgraph driven["Driven adapters"]
+    store["store-sqlite"]
+    srd["srd"]
+    bclient["bridge client"]
+  end
+  mcp --> uc
+  bsrv -->|"reads EncounterRepository"| ports
+  uc --> ports
+  ports -.implemented by.-> store
+  ports -.implemented by.-> srd
+  ports -.implemented by.-> bclient
+  store --> db[("SQLite")]
+  bclient -->|"HTTP + agent token (queries only)"| bsrv
+  bsrv <-->|"WebSocket + token"| ext["Owlbear extension (protocol)"]
+```
+
+The bridge is both sides: the server reads the encounter through the `EncounterRepository` port to push snapshots, and the client is the driven end of `TablePort`. The mcp-to-bridge arrow in the runtime diagram below is made by the bridge client adapter that `mcp/src/stdio.ts` wires in. The channel is read-only by rule: it carries queries only, and the agent changes the game through the engine's model (see the rule in [`CLAUDE.md`](../CLAUDE.md)).
+
+## Runtime (processes)
+
+Which processes run, how they talk, and what reaches the table.
 
 ```mermaid
 flowchart LR
   claude["Claude Code"] -->|"stdio"| mcp["MCP server"]
   mcp -->|"writes"| db[("SQLite file")]
+  mcp -->|"TablePort via the bridge client: POST /agent/query"| bridge
   bridge["Bridge"] -->|"polls"| db
   ext["Owlbear extension"] <-->|"WebSocket + token"| bridge
   ext --> scene["Owlbear scene"]
@@ -13,7 +49,7 @@ flowchart LR
 
 ## Processes
 
-- **MCP server**: stdio, started by Claude Code from `.mcp.json` through the launcher `packages/mcp/bin/stdio.mjs`.
+- **MCP server**: stdio, started by Claude Code from `.mcp.json` through the launcher `packages/mcp/bin/stdio.mjs`. It also calls the running bridge over loopback HTTP to ask the table something (see "Queries to the table").
 - **Bridge**: `npm run bridge`, a separate process. HTTP plus WebSocket `/ws` on 127.0.0.1, default port 5199 (`BRIDGE_PORT`). It also serves the built extension (`packages/owlbear/dist`).
 - **Extension**: runs in the GM's Owlbear tab and is the bridge's client.
 
@@ -27,6 +63,19 @@ Both processes use one SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DA
 - A `manifest.json` request with the right `?token=` gets the token put into the popover URL fragment. The extension reads it from `location.hash` and sends it in `hello`. The bridge compares it in constant time; a bad or missing token closes the socket.
 - The Host header must be a loopback name with the actual port (DNS-rebinding defence), and the WebSocket upgrade must come from the bridge's own loopback origin on `/ws`.
 - The `role` in `hello` only drives the extension UI and never authorizes.
+- A second, separate agent token authorises `POST /agent/query`: file `BRIDGE_AGENT_TOKEN_FILE` (default `~/.config/ttrpg-agents/agent-token`, mode 0600, created on first run). The bridge never serves it, it is not in the manifest URL, and it authorises nothing else. The extension token is rejected on that route.
+
+## Queries to the table
+
+The bridge otherwise only pushes. To let the agent ask the table something (first use: `table_status`), the MCP tool calls the engine's `getTableStatus`, which asks the `TablePort`; the bridge client (`@ttrpg-agents/bridge/client`, wired in by `mcp/src/stdio.ts`) implements the port and calls `POST /agent/query` on the bridge with `Authorization: Bearer <agent token>` and a JSON query (`{"name":"scene-status"}`). The channel is read-only by rule: a query never changes the table. The route has no CORS headers, keeps the Host check, and caps the body at 1 MiB.
+
+1. The bridge sends the query as a `query` message with a fresh id to the one active extension client.
+2. The extension answers with a `query-result` carrying the same id (or a non-fatal `error` with that id if the handler threw). A reply with another or no id does not complete the call; the bridge answers it with a non-fatal `error`.
+3. The bridge returns the result as the HTTP body: `{ ok: true, result }` or `{ ok: false, error: { code, message } }`.
+
+Errors: 401 `unauthorized`, 400 `bad-request`, 503 `not-connected` (no GM tab), 504 `timeout` (no reply within 5 s), 502 `query-failed`. The bridge client adds `bridge-unreachable` when the bridge is not running or the agent token file is missing; the adapter (`createBridgeTable`) turns any `{ ok: false }` into a `TableUnavailableError`. Only one GM tab is connected at a time, so there is one recipient.
+
+`scene-status` returns whether the scene is ready, how many of our tokens are on it, and how many instances the extension has applied. `getTableStatus` (engine) compares those with the encounter in the database to give the in-sync verdict; `table_status` only formats it.
 
 ## What reaches the table
 

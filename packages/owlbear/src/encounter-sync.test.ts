@@ -425,6 +425,45 @@ describe("createEncounterSync", () => {
     expect(applied).toBe(2);
   });
 
+  it("`appliedInstanceCount` follows snapshot / added / removed / cleared, and does not count a held or failed message", async () => {
+    const { obr, scene, failNextAdds } = recording(new SceneModel("gm", false));
+    const errors: unknown[] = [];
+    const sync = createEncounterSync(
+      obr,
+      (e) => errors.push(e),
+      () => {},
+      {
+        timers: new FakeTimers(),
+        backoff,
+      },
+    );
+
+    await sync.handleMessage(snapshot(1, 2));
+    expect(sync.appliedInstanceCount(), "held snapshot").toBe(0);
+    scene.setReady(true);
+    await settle();
+    expect(sync.appliedInstanceCount(), "snapshot").toBe(2);
+
+    await sync.handleMessage(added(3));
+    expect(sync.appliedInstanceCount(), "added").toBe(3);
+    await sync.handleMessage(added(3));
+    expect(sync.appliedInstanceCount(), "added again").toBe(3);
+
+    await sync.handleMessage(removed(1));
+    expect(sync.appliedInstanceCount(), "removed").toBe(2);
+
+    failNextAdds(1);
+    await sync.handleMessage(added(4));
+    expect(errors).toHaveLength(1);
+    expect(sync.appliedInstanceCount(), "failed added").toBe(2);
+
+    await sync.handleMessage(snapshot(5));
+    expect(sync.appliedInstanceCount(), "replacing snapshot").toBe(1);
+
+    await sync.handleMessage(event({ type: "cleared" }));
+    expect(sync.appliedInstanceCount(), "cleared").toBe(0);
+  });
+
   it("ignores non-encounter messages", async () => {
     const { obr, scene, calls } = recording();
     let applied = 0;

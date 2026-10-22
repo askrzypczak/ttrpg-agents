@@ -11,6 +11,7 @@
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
+    { "path": "../bridge/tsconfig.build.json" },
     { "path": "../engine/tsconfig.build.json" },
     { "path": "../srd/tsconfig.build.json" },
     { "path": "../store-sqlite/tsconfig.build.json" }

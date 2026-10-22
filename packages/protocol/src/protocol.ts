@@ -27,6 +27,49 @@ const encounterSnapshotPayload = z.object({
   instances: z.array(monsterInstanceSchema),
 });
 
+/**
+ * A request the agent can make of the table; also the `/agent/query` body.
+ *
+ * Read-only: a query never changes the table. The agent changes the game
+ * through the engine's encounter model, and the extension reconciles the scene
+ * to it. Do not add a query that writes to the table.
+ */
+export const querySchema = z.discriminatedUnion("name", [
+  z.object({ name: z.literal("scene-status") }),
+]);
+
+export const sceneStatusSchema = z.object({
+  sceneReady: z.boolean(),
+  tokenCount: z.number().int().min(0),
+  appliedInstanceCount: z.number().int().min(0),
+});
+
+export const queryResultSchema = z.discriminatedUnion("name", [
+  z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
+]);
+
+export const agentErrorCodeSchema = z.enum([
+  "not-connected",
+  "timeout",
+  "query-failed",
+  "bridge-unreachable",
+  "unauthorized",
+  "bad-request",
+]);
+
+export const agentQueryResponseSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), result: queryResultSchema }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({ code: agentErrorCodeSchema, message: z.string() }),
+  }),
+]);
+
+export type Query = z.infer<typeof querySchema>;
+export type SceneStatus = z.infer<typeof sceneStatusSchema>;
+export type QueryResult = z.infer<typeof queryResultSchema>;
+export type AgentQueryResponse = z.infer<typeof agentQueryResponseSchema>;
+
 function envelope<T extends string, P extends z.ZodType>(type: T, payload: P) {
   return z.object({
     v: z.literal(PROTOCOL_VERSION),
@@ -44,6 +87,8 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("error", errorPayload),
   envelope("encounter-event", encounterEventSchema),
   envelope("encounter-snapshot", encounterSnapshotPayload),
+  envelope("query", querySchema),
+  envelope("query-result", queryResultSchema),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;

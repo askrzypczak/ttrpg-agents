@@ -2,6 +2,7 @@ import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
+import type { SceneItem } from "./scene-model.js";
 import {
   PLACED_METADATA_KEY,
   defaultSyncConfig,
@@ -15,9 +16,15 @@ export type EncounterEventPayload = Extract<
   { type: "encounter-event" }
 >["payload"];
 
+/** Whether a scene item is one of our instance tokens. */
+export const isOurs = (item: SceneItem): boolean =>
+  instanceIdOf(item) !== undefined;
+
 export interface EncounterSync {
   /** Resolves once the message is applied, or deferred until the scene is ready. */
   handleMessage(message: BridgeMessage): Promise<void>;
+  /** How many instances the successfully applied messages account for (held or failed ones do not count). */
+  appliedInstanceCount(): number;
 }
 
 // Stryker disable all: real timers are only used in the browser; tests inject Timers
@@ -70,6 +77,7 @@ export function createEncounterSync(
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
   let desired: EncounterInstance[] | null = null;
+  let appliedCount = 0;
   let tail: Promise<void> = Promise.resolve();
   let retry: unknown = null;
   let attempt = 0;
@@ -120,8 +128,9 @@ export function createEncounterSync(
       retry = null;
     }
     if (desired === null || !(await obr.isSceneReady())) return;
+    const applying = desired;
     try {
-      await apply(desired);
+      await apply(applying);
     } catch (error) {
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
@@ -140,6 +149,7 @@ export function createEncounterSync(
       return;
     }
     attempt = 0;
+    appliedCount = applying.length;
     onApplied();
   }
 
@@ -158,6 +168,9 @@ export function createEncounterSync(
         return Promise.resolve();
       }
       return enqueue(reconcile);
+    },
+    appliedInstanceCount() {
+      return appliedCount;
     },
   };
 }

@@ -5,6 +5,7 @@ import {
 } from "@ttrpg-agents/engine";
 import {
   PROTOCOL_VERSION,
+  agentQueryResponseSchema,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -162,6 +163,61 @@ describe("protocol", () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
+  });
+
+  it("`query` and `query-result` messages round-trip through encode/decode", () => {
+    const messages: BridgeMessage[] = [
+      { v: 1, type: "query", id: "c1", payload: { name: "scene-status" } },
+      {
+        v: 1,
+        type: "query-result",
+        id: "c1",
+        payload: {
+          name: "scene-status",
+          result: { sceneReady: true, tokenCount: 3, appliedInstanceCount: 2 },
+        },
+      },
+    ];
+    for (const message of messages) {
+      expect(decodeMessage(encodeMessage(message))).toEqual({
+        ok: true,
+        message,
+      });
+    }
+  });
+
+  it("`agentQueryResponseSchema` accepts the ok and error shapes and rejects an unknown error code", () => {
+    const okResponse = {
+      ok: true,
+      result: {
+        name: "scene-status",
+        result: { sceneReady: false, tokenCount: 0, appliedInstanceCount: 0 },
+      },
+    };
+    expect(agentQueryResponseSchema.safeParse(okResponse)).toEqual({
+      success: true,
+      data: okResponse,
+    });
+    for (const code of [
+      "not-connected",
+      "timeout",
+      "query-failed",
+      "bridge-unreachable",
+      "unauthorized",
+      "bad-request",
+    ]) {
+      const errorResponse = { ok: false, error: { code, message: "m" } };
+      expect(agentQueryResponseSchema.safeParse(errorResponse), code).toEqual({
+        success: true,
+        data: errorResponse,
+      });
+    }
+    expect(
+      agentQueryResponseSchema.safeParse({
+        ok: false,
+        error: { code: "exploded", message: "m" },
+      }).success,
+    ).toBe(false);
   });
 
   it("strips unknown extra fields", () => {

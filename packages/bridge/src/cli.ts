@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   SqliteEncounterRepository,
@@ -9,7 +10,11 @@ import {
   snapshotMessage,
 } from "./encounter-bridge.js";
 import { DEFAULT_BRIDGE_PORT, startBridgeServer } from "./server.js";
-import { defaultTokenPath, loadOrCreateToken } from "./token-file.js";
+import {
+  defaultAgentTokenPath,
+  defaultTokenPath,
+  loadOrCreateToken,
+} from "./token-file.js";
 
 const port = process.env.BRIDGE_PORT
   ? Number(process.env.BRIDGE_PORT)
@@ -18,7 +23,16 @@ const staticDir =
   process.env.BRIDGE_STATIC_DIR ??
   fileURLToPath(new URL("../../owlbear/dist", import.meta.url));
 const tokenPath = process.env.BRIDGE_TOKEN_FILE ?? defaultTokenPath();
+const agentTokenPath =
+  process.env.BRIDGE_AGENT_TOKEN_FILE ?? defaultAgentTokenPath();
+if (resolve(tokenPath) === resolve(agentTokenPath)) {
+  console.error(
+    `BRIDGE_TOKEN_FILE and BRIDGE_AGENT_TOKEN_FILE must be different files (both are ${resolve(tokenPath)}): the extension token travels in the manifest URL and must not authorise /agent/query.`,
+  );
+  process.exit(1);
+}
 const token = await loadOrCreateToken(tokenPath);
+const agentToken = await loadOrCreateToken(agentTokenPath);
 
 // The snapshot is sent after each hello-ack and again whenever another process
 // (the MCP server) commits a change, detected by polling PRAGMA data_version.
@@ -28,6 +42,7 @@ const server = await startBridgeServer({
   port,
   staticDir,
   token,
+  agentToken,
   snapshot: () => snapshotMessage(repo),
 });
 const stopPolling = broadcastSnapshotsOnChange(
@@ -38,6 +53,7 @@ const stopPolling = broadcastSnapshotsOnChange(
 console.log(`bridge listening on http://localhost:${server.port}`);
 console.log(`serving ${staticDir}`);
 console.log(`token file: ${tokenPath}`);
+console.log(`agent token file: ${agentTokenPath}`);
 console.log(
   `install in Owlbear: http://localhost:${server.port}/manifest.json?token=${token}`,
 );

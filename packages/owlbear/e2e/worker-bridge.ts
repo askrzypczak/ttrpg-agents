@@ -1,12 +1,19 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
 import { e2eDbPath, seedE2eDatabase } from "./db.js";
-import { E2E_TOKEN, writeE2eTokenFile } from "./token.js";
+import {
+  E2E_AGENT_TOKEN,
+  E2E_TOKEN,
+  writeE2eAgentTokenFile,
+  writeE2eTokenFile,
+} from "./token.js";
 
 /** A real bridge child process owned by one Playwright worker. */
 export interface WorkerBridge {
   origin: string;
   token: string;
+  /** Bearer token for `POST /agent/query`. */
+  agentToken: string;
   stop(): Promise<void>;
 }
 
@@ -25,6 +32,7 @@ export async function startWorkerBridge(options: {
 }): Promise<WorkerBridge> {
   const { repo, staticDir, dir } = options;
   const tokenFile = writeE2eTokenFile(dir);
+  const agentTokenFile = writeE2eAgentTokenFile(dir);
   seedE2eDatabase(dir);
 
   const child = spawn(
@@ -37,6 +45,7 @@ export async function startWorkerBridge(options: {
         BRIDGE_PORT: "0",
         BRIDGE_STATIC_DIR: staticDir,
         BRIDGE_TOKEN_FILE: tokenFile,
+        BRIDGE_AGENT_TOKEN_FILE: agentTokenFile,
         TTRPG_AGENTS_DB: e2eDbPath(dir),
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -58,7 +67,7 @@ export async function startWorkerBridge(options: {
     await stop();
     throw error;
   }
-  return { origin, token: E2E_TOKEN, stop };
+  return { origin, token: E2E_TOKEN, agentToken: E2E_AGENT_TOKEN, stop };
 }
 
 function waitForOrigin(child: ChildProcess): Promise<string> {

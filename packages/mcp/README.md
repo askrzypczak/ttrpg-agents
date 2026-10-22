@@ -31,6 +31,12 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `heal`            | Heal by instance id or exact name (clamped at max)               |
 | `remove_monsters` | Remove several targets, all-or-nothing                           |
 | `clear_encounter` | Remove every monster                                             |
+| `table_status`    | Ask the Owlbear tab for its scene status; reports in sync or not |
+
+`table_status` needs the bridge running (`npm run bridge`) and a GM tab open: it
+asks the table through the engine's `TablePort` (wired to the bridge client in
+`src/stdio.ts`), and a stopped bridge, no
+tab or a slow tab come back as `isError` results.
 
 Domain errors (unknown monster, ambiguous target, bad amount) come back as
 `isError` results rather than protocol errors.

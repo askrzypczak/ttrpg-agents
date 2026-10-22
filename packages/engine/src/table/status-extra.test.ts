@@ -1,0 +1,33 @@
+// Added after mutation testing; kept out of the contract file status.test.ts.
+import { describe, expect, it } from "vitest";
+import { getTableStatus } from "./index.js";
+
+describe("getTableStatus (mutation-test additions)", () => {
+  it("reports out of sync when the token count equals the encounter count but the applied count differs", async () => {
+    const repo = {
+      listInstances: () =>
+        Array.from({ length: 3 }, (_, i) => ({
+          id: `id-${String(i)}`,
+          encounterId: "enc",
+          monsterKey: "srd-2024_shadow",
+          displayName: `Shadow ${String(i)}`,
+          maxHp: 10,
+          currentHp: 10,
+          initiative: null,
+          groupId: null,
+          createdAt: 1000 + i,
+        })),
+    };
+    const table = {
+      sceneStatus: () =>
+        Promise.resolve({
+          sceneReady: true,
+          tokenCount: 3,
+          appliedInstanceCount: 2,
+        }),
+    };
+    const status = await getTableStatus(repo, table);
+    expect(status.encounterCount).toBe(3);
+    expect(status.inSync).toBe(false);
+  });
+});
