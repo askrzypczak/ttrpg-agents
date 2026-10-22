@@ -115,7 +115,9 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * - d != o, b present, d != b (the encounter changed): push d, b := d.
  * - d != o, b present, d == b (the table was edited): leave it.
  * - d != o, no b: push d if o is absent, else keep o; either way b := d.
- * `create-only` keys, name, position and visibility are set at creation only.
+ * The token name follows the same rule, with its baseline under
+ * NAME_BASELINE_KEY in the synced record.
+ * `create-only` keys, position and visibility are set at creation only.
  * An instance in `context.placed` whose token is missing was deleted by the
  * GM and is not recreated.
  */
@@ -158,6 +160,17 @@ export function planSync(
         next[key] = d;
       }
     }
+    const d = instance.displayName;
+    if (d === token.name) {
+      next[NAME_BASELINE_KEY] = d;
+    } else if (Object.hasOwn(baseline, NAME_BASELINE_KEY)) {
+      if (d !== baseline[NAME_BASELINE_KEY]) {
+        plan.rename.push({ id: token.id, name: d });
+        next[NAME_BASELINE_KEY] = d;
+      }
+    } else {
+      next[NAME_BASELINE_KEY] = d;
+    }
     if (!deepEqual(next, baseline))
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
   }
@@ -174,6 +187,7 @@ export function planSync(
       metadata[p.key] = value;
       if (p.mode === "owned") synced[p.key] = value;
     }
+    synced[NAME_BASELINE_KEY] = instance.displayName;
     metadata[SYNCED_METADATA_KEY] = synced;
     plan.add.push({
       ...config.tokenKind(instance),

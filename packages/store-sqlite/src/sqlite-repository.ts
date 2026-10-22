@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { InvalidAmountError, UnknownInstanceError } from "@ttrpg-agents/engine";
+import {
+  InvalidAmountError,
+  UnknownInstanceError,
+  validateInstanceName,
+} from "@ttrpg-agents/engine";
 import type {
   Encounter,
   EncounterRepository,
@@ -153,9 +157,23 @@ export class SqliteEncounterRepository implements EncounterRepository {
   }
 
   renameInstance(id: string, name: string): MonsterInstance {
-    void id;
-    void name;
-    throw new Error("not implemented");
+    return this.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
+        .get(id) as InstanceRow | undefined;
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      const others = this.listInstances()
+        .filter((i) => i.id !== id)
+        .map((i) => i.displayName);
+      const displayName = validateInstanceName(name, others);
+      this.db
+        .prepare("UPDATE monster_instances SET display_name = ? WHERE id = ?")
+        .run(displayName, id);
+      return toInstance({ ...row, display_name: displayName });
+    });
   }
 
   clearEncounter(): void {

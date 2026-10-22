@@ -102,6 +102,10 @@ export function createEncounterSync(
     });
     if (plan.delete.length > 0) await obr.deleteItems(plan.delete);
     if (plan.add.length > 0) await obr.addItems(plan.add);
+    // Before the metadata write, so a failed rename leaves the baseline
+    // unwritten and the retry renames.
+    for (const r of plan.rename)
+      await obr.updateItems([r.id], { name: r.name });
     if (plan.update.length > 0) await obr.setItemMetadata(plan.update);
 
     // Remember which instances now have a token, so a token the GM deletes

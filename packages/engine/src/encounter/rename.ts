@@ -1,3 +1,5 @@
+import { InvalidNameError } from "./errors.js";
+
 /**
  * Validates a new display name for an instance and returns it trimmed.
  * Throws InvalidNameError if it is empty or whitespace-only, or if the trimmed
@@ -8,7 +10,12 @@ export function validateInstanceName(
   name: string,
   otherNames: readonly string[],
 ): string {
-  void name;
-  void otherNames;
-  throw new Error("not implemented");
+  const trimmed = name.trim();
+  if (trimmed === "") {
+    throw new InvalidNameError("name must not be empty");
+  }
+  if (otherNames.includes(trimmed)) {
+    throw new InvalidNameError(`name already in use: ${trimmed}`);
+  }
+  return trimmed;
 }
