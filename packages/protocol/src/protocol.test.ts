@@ -3,6 +3,7 @@ import {
   monsterInstanceSchema,
   type MonsterInstance,
 } from "@ttrpg-agents/engine";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import {
   PROTOCOL_VERSION,
   agentQueryResponseSchema,
@@ -26,18 +27,7 @@ function sampleInstance(): MonsterInstance {
   return instance as MonsterInstance;
 }
 
-const instance = {
-  id: "i1",
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: "Shadow 1",
-  maxHp: 16,
-  currentHp: 16,
-  initiative: null,
-  armorClass: null,
-  groupId: null,
-  createdAt: 5,
-};
+const instance = makeTestInstance({ createdAt: 5 });
 
 const samples: BridgeMessage[] = [
   {

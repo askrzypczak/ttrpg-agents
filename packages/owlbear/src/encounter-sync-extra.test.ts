@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
@@ -7,18 +8,8 @@ import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem } from "./scene-model.js";
 import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
 
-const inst = (n: number): EncounterInstance => ({
-  id: `i${n}`,
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: `Shadow ${n}`,
-  maxHp: 16,
-  currentHp: 16,
-  initiative: null,
-  armorClass: null,
-  groupId: null,
-  createdAt: n,
-});
+const inst = (n: number): EncounterInstance =>
+  makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
 const snapshot = (...ns: number[]): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",

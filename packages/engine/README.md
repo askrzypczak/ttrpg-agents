@@ -15,6 +15,10 @@ The domain engine: dice, monster schema and search, encounter events, and the ta
 
 `src/encounter/hp.ts`: the rules behind absolute HP and armor class, which the store calls: `clampHp` (current HP kept within 0..max HP), `resizeMaxHp` (max HP raised to at least 1, current HP lowered to it when above, never raised) and `clampArmorClass` (raised to at least 0). Non-integers throw `InvalidAmountError`, or `InvalidArmorClassError` for armor class.
 
+## Test data
+
+`@ttrpg-agents/engine/testing` (`src/testing/index.ts`) exports `makeTestInstance`, a full `MonsterInstance` for tests. It is test data only; production code must not import it (lint-enforced).
+
 ## Table
 
 `src/table/`: `TablePort` (driven port: `sceneStatus()` asks the table, the VTT, about its scene; fails with `TableUnavailableError`) and `getTableStatus(repo, table)`, which adds the encounter count and the verdict: `inSync` = scene ready and token, applied and encounter counts all equal. The bridge client implements the port; `mcp` only formats the result.

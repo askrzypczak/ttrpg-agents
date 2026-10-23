@@ -9,6 +9,7 @@ import {
   SqliteEncounterRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   broadcastSnapshotsOnChange,
@@ -79,18 +80,7 @@ describe("removeInstance", () => {
 
 describe("broadcastSnapshotsOnChange", () => {
   const INTERVAL = 100;
-  const shadow: MonsterInstance = {
-    id: "i1",
-    encounterId: "e1",
-    monsterKey: "shadow",
-    displayName: "Shadow 1",
-    maxHp: 16,
-    currentHp: 16,
-    initiative: null,
-    armorClass: null,
-    groupId: null,
-    createdAt: 0,
-  };
+  const shadow: MonsterInstance = makeTestInstance({ createdAt: 0 });
   const expected: BridgeMessage = {
     v: 1,
     type: "encounter-snapshot",

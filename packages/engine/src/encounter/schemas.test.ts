@@ -1,19 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "../testing/index.js";
 import { encounterEventSchema } from "./events.js";
 import { monsterInstanceSchema } from "./types.js";
 
-const instance = {
-  id: "i1",
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: "Shadow 1",
-  maxHp: 16,
-  currentHp: 16,
-  initiative: null,
-  armorClass: null,
-  groupId: null,
-  createdAt: 5,
-};
+const instance = makeTestInstance({ createdAt: 5 });
 
 describe("monsterInstanceSchema", () => {
   it("round-trips a full instance", () => {

@@ -1,19 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { INITIATIVE_METADATA_KEY, initiativeProjector } from "./initiative.js";
 import type { EncounterInstance } from "./sync-plan.js";
 
-const inst = (initiative: number | null): EncounterInstance => ({
-  id: "i1",
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: "Shadow 1",
-  maxHp: 16,
-  currentHp: 16,
-  initiative,
-  armorClass: null,
-  groupId: null,
-  createdAt: 1,
-});
+const inst = (initiative: number | null): EncounterInstance =>
+  makeTestInstance({ initiative });
 
 describe("initiativeProjector", () => {
   it("projects the count as a string with active false", () => {

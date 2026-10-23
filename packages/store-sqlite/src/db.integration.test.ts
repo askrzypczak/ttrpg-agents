@@ -3,6 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { defaultDbPath, openDatabase } from "./db.js";
 import {
   LATEST_VERSION,
@@ -102,18 +103,12 @@ describe("migrations", () => {
     ).map((c) => c.name);
     expect(columns).toContain("armor_class");
     expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
-      {
-        id: "i1",
-        encounterId: "e1",
-        monsterKey: "shadow",
-        displayName: "Shadow 1",
-        maxHp: 16,
+      makeTestInstance({
         currentHp: 9,
         initiative: 12,
-        armorClass: null,
         groupId: "g1",
         createdAt: 200,
-      },
+      }),
     ]);
     db.close();
   });
