@@ -5,12 +5,10 @@ import {
 import type { SceneItem } from "../src/scene-model.js";
 import { SHADOW_IDS } from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
+import { readItems } from "./helpers.js";
 
 const INSTANCE_KEY = "com.ttrpg-agents/instance";
 const INITIATIVE_KEY = "rodeo.owlbear.initiative-tracker/metadata";
-
-const readItems = (page: import("@playwright/test").Page) =>
-  page.evaluate(() => window.__host!.scene.getItems());
 
 /** Our token for the instance with this id. */
 function tokenOf(items: SceneItem[], instanceId: string): SceneItem {

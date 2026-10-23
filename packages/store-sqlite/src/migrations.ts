@@ -34,6 +34,18 @@ export const migrations: Migration[] = [
     version: 2,
     sql: "ALTER TABLE monster_instances ADD COLUMN armor_class INTEGER;",
   },
+  {
+    version: 3,
+    sql: `
+      CREATE TABLE token_art (
+        monster_key TEXT PRIMARY KEY,
+        url TEXT NOT NULL CHECK (url LIKE 'https://%'),
+        mime TEXT NOT NULL CHECK (mime LIKE 'image/%'),
+        width INTEGER NOT NULL CHECK (width > 0),
+        height INTEGER NOT NULL CHECK (height > 0)
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

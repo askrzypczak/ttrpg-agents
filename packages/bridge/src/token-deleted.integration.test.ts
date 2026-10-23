@@ -7,6 +7,7 @@ import { WebSocket } from "ws";
 import type { MonsterInstance } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
+  SqliteTokenArtRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
@@ -34,7 +35,7 @@ async function startServer(
   const server = await startBridgeServer({
     port: 0,
     staticDir: dir,
-    snapshot: () => snapshotMessage(repo),
+    snapshot: () => snapshotMessage(repo, new SqliteTokenArtRepository(db)),
     removeInstance: (id) => removeInstance(repo, id),
     ...options,
   });

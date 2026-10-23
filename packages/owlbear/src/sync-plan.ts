@@ -1,6 +1,7 @@
+import type { TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { initiativeProjector } from "./initiative.js";
-import type { SceneItem, Vec2 } from "./scene-model.js";
+import type { GridSpec, SceneItem, Vec2 } from "./scene-model.js";
 
 export type EncounterInstance = Extract<
   BridgeMessage,
@@ -18,6 +19,14 @@ export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 
 /** One grid cell at Owlbear's default 150 dpi. */
 const TOKEN_SIZE = 150;
+
+/** The image spans one grid cell, its centre at the item position. */
+export function oneCellGrid(art: Pick<TokenArt, "width" | "height">): GridSpec {
+  return {
+    dpi: Math.max(art.width, art.height),
+    offset: { x: art.width / 2, y: art.height / 2 },
+  };
+}
 
 /** Row of `count` positions centred horizontally on `center`. */
 export function rowPositions(count: number, center: Vec2): Vec2[] {
@@ -46,12 +55,13 @@ export type TokenKind = Pick<
 
 export type SyncConfig = {
   projectors: Projector[];
-  tokenKind(instance: EncounterInstance): TokenKind;
+  /** The look of a new token; `art` is the stored art of its monster type, if any. */
+  tokenKind(instance: EncounterInstance, art: TokenArt | undefined): TokenKind;
 };
 
 /**
- * Link and Initiative Tracker projectors plus a hidden SHAPE circle on the
- * CHARACTER layer.
+ * Link and Initiative Tracker projectors plus, on the CHARACTER layer, an
+ * IMAGE token from the monster type's art, or a SHAPE circle when it has none.
  */
 export const defaultSyncConfig: SyncConfig = {
   projectors: [
@@ -62,11 +72,28 @@ export const defaultSyncConfig: SyncConfig = {
     },
     initiativeProjector,
   ],
-  tokenKind: () => ({
-    type: "SHAPE",
-    layer: "CHARACTER",
-    shape: { shapeType: "CIRCLE", width: TOKEN_SIZE, height: TOKEN_SIZE },
-  }),
+  tokenKind: (_instance, art) =>
+    art
+      ? {
+          type: "IMAGE",
+          layer: "CHARACTER",
+          image: {
+            url: art.url,
+            mime: art.mime,
+            width: art.width,
+            height: art.height,
+          },
+          grid: oneCellGrid(art),
+        }
+      : {
+          type: "SHAPE",
+          layer: "CHARACTER",
+          shape: {
+            shapeType: "CIRCLE",
+            width: TOKEN_SIZE,
+            height: TOKEN_SIZE,
+          },
+        },
 };
 
 export type SyncPlan = {
@@ -78,6 +105,8 @@ export type SyncPlan = {
   rename: { id: string; name: string }[];
   /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
   deleted: string[];
+  /** Monster keys, once each, of instances getting a token that have no art. */
+  needsArt: string[];
 };
 
 /** The instance id a scene item is linked to, if it is one of our tokens. */
@@ -138,7 +167,12 @@ export function planSync(
   desired: EncounterInstance[],
   observed: SceneItem[],
   config: SyncConfig,
-  context: { viewportCenter: Vec2; placed: ReadonlySet<string> },
+  context: {
+    viewportCenter: Vec2;
+    placed: ReadonlySet<string>;
+    /** Monster key -> the art its new tokens are created with. */
+    art: Readonly<Record<string, TokenArt>>;
+  },
 ): SyncPlan {
   const plan: SyncPlan = {
     add: [],
@@ -146,6 +180,7 @@ export function planSync(
     delete: [],
     rename: [],
     deleted: [],
+    needsArt: [],
   };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();
@@ -216,8 +251,13 @@ export function planSync(
     }
     synced[NAME_BASELINE_KEY] = instance.displayName;
     metadata[SYNCED_METADATA_KEY] = synced;
+    const art = Object.hasOwn(context.art, instance.monsterKey)
+      ? context.art[instance.monsterKey]
+      : undefined;
+    if (!art && !plan.needsArt.includes(instance.monsterKey))
+      plan.needsArt.push(instance.monsterKey);
     plan.add.push({
-      ...config.tokenKind(instance),
+      ...config.tokenKind(instance, art),
       id: `ttrpg-instance-${instance.id}`,
       name: instance.displayName,
       visible: false,

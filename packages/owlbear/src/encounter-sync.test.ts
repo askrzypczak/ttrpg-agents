@@ -193,6 +193,7 @@ function twoScenes() {
     getSceneMetadata: () => current.obr.getSceneMetadata(),
     setSceneMetadata: (u) => current.obr.setSceneMetadata(u),
     getViewportCenter: () => current.obr.getViewportCenter(),
+    pickImage: () => current.obr.pickImage(),
   };
   return {
     obr,

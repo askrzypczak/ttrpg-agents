@@ -1,6 +1,6 @@
 # @ttrpg-agents/store-sqlite
 
-SQLite encounter store: `SqliteEncounterRepository` implements the `EncounterRepository` port from `@ttrpg-agents/engine`, and `openDatabase` opens and migrates the database. Uses Node's built-in `node:sqlite`.
+SQLite encounter store: `SqliteEncounterRepository` implements the `EncounterRepository` port from `@ttrpg-agents/engine`, `SqliteTokenArtRepository` implements `TokenArtRepository` (the image reference the GM picked for each monster key, table `token_art`, migration 2; a VTT-neutral reference `{ url, mime, width, height }`, no image bytes), and `openDatabase` opens and migrates the database. Uses Node's built-in `node:sqlite`.
 
 ## Database path
 

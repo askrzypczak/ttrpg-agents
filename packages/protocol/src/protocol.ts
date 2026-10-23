@@ -1,6 +1,7 @@
 import {
   encounterEventSchema,
   monsterInstanceSchema,
+  tokenArtSchema,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
@@ -27,6 +28,13 @@ const errorPayload = z.object({
 // the wire shape cannot drift from the domain types.
 const encounterSnapshotPayload = z.object({
   instances: z.array(monsterInstanceSchema),
+  /** Monster key -> the art new tokens of that type are created with. */
+  art: z.record(z.string(), tokenArtSchema).optional(),
+});
+// Extension -> bridge: the GM picked this art for a monster type.
+const tokenArtSetPayload = z.object({
+  monsterKey: z.string().min(1).max(200),
+  art: tokenArtSchema,
 });
 
 /**
@@ -92,6 +100,7 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("query", querySchema),
   envelope("query-result", queryResultSchema),
   envelope("token-deleted", tokenDeletedPayload),
+  envelope("token-art-set", tokenArtSetPayload),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;

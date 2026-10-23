@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   SqliteEncounterRepository,
+  SqliteTokenArtRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
@@ -39,17 +40,20 @@ const agentToken = await loadOrCreateToken(agentTokenPath);
 // (the MCP server) commits a change, detected by polling PRAGMA data_version.
 const db = openDatabase();
 const repo = new SqliteEncounterRepository(db);
+const artRepo = new SqliteTokenArtRepository(db);
 const server = await startBridgeServer({
   port,
   staticDir,
   token,
   agentToken,
-  snapshot: () => snapshotMessage(repo),
+  snapshot: () => snapshotMessage(repo, artRepo),
   removeInstance: (id) => removeInstance(repo, id),
+  setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
 });
 const stopPolling = broadcastSnapshotsOnChange(
   () => dataVersion(db),
   repo,
+  artRepo,
   server,
 );
 console.log(`bridge listening on http://localhost:${server.port}`);

@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   UnknownInstanceError,
   type EncounterRepository,
+  type TokenArtRepository,
 } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import type { RemoveInstanceResult } from "./server.js";
@@ -24,12 +25,20 @@ export function removeInstance(
   }
 }
 
-/** Full current instance list, for a client that just connected. */
-export function snapshotMessage(repo: EncounterRepository): BridgeMessage {
+/** Full current instance list and token art, for a client that just connected. */
+export function snapshotMessage(
+  repo: EncounterRepository,
+  artRepo: TokenArtRepository,
+): BridgeMessage {
+  const art = artRepo.listTokenArt();
   return {
     v: 1,
     type: "encounter-snapshot",
-    payload: { instances: repo.listInstances() },
+    // An empty map is left out, so a store with no art sends what it always did.
+    payload: {
+      instances: repo.listInstances(),
+      ...(Object.keys(art).length > 0 ? { art } : {}),
+    },
   };
 }
 
@@ -47,17 +56,19 @@ export function dataVersion(db: DatabaseSync): number {
 }
 
 /**
- * Polls `readVersion` and broadcasts `snapshotMessage(repo)` whenever it
+ * Polls `readVersion` and broadcasts `snapshotMessage(repo, artRepo)` whenever it
  * changes. Returns a stop function.
  *
  * Meant to be fed by `dataVersion` on a connection to the shared database:
  * SQLite only bumps it for commits made by other connections, so this
- * process's own writes (the bridge makes none) do not trigger a snapshot. A
- * failed read or snapshot is retried on the next tick.
+ * process's own writes (token art and removals) do not trigger one; the
+ * bridge sends those snapshots directly. A failed read or snapshot is
+ * retried on the next tick.
  */
 export function broadcastSnapshotsOnChange(
   readVersion: () => number,
   repo: EncounterRepository,
+  artRepo: TokenArtRepository,
   target: { broadcast(message: BridgeMessage): void },
   options?: { intervalMs?: number },
 ): () => void {
@@ -66,7 +77,7 @@ export function broadcastSnapshotsOnChange(
     try {
       const version = readVersion();
       if (version === seen) return;
-      target.broadcast(snapshotMessage(repo));
+      target.broadcast(snapshotMessage(repo, artRepo));
       seen = version;
     } catch {
       // Keep `seen` so the next tick retries.

@@ -49,11 +49,28 @@ export function listE2eInstanceIds(dir: string): string[] {
   }
 }
 
+/** Forgets all picked token art, so the next test starts with none. */
+function clearTokenArt(dir: string): void {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    const table = db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'token_art'",
+      )
+      .get();
+    if (table) db.exec("DELETE FROM token_art");
+  } finally {
+    db.close();
+  }
+}
+
 /**
- * Puts the 5 seeded shadows back in place. A worker's bridge (and its DB)
- * outlives a test, and specs expect all 5.
+ * Puts the 5 seeded shadows back in place and forgets any picked token art.
+ * A worker's bridge (and its DB) outlives a test, and specs expect all 5
+ * shadows and no art.
  */
 export function restoreE2eSeed(dir: string): void {
+  clearTokenArt(dir);
   const have = listE2eInstanceIds(dir);
   if (
     have.length === SHADOW_IDS.length &&

@@ -16,6 +16,11 @@ export interface FakeHostOptions {
   userId?: string;
   /** Makes every item call fail with this message, even on a ready scene. */
   failItems?: string;
+  /**
+   * What the GM picks each time the asset picker opens (`ImageDownload`
+   * objects of the SDK). Default: none, as when the GM cancels.
+   */
+  pickedImages?: unknown[];
 }
 
 interface SdkMessage {
@@ -43,11 +48,14 @@ class UnhandledMessageError extends Error {}
 export class FakeHost {
   /** Descriptions of messages the fake did not understand. Tests expect []. */
   readonly errors: string[] = [];
+  /** The data of each asset picker request, in order. */
+  readonly imageRequests: unknown[] = [];
   readonly scene: SceneModel;
   private readonly iframe: HTMLIFrameElement;
   private readonly ref = "e2e-ref";
   private readonly userId: string;
   private readonly failItems: string | undefined;
+  private readonly pickedImages: unknown[];
   private readonly readySubscribed = { value: false };
   private readonly itemsSubscribed = { value: false };
 
@@ -56,6 +64,7 @@ export class FakeHost {
     this.iframe = options.iframe;
     this.userId = options.userId ?? "e2e-user";
     this.failItems = options.failItems;
+    this.pickedImages = options.pickedImages ?? [];
     window.addEventListener("message", this.onMessage);
     this.scene.onChange((change) => {
       if (change.kind === "ready" && this.readySubscribed.value)
@@ -169,6 +178,10 @@ export class FakeHost {
       case "OBR_SCENE_SET_METADATA":
         this.scene.setMetadata(data.update as Record<string, unknown>);
         return {};
+      // The asset picker; the real one waits for the GM with no timeout.
+      case "OBR_ASSETS_DOWNLOAD_IMAGES":
+        this.imageRequests.push(message.data);
+        return { images: structuredClone(this.pickedImages) };
       default:
         throw new UnhandledMessageError(
           `Unhandled Owlbear message "${message.id}": the fake host does not implement it. Add it to e2e/fake-host.ts (and the ObrAdapter and its fake) deliberately.`,

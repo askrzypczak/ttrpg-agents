@@ -15,7 +15,11 @@ import {
 const instance: EncounterInstance = makeTestInstance();
 
 const KEY = "test.ext/value";
-const context = { viewportCenter: { x: 0, y: 0 }, placed: new Set<string>() };
+const context = {
+  viewportCenter: { x: 0, y: 0 },
+  placed: new Set<string>(),
+  art: {},
+};
 const linkValue = { instanceId: "i1" };
 const link: Projector = {
   key: INSTANCE_METADATA_KEY,
