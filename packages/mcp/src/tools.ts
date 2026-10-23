@@ -300,8 +300,16 @@ const setInitiativeTool = defineTool({
   description:
     "Set a monster's initiative to an exact value. Target is an instance id or exact name.",
   inputSchema: { target: z.string(), initiative: z.number().int() },
-  run() {
-    throw new Error("not implemented");
+  run(ctx, { target, initiative }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Stryker disable next-line ConditionalExpression: equivalent, resolveTargets throws for an unknown target
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const before = instance.initiative;
+    const updated = ctx.repo.setInitiative(instance.id, initiative);
+    return ok(
+      `${updated.displayName}: initiative ${String(before ?? "unset")} -> ${String(updated.initiative)}`,
+      { instance: instanceView(updated), before },
+    );
   },
 });
 

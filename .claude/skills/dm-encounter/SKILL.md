@@ -5,7 +5,7 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `clear_encounter`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `clear_encounter`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -40,3 +40,9 @@ Positions and flavour ("on the left", "circling from behind", "ambushing from th
 - Target by the instance's exact name as written in the encounter, with its capitalisation and number ("Goblin Warrior 2", not "goblin 2"), or by id. Names are case-sensitive and must match exactly.
 - If you do not know the exact name (the DM said "goblin 2" and you have not seen the encounter), call `list_encounter` once to find it, then act. If a target errors as unknown or ambiguous, do the same.
 - Always make the call, even if it looks pointless (healing a monster at full HP is clamped by the tool). Relay the tool's HP line verbatim (for example "Goblin Warrior 2: 9 -> 2/9 HP").
+
+## Changing initiative
+
+- "The goblins act on 14" is one `set_initiative` call per goblin, each with `initiative` 14. The tool takes one target, so run the calls in parallel. Target each goblin as under Damage and healing.
+- Use only the number the DM gives. If they name a monster without a number, ask for it.
+- Do not call `list_encounter` after the calls. Relay the tool's line verbatim (for example "Goblin Warrior 1: initiative 12 -> 14").
