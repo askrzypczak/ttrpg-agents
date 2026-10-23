@@ -64,6 +64,7 @@ Chromium. First time: `npx playwright install chromium`. It is NOT part of
   `window.__host.errors`; an auto fixture fails every test that leaves errors
   behind, so the fake cannot drift silently. When you add an SDK call, add it
   to `ObrAdapter`, the unit fake, and `fake-host.ts` together.
+- `e2e/helpers.ts` holds shared page actions: `readItems`, `whileExtensionAway`.
 - The extension adds items through `encounter-sync.ts`. `e2e/driver.html` is
   a test-only page that runs the real `createObrAdapter()` through the
   `addHiddenToken` helper.

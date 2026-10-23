@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect, openHarness } from "./fixtures.js";
+import { readItems, whileExtensionAway } from "./helpers.js";
 
 const PLACED_KEY = "com.ttrpg-agents/placed";
 
@@ -21,9 +22,6 @@ const shadowDownload = {
   type: "CHARACTER",
 };
 
-const readItems = (page: Page) =>
-  page.evaluate(() => window.__host!.scene.getItems());
-
 const pickerOpens = (page: Page) =>
   page.evaluate(() => window.__host!.imageRequests.length);
 
@@ -40,41 +38,6 @@ async function expectShadowArtTokens(page: Page): Promise<void> {
       // One cell, image centred: derived from the image size, not the picked grid.
       grid: { dpi: 300, offset: { x: 150, y: 140 } },
     });
-}
-
-/** Navigates the extension iframe away; resolves with its URL to come back to. */
-function leaveExtension(page: Page): Promise<string> {
-  // The fake host posts to the iframe's origin, so stay on that origin.
-  return page.evaluate(
-    () =>
-      new Promise<string>((resolve) => {
-        const iframe = document.getElementById(
-          "extension",
-        ) as HTMLIFrameElement;
-        const url = iframe.src;
-        iframe.addEventListener("load", () => resolve(url), { once: true });
-        iframe.src = new URL("/away.html", url).href;
-      }),
-  );
-}
-
-async function reloadExtension(page: Page, extensionUrl: string) {
-  await page.evaluate(
-    (src) =>
-      new Promise<void>((resolve) => {
-        const iframe = document.getElementById(
-          "extension",
-        ) as HTMLIFrameElement;
-        iframe.addEventListener("load", () => resolve(), { once: true });
-        const url = new URL(src);
-        url.searchParams.set("reload", "1");
-        iframe.src = url.href + location.hash;
-      }),
-    extensionUrl,
-  );
-  await expect(page.frameLocator("#extension").locator("#status")).toHaveText(
-    "Connected to the local bridge.",
-  );
 }
 
 test.describe("token art from the Owlbear asset library", () => {
@@ -98,13 +61,13 @@ test.describe("token art from the Owlbear asset library", () => {
 
     // While the extension is away, the GM clears the scene (tokens and the
     // placed record), so it creates all 5 tokens again when it comes back.
-    const extensionUrl = await leaveExtension(page);
-    await page.evaluate((key) => {
-      const scene = window.__host!.scene;
-      scene.deleteItems(scene.getItems().map((i) => i.id));
-      scene.setMetadata({ [key]: undefined });
-    }, PLACED_KEY);
-    await reloadExtension(page, extensionUrl);
+    await whileExtensionAway(page, async () => {
+      await page.evaluate((key) => {
+        const scene = window.__host!.scene;
+        scene.deleteItems(scene.getItems().map((i) => i.id));
+        scene.setMetadata({ [key]: undefined });
+      }, PLACED_KEY);
+    });
 
     await expectShadowArtTokens(page);
     await page.waitForTimeout(500);
