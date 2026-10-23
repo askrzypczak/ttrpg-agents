@@ -83,6 +83,7 @@ function wrapRepo(
     applyHealing: (id, amount) => inner.applyHealing(id, amount),
     removeInstances: (ids) => inner.removeInstances(ids),
     renameInstance: (id, name) => inner.renameInstance(id, name),
+    setInitiative: (id, n) => inner.setInitiative(id, n),
     clearEncounter: () => inner.clearEncounter(),
     listInstances: () => inner.listInstances(),
     ...over,
@@ -112,7 +113,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the ten tools", () => {
+  it("exposes the eleven tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -123,6 +124,7 @@ describe("tool registry", () => {
       "remove_monsters",
       "rename_monster",
       "search_monsters",
+      "set_initiative",
       "table_status",
     ]);
   });
@@ -460,6 +462,72 @@ describe("rename_monster", () => {
       expect(text(r)).toMatch(/name/i);
     }
     expect(names()).toEqual(["Shadow 1"]);
+  });
+});
+
+describe("set_initiative", () => {
+  const initiatives = () => ctx.repo.listInstances().map((i) => i.initiative);
+  const listedOrder = async () =>
+    (
+      (await call("list_encounter")).structuredContent?.["instances"] as {
+        name: string;
+      }[]
+    ).map((i) => i.name);
+
+  it("set_initiative by id stores the value and reports before and after", async () => {
+    seed(item("Shadow 1", 5));
+    const id = ctx.repo.listInstances()[0]?.id ?? "";
+
+    const r = await call("set_initiative", { target: id, initiative: 17 });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain("Shadow 1: initiative 5 -> 17");
+    expect(r.structuredContent?.["instance"]).toMatchObject({
+      id,
+      name: "Shadow 1",
+      initiative: 17,
+    });
+    expect(r.structuredContent?.["before"]).toBe(5);
+    expect(initiatives()).toEqual([17]);
+  });
+
+  it("set_initiative by exact name works and list_encounter order reflects the new value", async () => {
+    seed(item("Shadow 1", 15), item("Shadow 2", 8));
+    expect(await listedOrder()).toEqual(["Shadow 1", "Shadow 2"]);
+
+    const r = await call("set_initiative", {
+      target: "Shadow 2",
+      initiative: 20,
+    });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain("Shadow 2: initiative 8 -> 20");
+    expect(initiatives()).toEqual([15, 20]);
+    expect(await listedOrder()).toEqual(["Shadow 2", "Shadow 1"]);
+  });
+
+  it("set_initiative reports unset as the before value when the monster had no initiative", async () => {
+    seed(item("Shadow 1", null));
+
+    const r = await call("set_initiative", {
+      target: "Shadow 1",
+      initiative: 0,
+    });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain("Shadow 1: initiative unset -> 0");
+    expect(r.structuredContent?.["before"]).toBeNull();
+    expect(r.structuredContent?.["instance"]).toMatchObject({ initiative: 0 });
+    expect(initiatives()).toEqual([0]);
+  });
+
+  it("set_initiative on an unknown target fails and changes nothing", async () => {
+    seed(item("Shadow 1", 5), item("Shadow 2", 3));
+
+    const r = await call("set_initiative", {
+      target: "Nobody",
+      initiative: 12,
+    });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("Nobody");
+    expect(initiatives()).toEqual([5, 3]);
   });
 });
 

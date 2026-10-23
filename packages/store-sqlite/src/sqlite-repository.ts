@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import {
   InvalidAmountError,
+  InvalidInitiativeError,
   UnknownInstanceError,
   validateInstanceName,
 } from "@ttrpg-agents/engine";
@@ -173,6 +174,27 @@ export class SqliteEncounterRepository implements EncounterRepository {
         .prepare("UPDATE monster_instances SET display_name = ? WHERE id = ?")
         .run(displayName, id);
       return toInstance({ ...row, display_name: displayName });
+    });
+  }
+
+  setInitiative(id: string, initiative: number): MonsterInstance {
+    if (!Number.isInteger(initiative)) {
+      throw new InvalidInitiativeError(
+        `initiative must be an integer, got ${String(initiative)}`,
+      );
+    }
+    return this.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
+        .get(id) as InstanceRow | undefined;
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.db
+        .prepare("UPDATE monster_instances SET initiative = ? WHERE id = ?")
+        .run(initiative, id);
+      return toInstance({ ...row, initiative });
     });
   }
 

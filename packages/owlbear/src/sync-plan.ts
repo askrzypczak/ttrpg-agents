@@ -37,7 +37,7 @@ export function rowPositions(count: number, center: Vec2): Vec2[] {
 export type Projector = {
   key: string;
   mode: "owned" | "create-only";
-  project(instance: EncounterInstance): unknown;
+  project(instance: EncounterInstance, current?: unknown): unknown;
 };
 
 export type TokenKind = Pick<
@@ -127,13 +127,17 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * Pure diff of the desired instances against the scene's items; only items
  * carrying our instance link are ever touched.
  *
- * Table-wins rule, per `owned` key of an existing token (d = projected value,
- * o = value on the token, b = baseline: the value we last wrote):
- * - d == o: nothing, but re-baseline when b != d.
- * - d != o, b present, d != b (the encounter changed): push d, b := d.
- * - d != o, b present, d == b (the table was edited): leave it.
- * - d != o, no b: push d if o is absent, else keep o; either way b := d.
- * An undefined d means no key: it is never written or baselined, and its
+ * Table-wins rule, per `owned` key of an existing token. The projector sees the
+ * token's current value, so table-owned fields inside an owned value (the
+ * tracker's `active`) are carried over. The baseline is the raw projection
+ * (projected without the current value), which is what the encounter says.
+ * r = raw projection, o = value on the token, d = projection given o (what we
+ * push), b = baseline (the raw projection we last wrote):
+ * - d == o: nothing, but re-baseline when b != r.
+ * - d != o, b present, r != b (the encounter changed): push d, b := r.
+ * - d != o, b present, r == b (the table was edited): leave it.
+ * - d != o, no b: push d if o is absent, else keep o; either way b := r.
+ * An undefined r means no key: it is never written or baselined, and its
  * baseline is dropped (the token's value is left alone).
  * The token name follows the same rule, with its baseline under
  * NAME_BASELINE_KEY in the synced record.
@@ -177,21 +181,22 @@ export function planSync(
     const baseline = asRecord(token.metadata[SYNCED_METADATA_KEY]);
     const next = { ...baseline };
     for (const { key, project } of owned) {
-      const d = project(instance);
+      const raw = project(instance);
       const o = token.metadata[key];
+      const d = project(instance, o);
       const hasBaseline = Object.hasOwn(baseline, key);
-      if (d === undefined) {
+      if (raw === undefined) {
         delete next[key];
       } else if (deepEqual(d, o)) {
-        next[key] = d;
+        next[key] = raw;
       } else if (hasBaseline) {
-        if (!deepEqual(d, baseline[key])) {
+        if (!deepEqual(raw, baseline[key])) {
           plan.update.push({ id: token.id, key, value: d });
-          next[key] = d;
+          next[key] = raw;
         }
       } else {
         if (o === undefined) plan.update.push({ id: token.id, key, value: d });
-        next[key] = d;
+        next[key] = raw;
       }
     }
     const d = instance.displayName;

@@ -21,18 +21,19 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 
 ## Tools
 
-| Tool              | Purpose                                                          |
-| ----------------- | ---------------------------------------------------------------- |
-| `search_monsters` | Name search (top 10) with keys                                   |
-| `get_statblock`   | Markdown statblock by key                                        |
-| `add_monsters`    | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init |
-| `list_encounter`  | Encounter in initiative order with HP                            |
-| `apply_damage`    | Damage by instance id or exact name (clamped at 0)               |
-| `heal`            | Heal by instance id or exact name (clamped at max)               |
-| `remove_monsters` | Remove several targets, all-or-nothing                           |
-| `rename_monster`  | Rename by instance id or exact name; unique, non-empty           |
-| `clear_encounter` | Remove every monster                                             |
-| `table_status`    | Ask the Owlbear tab for its scene status; reports in sync or not |
+| Tool              | Purpose                                                                        |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `search_monsters` | Name search (top 10) with keys                                                 |
+| `get_statblock`   | Markdown statblock by key                                                      |
+| `add_monsters`    | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init               |
+| `list_encounter`  | Encounter in initiative order with HP                                          |
+| `apply_damage`    | Damage by instance id or exact name (clamped at 0)                             |
+| `heal`            | Heal by instance id or exact name (clamped at max)                             |
+| `remove_monsters` | Remove several targets, all-or-nothing                                         |
+| `rename_monster`  | Rename by instance id or exact name; unique, non-empty                         |
+| `set_initiative`  | Set an exact initiative by instance id or exact name; reports before and after |
+| `clear_encounter` | Remove every monster                                                           |
+| `table_status`    | Ask the Owlbear tab for its scene status; reports in sync or not               |
 
 `table_status` needs the bridge running (`npm run bridge`) and a GM tab open: it
 asks the table through the engine's `TablePort` (wired to the bridge client in
