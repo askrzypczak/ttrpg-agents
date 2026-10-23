@@ -58,6 +58,6 @@ An authenticated client can also send `token-art-set` (`{ monsterKey, art }`,
 sent by the extension after the GM picks an image for a monster type). The
 server's optional `setTokenArt` option stores it (`cli.ts` wires
 `SqliteTokenArtRepository.setTokenArt`) and the bridge replies with a fresh
-snapshot, whose `art` map (monster key -> image reference) it sends from the
+snapshot, whose `art` map (monster key -> image reference `{ url, mime, width, height }`) it sends from the
 same store. A failed write is a non-fatal `token-art-failed` `error` and no
 snapshot. Without the option the type is `unexpected-type`.

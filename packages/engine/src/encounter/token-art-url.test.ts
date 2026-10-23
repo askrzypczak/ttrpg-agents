@@ -2,14 +2,11 @@ import { describe, expect, it } from "vitest";
 import { tokenArtSchema } from "./token-art.js";
 
 const art = (image: { url?: string; mime?: string }) => ({
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/shadow.png",
-    mime: "image/png",
-    width: 300,
-    height: 280,
-    ...image,
-  },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+  mime: "image/png",
+  width: 300,
+  height: 280,
+  ...image,
 });
 
 const accepts = (image: { url?: string; mime?: string }) =>

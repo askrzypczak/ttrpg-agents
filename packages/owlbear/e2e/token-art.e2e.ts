@@ -12,7 +12,8 @@ const shadowDownload = {
     width: 300,
     height: 280,
   },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  // The SDK returns its own grid; the extension ignores it.
+  grid: { dpi: 96, offset: { x: 10, y: 20 } },
   visible: true,
   locked: false,
   rotation: 0,
@@ -36,7 +37,8 @@ async function expectShadowArtTokens(page: Page): Promise<void> {
       type: "IMAGE",
       visible: false,
       image: shadowDownload.image,
-      grid: shadowDownload.grid,
+      // One cell, image centred: derived from the image size, not the picked grid.
+      grid: { dpi: 300, offset: { x: 150, y: 140 } },
     });
 }
 

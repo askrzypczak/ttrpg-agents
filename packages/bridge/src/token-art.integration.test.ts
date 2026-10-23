@@ -23,13 +23,10 @@ import {
 } from "./server.js";
 
 const shadowArt: TokenArt = {
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/shadow.png",
-    mime: "image/png",
-    width: 300,
-    height: 280,
-  },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+  mime: "image/png",
+  width: 300,
+  height: 280,
 };
 
 let dir: string;

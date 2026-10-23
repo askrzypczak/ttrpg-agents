@@ -29,23 +29,17 @@ const inst = (
 });
 
 const shadowArt: TokenArt = {
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/shadow.png",
-    mime: "image/png",
-    width: 300,
-    height: 280,
-  },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+  mime: "image/png",
+  width: 300,
+  height: 280,
 };
 
 const ghoulArt: TokenArt = {
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/ghoul.webp",
-    mime: "image/webp",
-    width: 512,
-    height: 512,
-  },
-  grid: { dpi: 256, offset: { x: 256, y: 256 } },
+  url: "https://cdn.owlbear.rodeo/assets/ghoul.webp",
+  mime: "image/webp",
+  width: 512,
+  height: 512,
 };
 
 const center = { x: 1000, y: 500 };
@@ -131,8 +125,8 @@ describe("planSync token art", () => {
     expect(plan.add[0]).toMatchObject({
       type: "IMAGE",
       layer: "CHARACTER",
-      image: shadowArt.image,
-      grid: shadowArt.grid,
+      image: shadowArt,
+      grid: { dpi: 300, offset: { x: 150, y: 140 } },
       name: "Shadow 1",
       visible: false,
       position: rowPositions(1, center)[0],
@@ -159,8 +153,8 @@ describe("planSync token art", () => {
     // Control: the ghoul's art is used for the ghoul only.
     expect(addedFor(plan.add, "i2")).toMatchObject({
       type: "IMAGE",
-      image: ghoulArt.image,
-      grid: ghoulArt.grid,
+      image: ghoulArt,
+      grid: { dpi: 512, offset: { x: 256, y: 256 } },
     });
   });
 
@@ -177,7 +171,26 @@ describe("planSync token art", () => {
     // Control: the art is in effect for the instance that gets a new token.
     expect(plan.add[0]).toMatchObject({
       type: "IMAGE",
-      image: shadowArt.image,
+      image: shadowArt,
     });
   });
+});
+
+describe("planSync token art sizing", () => {
+  it.each([
+    ["wide", 600, 300, { dpi: 600, offset: { x: 300, y: 150 } }],
+    ["tall", 300, 600, { dpi: 600, offset: { x: 150, y: 300 } }],
+  ])(
+    "sizes a token art image to one grid cell with the image centred (%s)",
+    (_shape, width, height, grid) => {
+      const art: TokenArt = { ...shadowArt, width, height };
+      const plan = planSync(
+        [inst(1)],
+        [],
+        defaultSyncConfig,
+        ctx({ shadow: art }),
+      );
+      expect(plan.add[0]).toMatchObject({ type: "IMAGE", image: art, grid });
+    },
+  );
 });

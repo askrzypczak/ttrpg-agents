@@ -14,13 +14,10 @@ const instance = {
 };
 
 const art = {
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/shadow.png",
-    mime: "image/png",
-    width: 300,
-    height: 280,
-  },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+  mime: "image/png",
+  width: 300,
+  height: 280,
 };
 
 describe("token art on the wire", () => {
@@ -72,7 +69,7 @@ describe("token art on the wire", () => {
       type: "token-art-set",
       payload: {
         monsterKey: "shadow",
-        art: { ...art, image: { ...art.image, url: "http://evil.test/x.png" } },
+        art: { ...art, url: "http://evil.test/x.png" },
       },
     };
     const r = decodeMessage(JSON.stringify(raw));

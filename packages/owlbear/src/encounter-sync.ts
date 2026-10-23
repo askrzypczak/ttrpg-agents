@@ -119,14 +119,12 @@ export function createEncounterSync(
   /** The GM's pick, or `undefined` for a cancel, an error or an unusable image. */
   async function pickArt(): Promise<TokenArt | undefined> {
     try {
-      const picked = await obr.pickImage();
-      if (picked === undefined) return undefined;
-      const parsed = tokenArtSchema.safeParse(picked);
-      return parsed.success ? parsed.data : undefined;
-      // Stryker disable next-line BlockStatement: equivalent, falling out of the catch also returns undefined
+      const parsed = tokenArtSchema.safeParse(await obr.pickImage());
+      if (parsed.success) return parsed.data;
     } catch {
-      return undefined;
+      // A picker error is the same as no pick.
     }
+    return undefined;
   }
 
   async function apply(wanted: EncounterInstance[]): Promise<string[]> {
@@ -141,11 +139,13 @@ export function createEncounterSync(
       viewportCenter: await obr.getViewportCenter(),
       placed,
     };
-    let plan = planSync(wanted, items, defaultSyncConfig, { ...context, art });
+    const first = planSync(wanted, items, defaultSyncConfig, {
+      ...context,
+      art,
+    });
     // Ask once per new monster type, before anything is written, so its
     // tokens are created once with the right look.
-    let picked = false;
-    for (const monsterKey of plan.needsArt) {
+    for (const monsterKey of first.needsArt) {
       if (declined.has(monsterKey)) continue;
       const chosen = await pickArt();
       if (chosen === undefined) {
@@ -153,11 +153,12 @@ export function createEncounterSync(
         continue;
       }
       art = { ...art, [monsterKey]: chosen };
-      picked = true;
       options.onTokenArt?.(monsterKey, chosen);
     }
-    if (picked)
-      plan = planSync(wanted, items, defaultSyncConfig, { ...context, art });
+    const plan = planSync(wanted, items, defaultSyncConfig, {
+      ...context,
+      art,
+    });
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
     // Before the metadata write, so a failed rename leaves the baseline

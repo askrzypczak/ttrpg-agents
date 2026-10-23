@@ -1,7 +1,7 @@
 import type { TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { initiativeProjector } from "./initiative.js";
-import type { SceneItem, Vec2 } from "./scene-model.js";
+import type { GridSpec, SceneItem, Vec2 } from "./scene-model.js";
 
 export type EncounterInstance = Extract<
   BridgeMessage,
@@ -19,6 +19,14 @@ export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 
 /** One grid cell at Owlbear's default 150 dpi. */
 const TOKEN_SIZE = 150;
+
+/** The image spans one grid cell, its centre at the item position. */
+export function oneCellGrid(art: Pick<TokenArt, "width" | "height">): GridSpec {
+  return {
+    dpi: Math.max(art.width, art.height),
+    offset: { x: art.width / 2, y: art.height / 2 },
+  };
+}
 
 /** Row of `count` positions centred horizontally on `center`. */
 export function rowPositions(count: number, center: Vec2): Vec2[] {
@@ -66,7 +74,17 @@ export const defaultSyncConfig: SyncConfig = {
   ],
   tokenKind: (_instance, art) =>
     art
-      ? { type: "IMAGE", layer: "CHARACTER", image: art.image, grid: art.grid }
+      ? {
+          type: "IMAGE",
+          layer: "CHARACTER",
+          image: {
+            url: art.url,
+            mime: art.mime,
+            width: art.width,
+            height: art.height,
+          },
+          grid: oneCellGrid(art),
+        }
       : {
           type: "SHAPE",
           layer: "CHARACTER",

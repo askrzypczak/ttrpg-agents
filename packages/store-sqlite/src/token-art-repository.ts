@@ -11,29 +11,15 @@ export class SqliteTokenArtRepository implements TokenArtRepository {
 
   listTokenArt(): Record<string, TokenArt> {
     const rows = this.db
-      .prepare(
-        "SELECT monster_key, url, mime, width, height, dpi, offset_x, offset_y FROM token_art",
-      )
-      .all() as {
-      monster_key: string;
-      url: string;
-      mime: string;
-      width: number;
-      height: number;
-      dpi: number;
-      offset_x: number;
-      offset_y: number;
-    }[];
+      .prepare("SELECT monster_key, url, mime, width, height FROM token_art")
+      .all() as ({ monster_key: string } & TokenArt)[];
     const art: Record<string, TokenArt> = {};
     for (const row of rows)
       art[row.monster_key] = {
-        image: {
-          url: row.url,
-          mime: row.mime,
-          width: row.width,
-          height: row.height,
-        },
-        grid: { dpi: row.dpi, offset: { x: row.offset_x, y: row.offset_y } },
+        url: row.url,
+        mime: row.mime,
+        width: row.width,
+        height: row.height,
       };
     return art;
   }
@@ -41,22 +27,12 @@ export class SqliteTokenArtRepository implements TokenArtRepository {
   setTokenArt(monsterKey: string, art: TokenArt): void {
     this.db
       .prepare(
-        `INSERT INTO token_art (monster_key, url, mime, width, height, dpi, offset_x, offset_y)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO token_art (monster_key, url, mime, width, height)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (monster_key) DO UPDATE SET
            url = excluded.url, mime = excluded.mime, width = excluded.width,
-           height = excluded.height, dpi = excluded.dpi,
-           offset_x = excluded.offset_x, offset_y = excluded.offset_y`,
+           height = excluded.height`,
       )
-      .run(
-        monsterKey,
-        art.image.url,
-        art.image.mime,
-        art.image.width,
-        art.image.height,
-        art.grid.dpi,
-        art.grid.offset.x,
-        art.grid.offset.y,
-      );
+      .run(monsterKey, art.url, art.mime, art.width, art.height);
   }
 }

@@ -35,13 +35,10 @@ const snapshot = (
 });
 
 const artFor = (name: string): TokenArt => ({
-  image: {
-    url: `https://cdn.owlbear.rodeo/assets/${name}.png`,
-    mime: "image/png",
-    width: 300,
-    height: 280,
-  },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  url: `https://cdn.owlbear.rodeo/assets/${name}.png`,
+  mime: "image/png",
+  width: 300,
+  height: 280,
 });
 const shadowArt = artFor("shadow");
 const ghoulArt = artFor("ghoul");
@@ -107,8 +104,8 @@ describe("createEncounterSync token art", () => {
         type: "IMAGE",
         layer: "CHARACTER",
         visible: false,
-        image: shadowArt.image,
-        grid: shadowArt.grid,
+        image: shadowArt,
+        grid: { dpi: 300, offset: { x: 150, y: 140 } },
       });
     expect(errors).toEqual([]);
   });
@@ -136,7 +133,7 @@ describe("createEncounterSync token art", () => {
     for (const instance of instances)
       expect(tokenOf(instance.id)).toMatchObject({
         type: "IMAGE",
-        image: byKey.get(instance.monsterKey)!.image,
+        image: byKey.get(instance.monsterKey),
       });
     expect(errors).toEqual([]);
   });
@@ -161,8 +158,8 @@ describe("createEncounterSync token art", () => {
     for (const id of ["i1", "i2"])
       expect(tokenOf(id)).toMatchObject({
         type: "IMAGE",
-        image: shadowArt.image,
-        grid: shadowArt.grid,
+        image: shadowArt,
+        grid: { dpi: 300, offset: { x: 150, y: 140 } },
       });
   });
 
@@ -178,7 +175,7 @@ describe("createEncounterSync token art", () => {
     expect(tokenOf("i1")).toMatchObject({ id: "token-1", ...hiddenCircle });
     expect(tokenOf("i2")).toMatchObject({
       type: "IMAGE",
-      image: ghoulArt.image,
+      image: ghoulArt,
     });
   });
 
@@ -215,7 +212,7 @@ describe("createEncounterSync token art", () => {
   it("creates the circle when the picked art fails validation", async () => {
     const notHttps = {
       ...shadowArt,
-      image: { ...shadowArt.image, url: "http://cdn.example.test/shadow.png" },
+      url: "http://cdn.example.test/shadow.png",
     };
     const { fake, sync, errors, reported, tokenOf } = setup(notHttps);
 

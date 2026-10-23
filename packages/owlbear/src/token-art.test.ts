@@ -3,13 +3,10 @@ import { decodeMessage, encodeMessage } from "@ttrpg-agents/protocol";
 import { tokenArtMessage } from "./token-art.js";
 
 const art = {
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/shadow.png",
-    mime: "image/png",
-    width: 300,
-    height: 280,
-  },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+  mime: "image/png",
+  width: 300,
+  height: 280,
 };
 
 describe("tokenArtMessage", () => {

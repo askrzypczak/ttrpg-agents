@@ -38,10 +38,7 @@ export const migrations: Migration[] = [
         url TEXT NOT NULL CHECK (url LIKE 'https://%'),
         mime TEXT NOT NULL CHECK (mime LIKE 'image/%'),
         width INTEGER NOT NULL CHECK (width > 0),
-        height INTEGER NOT NULL CHECK (height > 0),
-        dpi REAL NOT NULL CHECK (dpi > 0),
-        offset_x REAL NOT NULL,
-        offset_y REAL NOT NULL
+        height INTEGER NOT NULL CHECK (height > 0)
       );
     `,
   },

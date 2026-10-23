@@ -2,22 +2,19 @@ import { describe, expect, it } from "vitest";
 import { tokenArtSchema } from "./token-art.js";
 
 const art = {
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/shadow.png",
-    mime: "image/png",
-    width: 300,
-    height: 280,
-  },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+  mime: "image/png",
+  width: 300,
+  height: 280,
 };
 
-const withImage = (over: Partial<typeof art.image>) => ({
+const withImage = (over: Partial<typeof art>) => ({
   ...art,
-  image: { ...art.image, ...over },
+  ...over,
 });
 
 describe("tokenArtSchema", () => {
-  it("accepts an https image reference with grid placement", () => {
+  it("accepts an https image reference", () => {
     expect(tokenArtSchema.parse(art)).toEqual(art);
   });
 

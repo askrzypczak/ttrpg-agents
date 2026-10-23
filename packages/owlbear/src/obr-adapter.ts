@@ -154,15 +154,12 @@ export function createObrAdapter(): ObrAdapter {
     pickImage: async () => {
       const [picked] = await OBR.assets.downloadImages(false);
       if (!picked) return undefined;
-      const { image, grid } = picked;
+      const { image } = picked;
       return {
-        image: {
-          url: image.url,
-          mime: image.mime,
-          width: image.width,
-          height: image.height,
-        },
-        grid: { dpi: grid.dpi, offset: { x: grid.offset.x, y: grid.offset.y } },
+        url: image.url,
+        mime: image.mime,
+        width: image.width,
+        height: image.height,
       };
     },
   };

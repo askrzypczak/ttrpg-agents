@@ -12,23 +12,17 @@ afterEach(() => {
 });
 
 const shadowArt: TokenArt = {
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/shadow.png",
-    mime: "image/png",
-    width: 300,
-    height: 280,
-  },
-  grid: { dpi: 300, offset: { x: 150, y: 140 } },
+  url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+  mime: "image/png",
+  width: 300,
+  height: 280,
 };
 
 const ghoulArt: TokenArt = {
-  image: {
-    url: "https://cdn.owlbear.rodeo/assets/ghoul.webp",
-    mime: "image/webp",
-    width: 512,
-    height: 512,
-  },
-  grid: { dpi: 256, offset: { x: 256.5, y: 250 } },
+  url: "https://cdn.owlbear.rodeo/assets/ghoul.webp",
+  mime: "image/webp",
+  width: 512,
+  height: 512,
 };
 
 describe("SqliteTokenArtRepository", () => {
