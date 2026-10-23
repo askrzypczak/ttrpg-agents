@@ -41,6 +41,8 @@ export async function openHarness(
     token?: string | null;
     /** Item calls fail with this message even when the scene is ready. */
     failItems?: string;
+    /** The asset picker's answer (SDK `ImageDownload`s). Default: a cancel. */
+    pickedImages?: unknown[];
   } = {},
 ): Promise<void> {
   const url = new URL(HARNESS);
@@ -50,6 +52,8 @@ export async function openHarness(
     options.token === undefined ? currentBridge().token : options.token;
   if (token) url.searchParams.set("token", token);
   if (options.failItems) url.searchParams.set("failItems", options.failItems);
+  if (options.pickedImages)
+    url.searchParams.set("pickedImages", JSON.stringify(options.pickedImages));
   url.searchParams.set("role", options.role ?? "gm");
   url.searchParams.set("ready", options.ready === false ? "0" : "1");
   await page.goto(url.href);
@@ -91,7 +95,8 @@ export const test = base.extend<
   ],
 
   // Auto fixture: tests may remove instances (a deleted token is written back
-  // to the store), so each starts from the 5 seeded shadows.
+  // to the store) or store token art, so each starts from the 5 seeded
+  // shadows and no art.
   seed: [
     async ({ bridge }, use, workerInfo) => {
       void bridge;

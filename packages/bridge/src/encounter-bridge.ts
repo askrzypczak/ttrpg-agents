@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   UnknownInstanceError,
   type EncounterRepository,
+  type TokenArtRepository,
 } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import type { RemoveInstanceResult } from "./server.js";
@@ -24,8 +25,12 @@ export function removeInstance(
   }
 }
 
-/** Full current instance list, for a client that just connected. */
-export function snapshotMessage(repo: EncounterRepository): BridgeMessage {
+/** Full current instance list and token art, for a client that just connected. */
+export function snapshotMessage(
+  repo: EncounterRepository,
+  artRepo: TokenArtRepository,
+): BridgeMessage {
+  void artRepo;
   return {
     v: 1,
     type: "encounter-snapshot",
@@ -47,7 +52,7 @@ export function dataVersion(db: DatabaseSync): number {
 }
 
 /**
- * Polls `readVersion` and broadcasts `snapshotMessage(repo)` whenever it
+ * Polls `readVersion` and broadcasts `snapshotMessage(repo, artRepo)` whenever it
  * changes. Returns a stop function.
  *
  * Meant to be fed by `dataVersion` on a connection to the shared database:
@@ -58,6 +63,7 @@ export function dataVersion(db: DatabaseSync): number {
 export function broadcastSnapshotsOnChange(
   readVersion: () => number,
   repo: EncounterRepository,
+  artRepo: TokenArtRepository,
   target: { broadcast(message: BridgeMessage): void },
   options?: { intervalMs?: number },
 ): () => void {
@@ -66,7 +72,7 @@ export function broadcastSnapshotsOnChange(
     try {
       const version = readVersion();
       if (version === seen) return;
-      target.broadcast(snapshotMessage(repo));
+      target.broadcast(snapshotMessage(repo, artRepo));
       seen = version;
     } catch {
       // Keep `seen` so the next tick retries.

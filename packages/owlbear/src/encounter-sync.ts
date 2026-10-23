@@ -1,3 +1,4 @@
+import type { TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
@@ -79,6 +80,8 @@ export function createEncounterSync(
     backoff?: BackoffOptions;
     /** Called once per snapshot for each wanted, placed instance whose token the GM deleted. */
     onTokenDeleted?: (instanceId: string) => void;
+    /** Called with the art the GM picked for a monster type, to store it. */
+    onTokenArt?: (monsterKey: string, art: TokenArt) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
@@ -120,6 +123,7 @@ export function createEncounterSync(
     const plan = planSync(wanted, items, defaultSyncConfig, {
       viewportCenter: await obr.getViewportCenter(),
       placed,
+      art: {},
     });
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));

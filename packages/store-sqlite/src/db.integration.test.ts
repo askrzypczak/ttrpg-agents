@@ -4,8 +4,14 @@ import { join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { defaultDbPath, openDatabase } from "./db.js";
-import { LATEST_VERSION, getUserVersion, migrate } from "./migrations.js";
+import {
+  LATEST_VERSION,
+  getUserVersion,
+  migrate,
+  migrations,
+} from "./migrations.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
+import { SqliteTokenArtRepository } from "./token-art-repository.js";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -83,6 +89,42 @@ describe("migrations", () => {
     const list = new SqliteEncounterRepository(db2).listInstances();
     expect(list.map((i) => i.displayName)).toEqual(["Orc"]);
     db2.close();
+  });
+
+  it("migrating a database at the previous schema version adds token_art and keeps its instances", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ttrpg-db-"));
+    dirs.push(dir);
+    const path = join(dir, "old.db");
+    const tables = (db: DatabaseSync) =>
+      (
+        db
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+
+    // Build the database as the previous release left it.
+    const previous = LATEST_VERSION - 1;
+    const old = new DatabaseSync(path);
+    for (const m of migrations.filter((m) => m.version <= previous))
+      old.exec(m.sql);
+    old.exec(`PRAGMA user_version = ${previous}`);
+    expect(tables(old)).toContain("monster_instances");
+    expect(tables(old)).not.toContain("token_art");
+    new SqliteEncounterRepository(old).addInstances(() => [
+      { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
+    ]);
+    old.close();
+
+    const db = openDatabase(path);
+    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    expect(tables(db)).toContain("token_art");
+    expect(
+      new SqliteEncounterRepository(db)
+        .listInstances()
+        .map((i) => i.displayName),
+    ).toEqual(["Shadow 1"]);
+    expect(new SqliteTokenArtRepository(db).listTokenArt()).toEqual({});
+    db.close();
   });
 });
 

@@ -29,6 +29,7 @@ import {
   type BridgeMessage,
   type Query,
 } from "@ttrpg-agents/protocol";
+import type { TokenArt } from "@ttrpg-agents/engine";
 
 export const DEFAULT_BRIDGE_PORT = 5199;
 export const SERVER_VERSION = "0.0.0";
@@ -67,6 +68,8 @@ export interface BridgeServerOptions {
   queryTimeoutMs?: number;
   /** Removes an instance from the store when the GM deletes its token on the table. */
   removeInstance?: (instanceId: string) => RemoveInstanceResult;
+  /** Stores the art the GM picked for a monster type. */
+  setTokenArt?: (monsterKey: string, art: TokenArt) => void;
 }
 
 export type RemoveInstanceResult =

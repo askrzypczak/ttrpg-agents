@@ -2,6 +2,7 @@
 // Everything else depends on the narrow ObrAdapter interface so it can be
 // unit-tested against the fake in fake-adapter.ts.
 import OBR, { buildImage, buildShape, type Item } from "@owlbear-rodeo/sdk";
+import type { TokenArt } from "@ttrpg-agents/engine";
 import type {
   ItemPatch,
   Metadata,
@@ -34,6 +35,11 @@ export interface ObrAdapter {
   setSceneMetadata(update: Metadata): Promise<void>;
   /** Scene coordinates of the middle of the GM's current view. */
   getViewportCenter(): Promise<Vec2>;
+  /**
+   * Asks the GM to pick one image from their Owlbear asset library; resolves
+   * with its reference, or `undefined` when they cancel.
+   */
+  pickImage(): Promise<TokenArt | undefined>;
 }
 
 /**
@@ -145,5 +151,6 @@ export function createObrAdapter(): ObrAdapter {
         y: height / 2,
       });
     },
+    pickImage: () => Promise.reject(new Error("not implemented")),
   };
 }

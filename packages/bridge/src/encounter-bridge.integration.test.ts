@@ -4,6 +4,7 @@ import {
   observeRepository,
   type EncounterRepository,
   type MonsterInstance,
+  type TokenArtRepository,
 } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
@@ -15,6 +16,12 @@ import {
   removeInstance,
   snapshotMessage,
 } from "./encounter-bridge.js";
+
+/** A store with no token art. */
+const noArt: TokenArtRepository = {
+  listTokenArt: () => ({}),
+  setTokenArt: () => {},
+};
 
 function setup() {
   const inner = new SqliteEncounterRepository(openDatabase(":memory:"));
@@ -28,7 +35,7 @@ describe("snapshotMessage", () => {
     const created = repo.addInstances(() => [
       { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
     ]);
-    expect(snapshotMessage(inner)).toEqual({
+    expect(snapshotMessage(inner, noArt)).toEqual({
       v: 1,
       type: "encounter-snapshot",
       payload: { instances: created },
@@ -118,7 +125,7 @@ describe("broadcastSnapshotsOnChange", () => {
   });
 
   it("broadcasts a snapshot when the data version changes", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, target, {
+    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
       intervalMs: INTERVAL,
     });
     version = 2;
@@ -128,7 +135,7 @@ describe("broadcastSnapshotsOnChange", () => {
   });
 
   it("broadcasts nothing while the data version is unchanged", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, target, {
+    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
       intervalMs: INTERVAL,
     });
     vi.advanceTimersByTime(INTERVAL * 10);
@@ -138,7 +145,7 @@ describe("broadcastSnapshotsOnChange", () => {
   });
 
   it("broadcasts once per change, not once per tick", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, target, {
+    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
       intervalMs: INTERVAL,
     });
     version = 2;
@@ -151,7 +158,7 @@ describe("broadcastSnapshotsOnChange", () => {
   });
 
   it("stops reading and broadcasting after stop() is called", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, target, {
+    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
       intervalMs: INTERVAL,
     });
     vi.advanceTimersByTime(INTERVAL);
@@ -165,7 +172,7 @@ describe("broadcastSnapshotsOnChange", () => {
   });
 
   it("keeps running and broadcasts on a later tick after a failing read", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, target, {
+    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
       intervalMs: INTERVAL,
     });
     version = 2;

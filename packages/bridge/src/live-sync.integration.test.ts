@@ -10,6 +10,7 @@ import { WebSocket } from "ws";
 import type { MonsterInstance } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
+  SqliteTokenArtRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
@@ -42,15 +43,22 @@ beforeEach(async () => {
   const dbPath = join(dir, "test.db");
   db = openDatabase(dbPath);
   const repo = new SqliteEncounterRepository(db);
+  const artRepo = new SqliteTokenArtRepository(db);
   server = await startBridgeServer({
     port: 0,
     staticDir: dir,
-    snapshot: () => snapshotMessage(repo),
+    snapshot: () => snapshotMessage(repo, artRepo),
   });
   received = [];
-  stop = broadcastSnapshotsOnChange(() => dataVersion(db), repo, server, {
-    intervalMs: 50,
-  });
+  stop = broadcastSnapshotsOnChange(
+    () => dataVersion(db),
+    repo,
+    artRepo,
+    server,
+    {
+      intervalMs: 50,
+    },
+  );
 
   ws = await new Promise<WebSocket>((resolve, reject) => {
     const s = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, {

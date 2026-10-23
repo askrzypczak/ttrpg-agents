@@ -14,3 +14,8 @@ export * from "./events.js";
 export * from "./errors.js";
 export * from "./queries.js";
 export * from "./rename.js";
+export {
+  tokenArtSchema,
+  type TokenArt,
+  type TokenArtRepository,
+} from "./token-art.js";

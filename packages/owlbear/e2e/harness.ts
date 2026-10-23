@@ -1,6 +1,6 @@
 // Harness page: plays the Owlbear host and iframes the extension.
 // Query: target=<url> (required), role=gm|player (default gm), ready=0|1,
-// failItems=<message> (item calls fail), token=<hex> (URL fragment for the extension), obrOrigin=<origin> (advertise a wrong host origin to test the SDK check).
+// failItems=<message> (item calls fail), pickedImages=<JSON array> (the asset picker's answer), token=<hex> (URL fragment for the extension), obrOrigin=<origin> (advertise a wrong host origin to test the SDK check).
 import { SceneModel } from "../src/scene-model.js";
 import { FakeHost } from "./fake-host.js";
 import "./globals.d.ts";
@@ -11,10 +11,13 @@ const role = params.get("role") === "player" ? "player" : "gm";
 const scene = new SceneModel(role, params.get("ready") !== "0");
 
 const iframe = document.getElementById("extension") as HTMLIFrameElement;
+const pickedImages = params.get("pickedImages");
 window.__host = new FakeHost({
   iframe,
   scene,
   failItems: params.get("failItems") ?? undefined,
+  pickedImages:
+    pickedImages === null ? undefined : (JSON.parse(pickedImages) as unknown[]),
 });
 
 // The SDK reads `obrref` = base64("<host origin> <room id>").

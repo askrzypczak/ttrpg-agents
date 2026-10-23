@@ -63,6 +63,7 @@ const center = { x: 1000, y: 500 };
 const ctx = (placed: string[] = []) => ({
   viewportCenter: center,
   placed: new Set(placed),
+  art: {},
 });
 
 /** An existing token of ours for instance `n` with the given extra metadata. */
@@ -177,6 +178,7 @@ describe("planSync", () => {
       delete: [],
       rename: [],
       deleted: [],
+      needsArt: [],
     });
   });
 
@@ -222,6 +224,7 @@ describe("planSync", () => {
       delete: [],
       rename: [],
       deleted: [],
+      needsArt: [],
     });
   });
 
