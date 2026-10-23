@@ -1,6 +1,9 @@
 import { DomainError } from "../errors.js";
 
-/** A damage or healing amount that is not a non-negative integer. */
+/**
+ * A damage or healing amount that is not a non-negative integer, or an
+ * absolute HP or max HP value that is not an integer.
+ */
 export class InvalidAmountError extends DomainError {
   constructor(message: string) {
     super("invalid_amount", message);
@@ -29,5 +32,13 @@ export class InvalidInitiativeError extends DomainError {
   constructor(message: string) {
     super("invalid_initiative", message);
     this.name = "InvalidInitiativeError";
+  }
+}
+
+/** An armor class value that is not an integer. */
+export class InvalidArmorClassError extends DomainError {
+  constructor(message: string) {
+    super("invalid_armor_class", message);
+    this.name = "InvalidArmorClassError";
   }
 }

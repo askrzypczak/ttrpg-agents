@@ -45,6 +45,27 @@ export interface EncounterRepository {
    * encounter; nothing changes on a throw.
    */
   setInitiative(id: string, initiative: number): MonsterInstance;
+  /**
+   * Sets the absolute current HP of an instance of the active encounter in one
+   * transaction, clamped to 0..maxHp. Throws InvalidAmountError for a
+   * non-integer value, UnknownInstanceError for an id not in the active
+   * encounter; nothing changes on a throw.
+   */
+  setHp(id: string, hp: number): HpChange;
+  /**
+   * Sets the max HP of an instance of the active encounter in one transaction
+   * (at least 1), lowering current HP if it is above the new max. Throws
+   * InvalidAmountError for a non-integer value, UnknownInstanceError for an id
+   * not in the active encounter; nothing changes on a throw.
+   */
+  setMaxHp(id: string, maxHp: number): HpChange;
+  /**
+   * Sets the armor class of an instance of the active encounter in one
+   * transaction (at least 0) and returns it updated. Throws
+   * InvalidArmorClassError for a non-integer value, UnknownInstanceError for
+   * an id not in the active encounter; nothing changes on a throw.
+   */
+  setArmorClass(id: string, armorClass: number): MonsterInstance;
   /** Deletes all instances of the active encounter. */
   clearEncounter(): void;
   /** Instances of the active encounter, ordered by creation. */

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "../testing/index.js";
 import { TargetError, compareByInitiative, resolveTargets } from "./queries.js";
 import type { MonsterInstance } from "./types.js";
 
@@ -8,7 +9,7 @@ function inst(
   initiative: number | null = null,
   createdAt = 1000,
 ): MonsterInstance {
-  return {
+  return makeTestInstance({
     id,
     encounterId: "enc",
     monsterKey: "srd-2024_goblin-warrior",
@@ -16,9 +17,8 @@ function inst(
     maxHp: 7,
     currentHp: 7,
     initiative,
-    groupId: null,
     createdAt,
-  };
+  });
 }
 
 function targetError(fn: () => unknown): TargetError {

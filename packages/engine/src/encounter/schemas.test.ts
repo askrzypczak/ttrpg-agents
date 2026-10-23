@@ -1,18 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "../testing/index.js";
 import { encounterEventSchema } from "./events.js";
 import { monsterInstanceSchema } from "./types.js";
 
-const instance = {
-  id: "i1",
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: "Shadow 1",
-  maxHp: 16,
-  currentHp: 16,
-  initiative: null,
-  groupId: null,
-  createdAt: 5,
-};
+const instance = makeTestInstance({ createdAt: 5 });
 
 describe("monsterInstanceSchema", () => {
   it("round-trips a full instance", () => {
@@ -23,6 +14,20 @@ describe("monsterInstanceSchema", () => {
     const withoutMaxHp: Record<string, unknown> = { ...instance };
     delete withoutMaxHp.maxHp;
     expect(monsterInstanceSchema.safeParse(withoutMaxHp).success).toBe(false);
+  });
+
+  it("monsterInstanceSchema requires armorClass and accepts null", () => {
+    expect(
+      monsterInstanceSchema.parse({ ...instance, armorClass: 13 }),
+    ).toEqual({ ...instance, armorClass: 13 });
+    expect(
+      monsterInstanceSchema.parse({ ...instance, armorClass: null }),
+    ).toEqual({ ...instance, armorClass: null });
+    const withoutArmorClass: Record<string, unknown> = { ...instance };
+    delete withoutArmorClass.armorClass;
+    expect(monsterInstanceSchema.safeParse(withoutArmorClass).success).toBe(
+      false,
+    );
   });
 
   it("rejects an instance with a wrong type", () => {

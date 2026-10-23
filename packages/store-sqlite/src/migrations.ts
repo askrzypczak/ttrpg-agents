@@ -32,6 +32,10 @@ export const migrations: Migration[] = [
   },
   {
     version: 2,
+    sql: "ALTER TABLE monster_instances ADD COLUMN armor_class INTEGER;",
+  },
+  {
+    version: 3,
     sql: `
       CREATE TABLE token_art (
         monster_key TEXT PRIMARY KEY,

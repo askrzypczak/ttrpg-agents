@@ -20,6 +20,7 @@ export const COVERAGE_INCLUDE = ["packages/*/src/**/*.ts", "scripts/**/*.ts"];
 export const COVERAGE_EXCLUDE = [
   "**/*.test.ts",
   "**/fixtures/**",
+  "packages/engine/src/testing/**",
   "**/index.ts",
   "**/*.d.ts",
 ];
