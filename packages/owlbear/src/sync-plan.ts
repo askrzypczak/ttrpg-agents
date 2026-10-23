@@ -64,11 +64,18 @@ export const defaultSyncConfig: SyncConfig = {
     },
     initiativeProjector,
   ],
-  tokenKind: () => ({
-    type: "SHAPE",
-    layer: "CHARACTER",
-    shape: { shapeType: "CIRCLE", width: TOKEN_SIZE, height: TOKEN_SIZE },
-  }),
+  tokenKind: (_instance, art) =>
+    art
+      ? { type: "IMAGE", layer: "CHARACTER", image: art.image, grid: art.grid }
+      : {
+          type: "SHAPE",
+          layer: "CHARACTER",
+          shape: {
+            shapeType: "CIRCLE",
+            width: TOKEN_SIZE,
+            height: TOKEN_SIZE,
+          },
+        },
 };
 
 export type SyncPlan = {
@@ -221,8 +228,13 @@ export function planSync(
     }
     synced[NAME_BASELINE_KEY] = instance.displayName;
     metadata[SYNCED_METADATA_KEY] = synced;
+    const art = Object.hasOwn(context.art, instance.monsterKey)
+      ? context.art[instance.monsterKey]
+      : undefined;
+    if (!art && !plan.needsArt.includes(instance.monsterKey))
+      plan.needsArt.push(instance.monsterKey);
     plan.add.push({
-      ...config.tokenKind(instance, undefined),
+      ...config.tokenKind(instance, art),
       id: `ttrpg-instance-${instance.id}`,
       name: instance.displayName,
       visible: false,

@@ -9,7 +9,5 @@ export function tokenArtMessage(
   monsterKey: string,
   art: TokenArt,
 ): BridgeMessage {
-  void monsterKey;
-  void art;
-  throw new Error("not implemented");
+  return { v: 1, type: "token-art-set", payload: { monsterKey, art } };
 }

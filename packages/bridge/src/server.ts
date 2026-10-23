@@ -135,6 +135,7 @@ interface Hooks {
   pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
   removeInstance: ((instanceId: string) => RemoveInstanceResult) | undefined;
+  setTokenArt: ((monsterKey: string, art: TokenArt) => void) | undefined;
   onAuthenticated: () => void;
 }
 
@@ -233,6 +234,34 @@ function handleMessage(
       }
       break;
     }
+    case "token-art-set": {
+      if (!hooks.setTokenArt) {
+        send(
+          ws,
+          errorMessage(
+            "unexpected-type",
+            `server does not accept "${message.type}"`,
+          ),
+        );
+        break;
+      }
+      try {
+        hooks.setTokenArt(message.payload.monsterKey, message.payload.art);
+      } catch (e) {
+        send(
+          ws,
+          errorMessage(
+            "token-art-failed",
+            e instanceof Error ? e.message : String(e),
+            message.id,
+          ),
+        );
+        break;
+      }
+      // The bridge's own commit does not bump data_version; tell the client directly.
+      sendSnapshot(ws, hooks);
+      break;
+    }
     case "query-result": {
       const waiting = hooks.pending.get(message.id ?? "");
       if (waiting === undefined) {
@@ -291,6 +320,7 @@ export async function startBridgeServer(
     agentToken = randomBytes(32).toString("hex"),
     queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS,
     removeInstance,
+    setTokenArt,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
@@ -422,6 +452,7 @@ export async function startBridgeServer(
         pending,
         snapshot,
         removeInstance,
+        setTokenArt,
         onAuthenticated: () => {
           if (active !== null) {
             rejectAndClose(active, "superseded", "another tab connected");

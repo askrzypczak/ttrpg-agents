@@ -151,6 +151,19 @@ export function createObrAdapter(): ObrAdapter {
         y: height / 2,
       });
     },
-    pickImage: () => Promise.reject(new Error("not implemented")),
+    pickImage: async () => {
+      const [picked] = await OBR.assets.downloadImages(false);
+      if (!picked) return undefined;
+      const { image, grid } = picked;
+      return {
+        image: {
+          url: image.url,
+          mime: image.mime,
+          width: image.width,
+          height: image.height,
+        },
+        grid: { dpi: grid.dpi, offset: { x: grid.offset.x, y: grid.offset.y } },
+      };
+    },
   };
 }

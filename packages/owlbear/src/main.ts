@@ -9,6 +9,7 @@ import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { describeError, panelView } from "./panel-state.js";
+import { tokenArtMessage } from "./token-art.js";
 import { tokenDeletedErrorText, tokenDeletedMessage } from "./token-deleted.js";
 
 const EXTENSION_VERSION = "0.0.0";
@@ -71,7 +72,11 @@ obr.onReady(async () => {
       syncError = undefined;
       render();
     },
-    { onTokenDeleted: (id) => sendToBridge(tokenDeletedMessage(id)) },
+    {
+      onTokenDeleted: (id) => sendToBridge(tokenDeletedMessage(id)),
+      onTokenArt: (monsterKey, art) =>
+        sendToBridge(tokenArtMessage(monsterKey, art)),
+    },
   );
   const socket = new ReconnectingSocket({
     url: `ws://${location.host}/ws`,

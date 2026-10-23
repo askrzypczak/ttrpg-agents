@@ -206,6 +206,7 @@ describe("token-art-set over the bridge", () => {
     await setArtAndAwaitSnapshot(client, "shadow", shadowArt);
     client.ws.close();
     await first.close();
+    servers.splice(servers.indexOf(first), 1);
     db.close();
 
     openStore();

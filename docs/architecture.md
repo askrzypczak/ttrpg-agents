@@ -21,7 +21,7 @@ flowchart LR
     bclient["bridge client"]
   end
   mcp --> uc
-  bsrv -->|"reads EncounterRepository"| ports
+  bsrv -->|"reads EncounterRepository, reads and writes TokenArtRepository"| ports
   uc --> ports
   ports -.implemented by.-> store
   ports -.implemented by.-> srd
@@ -31,7 +31,7 @@ flowchart LR
   bsrv <-->|"WebSocket + token"| ext["Owlbear extension (protocol)"]
 ```
 
-The bridge is both sides: the server reads the encounter through the `EncounterRepository` port to push snapshots, and the client is the driven end of `TablePort`. The mcp-to-bridge arrow in the runtime diagram below is made by the bridge client adapter that `mcp/src/stdio.ts` wires in. The channel is read-only by rule: it carries queries only, and the agent changes the game through the engine's model (see the rule in [`CLAUDE.md`](../CLAUDE.md)).
+The bridge is both sides: the server reads the encounter through the `EncounterRepository` port and the token art through `TokenArtRepository` to push snapshots, and stores the art the extension sends, and the client is the driven end of `TablePort`. The mcp-to-bridge arrow in the runtime diagram below is made by the bridge client adapter that `mcp/src/stdio.ts` wires in. The channel is read-only by rule: it carries queries only, and the agent changes the game through the engine's model (see the rule in [`CLAUDE.md`](../CLAUDE.md)).
 
 ## Runtime (processes)
 
@@ -55,7 +55,7 @@ flowchart LR
 
 ## Shared database
 
-Both processes use one SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else `~/.local/share/ttrpg-agents/encounters.db`. The MCP server writes. The bridge reads, and removes one instance when the extension reports (`token-deleted`) that the GM deleted its token.
+Both processes use one SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else `~/.local/share/ttrpg-agents/encounters.db`. The MCP server writes. The bridge reads, removes one instance when the extension reports (`token-deleted`) that the GM deleted its token, and stores the image the GM picked for a monster type (`token-art-set`, table `token_art`).
 
 ## Token and auth
 
@@ -67,7 +67,7 @@ Both processes use one SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DA
 
 ## Queries to the table
 
-The bridge otherwise only pushes. To let the agent ask the table something (first use: `table_status`), the MCP tool calls the engine's `getTableStatus`, which asks the `TablePort`; the bridge client (`@ttrpg-agents/bridge/client`, wired in by `mcp/src/stdio.ts`) implements the port and calls `POST /agent/query` on the bridge with `Authorization: Bearer <agent token>` and a JSON query (`{"name":"scene-status"}`). The channel is read-only by rule: a query never changes the table. The route has no CORS headers, keeps the Host check, and caps the body at 1 MiB.
+Apart from the extension's write-backs (`token-deleted`, `token-art-set`), the bridge only pushes. To let the agent ask the table something (first use: `table_status`), the MCP tool calls the engine's `getTableStatus`, which asks the `TablePort`; the bridge client (`@ttrpg-agents/bridge/client`, wired in by `mcp/src/stdio.ts`) implements the port and calls `POST /agent/query` on the bridge with `Authorization: Bearer <agent token>` and a JSON query (`{"name":"scene-status"}`). The channel is read-only by rule: a query never changes the table. The route has no CORS headers, keeps the Host check, and caps the body at 1 MiB.
 
 1. The bridge sends the query as a `query` message with a fresh id to the one active extension client.
 2. The extension answers with a `query-result` carrying the same id (or a non-fatal `error` with that id if the handler threw). A reply with another or no id does not complete the call; the bridge answers it with a non-fatal `error`.
@@ -83,7 +83,7 @@ The bridge polls `PRAGMA data_version` every 250 ms. When another process commit
 
 The extension (GM role only) reconciles the scene against the latest encounter. It keeps the instances from the last snapshot, folded with the `encounter-event` messages, and fixes the difference with the scene on every snapshot, event, scene-ready change and retry after a failed apply (backoff). Nothing touches the scene until it is ready.
 
-- **Tokens.** Our tokens carry the metadata key `com.ttrpg-agents/instance`; anything else on the scene is never touched. By default each instance is a hidden circle SHAPE token. Per-feature values are set by projectors (`owned` or `create-only`) and written one metadata key at a time, so other extensions' keys survive.
+- **Tokens.** Our tokens carry the metadata key `com.ttrpg-agents/instance`; anything else on the scene is never touched. By default each instance is a hidden IMAGE token drawn with the art the GM picked from their Owlbear asset library for its monster type (asked once per type, when a token is first created for it, then remembered in the database), or a hidden circle SHAPE token when there is no art (no usable pick: cancel, picker error or invalid image; tokens that already exist are not re-skinned). Per-feature values are set by projectors (`owned` or `create-only`) and written one metadata key at a time, so other extensions' keys survive.
 - **The table wins.** Each token records the value last written for every `owned` key (metadata key `com.ttrpg-agents/synced`). A value is pushed only when the encounter changed since then. A table edit stands until the encounter's value changes again, and then the encounter overwrites it.
 - **Deleted tokens stay deleted.** The scene metadata key `com.ttrpg-agents/placed` lists the instances already placed on the scene, so a token the GM deleted is not recreated. A scene with no record is populated.
 - **Token deletion is written back.** A deleted token (a wanted instance in `placed` with no token) is reported to the bridge, which removes the instance from the store and replies with a fresh snapshot, so the `placed` record is pruned. Table edits do not reach the store yet (open ticket #162).

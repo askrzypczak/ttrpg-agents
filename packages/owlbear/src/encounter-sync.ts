@@ -1,4 +1,4 @@
-import type { TokenArt } from "@ttrpg-agents/engine";
+import { tokenArtSchema, type TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
@@ -90,6 +90,10 @@ export function createEncounterSync(
   let tail: Promise<void> = Promise.resolve();
   let retry: unknown = null;
   let attempt = 0;
+  // Monster key -> art, from the snapshots and the GM's picks this session.
+  let art: Record<string, TokenArt> = {};
+  // Monster types the GM declined (or whose pick was unusable) this session.
+  const declined = new Set<string>();
   // Deleted tokens already reported since the last snapshot.
   const reported = new Set<string>();
   // Item changes coalesce: at most one quiet reconcile is `queued`. Changes
@@ -112,6 +116,19 @@ export function createEncounterSync(
     }
   }
 
+  /** The GM's pick, or `undefined` for a cancel, an error or an unusable image. */
+  async function pickArt(): Promise<TokenArt | undefined> {
+    try {
+      const picked = await obr.pickImage();
+      if (picked === undefined) return undefined;
+      const parsed = tokenArtSchema.safeParse(picked);
+      return parsed.success ? parsed.data : undefined;
+      // Stryker disable next-line BlockStatement: equivalent, falling out of the catch also returns undefined
+    } catch {
+      return undefined;
+    }
+  }
+
   async function apply(wanted: EncounterInstance[]): Promise<string[]> {
     const items = await obr.getItems();
     const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
@@ -120,11 +137,27 @@ export function createEncounterSync(
         ? stored.filter((id): id is string => typeof id === "string")
         : [],
     );
-    const plan = planSync(wanted, items, defaultSyncConfig, {
+    const context = {
       viewportCenter: await obr.getViewportCenter(),
       placed,
-      art: {},
-    });
+    };
+    let plan = planSync(wanted, items, defaultSyncConfig, { ...context, art });
+    // Ask once per new monster type, before anything is written, so its
+    // tokens are created once with the right look.
+    let picked = false;
+    for (const monsterKey of plan.needsArt) {
+      if (declined.has(monsterKey)) continue;
+      const chosen = await pickArt();
+      if (chosen === undefined) {
+        declined.add(monsterKey);
+        continue;
+      }
+      art = { ...art, [monsterKey]: chosen };
+      picked = true;
+      options.onTokenArt?.(monsterKey, chosen);
+    }
+    if (picked)
+      plan = planSync(wanted, items, defaultSyncConfig, { ...context, art });
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
     // Before the metadata write, so a failed rename leaves the baseline
@@ -217,6 +250,7 @@ export function createEncounterSync(
     handleMessage(message) {
       if (message.type === "encounter-snapshot") {
         desired = message.payload.instances;
+        art = { ...art, ...message.payload.art };
         reported.clear();
       } else if (message.type === "encounter-event") {
         if (desired === null) return Promise.resolve();
