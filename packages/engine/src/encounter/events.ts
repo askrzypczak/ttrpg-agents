@@ -64,8 +64,8 @@ function emitHp(emitter: EncounterEmitter, { after }: HpChange): void {
 
 /**
  * Wraps a repository so every successful mutation emits an event afterwards,
- * except renameInstance and setInitiative (the bridge syncs those by
- * snapshot). Failed calls (throws) emit nothing.
+ * except renameInstance, setInitiative and setArmorClass (the bridge syncs
+ * those by snapshot). Failed calls (throws) emit nothing.
  */
 export function observeRepository(
   repo: EncounterRepository,
@@ -100,15 +100,18 @@ export function observeRepository(
     renameInstance: (id, name) => repo.renameInstance(id, name),
     // Snapshot-only: setting initiative emits no event.
     setInitiative: (id, initiative) => repo.setInitiative(id, initiative),
-    setHp() {
-      throw new Error("not implemented");
+    setHp(id, hp) {
+      const change = repo.setHp(id, hp);
+      emitHp(emitter, change);
+      return change;
     },
-    setMaxHp() {
-      throw new Error("not implemented");
+    setMaxHp(id, maxHp) {
+      const change = repo.setMaxHp(id, maxHp);
+      emitHp(emitter, change);
+      return change;
     },
-    setArmorClass() {
-      throw new Error("not implemented");
-    },
+    // Snapshot-only: setting armor class emits no event.
+    setArmorClass: (id, armorClass) => repo.setArmorClass(id, armorClass),
     clearEncounter() {
       repo.clearEncounter();
       emitter.emit({ type: "cleared" });

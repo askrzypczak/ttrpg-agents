@@ -1,10 +1,14 @@
+import { InvalidAmountError, InvalidArmorClassError } from "./errors.js";
+
 /**
  * Validates an absolute current HP value and clamps it to 0..maxHp. Throws
  * InvalidAmountError if `hp` is not an integer.
  */
 export function clampHp(hp: number, maxHp: number): number {
-  void [hp, maxHp];
-  throw new Error("not implemented");
+  if (!Number.isInteger(hp)) {
+    throw new InvalidAmountError(`hp must be an integer, got ${String(hp)}`);
+  }
+  return Math.min(maxHp, Math.max(0, hp));
 }
 
 /**
@@ -16,8 +20,13 @@ export function resizeMaxHp(
   currentHp: number,
   newMaxHp: number,
 ): { maxHp: number; currentHp: number } {
-  void [currentHp, newMaxHp];
-  throw new Error("not implemented");
+  if (!Number.isInteger(newMaxHp)) {
+    throw new InvalidAmountError(
+      `maxHp must be an integer, got ${String(newMaxHp)}`,
+    );
+  }
+  const maxHp = Math.max(1, newMaxHp);
+  return { maxHp, currentHp: Math.min(currentHp, maxHp) };
 }
 
 /**
@@ -25,6 +34,10 @@ export function resizeMaxHp(
  * InvalidArmorClassError if `armorClass` is not an integer.
  */
 export function clampArmorClass(armorClass: number): number {
-  void armorClass;
-  throw new Error("not implemented");
+  if (!Number.isInteger(armorClass)) {
+    throw new InvalidArmorClassError(
+      `armor class must be an integer, got ${String(armorClass)}`,
+    );
+  }
+  return Math.max(0, armorClass);
 }
