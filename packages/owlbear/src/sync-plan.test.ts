@@ -590,6 +590,68 @@ describe("planSync initiative tracker", () => {
     );
     expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
   });
+
+  it("planSync pushes a changed initiative count and keeps active true on the token", () => {
+    const observed = [
+      token(1, {
+        [INITIATIVE_METADATA_KEY]: { count: "10", active: true },
+        [SYNCED_METADATA_KEY]: {
+          ...linkBaseline(1),
+          [INITIATIVE_METADATA_KEY]: tracker("10"),
+        },
+      }),
+    ];
+    const plan = planSync(
+      [inst(1, { initiative: 14 })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(
+      plan.update.filter(
+        (u) => u.id === "token-1" && u.key === INITIATIVE_METADATA_KEY,
+      ),
+    ).toEqual([
+      {
+        id: "token-1",
+        key: INITIATIVE_METADATA_KEY,
+        value: { count: "14", active: true },
+      },
+    ]);
+    const after = applyUpdates(observed, plan);
+    expect(metadataOf(after, "token-1")[INITIATIVE_METADATA_KEY]).toEqual({
+      count: "14",
+      active: true,
+    });
+    expect(syncedAfter(observed, plan, "token-1")).toEqual({
+      ...linkBaseline(1),
+      [INITIATIVE_METADATA_KEY]: tracker("14"),
+    });
+  });
+
+  it("planSync leaves a tracker-side count edit alone while the encounter initiative is unchanged, even after the token became active", () => {
+    const observed = [
+      token(1, {
+        [INITIATIVE_METADATA_KEY]: { count: "20", active: true },
+        [SYNCED_METADATA_KEY]: {
+          ...linkBaseline(1),
+          [INITIATIVE_METADATA_KEY]: tracker("10"),
+        },
+      }),
+    ];
+    const plan = planSync(
+      [inst(1, { initiative: 10 })],
+      observed,
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(plan.update).toEqual([]);
+    const after = applyUpdates(observed, plan);
+    expect(metadataOf(after, "token-1")[INITIATIVE_METADATA_KEY]).toEqual({
+      count: "20",
+      active: true,
+    });
+  });
 });
 
 describe("rowPositions", () => {

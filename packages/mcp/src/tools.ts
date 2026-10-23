@@ -294,6 +294,25 @@ const renameMonsterTool = defineTool({
   },
 });
 
+const setInitiativeTool = defineTool({
+  name: "set_initiative",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's initiative to an exact value. Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), initiative: z.number().int() },
+  run(ctx, { target, initiative }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Stryker disable next-line ConditionalExpression: equivalent, resolveTargets throws for an unknown target
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const before = instance.initiative;
+    const updated = ctx.repo.setInitiative(instance.id, initiative);
+    return ok(
+      `${updated.displayName}: initiative ${String(before ?? "unset")} -> ${String(updated.initiative)}`,
+      { instance: instanceView(updated), before },
+    );
+  },
+});
+
 const clearEncounterTool = defineTool({
   name: "clear_encounter",
   annotations: { destructiveHint: true },
@@ -346,6 +365,7 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("heal"),
   removeMonstersTool,
   renameMonsterTool,
+  setInitiativeTool,
   clearEncounterTool,
   tableStatusTool,
 ];

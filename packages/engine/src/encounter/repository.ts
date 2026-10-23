@@ -38,6 +38,13 @@ export interface EncounterRepository {
    * instance has; nothing changes on a throw.
    */
   renameInstance(id: string, name: string): MonsterInstance;
+  /**
+   * Sets the absolute initiative of an instance of the active encounter in one
+   * transaction and returns it updated. Throws InvalidInitiativeError for a
+   * non-integer value, UnknownInstanceError for an id not in the active
+   * encounter; nothing changes on a throw.
+   */
+  setInitiative(id: string, initiative: number): MonsterInstance;
   /** Deletes all instances of the active encounter. */
   clearEncounter(): void;
   /** Instances of the active encounter, ordered by creation. */

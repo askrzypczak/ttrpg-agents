@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { openDatabase } from "./db.js";
 import {
   InvalidAmountError,
+  InvalidInitiativeError,
   InvalidNameError,
   UnknownInstanceError,
 } from "@ttrpg-agents/engine";
@@ -246,6 +247,41 @@ describe("renameInstance", () => {
         .get(old!.id),
     ).toEqual({ display_name: "Old" });
     expect(repo.listInstances().map((i) => i.displayName)).toEqual(["New"]);
+  });
+});
+
+describe("setInitiative", () => {
+  it("setInitiative stores an integer, including zero and negative values, and returns the updated instance", () => {
+    const [a, b] = repo.addInstances(() => [
+      goblin({ displayName: "Goblin 1", initiative: 12 }),
+      goblin({ displayName: "Goblin 2", initiative: 9 }),
+    ]);
+    for (const value of [17, 0, -3]) {
+      const updated = repo.setInitiative(a!.id, value);
+      expect(updated, String(value)).toEqual({ ...a, initiative: value });
+      expect(repo.listInstances(), String(value)).toEqual([updated, b]);
+    }
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setInitiative on an unknown id throws UnknownInstanceError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin({ initiative: 12 })]);
+    expect(() => repo.setInitiative("nope", 5)).toThrow(UnknownInstanceError);
+    expect(repo.listInstances()).toEqual(added);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setInitiative rejects fractional, NaN and infinite values with InvalidInitiativeError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin({ initiative: 12 })]);
+    const id = added[0]!.id;
+    for (const bad of [1.5, -0.5, Number.NaN, Infinity, -Infinity]) {
+      expect(() => repo.setInitiative(id, bad), String(bad)).toThrow(
+        InvalidInitiativeError,
+      );
+    }
+    expect(repo.listInstances()).toEqual(added);
+    expect(repo.listInstances()[0]!.initiative).toBe(12);
+    expect(db.isTransaction).toBe(false);
   });
 });
 
