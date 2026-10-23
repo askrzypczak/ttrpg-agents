@@ -197,7 +197,13 @@ export function addMonsters(
           // Clamp to 1; the logged roll keeps the raw total, so it can differ from maxHp.
           maxHp = Math.max(1, result.total);
         }
-        items.push({ monsterKey: monster.key, displayName, maxHp, groupId });
+        items.push({
+          monsterKey: monster.key,
+          displayName,
+          maxHp,
+          armorClass: monster.ac,
+          groupId,
+        });
         hpModes.push(hpMode);
         acs.push(monster.ac);
       }

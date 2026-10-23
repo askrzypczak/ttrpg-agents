@@ -1,18 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 
-const inst = (n: number) => ({
-  id: `i${n}`,
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: `Shadow ${n}`,
-  maxHp: 16,
-  currentHp: 16,
-  initiative: null,
-  groupId: null,
-  createdAt: n,
-});
+const inst = (n: number) =>
+  makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
 
 describe("appliedInstanceCount", () => {
   it("an hp-changed event leaves the count unchanged", async () => {

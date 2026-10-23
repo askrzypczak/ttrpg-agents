@@ -30,6 +30,10 @@ export const migrations: Migration[] = [
       CREATE INDEX monster_instances_encounter ON monster_instances (encounter_id);
     `,
   },
+  {
+    version: 2,
+    sql: "ALTER TABLE monster_instances ADD COLUMN armor_class INTEGER;",
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

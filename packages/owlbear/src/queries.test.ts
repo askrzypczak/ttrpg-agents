@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { PROTOCOL_VERSION, type QueryResult } from "@ttrpg-agents/protocol";
 import { queryReply, handleQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
@@ -6,17 +7,8 @@ import { createFakeObr } from "./fake-adapter.js";
 import { SceneModel, type SceneItem } from "./scene-model.js";
 import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
 
-const inst = (n: number): EncounterInstance => ({
-  id: `i${n}`,
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: `Shadow ${n}`,
-  maxHp: 16,
-  currentHp: 16,
-  initiative: null,
-  groupId: null,
-  createdAt: n,
-});
+const inst = (n: number): EncounterInstance =>
+  makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
 
 const foreign: SceneItem = {
   id: "map",

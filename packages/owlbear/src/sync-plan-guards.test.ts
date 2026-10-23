@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { SceneItem } from "./scene-model.js";
 import {
   INSTANCE_METADATA_KEY,
@@ -11,17 +12,7 @@ import {
   type SyncConfig,
 } from "./sync-plan.js";
 
-const instance: EncounterInstance = {
-  id: "i1",
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: "Shadow 1",
-  maxHp: 16,
-  currentHp: 16,
-  initiative: null,
-  groupId: null,
-  createdAt: 1,
-};
+const instance: EncounterInstance = makeTestInstance();
 
 const KEY = "test.ext/value";
 const context = { viewportCenter: { x: 0, y: 0 }, placed: new Set<string>() };

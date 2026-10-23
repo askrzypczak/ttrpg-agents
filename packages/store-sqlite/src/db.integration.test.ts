@@ -3,8 +3,14 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { defaultDbPath, openDatabase } from "./db.js";
-import { LATEST_VERSION, getUserVersion, migrate } from "./migrations.js";
+import {
+  LATEST_VERSION,
+  getUserVersion,
+  migrate,
+  migrations,
+} from "./migrations.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const dirs: string[] = [];
@@ -68,6 +74,43 @@ describe("migrations", () => {
     });
     a.close();
     b.close();
+  });
+
+  it("a version 1 database migrates to the latest version keeping its instances with a null armorClass", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version === 1)) {
+      db.exec(m.sql);
+    }
+    db.exec("PRAGMA user_version = 1");
+    db.exec(
+      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+    );
+    db.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, group_id, created_at)
+       VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 'g1', 200)`,
+    );
+
+    migrate(db);
+
+    expect(LATEST_VERSION).toBeGreaterThan(1);
+    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    const columns = (
+      db.prepare("PRAGMA table_info(monster_instances)").all() as {
+        name: string;
+      }[]
+    ).map((c) => c.name);
+    expect(columns).toContain("armor_class");
+    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+      makeTestInstance({
+        currentHp: 9,
+        initiative: 12,
+        groupId: "g1",
+        createdAt: 200,
+      }),
+    ]);
+    db.close();
   });
 
   it("persists data across reopen of a file-backed database", () => {

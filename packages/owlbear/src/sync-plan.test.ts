@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { INITIATIVE_METADATA_KEY } from "./initiative.js";
 import type { SceneItem } from "./scene-model.js";
 import {
@@ -17,18 +18,13 @@ import {
 const inst = (
   n: number,
   over: Partial<EncounterInstance> = {},
-): EncounterInstance => ({
-  id: `i${n}`,
-  encounterId: "e1",
-  monsterKey: "shadow",
-  displayName: `Shadow ${n}`,
-  maxHp: 16,
-  currentHp: 16,
-  initiative: null,
-  groupId: null,
-  createdAt: n,
-  ...over,
-});
+): EncounterInstance =>
+  makeTestInstance({
+    id: `i${n}`,
+    displayName: `Shadow ${n}`,
+    createdAt: n,
+    ...over,
+  });
 
 const HP_KEY = "test.ext/hp";
 const NOTE_KEY = "test.ext/note";

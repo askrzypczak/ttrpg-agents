@@ -12,5 +12,6 @@ export type {
 export * from "./add-monsters.js";
 export * from "./events.js";
 export * from "./errors.js";
+export * from "./hp.js";
 export * from "./queries.js";
 export * from "./rename.js";

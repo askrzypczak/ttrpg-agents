@@ -4,6 +4,9 @@ import {
   InvalidAmountError,
   InvalidInitiativeError,
   UnknownInstanceError,
+  clampArmorClass,
+  clampHp,
+  resizeMaxHp,
   validateInstanceName,
 } from "@ttrpg-agents/engine";
 import type {
@@ -27,6 +30,7 @@ interface InstanceRow {
   max_hp: number;
   current_hp: number;
   initiative: number | null;
+  armor_class: number | null;
   group_id: string | null;
   created_at: number;
 }
@@ -43,6 +47,7 @@ function toInstance(row: InstanceRow): MonsterInstance {
     maxHp: row.max_hp,
     currentHp: row.current_hp,
     initiative: row.initiative,
+    armorClass: row.armor_class,
     groupId: row.group_id,
     createdAt: row.created_at,
   };
@@ -86,8 +91,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const items = build(names);
       const insert = this.db.prepare(
         `INSERT INTO monster_instances
-          (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, group_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const created: MonsterInstance[] = [];
       for (const item of items) {
@@ -105,6 +110,14 @@ export class SqliteEncounterRepository implements EncounterRepository {
             `initiative must be an integer or null, got ${String(item.initiative)}`,
           );
         }
+        if (
+          item.armorClass != null &&
+          (!Number.isInteger(item.armorClass) || item.armorClass < 0)
+        ) {
+          throw new RangeError(
+            `armorClass must be a non-negative integer or null, got ${String(item.armorClass)}`,
+          );
+        }
         const instance: MonsterInstance = {
           id: this.newId(),
           encounterId: encounter.id,
@@ -113,6 +126,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           maxHp: item.maxHp,
           currentHp: item.maxHp,
           initiative: item.initiative ?? null,
+          armorClass: item.armorClass ?? null,
           groupId: item.groupId ?? null,
           createdAt: this.now(),
         };
@@ -124,6 +138,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           instance.maxHp,
           instance.currentHp,
           instance.initiative,
+          instance.armorClass,
           instance.groupId,
           instance.createdAt,
         );
@@ -195,6 +210,69 @@ export class SqliteEncounterRepository implements EncounterRepository {
         .prepare("UPDATE monster_instances SET initiative = ? WHERE id = ?")
         .run(initiative, id);
       return toInstance({ ...row, initiative });
+    });
+  }
+
+  setHp(id: string, hp: number): HpChange {
+    return this.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
+        .get(id) as InstanceRow | undefined;
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      const currentHp = clampHp(hp, row.max_hp);
+      this.db
+        .prepare("UPDATE monster_instances SET current_hp = ? WHERE id = ?")
+        .run(currentHp, id);
+      return {
+        before: toInstance(row),
+        after: toInstance({ ...row, current_hp: currentHp }),
+      };
+    });
+  }
+
+  setMaxHp(id: string, maxHp: number): HpChange {
+    return this.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
+        .get(id) as InstanceRow | undefined;
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      const resized = resizeMaxHp(row.current_hp, maxHp);
+      this.db
+        .prepare(
+          "UPDATE monster_instances SET max_hp = ?, current_hp = ? WHERE id = ?",
+        )
+        .run(resized.maxHp, resized.currentHp, id);
+      return {
+        before: toInstance(row),
+        after: toInstance({
+          ...row,
+          max_hp: resized.maxHp,
+          current_hp: resized.currentHp,
+        }),
+      };
+    });
+  }
+
+  setArmorClass(id: string, armorClass: number): MonsterInstance {
+    return this.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
+        .get(id) as InstanceRow | undefined;
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      const value = clampArmorClass(armorClass);
+      this.db
+        .prepare("UPDATE monster_instances SET armor_class = ? WHERE id = ?")
+        .run(value, id);
+      return toInstance({ ...row, armor_class: value });
     });
   }
 

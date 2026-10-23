@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeTestInstance } from "../testing/index.js";
 import { InvalidNameError } from "./errors.js";
 import {
   createEncounterEmitter,
@@ -37,17 +38,7 @@ describe("validateInstanceName", () => {
 
 describe("observeRepository", () => {
   it("`observeRepository.renameInstance` delegates and returns the repo's result without emitting", () => {
-    const renamed: MonsterInstance = {
-      id: "i1",
-      encounterId: "e1",
-      monsterKey: "shadow",
-      displayName: "Boss",
-      maxHp: 16,
-      currentHp: 16,
-      initiative: null,
-      groupId: null,
-      createdAt: 1,
-    };
+    const renamed: MonsterInstance = makeTestInstance({ displayName: "Boss" });
     const calls: [string, string][] = [];
     const unexpected = () => {
       throw new Error("unexpected call");
@@ -61,6 +52,9 @@ describe("observeRepository", () => {
       clearEncounter: unexpected,
       listInstances: unexpected,
       setInitiative: unexpected,
+      setHp: unexpected,
+      setMaxHp: unexpected,
+      setArmorClass: unexpected,
       renameInstance: (id, name) => {
         calls.push([id, name]);
         return renamed;

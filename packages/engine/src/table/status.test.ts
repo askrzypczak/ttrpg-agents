@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MonsterInstance } from "../encounter/types.js";
+import { makeTestInstance } from "../testing/index.js";
 import {
   TableUnavailableError,
   getTableStatus,
@@ -8,17 +9,15 @@ import {
 } from "./index.js";
 
 function inst(i: number): MonsterInstance {
-  return {
+  return makeTestInstance({
     id: `id-${String(i)}`,
     encounterId: "enc",
     monsterKey: "srd-2024_shadow",
     displayName: `Shadow ${String(i)}`,
     maxHp: 10,
     currentHp: 10,
-    initiative: null,
-    groupId: null,
     createdAt: 1000 + i,
-  };
+  });
 }
 
 /** Fake repo holding `count` instances. */
