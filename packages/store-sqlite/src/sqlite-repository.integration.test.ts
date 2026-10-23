@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { openDatabase } from "./db.js";
 import {
   InvalidAmountError,
+  InvalidArmorClassError,
   InvalidInitiativeError,
   InvalidNameError,
   UnknownInstanceError,
@@ -281,6 +282,174 @@ describe("setInitiative", () => {
     }
     expect(repo.listInstances()).toEqual(added);
     expect(repo.listInstances()[0]!.initiative).toBe(12);
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("setHp", () => {
+  it("setHp stores an absolute value and returns before and after", () => {
+    const [a, b] = repo.addInstances(() => [
+      goblin({ displayName: "Goblin 1" }),
+      goblin({ displayName: "Goblin 2" }),
+    ]);
+    const change = repo.setHp(a!.id, 3);
+    expect(change.before).toEqual(a);
+    expect(change.after).toEqual({ ...a, currentHp: 3 });
+    expect(repo.listInstances()).toEqual([change.after, b]);
+    const raised = repo.setHp(a!.id, 6);
+    expect(raised.before.currentHp).toBe(3);
+    expect(raised.after).toEqual({ ...a, currentHp: 6 });
+    expect(repo.listInstances()).toEqual([raised.after, b]);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setHp clamps to 0 and to max HP in the store", () => {
+    const [m] = repo.addInstances(() => [goblin()]);
+    const low = repo.setHp(m!.id, -4);
+    expect(low.after.currentHp).toBe(0);
+    expect(repo.listInstances()[0]!.currentHp).toBe(0);
+    const high = repo.setHp(m!.id, 50);
+    expect(high.before.currentHp).toBe(0);
+    expect(high.after.currentHp).toBe(7);
+    expect(repo.listInstances()[0]!.currentHp).toBe(7);
+  });
+
+  it("setHp on an unknown id throws UnknownInstanceError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin()]);
+    expect(() => repo.setHp("nope", 3)).toThrow(UnknownInstanceError);
+    expect(repo.listInstances()).toEqual(added);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setHp with a non-integer throws InvalidAmountError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin()]);
+    const id = added[0]!.id;
+    for (const bad of [1.5, -0.5, Number.NaN, Infinity, -Infinity]) {
+      expect(() => repo.setHp(id, bad), String(bad)).toThrow(
+        InvalidAmountError,
+      );
+    }
+    expect(repo.listInstances()).toEqual(added);
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("setMaxHp", () => {
+  it("setMaxHp stores the value, keeps current HP when it fits and returns before and after", () => {
+    const [a, b] = repo.addInstances(() => [
+      goblin({ displayName: "Goblin 1" }),
+      goblin({ displayName: "Goblin 2" }),
+    ]);
+    const raised = repo.setMaxHp(a!.id, 12);
+    expect(raised.before).toEqual(a);
+    expect(raised.after).toEqual({ ...a, maxHp: 12, currentHp: 7 });
+    expect(repo.listInstances()).toEqual([raised.after, b]);
+    repo.setHp(a!.id, 4);
+    const lowered = repo.setMaxHp(a!.id, 5);
+    expect(lowered.before).toEqual({ ...a, maxHp: 12, currentHp: 4 });
+    expect(lowered.after).toEqual({ ...a, maxHp: 5, currentHp: 4 });
+    expect(repo.listInstances()).toEqual([lowered.after, b]);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setMaxHp lowers current HP in the store when the new max is below it", () => {
+    const [m] = repo.addInstances(() => [goblin()]);
+    const change = repo.setMaxHp(m!.id, 3);
+    expect(change.before).toEqual(m);
+    expect(change.after).toEqual({ ...m, maxHp: 3, currentHp: 3 });
+    expect(repo.listInstances()).toEqual([change.after]);
+    const floored = repo.setMaxHp(m!.id, 0);
+    expect(floored.after).toEqual({ ...m, maxHp: 1, currentHp: 1 });
+    expect(repo.listInstances()).toEqual([floored.after]);
+  });
+
+  it("setMaxHp with a non-integer throws InvalidAmountError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin()]);
+    const id = added[0]!.id;
+    for (const bad of [1.5, -0.5, Number.NaN, Infinity, -Infinity]) {
+      expect(() => repo.setMaxHp(id, bad), String(bad)).toThrow(
+        InvalidAmountError,
+      );
+    }
+    expect(repo.listInstances()).toEqual(added);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setMaxHp on an unknown id throws UnknownInstanceError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin()]);
+    expect(() => repo.setMaxHp("nope", 12)).toThrow(UnknownInstanceError);
+    expect(repo.listInstances()).toEqual(added);
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("setArmorClass", () => {
+  it("setArmorClass stores an integer and returns the updated instance", () => {
+    const [a, b] = repo.addInstances(() => [
+      goblin({ displayName: "Goblin 1", armorClass: 15 }),
+      goblin({ displayName: "Goblin 2", armorClass: 15 }),
+    ]);
+    for (const value of [17, 0, 12]) {
+      const updated = repo.setArmorClass(a!.id, value);
+      expect(updated, String(value)).toEqual({ ...a, armorClass: value });
+      expect(repo.listInstances(), String(value)).toEqual([updated, b]);
+    }
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setArmorClass clamps a negative value to 0 in the store", () => {
+    const [m] = repo.addInstances(() => [goblin({ armorClass: 15 })]);
+    const updated = repo.setArmorClass(m!.id, -3);
+    expect(updated).toEqual({ ...m, armorClass: 0 });
+    expect(repo.listInstances()).toEqual([updated]);
+  });
+
+  it("setArmorClass with a non-integer throws InvalidArmorClassError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin({ armorClass: 15 })]);
+    const id = added[0]!.id;
+    for (const bad of [1.5, -0.5, Number.NaN, Infinity, -Infinity]) {
+      expect(() => repo.setArmorClass(id, bad), String(bad)).toThrow(
+        InvalidArmorClassError,
+      );
+    }
+    expect(repo.listInstances()).toEqual(added);
+    expect(repo.listInstances()[0]!.armorClass).toBe(15);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setArmorClass on an unknown id throws UnknownInstanceError and changes nothing", () => {
+    const added = repo.addInstances(() => [goblin({ armorClass: 15 })]);
+    expect(() => repo.setArmorClass("nope", 12)).toThrow(UnknownInstanceError);
+    expect(repo.listInstances()).toEqual(added);
+    expect(repo.listInstances()[0]!.armorClass).toBe(15);
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("armor class on insert", () => {
+  it("addInstances stores the given armorClass and null when none is given", () => {
+    const added = repo.addInstances(() => [
+      goblin({ displayName: "A", armorClass: 15 }),
+      goblin({ displayName: "B", armorClass: 0 }),
+      goblin({ displayName: "C", armorClass: null }),
+      goblin({ displayName: "D" }),
+    ]);
+    expect(added.map((i) => i.armorClass)).toEqual([15, 0, null, null]);
+    expect(repo.listInstances()).toEqual(added);
+  });
+
+  it("addInstances rejects a negative or non-integer armorClass with RangeError and stores nothing", () => {
+    for (const bad of [-1, 1.5, Number.NaN, Infinity, "13"]) {
+      expect(
+        () =>
+          repo.addInstances(() => [
+            goblin({ armorClass: 15 }),
+            goblin({ armorClass: bad as unknown as number }),
+          ]),
+        String(bad),
+      ).toThrow(RangeError);
+    }
+    expect(repo.listInstances()).toEqual([]);
     expect(db.isTransaction).toBe(false);
   });
 });

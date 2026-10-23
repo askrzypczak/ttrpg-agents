@@ -226,6 +226,21 @@ describe("addMonsters", () => {
     expect(init?.timestamp).toBe("2026-01-01T00:00:00.000Z");
   });
 
+  it("addMonsters stores the statblock armor class on each instance", () => {
+    expect(shadow.ac).not.toBe(goblin.ac);
+    const { instances } = addMonsters(deps(), [
+      { monster: SHADOW, count: 2, hp: "average" },
+      { monster: GOBLIN, count: 1, hp: "average" },
+    ]);
+    const stored = repo.listInstances();
+    expect(stored.map((s) => s.id)).toEqual(instances.map((i) => i.id));
+    expect(stored.map((s) => s.armorClass)).toEqual([
+      shadow.ac,
+      shadow.ac,
+      goblin.ac,
+    ]);
+  });
+
   it("clamps rolled HP to 1 but logs the raw total", () => {
     const weak = {
       ...shadow,

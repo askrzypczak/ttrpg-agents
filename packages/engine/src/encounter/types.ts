@@ -14,6 +14,7 @@ export const monsterInstanceSchema = z.object({
   maxHp: z.number(),
   currentHp: z.number(),
   initiative: z.number().nullable(),
+  armorClass: z.number().nullable(),
   groupId: z.string().nullable(),
   createdAt: z.number(),
 });
@@ -26,5 +27,6 @@ export interface NewMonsterInstance {
   displayName: string;
   maxHp: number;
   initiative?: number | null;
+  armorClass?: number | null;
   groupId?: string | null;
 }

@@ -16,6 +16,7 @@ function inst(
     maxHp: 7,
     currentHp: 7,
     initiative,
+    armorClass: null,
     groupId: null,
     createdAt,
   };

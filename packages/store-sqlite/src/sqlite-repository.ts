@@ -43,6 +43,7 @@ function toInstance(row: InstanceRow): MonsterInstance {
     maxHp: row.max_hp,
     currentHp: row.current_hp,
     initiative: row.initiative,
+    armorClass: null,
     groupId: row.group_id,
     createdAt: row.created_at,
   };
@@ -113,6 +114,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           maxHp: item.maxHp,
           currentHp: item.maxHp,
           initiative: item.initiative ?? null,
+          armorClass: null,
           groupId: item.groupId ?? null,
           createdAt: this.now(),
         };
@@ -196,6 +198,21 @@ export class SqliteEncounterRepository implements EncounterRepository {
         .run(initiative, id);
       return toInstance({ ...row, initiative });
     });
+  }
+
+  setHp(id: string, hp: number): HpChange {
+    void [id, hp];
+    throw new Error("not implemented");
+  }
+
+  setMaxHp(id: string, maxHp: number): HpChange {
+    void [id, maxHp];
+    throw new Error("not implemented");
+  }
+
+  setArmorClass(id: string, armorClass: number): MonsterInstance {
+    void [id, armorClass];
+    throw new Error("not implemented");
   }
 
   clearEncounter(): void {

@@ -100,6 +100,15 @@ export function observeRepository(
     renameInstance: (id, name) => repo.renameInstance(id, name),
     // Snapshot-only: setting initiative emits no event.
     setInitiative: (id, initiative) => repo.setInitiative(id, initiative),
+    setHp() {
+      throw new Error("not implemented");
+    },
+    setMaxHp() {
+      throw new Error("not implemented");
+    },
+    setArmorClass() {
+      throw new Error("not implemented");
+    },
     clearEncounter() {
       repo.clearEncounter();
       emitter.emit({ type: "cleared" });

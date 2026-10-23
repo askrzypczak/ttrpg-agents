@@ -87,6 +87,7 @@ describe("broadcastSnapshotsOnChange", () => {
     maxHp: 16,
     currentHp: 16,
     initiative: null,
+    armorClass: null,
     groupId: null,
     createdAt: 0,
   };

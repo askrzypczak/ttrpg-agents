@@ -16,6 +16,7 @@ function inst(i: number): MonsterInstance {
     maxHp: 10,
     currentHp: 10,
     initiative: null,
+    armorClass: null,
     groupId: null,
     createdAt: 1000 + i,
   };

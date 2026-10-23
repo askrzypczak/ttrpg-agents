@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  InvalidAmountError,
   UnknownInstanceError,
   createEncounterEmitter,
   observeRepository,
@@ -57,6 +58,53 @@ describe("observeRepository", () => {
       { type: "hp-changed", id: a!.id, currentHp: 10, maxHp: 16 },
       { type: "hp-changed", id: a!.id, currentHp: 12, maxHp: 16 },
     ]);
+  });
+
+  it("setHp emits hp-changed from the after instance", () => {
+    const { repo, events } = setup();
+    const [a] = repo.addInstances(() => [shadow()]);
+    events.length = 0;
+    const lowered = repo.setHp(a!.id, 5);
+    const clamped = repo.setHp(a!.id, 40);
+    expect(lowered.after.currentHp).toBe(5);
+    expect(clamped.after.currentHp).toBe(16);
+    expect(events).toEqual([
+      { type: "hp-changed", id: a!.id, currentHp: 5, maxHp: 16 },
+      { type: "hp-changed", id: a!.id, currentHp: 16, maxHp: 16 },
+    ]);
+  });
+
+  it("setMaxHp emits hp-changed with the lowered current HP and the new max HP", () => {
+    const { repo, events } = setup();
+    const [a] = repo.addInstances(() => [shadow()]);
+    events.length = 0;
+    const change = repo.setMaxHp(a!.id, 10);
+    expect(change.after).toMatchObject({ maxHp: 10, currentHp: 10 });
+    expect(events).toEqual([
+      { type: "hp-changed", id: a!.id, currentHp: 10, maxHp: 10 },
+    ]);
+  });
+
+  it("setHp and setMaxHp emit nothing when they throw", () => {
+    const { repo, events } = setup();
+    const [a] = repo.addInstances(() => [shadow()]);
+    events.length = 0;
+    expect(() => repo.setHp("nope", 3)).toThrow(UnknownInstanceError);
+    expect(() => repo.setHp(a!.id, 1.5)).toThrow(InvalidAmountError);
+    expect(() => repo.setMaxHp("nope", 3)).toThrow(UnknownInstanceError);
+    expect(() => repo.setMaxHp(a!.id, Number.NaN)).toThrow(InvalidAmountError);
+    expect(events).toEqual([]);
+    expect(repo.listInstances()).toEqual([a]);
+  });
+
+  it("setArmorClass emits no event", () => {
+    const { repo, events } = setup();
+    const [a] = repo.addInstances(() => [shadow()]);
+    events.length = 0;
+    const updated = repo.setArmorClass(a!.id, 14);
+    expect(updated).toEqual({ ...a, armorClass: 14 });
+    expect(repo.listInstances()).toEqual([updated]);
+    expect(events).toEqual([]);
   });
 
   it("emits nothing when damage throws", () => {

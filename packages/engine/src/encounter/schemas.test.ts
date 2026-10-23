@@ -10,6 +10,7 @@ const instance = {
   maxHp: 16,
   currentHp: 16,
   initiative: null,
+  armorClass: null,
   groupId: null,
   createdAt: 5,
 };
@@ -23,6 +24,20 @@ describe("monsterInstanceSchema", () => {
     const withoutMaxHp: Record<string, unknown> = { ...instance };
     delete withoutMaxHp.maxHp;
     expect(monsterInstanceSchema.safeParse(withoutMaxHp).success).toBe(false);
+  });
+
+  it("monsterInstanceSchema requires armorClass and accepts null", () => {
+    expect(
+      monsterInstanceSchema.parse({ ...instance, armorClass: 13 }),
+    ).toEqual({ ...instance, armorClass: 13 });
+    expect(
+      monsterInstanceSchema.parse({ ...instance, armorClass: null }),
+    ).toEqual({ ...instance, armorClass: null });
+    const withoutArmorClass: Record<string, unknown> = { ...instance };
+    delete withoutArmorClass.armorClass;
+    expect(monsterInstanceSchema.safeParse(withoutArmorClass).success).toBe(
+      false,
+    );
   });
 
   it("rejects an instance with a wrong type", () => {

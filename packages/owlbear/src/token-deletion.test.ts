@@ -18,6 +18,7 @@ const inst = (n: number): EncounterInstance => ({
   maxHp: 16,
   currentHp: 16,
   initiative: null,
+  armorClass: null,
   groupId: null,
   createdAt: n,
 });

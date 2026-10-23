@@ -45,6 +45,7 @@ describe("observeRepository", () => {
       maxHp: 16,
       currentHp: 16,
       initiative: null,
+      armorClass: null,
       groupId: null,
       createdAt: 1,
     };
@@ -61,6 +62,9 @@ describe("observeRepository", () => {
       clearEncounter: unexpected,
       listInstances: unexpected,
       setInitiative: unexpected,
+      setHp: unexpected,
+      setMaxHp: unexpected,
+      setArmorClass: unexpected,
       renameInstance: (id, name) => {
         calls.push([id, name]);
         return renamed;
