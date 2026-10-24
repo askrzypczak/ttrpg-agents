@@ -64,8 +64,9 @@ obr.onReady(async () => {
     return;
   }
 
-  // The socket is created after the sync, which reports deletions through it.
+  // The socket is created after the sync, which reports deletions and gaps through it.
   let sendToBridge: (message: BridgeMessage) => void = () => {};
+  let reconnect: () => void = () => {};
   const sync = createEncounterSync(
     obr,
     (e) => {
@@ -91,6 +92,14 @@ obr.onReady(async () => {
       },
       onTokenArt: (monsterKey, art) =>
         sendToBridge(tokenArtMessage(monsterKey, art)),
+      onStoreChange: () => {
+        removeError = undefined;
+        editError = undefined;
+        editNote = undefined;
+        render();
+      },
+      // A missed event: reconnect, which brings a fresh snapshot.
+      onGap: () => reconnect(),
     },
   );
   const socket = new ReconnectingSocket({
@@ -108,22 +117,15 @@ obr.onReady(async () => {
         );
         return;
       }
-      if (message.type === "encounter-snapshot") {
-        removeError = undefined;
-        editError = undefined;
-        editNote = undefined;
+      const text = tokenDeletedErrorText(message);
+      if (text !== undefined) {
+        removeError = text;
         render();
-      } else {
-        const text = tokenDeletedErrorText(message);
-        if (text !== undefined) {
-          removeError = text;
-          render();
-        }
-        const editText = instanceEditErrorText(message);
-        if (editText !== undefined) {
-          editError = editText;
-          render();
-        }
+      }
+      const editText = instanceEditErrorText(message);
+      if (editText !== undefined) {
+        editError = editText;
+        render();
       }
       void sync.handleMessage(message);
     },
@@ -137,10 +139,11 @@ obr.onReady(async () => {
     },
   });
   sendToBridge = (message) => socket.send(message);
-  el("use-this-tab").addEventListener("click", () => {
+  reconnect = () => {
     socket.close();
     socket.start();
-  });
+  };
+  el("use-this-tab").addEventListener("click", reconnect);
   socket.start();
   // Re-render periodically so the stalled hint appears without a state change.
   setInterval(render, 1000);

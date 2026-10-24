@@ -77,8 +77,8 @@ function fold(
 }
 
 /**
- * Holds the desired encounter (the latest snapshot folded with later events)
- * and reconciles the scene against it on every trigger: a message, the scene
+ * Holds the desired encounter (the latest snapshot folded with later `mcp`
+ * events, in `seq` order) and reconciles the scene against it on every trigger: a message, the scene
  * becoming ready, an item change, or a retry. Reconciles run one at a time,
  * in arrival order. One on a scene that is not ready is skipped (the ready flip runs it). A
  * failing one on a ready scene is reported to `onError` and retried with
@@ -86,7 +86,10 @@ function fold(
  * is deferred silently. `onApplied` fires after each successful reconcile, except a quiet one (from an
  * item change) that was not recovering from a failure.
  * Events before the first snapshot are ignored (the bridge sends a snapshot
- * on connect).
+ * on connect). After it, an event whose `seq` is not past the last one seen is
+ * a duplicate and ignored; one that skips ahead is a gap: nothing is applied,
+ * `onGap` is called once, and events are ignored until the next snapshot. A
+ * `table` event only advances the `seq` (the table already shows it).
  */
 export function createEncounterSync(
   obr: ObrAdapter,
@@ -95,13 +98,13 @@ export function createEncounterSync(
   options: {
     timers?: Timers;
     backoff?: BackoffOptions;
-    /** Called once per snapshot for each wanted, placed instance whose token the GM deleted. */
+    /** Called once per store change (a snapshot or an applied `mcp` event) for each wanted, placed instance whose token the GM deleted. */
     onTokenDeleted?: (instanceId: string) => void;
     /** Called with the art the GM picked for a monster type, to store it. */
     onTokenArt?: (monsterKey: string, art: TokenArt) => void;
     /** Called once per table edit of HP, max HP or armor class, to write it back. */
     onInstanceEdit?: (edit: InstanceEdit) => void;
-    /** Called once per snapshot for each table value that could not be read back. */
+    /** Called once per store change (a snapshot or an applied `mcp` event) for each table value that could not be read back. */
     onEditRejected?: (text: string) => void;
     /** Called once per answered edit whose table value differs from the store's, with the note to show. */
     onEditDiffers?: (text: string) => void;
@@ -113,6 +116,10 @@ export function createEncounterSync(
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
   let desired: EncounterInstance[] | null = null;
+  // Log position of the last snapshot or applied event; null before the first
+  // snapshot. `awaitingSnapshot` is set by a gap.
+  let seq: number | null = null;
+  let awaitingSnapshot = false;
   let appliedCount = 0;
   let tail: Promise<void> = Promise.resolve();
   let retry: unknown = null;
@@ -121,9 +128,9 @@ export function createEncounterSync(
   let art: Record<string, TokenArt> = {};
   // Monster types the GM declined (or whose pick was unusable) this session.
   const declined = new Set<string>();
-  // Deleted tokens already reported since the last snapshot.
+  // Deleted tokens already reported since the last store change.
   const reported = new Set<string>();
-  // Unreadable table values already reported since the last snapshot.
+  // Unreadable table values already reported since the last store change.
   const rejectedReported = new Set<string>();
   // Item changes coalesce: at most one quiet reconcile is `queued`. Changes
   // raised synchronously by our own write calls (`writing`) are ignored.
@@ -310,11 +317,29 @@ export function createEncounterSync(
         if (answer !== undefined) answered.set(answer.id, answer);
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
+        seq = message.payload.seq;
+        awaitingSnapshot = false;
         reported.clear();
         rejectedReported.clear();
+        options.onStoreChange?.();
       } else if (message.type === "encounter-event") {
-        if (desired === null) return Promise.resolve();
+        if (desired === null || seq === null || awaitingSnapshot)
+          return Promise.resolve();
+        const { seq: eventSeq } = message.payload;
+        if (eventSeq <= seq) return Promise.resolve();
+        if (eventSeq > seq + 1) {
+          awaitingSnapshot = true;
+          options.onGap?.();
+          return Promise.resolve();
+        }
+        seq = eventSeq;
+        // The table already shows its own change, and the answer snapshot
+        // carried the store's value: nothing to apply or reset.
+        if (message.payload.origin.source === "table") return Promise.resolve();
         desired = fold(desired, message.payload);
+        reported.clear();
+        rejectedReported.clear();
+        options.onStoreChange?.();
       } else {
         // A refused edit needs no reconcile: the token keeps the typed value
         // and main.ts shows the error.
