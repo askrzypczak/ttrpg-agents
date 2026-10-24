@@ -76,7 +76,7 @@ const samples: BridgeMessage[] = [
   {
     v: 1,
     type: "encounter-snapshot",
-    payload: { instances: [instance], seq: 0 },
+    payload: { instances: [instance], seq: 7 },
   },
 ];
 
