@@ -116,10 +116,9 @@ export function createEncounterSync(
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
   let desired: EncounterInstance[] | null = null;
-  // Log position of the last snapshot or applied event; null before the first
-  // snapshot. `awaitingSnapshot` is set by a gap.
+  // Log position of the last snapshot or applied event. Null before the first
+  // snapshot and after a gap, when events are ignored until the next snapshot.
   let seq: number | null = null;
-  let awaitingSnapshot = false;
   let appliedCount = 0;
   let tail: Promise<void> = Promise.resolve();
   let retry: unknown = null;
@@ -318,17 +317,17 @@ export function createEncounterSync(
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
         seq = message.payload.seq;
-        awaitingSnapshot = false;
         reported.clear();
         rejectedReported.clear();
         options.onStoreChange?.();
       } else if (message.type === "encounter-event") {
-        if (desired === null || seq === null || awaitingSnapshot)
-          return Promise.resolve();
+        // Stryker disable next-line all: equivalent, desired is null only before the first snapshot, when seq is null too
+        if (desired === null) return Promise.resolve();
+        if (seq === null) return Promise.resolve();
         const { seq: eventSeq } = message.payload;
         if (eventSeq <= seq) return Promise.resolve();
         if (eventSeq > seq + 1) {
-          awaitingSnapshot = true;
+          seq = null;
           options.onGap?.();
           return Promise.resolve();
         }
