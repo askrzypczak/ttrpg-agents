@@ -151,8 +151,13 @@ function sendSnapshot(ws: WebSocket, hooks: Hooks, cause?: string): void {
   if (!hooks.snapshot) return;
   try {
     const snapshot = hooks.snapshot();
-    void cause;
-    send(ws, snapshot);
+    send(
+      ws,
+      // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent on the wire, JSON drops an undefined cause and the hook only returns snapshots
+      cause !== undefined && snapshot.type === "encounter-snapshot"
+        ? { ...snapshot, payload: { ...snapshot.payload, cause } }
+        : snapshot,
+    );
   } catch (e) {
     send(
       ws,
@@ -271,7 +276,7 @@ function handleMessage(
       if (outcome.ok) {
         // The bridge's own commit does not bump data_version; send the new
         // state directly, like token-deleted.
-        sendSnapshot(ws, hooks);
+        sendSnapshot(ws, hooks, message.id);
       } else {
         send(ws, errorMessage(outcome.code, outcome.message, message.id));
       }

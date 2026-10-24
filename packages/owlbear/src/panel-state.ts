@@ -77,7 +77,9 @@ export function panelView(input: PanelInput): PanelView {
     input.removeError,
     input.editError,
   ].filter((e): e is string => !!e);
-  return errors.length > 0 ? { ...view, error: errors.join(" ") } : view;
+  const withErrors =
+    errors.length > 0 ? { ...view, error: errors.join(" ") } : view;
+  return input.editNote ? { ...withErrors, note: input.editNote } : withErrors;
 }
 
 function connectionView(input: PanelInput): PanelView {

@@ -24,8 +24,9 @@ export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
 export function instanceIdOfEditCause(
   cause: string | undefined,
 ): string | undefined {
-  void cause;
-  throw new Error("not implemented");
+  return cause?.startsWith(INSTANCE_EDIT_ID_PREFIX)
+    ? cause.slice(INSTANCE_EDIT_ID_PREFIX.length)
+    : undefined;
 }
 
 /**

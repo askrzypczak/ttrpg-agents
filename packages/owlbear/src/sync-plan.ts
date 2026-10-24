@@ -191,6 +191,37 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
+const EDIT_LABELS: Record<keyof Omit<InstanceEdit, "instanceId">, string> = {
+  currentHp: "HP",
+  maxHp: "max HP",
+  armorClass: "armor class",
+};
+
+/**
+ * The note for an answered instance whose table values differ from the
+ * store's, or `undefined` when the table matches.
+ */
+function differsMessage(
+  owned: Projector[],
+  token: SceneItem,
+  answer: EncounterInstance,
+): string | undefined {
+  const clauses: string[] = [];
+  for (const { key, readBack } of owned) {
+    if (!readBack) continue;
+    const { edit } = readBack(token.metadata[key], answer);
+    for (const [field, table] of Object.entries(edit)) {
+      const name = field as keyof typeof EDIT_LABELS;
+      clauses.push(
+        `${EDIT_LABELS[name]} ${String(answer[name])} for ${answer.displayName}, not the ${String(table)} on the table`,
+      );
+    }
+  }
+  return clauses.length > 0
+    ? `The store holds ${clauses.join("; ")}; the token keeps your value.`
+    : undefined;
+}
+
 /**
  * Pure diff of the desired instances against the scene's items; only items
  * carrying our instance link are ever touched.
@@ -204,11 +235,13 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * - d == o: nothing, but re-baseline when b != r.
  * - d != o, b present, r != b (the encounter changed): push d, b := r.
  * - d != o, b present, r == b (the table was edited): leave it. If the
- *   projector can `readBack` the value, the changed fields are planned as an
- *   edit to write back and b := o (the baseline temporarily holds the edited
- *   table value, so the store's answer is judged by the rules above: accepted
- *   exactly is d == o, a different value is r != b and is pushed). Values that
- *   cannot be read are planned as rejected and left on the table, b untouched.
+ *   projector can `readBack` the value, the changed fields not already in
+ *   `context.sent` are planned as an edit to write back, b untouched. Values
+ *   that cannot be read are planned as rejected and left on the table.
+ * Only a change of the encounter writes to the table: the store's answer to a
+ * write-back (`context.answered`) sets b := the raw projection of the answered
+ * instance for keys that can be read back, so a clamped or refused edit stays
+ * on the table (reported in `differs`) and is not pushed or sent again.
  * - d != o, no b: push d if o is absent, else keep o; either way b := r.
  * A projector may use the baseline to apply this rule per field inside its
  * value: a table edit wins until the encounter changes that field.
@@ -235,8 +268,6 @@ export function planSync(
     sent?: Readonly<EditMemory>;
   },
 ): SyncPlan {
-  if (context.answered !== undefined || context.sent !== undefined)
-    throw new Error("not implemented");
   const plan: SyncPlan = {
     add: [],
     update: [],
@@ -265,27 +296,43 @@ export function planSync(
     const instance = wanted.get(id)!;
     const baseline = asRecord(token.metadata[SYNCED_METADATA_KEY]);
     const next = { ...baseline };
+    const answer = context.answered?.get(id);
     for (const { key, project, readBack } of owned) {
       const raw = project(instance);
       const o = token.metadata[key];
-      const d = project(instance, o, baseline[key]);
-      const hasBaseline = Object.hasOwn(baseline, key);
+      // The store's answer to a write-back is the baseline: the table value
+      // it differs from stays, and only a later encounter change is pushed.
+      const adopted = answer !== undefined && readBack !== undefined;
+      const b = adopted ? project(answer) : baseline[key];
+      // Stryker disable next-line ConditionalExpression: equivalent, without an answer b is the stored baseline, which next already holds
+      if (adopted) next[key] = b;
+      const d = project(instance, o, b);
+      const hasBaseline = adopted || Object.hasOwn(baseline, key);
       if (raw === undefined) {
         delete next[key];
       } else if (deepEqual(d, o)) {
         next[key] = raw;
       } else if (hasBaseline) {
-        if (!deepEqual(raw, baseline[key])) {
+        if (!deepEqual(raw, b)) {
           plan.update.push({ id: token.id, key, value: d });
           next[key] = raw;
         } else if (readBack) {
-          // The table was edited: write the change back and keep the table
-          // value as the baseline until the store answers.
+          // The table was edited: write the change back unless it was
+          // already sent. The baseline stays; the store's answer never
+          // writes to the table.
           const { edit, invalid } = readBack(o, instance);
-          if (Object.keys(edit).length > 0) {
-            plan.edits.push({ instanceId: id, ...edit });
-            next[key] = o;
-          }
+          const already = context.sent?.[id]?.[key] ?? {};
+          const fresh = Object.fromEntries(
+            Object.entries(edit).filter(
+              ([field, value]) =>
+                !Object.hasOwn(already, field) ||
+                (already as Record<string, unknown>)[field] !== value,
+            ),
+          );
+          if (Object.keys(fresh).length > 0)
+            plan.edits.push({ instanceId: id, ...fresh });
+          // Stryker disable next-line EqualityOperator,ConditionalExpression: equivalent, an empty remembered edit is the same as none
+          if (Object.keys(edit).length > 0) (plan.sent[id] ??= {})[key] = edit;
           if (invalid.length > 0)
             plan.rejected.push({
               instanceId: id,
@@ -310,6 +357,15 @@ export function planSync(
     }
     if (!deepEqual(next, baseline))
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
+
+    if (answer !== undefined) {
+      // A key the plan pushes to is no longer the table's value to keep.
+      const kept = owned.filter(
+        (p) => !plan.update.some((u) => u.id === token.id && u.key === p.key),
+      );
+      const message = differsMessage(kept, token, answer);
+      if (message !== undefined) plan.differs.push({ instanceId: id, message });
+    }
   }
 
   for (const instance of desired)
