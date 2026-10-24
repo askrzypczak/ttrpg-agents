@@ -54,6 +54,10 @@ export const migrations: Migration[] = [
     version: 5,
     sql: "ALTER TABLE monster_instances ADD COLUMN stats_visible INTEGER NOT NULL DEFAULT 0;",
   },
+  {
+    version: 6,
+    sql: "CREATE TABLE encounter_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, event TEXT NOT NULL);",
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

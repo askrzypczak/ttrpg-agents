@@ -2,5 +2,6 @@ export {
   SqliteEncounterRepository,
   type RepositoryOptions,
 } from "./sqlite-repository.js";
+export { SqliteEncounterLog } from "./sqlite-log.js";
 export { SqliteTokenArtRepository } from "./token-art-repository.js";
 export { openDatabase } from "./db.js";
