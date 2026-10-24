@@ -321,7 +321,7 @@ export function createEncounterSync(
         rejectedReported.clear();
         options.onStoreChange?.();
       } else if (message.type === "encounter-event") {
-        // Stryker disable next-line all: equivalent, desired is null only before the first snapshot, when seq is null too
+        // Stryker disable next-line ConditionalExpression: equivalent, desired is null only before the first snapshot, when seq is null too
         if (desired === null) return Promise.resolve();
         if (seq === null) return Promise.resolve();
         const { seq: eventSeq } = message.payload;
