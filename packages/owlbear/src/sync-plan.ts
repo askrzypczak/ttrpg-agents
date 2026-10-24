@@ -2,6 +2,7 @@ import type { TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { initiativeProjector } from "./initiative.js";
 import type { GridSpec, SceneItem, Vec2 } from "./scene-model.js";
+import { statBubblesProjector } from "./stat-bubbles.js";
 
 export type EncounterInstance = Extract<
   BridgeMessage,
@@ -60,8 +61,9 @@ export type SyncConfig = {
 };
 
 /**
- * Link and Initiative Tracker projectors plus, on the CHARACTER layer, an
- * IMAGE token from the monster type's art, or a SHAPE circle when it has none.
+ * Link, Initiative Tracker and Stat Bubbles projectors plus, on the CHARACTER
+ * layer, an IMAGE token from the monster type's art, or a SHAPE circle when it
+ * has none.
  */
 export const defaultSyncConfig: SyncConfig = {
   projectors: [
@@ -71,6 +73,7 @@ export const defaultSyncConfig: SyncConfig = {
       project: (instance) => ({ instanceId: instance.id }),
     },
     initiativeProjector,
+    statBubblesProjector,
   ],
   tokenKind: (_instance, art) =>
     art

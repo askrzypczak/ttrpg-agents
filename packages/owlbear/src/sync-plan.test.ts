@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { INITIATIVE_METADATA_KEY } from "./initiative.js";
 import type { SceneItem } from "./scene-model.js";
+import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import {
   INSTANCE_METADATA_KEY,
   NAME_BASELINE_KEY,
@@ -84,6 +85,31 @@ const linkBaseline = (n: number) => ({
   [NAME_BASELINE_KEY]: `Shadow ${n}`,
 });
 
+/** The stat bubbles value the default config writes for the default `inst(n)`. */
+const bubbles = { health: 16, "max health": 16, hide: true };
+
+/** The link, name and stat bubbles baseline a token of ours has once the default config wrote it. */
+const defaultBaseline = (n: number) => ({
+  ...linkBaseline(n),
+  [STAT_BUBBLES_METADATA_KEY]: bubbles,
+});
+
+/** A token of ours the default config wrote for the default `inst(n)`; `metadata` adds to or overrides its keys. */
+const defaultToken = (
+  n: number,
+  metadata: Record<string, unknown> = {},
+  over: Partial<SceneItem> = {},
+): SceneItem =>
+  token(
+    n,
+    {
+      [STAT_BUBBLES_METADATA_KEY]: bubbles,
+      [SYNCED_METADATA_KEY]: defaultBaseline(n),
+      ...metadata,
+    },
+    over,
+  );
+
 const foreign: SceneItem = {
   id: "map",
   type: "IMAGE",
@@ -160,11 +186,7 @@ describe("planSync", () => {
   it("plans nothing when the scene matches", () => {
     const plan = planSync(
       [inst(1), inst(2)],
-      [
-        token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }),
-        token(2, { [SYNCED_METADATA_KEY]: linkBaseline(2) }),
-        foreign,
-      ],
+      [defaultToken(1), defaultToken(2), foreign],
       defaultSyncConfig,
       ctx(["i1", "i2"]),
     );
@@ -314,7 +336,7 @@ describe("planSync", () => {
   it("does not recreate an instance already placed on this scene", () => {
     const plan = planSync(
       [inst(1), inst(2)],
-      [token(2, { [SYNCED_METADATA_KEY]: linkBaseline(2) })],
+      [defaultToken(2)],
       defaultSyncConfig,
       ctx(["i1", "i2"]),
     );
@@ -420,7 +442,7 @@ const syncedAfter = (items: SceneItem[], plan: SyncPlan, id: string) =>
 
 describe("planSync token name", () => {
   it("renames a token whose name equals its baseline when the store name changed", () => {
-    const observed = [token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) })];
+    const observed = [defaultToken(1)];
     const plan = planSync(
       [inst(1, { displayName: "Boss" })],
       observed,
@@ -431,7 +453,7 @@ describe("planSync token name", () => {
     expect(plan.delete).toEqual([]);
     expect(plan.rename).toEqual([{ id: "token-1", name: "Boss" }]);
     expect(syncedAfter(observed, plan, "token-1")).toEqual({
-      ...linkBaseline(1),
+      ...defaultBaseline(1),
       [NAME_BASELINE_KEY]: "Boss",
     });
   });
@@ -449,9 +471,9 @@ describe("planSync token name", () => {
   it("leaves a GM-renamed token alone while the store name is unchanged", () => {
     const observed = [
       // The GM renamed token 1 on the table; its store name is unchanged.
-      token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }, { name: "Boss" }),
+      defaultToken(1, {}, { name: "Boss" }),
       // Control: token 2's store name changed, so it is renamed.
-      token(2, { [SYNCED_METADATA_KEY]: linkBaseline(2) }),
+      defaultToken(2),
     ];
     const plan = planSync(
       [inst(1), inst(2, { displayName: "Ghost" })],
@@ -460,13 +482,11 @@ describe("planSync token name", () => {
       ctx(["i1", "i2"]),
     );
     expect(plan.rename).toEqual([{ id: "token-2", name: "Ghost" }]);
-    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(defaultBaseline(1));
   });
 
   it("renames again after a further store change even if the GM had renamed it", () => {
-    const observed = [
-      token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }, { name: "Boss" }),
-    ];
+    const observed = [defaultToken(1, {}, { name: "Boss" })];
     const plan = planSync(
       [inst(1, { displayName: "Ghost" })],
       observed,
@@ -475,7 +495,7 @@ describe("planSync token name", () => {
     );
     expect(plan.rename).toEqual([{ id: "token-1", name: "Ghost" }]);
     expect(syncedAfter(observed, plan, "token-1")).toEqual({
-      ...linkBaseline(1),
+      ...defaultBaseline(1),
       [NAME_BASELINE_KEY]: "Ghost",
     });
   });
@@ -483,11 +503,12 @@ describe("planSync token name", () => {
   it("keeps the token name and adopts the baseline when there is no name baseline", () => {
     const observed = [
       // A token from before name sync: no name in its synced record.
-      token(
+      defaultToken(
         1,
         {
           [SYNCED_METADATA_KEY]: {
             [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+            [STAT_BUBBLES_METADATA_KEY]: bubbles,
           },
         },
         { name: "Boss" },
@@ -495,13 +516,11 @@ describe("planSync token name", () => {
     ];
     const plan = planSync([inst(1)], observed, defaultSyncConfig, ctx(["i1"]));
     expect(plan.rename).toEqual([]);
-    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(defaultBaseline(1));
   });
 
   it("re-baselines when token name already equals the store name", () => {
-    const observed = [
-      token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }, { name: "Ghost" }),
-    ];
+    const observed = [defaultToken(1, {}, { name: "Ghost" })];
     const plan = planSync(
       [inst(1, { displayName: "Ghost" })],
       observed,
@@ -510,7 +529,7 @@ describe("planSync token name", () => {
     );
     expect(plan.rename).toEqual([]);
     expect(syncedAfter(observed, plan, "token-1")).toEqual({
-      ...linkBaseline(1),
+      ...defaultBaseline(1),
       [NAME_BASELINE_KEY]: "Ghost",
     });
   });
@@ -550,10 +569,7 @@ describe("planSync initiative tracker", () => {
   });
 
   it("a null initiative on an existing token writes nothing and records no baseline", () => {
-    const observed = [
-      token(1, { [SYNCED_METADATA_KEY]: linkBaseline(1) }),
-      token(2, { [SYNCED_METADATA_KEY]: linkBaseline(2) }),
-    ];
+    const observed = [defaultToken(1), defaultToken(2)];
     const plan = planSync(
       [inst(1, { initiative: null }), inst(2, { initiative: 12 })],
       observed,
@@ -565,7 +581,7 @@ describe("planSync initiative tracker", () => {
     expect(
       Object.hasOwn(metadataOf(after, "token-1"), INITIATIVE_METADATA_KEY),
     ).toBe(false);
-    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(defaultBaseline(1));
     // Control: the projector is active in the default config.
     expect(metadataOf(after, "token-2")[INITIATIVE_METADATA_KEY]).toEqual(
       tracker("12"),
@@ -574,9 +590,9 @@ describe("planSync initiative tracker", () => {
 
   it("a null initiative drops an existing tracker baseline", () => {
     const observed = [
-      token(1, {
+      defaultToken(1, {
         [SYNCED_METADATA_KEY]: {
-          ...linkBaseline(1),
+          ...defaultBaseline(1),
           [INITIATIVE_METADATA_KEY]: tracker("14"),
         },
       }),
@@ -587,15 +603,15 @@ describe("planSync initiative tracker", () => {
       defaultSyncConfig,
       ctx(["i1"]),
     );
-    expect(syncedAfter(observed, plan, "token-1")).toEqual(linkBaseline(1));
+    expect(syncedAfter(observed, plan, "token-1")).toEqual(defaultBaseline(1));
   });
 
   it("planSync pushes a changed initiative count and keeps active true on the token", () => {
     const observed = [
-      token(1, {
+      defaultToken(1, {
         [INITIATIVE_METADATA_KEY]: { count: "10", active: true },
         [SYNCED_METADATA_KEY]: {
-          ...linkBaseline(1),
+          ...defaultBaseline(1),
           [INITIATIVE_METADATA_KEY]: tracker("10"),
         },
       }),
@@ -623,17 +639,17 @@ describe("planSync initiative tracker", () => {
       active: true,
     });
     expect(syncedAfter(observed, plan, "token-1")).toEqual({
-      ...linkBaseline(1),
+      ...defaultBaseline(1),
       [INITIATIVE_METADATA_KEY]: tracker("14"),
     });
   });
 
   it("planSync leaves a tracker-side count edit alone while the encounter initiative is unchanged, even after the token became active", () => {
     const observed = [
-      token(1, {
+      defaultToken(1, {
         [INITIATIVE_METADATA_KEY]: { count: "20", active: true },
         [SYNCED_METADATA_KEY]: {
-          ...linkBaseline(1),
+          ...defaultBaseline(1),
           [INITIATIVE_METADATA_KEY]: tracker("10"),
         },
       }),

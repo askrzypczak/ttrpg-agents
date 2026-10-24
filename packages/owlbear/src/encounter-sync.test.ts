@@ -14,6 +14,7 @@ import {
   SceneModel,
   type SceneItem,
 } from "./scene-model.js";
+import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import {
   INSTANCE_METADATA_KEY,
   NAME_BASELINE_KEY,
@@ -359,12 +360,43 @@ describe("createEncounterSync", () => {
     await sync.handleMessage(
       event({ type: "hp-changed", id: "i2", currentHp: 3, maxHp: 16 }),
     );
-    expect(scene.getItems()).toEqual(before);
+    // Only i2's stat bubbles value and its entry in the synced record may change.
+    const withoutBubbles = (items: SceneItem[]) =>
+      items.map((item) => {
+        const metadata: Record<string, unknown> = { ...item.metadata };
+        delete metadata[STAT_BUBBLES_METADATA_KEY];
+        const synced = metadata[SYNCED_METADATA_KEY] as
+          Record<string, unknown> | undefined;
+        if (synced !== undefined) {
+          const rest = { ...synced };
+          delete rest[STAT_BUBBLES_METADATA_KEY];
+          metadata[SYNCED_METADATA_KEY] = rest;
+        }
+        return { ...item, metadata };
+      });
+    expect(withoutBubbles(scene.getItems())).toEqual(withoutBubbles(before));
+    expect(tokenOf(scene, 2).metadata[STAT_BUBBLES_METADATA_KEY]).toMatchObject(
+      { health: 3, "max health": 16 },
+    );
     await sync.handleMessage(event({ type: "cleared" }));
     expect(instanceIds(scene)).toEqual([]);
     await sync.handleMessage(added(4));
     expect(instanceIds(scene)).toEqual(["i4"]);
     expect(scene.getItems().some((i) => i.id === foreign.id)).toBe(true);
+  });
+
+  it("an hp-changed event only updates the stat bubbles of its own token", async () => {
+    const { obr, scene } = createFakeObr();
+    const sync = createEncounterSync(obr);
+    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(
+      event({ type: "hp-changed", id: "i1", currentHp: 3, maxHp: 20 }),
+    );
+
+    const bubblesOf = (n: number) =>
+      tokenOf(scene, n).metadata[STAT_BUBBLES_METADATA_KEY];
+    expect(bubblesOf(1)).toMatchObject({ health: 3, "max health": 20 });
+    expect(bubblesOf(2)).toMatchObject({ health: 16, "max health": 16 });
   });
 
   it("ignores events before the first snapshot", async () => {

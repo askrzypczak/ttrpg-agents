@@ -48,7 +48,6 @@ function fold(
       return desired.filter((i) => i.id !== event.id);
     case "cleared":
       return [];
-    // Stryker disable all: no projector reads hp until #67
     case "hp-changed":
       return desired.map((i) =>
         i.id === event.id
@@ -58,7 +57,6 @@ function fold(
   }
 }
 
-// Stryker restore all
 /**
  * Holds the desired encounter (the latest snapshot folded with later events)
  * and reconciles the scene against it on every trigger: a message, the scene
