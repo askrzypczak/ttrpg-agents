@@ -199,7 +199,7 @@ describe("formatMutationSummary", () => {
     const out = formatMutationSummary(withIgnored);
     expect(out).toContain("**Score 66.7%**");
     expect(out).toContain("| a.ts | 4 | 1 | 50.0% |");
-    expect(out).toContain("| b.ts | 3 | 0 | 100.0% |");
+    expect(out).toContain("| b.ts | 2 | 0 | 100.0% |");
     expect(out).toContain("3 ignored.");
   });
 });
