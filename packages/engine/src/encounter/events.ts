@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { EncounterRepository, HpChange } from "./repository.js";
+import { changeOriginSchema, type ChangeOrigin } from "./origin.js";
 import { monsterInstanceSchema } from "./types.js";
 
 /** Source of truth for `EncounterEvent`; the protocol reuses it as the wire shape. */
@@ -7,14 +8,36 @@ export const encounterEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("added"),
     instances: z.array(monsterInstanceSchema),
+    origin: changeOriginSchema,
   }),
-  z.object({ type: z.literal("removed"), id: z.string() }),
-  z.object({ type: z.literal("cleared") }),
+  z.object({
+    type: z.literal("removed"),
+    id: z.string(),
+    origin: changeOriginSchema,
+  }),
+  z.object({ type: z.literal("cleared"), origin: changeOriginSchema }),
   z.object({
     type: z.literal("hp-changed"),
     id: z.string(),
     currentHp: z.number(),
     maxHp: z.number(),
+    origin: changeOriginSchema,
+  }),
+  z.object({
+    type: z.literal("instance-changed"),
+    id: z.string(),
+    changes: z
+      .object({
+        name: z.string(),
+        initiative: z.number(),
+        armorClass: z.number(),
+        statsVisible: z.boolean(),
+      })
+      .partial()
+      .refine((changes) => Object.keys(changes).length > 0, {
+        message: "changes must name at least one field",
+      }),
+    origin: changeOriginSchema,
   }),
 ]);
 
@@ -53,12 +76,17 @@ export function createEncounterEmitter(): EncounterEmitter {
   };
 }
 
-function emitHp(emitter: EncounterEmitter, { after }: HpChange): void {
+function emitHp(
+  emitter: EncounterEmitter,
+  { after }: HpChange,
+  origin: ChangeOrigin,
+): void {
   emitter.emit({
     type: "hp-changed",
     id: after.id,
     currentHp: after.currentHp,
     maxHp: after.maxHp,
+    origin,
   });
 }
 
@@ -74,49 +102,49 @@ export function observeRepository(
   return {
     getOrCreateActiveEncounter: () => repo.getOrCreateActiveEncounter(),
     listInstances: () => repo.listInstances(),
-    addInstances(build) {
-      const instances = repo.addInstances(build);
-      if (instances.length > 0) emitter.emit({ type: "added", instances });
+    addInstances(build, origin) {
+      const instances = repo.addInstances(build, origin);
+      if (instances.length > 0)
+        emitter.emit({ type: "added", instances, origin });
       return instances;
     },
-    applyDamage(id, amount) {
-      const change = repo.applyDamage(id, amount);
-      emitHp(emitter, change);
+    applyDamage(id, amount, origin) {
+      const change = repo.applyDamage(id, amount, origin);
+      emitHp(emitter, change, origin);
       return change;
     },
-    applyHealing(id, amount) {
-      const change = repo.applyHealing(id, amount);
-      emitHp(emitter, change);
+    applyHealing(id, amount, origin) {
+      const change = repo.applyHealing(id, amount, origin);
+      emitHp(emitter, change, origin);
       return change;
     },
-    removeInstances(ids) {
-      const removed = repo.removeInstances(ids);
+    removeInstances(ids, origin) {
+      const removed = repo.removeInstances(ids, origin);
       for (const instance of removed) {
-        emitter.emit({ type: "removed", id: instance.id });
+        emitter.emit({ type: "removed", id: instance.id, origin });
       }
       return removed;
     },
-    // Snapshot-only: a rename emits no event.
-    renameInstance: (id, name) => repo.renameInstance(id, name),
-    // Snapshot-only: setting initiative emits no event.
-    setInitiative: (id, initiative) => repo.setInitiative(id, initiative),
-    setHp(id, hp) {
-      const change = repo.setHp(id, hp);
-      emitHp(emitter, change);
+    renameInstance: (id, name, origin) => repo.renameInstance(id, name, origin),
+    setInitiative: (id, initiative, origin) =>
+      repo.setInitiative(id, initiative, origin),
+    setHp(id, hp, origin) {
+      const change = repo.setHp(id, hp, origin);
+      emitHp(emitter, change, origin);
       return change;
     },
-    setMaxHp(id, maxHp) {
-      const change = repo.setMaxHp(id, maxHp);
-      emitHp(emitter, change);
+    setMaxHp(id, maxHp, origin) {
+      const change = repo.setMaxHp(id, maxHp, origin);
+      emitHp(emitter, change, origin);
       return change;
     },
-    // Snapshot-only: setting armor class emits no event.
-    setArmorClass: (id, armorClass) => repo.setArmorClass(id, armorClass),
-    // Snapshot-only: revealing stats emits no event.
-    setStatsVisible: (id, visible) => repo.setStatsVisible(id, visible),
-    clearEncounter() {
-      repo.clearEncounter();
-      emitter.emit({ type: "cleared" });
+    setArmorClass: (id, armorClass, origin) =>
+      repo.setArmorClass(id, armorClass, origin),
+    setStatsVisible: (id, visible, origin) =>
+      repo.setStatsVisible(id, visible, origin),
+    clearEncounter(origin) {
+      repo.clearEncounter(origin);
+      emitter.emit({ type: "cleared", origin });
     },
   };
 }

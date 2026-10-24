@@ -55,6 +55,8 @@ function fold(
       return desired.filter((i) => i.id !== event.id);
     case "cleared":
       return [];
+    case "instance-changed":
+      return desired;
     case "hp-changed":
       return desired.map((i) =>
         i.id === event.id

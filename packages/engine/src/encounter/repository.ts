@@ -1,3 +1,4 @@
+import type { ChangeOrigin } from "./origin.js";
 import type {
   Encounter,
   MonsterInstance,
@@ -21,59 +22,78 @@ export interface EncounterRepository {
    * with them and inserts the items it returns (all or nothing; rolls back if
    * `build` throws).
    */
-  addInstances(build: InstanceBuilder): MonsterInstance[];
+  addInstances(build: InstanceBuilder, origin: ChangeOrigin): MonsterInstance[];
   /** Reduces HP, clamped at 0. Throws on unknown id or invalid amount. */
-  applyDamage(id: string, amount: number): HpChange;
+  applyDamage(id: string, amount: number, origin: ChangeOrigin): HpChange;
   /** Raises HP, clamped at maxHp. Throws on unknown id or invalid amount. */
-  applyHealing(id: string, amount: number): HpChange;
+  applyHealing(id: string, amount: number, origin: ChangeOrigin): HpChange;
   /**
    * Removes all given instances in one transaction and returns them. Throws
    * UnknownInstanceError, removing nothing, if any id is not in the active encounter.
    */
-  removeInstances(ids: readonly string[]): MonsterInstance[];
+  removeInstances(
+    ids: readonly string[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[];
   /**
    * Renames an instance of the active encounter in one transaction and returns
    * it updated; the name is trimmed. Throws UnknownInstanceError for an id not
    * in the active encounter, InvalidNameError for an empty name or one another
    * instance has; nothing changes on a throw.
    */
-  renameInstance(id: string, name: string): MonsterInstance;
+  renameInstance(
+    id: string,
+    name: string,
+    origin: ChangeOrigin,
+  ): MonsterInstance;
   /**
    * Sets the absolute initiative of an instance of the active encounter in one
    * transaction and returns it updated. Throws InvalidInitiativeError for a
    * non-integer value, UnknownInstanceError for an id not in the active
    * encounter; nothing changes on a throw.
    */
-  setInitiative(id: string, initiative: number): MonsterInstance;
+  setInitiative(
+    id: string,
+    initiative: number,
+    origin: ChangeOrigin,
+  ): MonsterInstance;
   /**
    * Sets the absolute current HP of an instance of the active encounter in one
    * transaction, clamped to 0..maxHp. Throws InvalidAmountError for a
    * non-integer value, UnknownInstanceError for an id not in the active
    * encounter; nothing changes on a throw.
    */
-  setHp(id: string, hp: number): HpChange;
+  setHp(id: string, hp: number, origin: ChangeOrigin): HpChange;
   /**
    * Sets the max HP of an instance of the active encounter in one transaction
    * (at least 1), lowering current HP if it is above the new max. Throws
    * InvalidAmountError for a non-integer value, UnknownInstanceError for an id
    * not in the active encounter; nothing changes on a throw.
    */
-  setMaxHp(id: string, maxHp: number): HpChange;
+  setMaxHp(id: string, maxHp: number, origin: ChangeOrigin): HpChange;
   /**
    * Sets the armor class of an instance of the active encounter in one
    * transaction (at least 0) and returns it updated. Throws
    * InvalidArmorClassError for a non-integer value, UnknownInstanceError for
    * an id not in the active encounter; nothing changes on a throw.
    */
-  setArmorClass(id: string, armorClass: number): MonsterInstance;
+  setArmorClass(
+    id: string,
+    armorClass: number,
+    origin: ChangeOrigin,
+  ): MonsterInstance;
   /**
    * Sets whether players see the stats of an instance of the active encounter
    * and returns it updated. Throws UnknownInstanceError for an id not in the
    * active encounter; nothing changes on a throw.
    */
-  setStatsVisible(id: string, visible: boolean): MonsterInstance;
+  setStatsVisible(
+    id: string,
+    visible: boolean,
+    origin: ChangeOrigin,
+  ): MonsterInstance;
   /** Deletes all instances of the active encounter. */
-  clearEncounter(): void;
+  clearEncounter(origin: ChangeOrigin): void;
   /** Instances of the active encounter, ordered by creation. */
   listInstances(): MonsterInstance[];
 }

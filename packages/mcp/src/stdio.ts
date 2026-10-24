@@ -21,6 +21,7 @@ async function main(): Promise<void> {
     rng,
     now: () => new Date(),
     newGroupId: randomUUID,
+    newCommandId: randomUUID,
   });
   await server.connect(new StdioServerTransport());
 }

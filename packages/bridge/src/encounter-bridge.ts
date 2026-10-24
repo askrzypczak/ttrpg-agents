@@ -1,8 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
-  DomainError,
-  UnknownInstanceError,
-  applyInstanceEdit,
   type EncounterRepository,
   type InstanceEdit,
   type TokenArtRepository,
@@ -12,39 +9,30 @@ import type { WriteBackResult } from "./server.js";
 
 /**
  * Removes one instance for a `token-deleted` request: an unknown id is a
- * refusal (`unknown-instance`), any other failure is rethrown.
+ * refusal (`unknown-instance`), any other failure is rethrown. The write
+ * carries origin source `table` and `commandId`.
  */
 export function removeInstance(
   repo: EncounterRepository,
   instanceId: string,
+  commandId: string,
 ): WriteBackResult {
-  try {
-    repo.removeInstances([instanceId]);
-    return { ok: true };
-  } catch (e) {
-    if (e instanceof UnknownInstanceError)
-      return { ok: false, code: "unknown-instance", message: e.message };
-    throw e;
-  }
+  void [repo, instanceId, commandId];
+  throw new Error("not implemented");
 }
 
 /**
  * Applies a table edit for an `instance-edit` request: a domain error (unknown
  * instance, invalid value) is a refusal carrying its code, anything else is
- * rethrown.
+ * rethrown. The writes carry origin source `table` and `commandId`.
  */
 export function editInstance(
   repo: EncounterRepository,
   edit: InstanceEdit,
+  commandId: string,
 ): WriteBackResult {
-  try {
-    applyInstanceEdit(repo, edit);
-    return { ok: true };
-  } catch (e) {
-    if (e instanceof DomainError)
-      return { ok: false, code: e.code, message: e.message };
-    throw e;
-  }
+  void [repo, edit, commandId];
+  throw new Error("not implemented");
 }
 
 /** Full current instance list and token art, for a client that just connected. */

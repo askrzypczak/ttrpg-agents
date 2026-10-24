@@ -5,6 +5,7 @@ import { footprintForSize } from "../monsters/footprint.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import { DomainError } from "../errors.js";
+import type { ChangeOrigin } from "./origin.js";
 import type { EncounterRepository } from "./repository.js";
 import type { NewMonsterInstance } from "./types.js";
 
@@ -162,6 +163,7 @@ function validate(
 export function addMonsters(
   deps: AddMonstersDeps,
   groups: readonly AddMonstersGroup[],
+  origin: ChangeOrigin,
   options: AddMonstersOptions = {},
 ): AddMonstersResult {
   const { repo, monsters, rng, now } = deps;
@@ -233,7 +235,7 @@ export function addMonsters(
       }
     }
     return items;
-  });
+  }, origin);
   if (saved.length !== items.length) {
     throw new Error(
       `Store persisted ${saved.length} instances, expected ${items.length}`,
