@@ -104,10 +104,11 @@ export function formatMutationSummary(report: MutationReport): string {
   }
   const n = (status: string): number => totals.get(status) ?? 0;
   const total = [...totals.values()].reduce((a, b) => a + b, 0);
+  const ignored = n("Ignored") > 0 ? `, ${n("Ignored")} ignored` : "";
   let out =
     "## Mutation testing (changed files)\n\n" +
     `**Score ${scoreOf(totals)}** over ${total} mutants: ${n("Killed")} killed, ` +
-    `${n("Timeout")} timeout, ${n("Survived")} survived, ${n("NoCoverage")} no coverage.\n\n` +
+    `${n("Timeout")} timeout, ${n("Survived")} survived, ${n("NoCoverage")} no coverage${ignored}.\n\n` +
     "| File | Mutants | Survived + no coverage | Score |\n" +
     "| --- | ---: | ---: | ---: |\n" +
     rows.join("\n") +
