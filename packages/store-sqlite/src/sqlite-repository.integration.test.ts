@@ -7,8 +7,11 @@ import {
   InvalidInitiativeError,
   InvalidNameError,
   UnknownInstanceError,
+  type ChangeOrigin,
 } from "@ttrpg-agents/engine";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 let db: DatabaseSync;
 let repo: SqliteEncounterRepository;
@@ -54,10 +57,13 @@ describe("getOrCreateActiveEncounter", () => {
 
 describe("addInstances", () => {
   it("persists many instances with currentHp = maxHp and returns them", () => {
-    const added = repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1", initiative: 14, groupId: "g1" }),
-      goblin({ displayName: "Goblin 2", maxHp: 9 }),
-    ]);
+    const added = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1", initiative: 14, groupId: "g1" }),
+        goblin({ displayName: "Goblin 2", maxHp: 9 }),
+      ],
+      origin,
+    );
     expect(added).toHaveLength(2);
     expect(added[0]).toMatchObject({
       displayName: "Goblin 1",
@@ -77,22 +83,28 @@ describe("addInstances", () => {
 
   it("rolls back the whole batch when a later item is invalid", () => {
     expect(() =>
-      repo.addInstances(() => [goblin(), goblin(), goblin({ maxHp: 0 })]),
+      repo.addInstances(
+        () => [goblin(), goblin(), goblin({ maxHp: 0 })],
+        origin,
+      ),
     ).toThrow();
     expect(repo.listInstances()).toEqual([]);
     expect(db.isTransaction).toBe(false);
   });
 
   it("addInstances passes the current names to the builder and inserts the items it returns", () => {
-    repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1" }),
-      goblin({ displayName: "Goblin 2" }),
-    ]);
+    repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1" }),
+        goblin({ displayName: "Goblin 2" }),
+      ],
+      origin,
+    );
     const seen: string[][] = [];
     const added = repo.addInstances((names) => {
       seen.push([...names]);
       return [goblin({ displayName: "Goblin 3", maxHp: 9 })];
-    });
+    }, origin);
     expect(seen).toEqual([["Goblin 1", "Goblin 2"]]);
     expect(added).toHaveLength(1);
     expect(added[0]).toMatchObject({
@@ -108,15 +120,15 @@ describe("addInstances", () => {
   });
 
   it("addInstances rolls back when the builder throws", () => {
-    const [m] = repo.addInstances(() => [goblin()]);
+    const [m] = repo.addInstances(() => [goblin()], origin);
     let inTransaction: boolean | undefined;
     expect(() =>
       repo.addInstances(() => {
         inTransaction = db.isTransaction;
         // A write made while building must be undone with the batch.
-        repo.applyDamage(m!.id, 3);
+        repo.applyDamage(m!.id, 3, origin);
         throw new Error("builder failed");
-      }),
+      }, origin),
     ).toThrow("builder failed");
     expect(inTransaction).toBe(true);
     expect(db.isTransaction).toBe(false);
@@ -126,50 +138,58 @@ describe("addInstances", () => {
 
 describe("applyDamage / applyHealing", () => {
   it("reduces HP and clamps at 0", () => {
-    const [m] = repo.addInstances(() => [goblin()]);
-    expect(repo.applyDamage(m!.id, 3).after.currentHp).toBe(4);
-    expect(repo.applyDamage(m!.id, 100).after.currentHp).toBe(0);
+    const [m] = repo.addInstances(() => [goblin()], origin);
+    expect(repo.applyDamage(m!.id, 3, origin).after.currentHp).toBe(4);
+    expect(repo.applyDamage(m!.id, 100, origin).after.currentHp).toBe(0);
     expect(repo.listInstances()[0]!.currentHp).toBe(0);
   });
 
   it("raises HP and clamps at maxHp", () => {
-    const [m] = repo.addInstances(() => [goblin()]);
-    repo.applyDamage(m!.id, 5);
-    expect(repo.applyHealing(m!.id, 2).after.currentHp).toBe(4);
-    expect(repo.applyHealing(m!.id, 100).after.currentHp).toBe(7);
+    const [m] = repo.addInstances(() => [goblin()], origin);
+    repo.applyDamage(m!.id, 5, origin);
+    expect(repo.applyHealing(m!.id, 2, origin).after.currentHp).toBe(4);
+    expect(repo.applyHealing(m!.id, 100, origin).after.currentHp).toBe(7);
   });
 
   it("applyDamage returns before and after", () => {
-    const [m] = repo.addInstances(() => [goblin()]);
-    const hit = repo.applyDamage(m!.id, 3);
+    const [m] = repo.addInstances(() => [goblin()], origin);
+    const hit = repo.applyDamage(m!.id, 3, origin);
     expect(hit.before).toEqual(m);
     expect(hit.after).toEqual({ ...m, currentHp: 4 });
-    const overkill = repo.applyDamage(m!.id, 100);
+    const overkill = repo.applyDamage(m!.id, 100, origin);
     expect(overkill.before.currentHp).toBe(4);
     expect(overkill.after.currentHp).toBe(0);
   });
 
   it("applyHealing returns before and after", () => {
-    const [m] = repo.addInstances(() => [goblin()]);
-    repo.applyDamage(m!.id, 5);
-    const healed = repo.applyHealing(m!.id, 2);
+    const [m] = repo.addInstances(() => [goblin()], origin);
+    repo.applyDamage(m!.id, 5, origin);
+    const healed = repo.applyHealing(m!.id, 2, origin);
     expect(healed.before).toEqual({ ...m, currentHp: 2 });
     expect(healed.after).toEqual({ ...m, currentHp: 4 });
-    const overheal = repo.applyHealing(m!.id, 100);
+    const overheal = repo.applyHealing(m!.id, 100, origin);
     expect(overheal.before.currentHp).toBe(4);
     expect(overheal.after.currentHp).toBe(7);
   });
 
   it("repository throws InvalidAmountError for a bad amount and UnknownInstanceError for an unknown id", () => {
-    const [m] = repo.addInstances(() => [goblin()]);
-    expect(() => repo.applyDamage("nope", 1)).toThrow(UnknownInstanceError);
-    expect(() => repo.applyHealing("nope", 1)).toThrow(UnknownInstanceError);
-    expect(() => repo.applyDamage("nope", 1)).toThrow(
+    const [m] = repo.addInstances(() => [goblin()], origin);
+    expect(() => repo.applyDamage("nope", 1, origin)).toThrow(
+      UnknownInstanceError,
+    );
+    expect(() => repo.applyHealing("nope", 1, origin)).toThrow(
+      UnknownInstanceError,
+    );
+    expect(() => repo.applyDamage("nope", 1, origin)).toThrow(
       "Unknown monster instance: nope",
     );
-    expect(() => repo.applyDamage(m!.id, -1)).toThrow(InvalidAmountError);
-    expect(() => repo.applyDamage(m!.id, 1.5)).toThrow(InvalidAmountError);
-    expect(() => repo.applyHealing(m!.id, Number.NaN)).toThrow(
+    expect(() => repo.applyDamage(m!.id, -1, origin)).toThrow(
+      InvalidAmountError,
+    );
+    expect(() => repo.applyDamage(m!.id, 1.5, origin)).toThrow(
+      InvalidAmountError,
+    );
+    expect(() => repo.applyHealing(m!.id, Number.NaN, origin)).toThrow(
       InvalidAmountError,
     );
     expect(repo.listInstances()[0]!.currentHp).toBe(7);
@@ -178,19 +198,22 @@ describe("applyDamage / applyHealing", () => {
 
 describe("removeInstances", () => {
   it("removeInstances removes all given ids and returns them", () => {
-    const [a, b, c] = repo.addInstances(() => [
-      goblin({ displayName: "A" }),
-      goblin({ displayName: "B" }),
-      goblin({ displayName: "C" }),
-    ]);
-    expect(repo.removeInstances([a!.id, c!.id])).toEqual([a, c]);
+    const [a, b, c] = repo.addInstances(
+      () => [
+        goblin({ displayName: "A" }),
+        goblin({ displayName: "B" }),
+        goblin({ displayName: "C" }),
+      ],
+      origin,
+    );
+    expect(repo.removeInstances([a!.id, c!.id], origin)).toEqual([a, c]);
     expect(repo.listInstances()).toEqual([b]);
   });
 
   it("removeInstances with any unknown id removes nothing and throws UnknownInstanceError", () => {
-    const added = repo.addInstances(() => [goblin(), goblin()]);
+    const added = repo.addInstances(() => [goblin(), goblin()], origin);
     const [a, b] = added;
-    expect(() => repo.removeInstances([a!.id, "nope", b!.id])).toThrow(
+    expect(() => repo.removeInstances([a!.id, "nope", b!.id], origin)).toThrow(
       UnknownInstanceError,
     );
     expect(repo.listInstances()).toEqual(added);
@@ -200,20 +223,23 @@ describe("removeInstances", () => {
 
 describe("renameInstance", () => {
   it("renames and persists the display name", () => {
-    const [a, b] = repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1" }),
-      goblin({ displayName: "Goblin 2" }),
-    ]);
-    const renamed = repo.renameInstance(a!.id, "  Boss  ");
+    const [a, b] = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1" }),
+        goblin({ displayName: "Goblin 2" }),
+      ],
+      origin,
+    );
+    const renamed = repo.renameInstance(a!.id, "  Boss  ", origin);
     expect(renamed).toEqual({ ...a, displayName: "Boss" });
     expect(repo.listInstances()).toEqual([renamed, b]);
     // Renaming to its own current name is allowed.
-    expect(repo.renameInstance(a!.id, "Boss")).toEqual(renamed);
+    expect(repo.renameInstance(a!.id, "Boss", origin)).toEqual(renamed);
   });
 
   it("unknown id throws UnknownInstanceError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin()]);
-    expect(() => repo.renameInstance("nope", "Boss")).toThrow(
+    const added = repo.addInstances(() => [goblin()], origin);
+    expect(() => repo.renameInstance("nope", "Boss", origin)).toThrow(
       UnknownInstanceError,
     );
     expect(repo.listInstances()).toEqual(added);
@@ -221,13 +247,16 @@ describe("renameInstance", () => {
   });
 
   it("duplicate or empty name rejected, changes nothing", () => {
-    const added = repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1" }),
-      goblin({ displayName: "Goblin 2" }),
-    ]);
+    const added = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1" }),
+        goblin({ displayName: "Goblin 2" }),
+      ],
+      origin,
+    );
     const id = added[0]!.id;
     for (const name of ["Goblin 2", " Goblin 2 ", "", "   "]) {
-      expect(() => repo.renameInstance(id, name), name).toThrow(
+      expect(() => repo.renameInstance(id, name, origin), name).toThrow(
         InvalidNameError,
       );
     }
@@ -236,10 +265,13 @@ describe("renameInstance", () => {
   });
 
   it("does not rename an instance outside the active encounter", () => {
-    const [old] = repo.addInstances(() => [goblin({ displayName: "Old" })]);
+    const [old] = repo.addInstances(
+      () => [goblin({ displayName: "Old" })],
+      origin,
+    );
     db.exec("UPDATE encounters SET active = 0");
-    repo.addInstances(() => [goblin({ displayName: "New" })]);
-    expect(() => repo.renameInstance(old!.id, "Boss")).toThrow(
+    repo.addInstances(() => [goblin({ displayName: "New" })], origin);
+    expect(() => repo.renameInstance(old!.id, "Boss", origin)).toThrow(
       UnknownInstanceError,
     );
     expect(
@@ -253,12 +285,15 @@ describe("renameInstance", () => {
 
 describe("setInitiative", () => {
   it("setInitiative stores an integer, including zero and negative values, and returns the updated instance", () => {
-    const [a, b] = repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1", initiative: 12 }),
-      goblin({ displayName: "Goblin 2", initiative: 9 }),
-    ]);
+    const [a, b] = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1", initiative: 12 }),
+        goblin({ displayName: "Goblin 2", initiative: 9 }),
+      ],
+      origin,
+    );
     for (const value of [17, 0, -3]) {
-      const updated = repo.setInitiative(a!.id, value);
+      const updated = repo.setInitiative(a!.id, value, origin);
       expect(updated, String(value)).toEqual({ ...a, initiative: value });
       expect(repo.listInstances(), String(value)).toEqual([updated, b]);
     }
@@ -266,17 +301,19 @@ describe("setInitiative", () => {
   });
 
   it("setInitiative on an unknown id throws UnknownInstanceError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin({ initiative: 12 })]);
-    expect(() => repo.setInitiative("nope", 5)).toThrow(UnknownInstanceError);
+    const added = repo.addInstances(() => [goblin({ initiative: 12 })], origin);
+    expect(() => repo.setInitiative("nope", 5, origin)).toThrow(
+      UnknownInstanceError,
+    );
     expect(repo.listInstances()).toEqual(added);
     expect(db.isTransaction).toBe(false);
   });
 
   it("setInitiative rejects fractional, NaN and infinite values with InvalidInitiativeError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin({ initiative: 12 })]);
+    const added = repo.addInstances(() => [goblin({ initiative: 12 })], origin);
     const id = added[0]!.id;
     for (const bad of [1.5, -0.5, Number.NaN, Infinity, -Infinity]) {
-      expect(() => repo.setInitiative(id, bad), String(bad)).toThrow(
+      expect(() => repo.setInitiative(id, bad, origin), String(bad)).toThrow(
         InvalidInitiativeError,
       );
     }
@@ -288,15 +325,18 @@ describe("setInitiative", () => {
 
 describe("setHp", () => {
   it("setHp stores an absolute value and returns before and after", () => {
-    const [a, b] = repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1" }),
-      goblin({ displayName: "Goblin 2" }),
-    ]);
-    const change = repo.setHp(a!.id, 3);
+    const [a, b] = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1" }),
+        goblin({ displayName: "Goblin 2" }),
+      ],
+      origin,
+    );
+    const change = repo.setHp(a!.id, 3, origin);
     expect(change.before).toEqual(a);
     expect(change.after).toEqual({ ...a, currentHp: 3 });
     expect(repo.listInstances()).toEqual([change.after, b]);
-    const raised = repo.setHp(a!.id, 6);
+    const raised = repo.setHp(a!.id, 6, origin);
     expect(raised.before.currentHp).toBe(3);
     expect(raised.after).toEqual({ ...a, currentHp: 6 });
     expect(repo.listInstances()).toEqual([raised.after, b]);
@@ -304,28 +344,28 @@ describe("setHp", () => {
   });
 
   it("setHp clamps to 0 and to max HP in the store", () => {
-    const [m] = repo.addInstances(() => [goblin()]);
-    const low = repo.setHp(m!.id, -4);
+    const [m] = repo.addInstances(() => [goblin()], origin);
+    const low = repo.setHp(m!.id, -4, origin);
     expect(low.after.currentHp).toBe(0);
     expect(repo.listInstances()[0]!.currentHp).toBe(0);
-    const high = repo.setHp(m!.id, 50);
+    const high = repo.setHp(m!.id, 50, origin);
     expect(high.before.currentHp).toBe(0);
     expect(high.after.currentHp).toBe(7);
     expect(repo.listInstances()[0]!.currentHp).toBe(7);
   });
 
   it("setHp on an unknown id throws UnknownInstanceError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin()]);
-    expect(() => repo.setHp("nope", 3)).toThrow(UnknownInstanceError);
+    const added = repo.addInstances(() => [goblin()], origin);
+    expect(() => repo.setHp("nope", 3, origin)).toThrow(UnknownInstanceError);
     expect(repo.listInstances()).toEqual(added);
     expect(db.isTransaction).toBe(false);
   });
 
   it("setHp with a non-integer throws InvalidAmountError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin()]);
+    const added = repo.addInstances(() => [goblin()], origin);
     const id = added[0]!.id;
     for (const bad of [1.5, -0.5, Number.NaN, Infinity, -Infinity]) {
-      expect(() => repo.setHp(id, bad), String(bad)).toThrow(
+      expect(() => repo.setHp(id, bad, origin), String(bad)).toThrow(
         InvalidAmountError,
       );
     }
@@ -336,16 +376,19 @@ describe("setHp", () => {
 
 describe("setMaxHp", () => {
   it("setMaxHp stores the value, keeps current HP when it fits and returns before and after", () => {
-    const [a, b] = repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1" }),
-      goblin({ displayName: "Goblin 2" }),
-    ]);
-    const raised = repo.setMaxHp(a!.id, 12);
+    const [a, b] = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1" }),
+        goblin({ displayName: "Goblin 2" }),
+      ],
+      origin,
+    );
+    const raised = repo.setMaxHp(a!.id, 12, origin);
     expect(raised.before).toEqual(a);
     expect(raised.after).toEqual({ ...a, maxHp: 12, currentHp: 7 });
     expect(repo.listInstances()).toEqual([raised.after, b]);
-    repo.setHp(a!.id, 4);
-    const lowered = repo.setMaxHp(a!.id, 5);
+    repo.setHp(a!.id, 4, origin);
+    const lowered = repo.setMaxHp(a!.id, 5, origin);
     expect(lowered.before).toEqual({ ...a, maxHp: 12, currentHp: 4 });
     expect(lowered.after).toEqual({ ...a, maxHp: 5, currentHp: 4 });
     expect(repo.listInstances()).toEqual([lowered.after, b]);
@@ -353,21 +396,21 @@ describe("setMaxHp", () => {
   });
 
   it("setMaxHp lowers current HP in the store when the new max is below it", () => {
-    const [m] = repo.addInstances(() => [goblin()]);
-    const change = repo.setMaxHp(m!.id, 3);
+    const [m] = repo.addInstances(() => [goblin()], origin);
+    const change = repo.setMaxHp(m!.id, 3, origin);
     expect(change.before).toEqual(m);
     expect(change.after).toEqual({ ...m, maxHp: 3, currentHp: 3 });
     expect(repo.listInstances()).toEqual([change.after]);
-    const floored = repo.setMaxHp(m!.id, 0);
+    const floored = repo.setMaxHp(m!.id, 0, origin);
     expect(floored.after).toEqual({ ...m, maxHp: 1, currentHp: 1 });
     expect(repo.listInstances()).toEqual([floored.after]);
   });
 
   it("setMaxHp with a non-integer throws InvalidAmountError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin()]);
+    const added = repo.addInstances(() => [goblin()], origin);
     const id = added[0]!.id;
     for (const bad of [1.5, -0.5, Number.NaN, Infinity, -Infinity]) {
-      expect(() => repo.setMaxHp(id, bad), String(bad)).toThrow(
+      expect(() => repo.setMaxHp(id, bad, origin), String(bad)).toThrow(
         InvalidAmountError,
       );
     }
@@ -376,8 +419,10 @@ describe("setMaxHp", () => {
   });
 
   it("setMaxHp on an unknown id throws UnknownInstanceError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin()]);
-    expect(() => repo.setMaxHp("nope", 12)).toThrow(UnknownInstanceError);
+    const added = repo.addInstances(() => [goblin()], origin);
+    expect(() => repo.setMaxHp("nope", 12, origin)).toThrow(
+      UnknownInstanceError,
+    );
     expect(repo.listInstances()).toEqual(added);
     expect(db.isTransaction).toBe(false);
   });
@@ -385,12 +430,15 @@ describe("setMaxHp", () => {
 
 describe("setArmorClass", () => {
   it("setArmorClass stores an integer and returns the updated instance", () => {
-    const [a, b] = repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1", armorClass: 15 }),
-      goblin({ displayName: "Goblin 2", armorClass: 15 }),
-    ]);
+    const [a, b] = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1", armorClass: 15 }),
+        goblin({ displayName: "Goblin 2", armorClass: 15 }),
+      ],
+      origin,
+    );
     for (const value of [17, 0, 12]) {
-      const updated = repo.setArmorClass(a!.id, value);
+      const updated = repo.setArmorClass(a!.id, value, origin);
       expect(updated, String(value)).toEqual({ ...a, armorClass: value });
       expect(repo.listInstances(), String(value)).toEqual([updated, b]);
     }
@@ -398,17 +446,17 @@ describe("setArmorClass", () => {
   });
 
   it("setArmorClass clamps a negative value to 0 in the store", () => {
-    const [m] = repo.addInstances(() => [goblin({ armorClass: 15 })]);
-    const updated = repo.setArmorClass(m!.id, -3);
+    const [m] = repo.addInstances(() => [goblin({ armorClass: 15 })], origin);
+    const updated = repo.setArmorClass(m!.id, -3, origin);
     expect(updated).toEqual({ ...m, armorClass: 0 });
     expect(repo.listInstances()).toEqual([updated]);
   });
 
   it("setArmorClass with a non-integer throws InvalidArmorClassError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin({ armorClass: 15 })]);
+    const added = repo.addInstances(() => [goblin({ armorClass: 15 })], origin);
     const id = added[0]!.id;
     for (const bad of [1.5, -0.5, Number.NaN, Infinity, -Infinity]) {
-      expect(() => repo.setArmorClass(id, bad), String(bad)).toThrow(
+      expect(() => repo.setArmorClass(id, bad, origin), String(bad)).toThrow(
         InvalidArmorClassError,
       );
     }
@@ -418,8 +466,10 @@ describe("setArmorClass", () => {
   });
 
   it("setArmorClass on an unknown id throws UnknownInstanceError and changes nothing", () => {
-    const added = repo.addInstances(() => [goblin({ armorClass: 15 })]);
-    expect(() => repo.setArmorClass("nope", 12)).toThrow(UnknownInstanceError);
+    const added = repo.addInstances(() => [goblin({ armorClass: 15 })], origin);
+    expect(() => repo.setArmorClass("nope", 12, origin)).toThrow(
+      UnknownInstanceError,
+    );
     expect(repo.listInstances()).toEqual(added);
     expect(repo.listInstances()[0]!.armorClass).toBe(15);
     expect(db.isTransaction).toBe(false);
@@ -428,29 +478,35 @@ describe("setArmorClass", () => {
 
 describe("setStatsVisible", () => {
   it("setStatsVisible persists true and back to false and returns the updated instance", () => {
-    const [a, b] = repo.addInstances(() => [
-      goblin({ displayName: "Goblin 1" }),
-      goblin({ displayName: "Goblin 2" }),
-    ]);
+    const [a, b] = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1" }),
+        goblin({ displayName: "Goblin 2" }),
+      ],
+      origin,
+    );
     expect(a!.statsVisible).toBe(false);
 
-    const revealed = repo.setStatsVisible(a!.id, true);
+    const revealed = repo.setStatsVisible(a!.id, true, origin);
     expect(revealed).toEqual({ ...a, statsVisible: true });
     expect(repo.listInstances()).toEqual([revealed, b]);
 
-    const hidden = repo.setStatsVisible(a!.id, false);
+    const hidden = repo.setStatsVisible(a!.id, false, origin);
     expect(hidden).toEqual({ ...a, statsVisible: false });
     expect(repo.listInstances()).toEqual([hidden, b]);
     expect(db.isTransaction).toBe(false);
   });
 
   it("setStatsVisible throws UnknownInstanceError for an id not in the active encounter", () => {
-    const [old] = repo.addInstances(() => [goblin()]);
+    const [old] = repo.addInstances(() => [goblin()], origin);
     db.exec("UPDATE encounters SET active = 0");
-    const current = repo.addInstances(() => [goblin({ displayName: "New" })]);
+    const current = repo.addInstances(
+      () => [goblin({ displayName: "New" })],
+      origin,
+    );
 
     for (const id of ["nope", old!.id]) {
-      expect(() => repo.setStatsVisible(id, true), id).toThrow(
+      expect(() => repo.setStatsVisible(id, true, origin), id).toThrow(
         UnknownInstanceError,
       );
     }
@@ -466,12 +522,15 @@ describe("setStatsVisible", () => {
 
 describe("armor class on insert", () => {
   it("addInstances stores the given armorClass and null when none is given", () => {
-    const added = repo.addInstances(() => [
-      goblin({ displayName: "A", armorClass: 15 }),
-      goblin({ displayName: "B", armorClass: 0 }),
-      goblin({ displayName: "C", armorClass: null }),
-      goblin({ displayName: "D" }),
-    ]);
+    const added = repo.addInstances(
+      () => [
+        goblin({ displayName: "A", armorClass: 15 }),
+        goblin({ displayName: "B", armorClass: 0 }),
+        goblin({ displayName: "C", armorClass: null }),
+        goblin({ displayName: "D" }),
+      ],
+      origin,
+    );
     expect(added.map((i) => i.armorClass)).toEqual([15, 0, null, null]);
     expect(repo.listInstances()).toEqual(added);
   });
@@ -480,10 +539,13 @@ describe("armor class on insert", () => {
     for (const bad of [-1, 1.5, Number.NaN, Infinity, "13"]) {
       expect(
         () =>
-          repo.addInstances(() => [
-            goblin({ armorClass: 15 }),
-            goblin({ armorClass: bad as unknown as number }),
-          ]),
+          repo.addInstances(
+            () => [
+              goblin({ armorClass: 15 }),
+              goblin({ armorClass: bad as unknown as number }),
+            ],
+            origin,
+          ),
         String(bad),
       ).toThrow(RangeError);
     }
@@ -494,12 +556,14 @@ describe("armor class on insert", () => {
 
 describe("active-encounter scoping", () => {
   it("ignores instances of an inactive encounter", () => {
-    const [old] = repo.addInstances(() => [goblin()]);
+    const [old] = repo.addInstances(() => [goblin()], origin);
     db.exec("UPDATE encounters SET active = 0");
-    repo.addInstances(() => [goblin({ displayName: "New" })]);
-    expect(() => repo.applyDamage(old!.id, 1)).toThrow(/Unknown/);
-    expect(() => repo.applyHealing(old!.id, 1)).toThrow(/Unknown/);
-    expect(() => repo.removeInstances([old!.id])).toThrow(UnknownInstanceError);
+    repo.addInstances(() => [goblin({ displayName: "New" })], origin);
+    expect(() => repo.applyDamage(old!.id, 1, origin)).toThrow(/Unknown/);
+    expect(() => repo.applyHealing(old!.id, 1, origin)).toThrow(/Unknown/);
+    expect(() => repo.removeInstances([old!.id], origin)).toThrow(
+      UnknownInstanceError,
+    );
     expect(
       db
         .prepare("SELECT current_hp FROM monster_instances WHERE id = ?")
@@ -514,30 +578,33 @@ describe("initiative validation", () => {
     "rejects %j and persists nothing",
     (bad) => {
       expect(() =>
-        repo.addInstances(() => [
-          goblin(),
-          goblin({ initiative: bad as unknown as number }),
-        ]),
+        repo.addInstances(
+          () => [goblin(), goblin({ initiative: bad as unknown as number })],
+          origin,
+        ),
       ).toThrow(RangeError);
       expect(repo.listInstances()).toEqual([]);
     },
   );
 
   it("accepts integers, null and undefined", () => {
-    const added = repo.addInstances(() => [
-      goblin({ initiative: -2 }),
-      goblin({ initiative: 0 }),
-      goblin({ initiative: null }),
-      goblin(),
-    ]);
+    const added = repo.addInstances(
+      () => [
+        goblin({ initiative: -2 }),
+        goblin({ initiative: 0 }),
+        goblin({ initiative: null }),
+        goblin(),
+      ],
+      origin,
+    );
     expect(added.map((i) => i.initiative)).toEqual([-2, 0, null, null]);
   });
 });
 
 describe("clearEncounter", () => {
   it("removes all instances", () => {
-    repo.addInstances(() => [goblin(), goblin()]);
-    repo.clearEncounter();
+    repo.addInstances(() => [goblin(), goblin()], origin);
+    repo.clearEncounter(origin);
     expect(repo.listInstances()).toEqual([]);
   });
 });
@@ -545,12 +612,15 @@ describe("clearEncounter", () => {
 describe("listInstances", () => {
   it("is empty initially and ordered by creation", () => {
     expect(repo.listInstances()).toEqual([]);
-    const added = repo.addInstances(() => [
-      goblin({ displayName: "A" }),
-      goblin({ displayName: "B" }),
-      goblin({ displayName: "C" }),
-    ]);
-    repo.addInstances(() => [goblin({ displayName: "D" })]);
+    const added = repo.addInstances(
+      () => [
+        goblin({ displayName: "A" }),
+        goblin({ displayName: "B" }),
+        goblin({ displayName: "C" }),
+      ],
+      origin,
+    );
+    repo.addInstances(() => [goblin({ displayName: "D" })], origin);
     expect(repo.listInstances().map((i) => i.displayName)).toEqual([
       "A",
       "B",
@@ -566,8 +636,9 @@ describe("listInstances", () => {
       newId: () => `z${9 - ++n}`, // ids sort opposite to insertion order
       now: () => 1000,
     });
-    tied.addInstances(() =>
-      ["A", "B", "C", "D"].map((displayName) => goblin({ displayName })),
+    tied.addInstances(
+      () => ["A", "B", "C", "D"].map((displayName) => goblin({ displayName })),
+      origin,
     );
     expect(tied.listInstances().map((i) => i.displayName)).toEqual([
       "A",

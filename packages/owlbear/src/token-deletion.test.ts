@@ -103,7 +103,13 @@ describe("createEncounterSync token deletion", () => {
     await sync.handleMessage({
       v: 1,
       type: "encounter-event",
-      payload: { type: "hp-changed", id: "i2", currentHp: 3, maxHp: 16 },
+      payload: {
+        type: "hp-changed",
+        id: "i2",
+        currentHp: 3,
+        maxHp: 16,
+        origin: { source: "mcp", commandId: "test" },
+      },
     });
     scene.addItems([foreign]);
     await settle();

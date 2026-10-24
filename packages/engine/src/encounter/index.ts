@@ -14,6 +14,7 @@ export * from "./edit.js";
 export * from "./events.js";
 export * from "./errors.js";
 export * from "./hp.js";
+export * from "./origin.js";
 export * from "./queries.js";
 export * from "./rename.js";
 export {

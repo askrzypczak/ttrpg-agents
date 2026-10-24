@@ -14,10 +14,13 @@ import {
   type EncounterRepository,
   type NamingStrategy,
   type Rng,
+  type ChangeOrigin,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 const SHADOW = "srd-2024_shadow";
 const GOBLIN = "srd-2024_goblin-warrior";
@@ -78,9 +81,11 @@ beforeEach(() => {
 
 describe("addMonsters", () => {
   it("adds 5 shadows with rolled HP, numbered names and shared initiative", () => {
-    const { instances, rolls } = addMonsters(deps(), [
-      { monster: SHADOW, count: 5 },
-    ]);
+    const { instances, rolls } = addMonsters(
+      deps(),
+      [{ monster: SHADOW, count: 5 }],
+      origin,
+    );
     expect(instances.map((i) => i.name)).toEqual([
       "Shadow 1",
       "Shadow 2",
@@ -106,8 +111,8 @@ describe("addMonsters", () => {
   });
 
   it("continues numbering across calls and never reuses a present number", () => {
-    addMonsters(deps(), [{ monster: SHADOW, count: 5 }]);
-    const second = addMonsters(deps(), [{ monster: SHADOW, count: 3 }]);
+    addMonsters(deps(), [{ monster: SHADOW, count: 5 }], origin);
+    const second = addMonsters(deps(), [{ monster: SHADOW, count: 3 }], origin);
     expect(second.instances.map((i) => i.name)).toEqual([
       "Shadow 6",
       "Shadow 7",
@@ -115,16 +120,20 @@ describe("addMonsters", () => {
     ]);
     const first = repo.listInstances()[0];
     if (!first) throw new Error("expected instance");
-    repo.removeInstances([first.id]);
-    const third = addMonsters(deps(), [{ monster: SHADOW, count: 1 }]);
+    repo.removeInstances([first.id], origin);
+    const third = addMonsters(deps(), [{ monster: SHADOW, count: 1 }], origin);
     expect(third.instances.map((i) => i.name)).toEqual(["Shadow 9"]);
   });
 
   it("continues numbering for repeated groups of one monster in a call", () => {
-    const { instances } = addMonsters(deps(), [
-      { monster: SHADOW, count: 2 },
-      { monster: SHADOW, count: 2 },
-    ]);
+    const { instances } = addMonsters(
+      deps(),
+      [
+        { monster: SHADOW, count: 2 },
+        { monster: SHADOW, count: 2 },
+      ],
+      origin,
+    );
     expect(instances.map((i) => i.name)).toEqual([
       "Shadow 1",
       "Shadow 2",
@@ -135,10 +144,14 @@ describe("addMonsters", () => {
   });
 
   it("handles mixed rolled and average groups in one call", () => {
-    const { instances, rolls } = addMonsters(deps(), [
-      { monster: SHADOW, count: 5 },
-      { monster: GOBLIN, count: 2, hp: "average" },
-    ]);
+    const { instances, rolls } = addMonsters(
+      deps(),
+      [
+        { monster: SHADOW, count: 5 },
+        { monster: GOBLIN, count: 2, hp: "average" },
+      ],
+      origin,
+    );
     const goblins = instances.filter((i) => i.monsterKey === GOBLIN);
     expect(goblins).toHaveLength(2);
     for (const g of goblins) {
@@ -164,7 +177,7 @@ describe("addMonsters", () => {
   });
 
   it("does not consume rng for HP in average mode", () => {
-    addMonsters(deps(), [{ monster: SHADOW, count: 4, hp: "average" }]);
+    addMonsters(deps(), [{ monster: SHADOW, count: 4, hp: "average" }], origin);
     expect(calls).toBe(1); // only the group initiative d20
     expect(repo.listInstances().map((i) => i.maxHp)).toEqual([27, 27, 27, 27]);
   });
@@ -173,6 +186,7 @@ describe("addMonsters", () => {
     const { instances, rolls } = addMonsters(
       deps(),
       [{ monster: SHADOW, count: 6, hp: "average" }],
+      origin,
       { initiative: "each" },
     );
     expect(rolls).toHaveLength(6);
@@ -184,10 +198,14 @@ describe("addMonsters", () => {
   });
 
   it("computes initiative as d20 plus the monster modifier", () => {
-    const { instances, rolls } = addMonsters(deps(), [
-      { monster: SHADOW, count: 1, hp: "average" },
-      { monster: GOBLIN, count: 1, hp: "average" },
-    ]);
+    const { instances, rolls } = addMonsters(
+      deps(),
+      [
+        { monster: SHADOW, count: 1, hp: "average" },
+        { monster: GOBLIN, count: 1, hp: "average" },
+      ],
+      origin,
+    );
     const [s, g] = rolls;
     expect(instances[0]?.initiative).toBe(
       (s?.total ?? 0) + shadow.initiativeModifier,
@@ -208,15 +226,18 @@ describe("addMonsters", () => {
         },
       }),
       [{ monster: SHADOW, count: 2, hp: "average" }],
+      origin,
     );
     expect(instances.map((i) => i.name)).toEqual(["Shadow #1", "Shadow #2"]);
     expect(seen).toEqual([[], ["Shadow #1"]]);
   });
 
   it("returns statblock AC and labelled rolls with sides and totals", () => {
-    const { instances, rolls } = addMonsters(deps(), [
-      { monster: SHADOW, count: 2 },
-    ]);
+    const { instances, rolls } = addMonsters(
+      deps(),
+      [{ monster: SHADOW, count: 2 }],
+      origin,
+    );
     for (const i of instances) expect(i.ac).toBe(shadow.ac);
     const hpRolls = rolls.filter((r) => r.label?.endsWith(" HP"));
     expect(hpRolls.map((r) => r.label)).toEqual(["Shadow 1 HP", "Shadow 2 HP"]);
@@ -230,10 +251,14 @@ describe("addMonsters", () => {
 
   it("addMonsters stores the statblock armor class on each instance", () => {
     expect(shadow.ac).not.toBe(goblin.ac);
-    const { instances } = addMonsters(deps(), [
-      { monster: SHADOW, count: 2, hp: "average" },
-      { monster: GOBLIN, count: 1, hp: "average" },
-    ]);
+    const { instances } = addMonsters(
+      deps(),
+      [
+        { monster: SHADOW, count: 2, hp: "average" },
+        { monster: GOBLIN, count: 1, hp: "average" },
+      ],
+      origin,
+    );
     const stored = repo.listInstances();
     expect(stored.map((s) => s.id)).toEqual(instances.map((i) => i.id));
     expect(stored.map((s) => s.armorClass)).toEqual([
@@ -246,21 +271,29 @@ describe("addMonsters", () => {
   it("addMonsters stores footprint 2 for a Large monster and 1 for a Medium one", () => {
     expect(ogre.size).toBe("large");
     expect(shadow.size).toBe("medium");
-    const { instances } = addMonsters(deps(), [
-      { monster: OGRE, count: 2, hp: "average" },
-      { monster: SHADOW, count: 1, hp: "average" },
-    ]);
+    const { instances } = addMonsters(
+      deps(),
+      [
+        { monster: OGRE, count: 2, hp: "average" },
+        { monster: SHADOW, count: 1, hp: "average" },
+      ],
+      origin,
+    );
     const stored = repo.listInstances();
     expect(stored.map((s) => s.id)).toEqual(instances.map((i) => i.id));
     expect(stored.map((s) => s.footprint)).toEqual([2, 2, 1]);
   });
 
   it("a new instance has statsVisible false unless its group asks for true", () => {
-    addMonsters(deps(), [
-      { monster: SHADOW, count: 2, hp: "average", statsVisible: true },
-      { monster: GOBLIN, count: 1, hp: "average" },
-      { monster: GOBLIN, count: 1, hp: "average", statsVisible: false },
-    ]);
+    addMonsters(
+      deps(),
+      [
+        { monster: SHADOW, count: 2, hp: "average", statsVisible: true },
+        { monster: GOBLIN, count: 1, hp: "average" },
+        { monster: GOBLIN, count: 1, hp: "average", statsVisible: false },
+      ],
+      origin,
+    );
     expect(
       repo.listInstances().map((s) => [s.displayName, s.statsVisible]),
     ).toEqual([
@@ -283,9 +316,11 @@ describe("addMonsters", () => {
       byKey: new Map([[weak.key, weak]]),
     };
     const rng: Rng = { nextInt: () => 0 }; // every die shows its minimum (1)
-    const { instances, rolls } = addMonsters(deps({ monsters: index, rng }), [
-      { monster: weak.key, count: 1 },
-    ]);
+    const { instances, rolls } = addMonsters(
+      deps({ monsters: index, rng }),
+      [{ monster: weak.key, count: 1 }],
+      origin,
+    );
     expect(instances[0]?.maxHp).toBe(1);
     expect(repo.listInstances()[0]?.maxHp).toBe(1);
     expect(rolls[0]?.label).toBe("Weakling 1 HP");
@@ -329,6 +364,7 @@ describe("addMonsters validation", () => {
         addMonsters(
           deps(),
           groups,
+          origin,
           code === "invalid_initiative"
             ? { initiative: "Each" as "each" }
             : undefined,
@@ -344,25 +380,32 @@ describe("addMonsters validation", () => {
   );
 
   it("accepts the maximum count of 50", () => {
-    const { instances } = addMonsters(deps(), [
-      { monster: SHADOW, count: 50, hp: "average" },
-    ]);
+    const { instances } = addMonsters(
+      deps(),
+      [{ monster: SHADOW, count: 50, hp: "average" }],
+      origin,
+    );
     expect(instances).toHaveLength(50);
   });
 
   it("rejects a count above the default cap but allows a higher one", () => {
     expect(MAX_GROUP_COUNT).toBe(50);
     expect(() =>
-      addMonsters(deps(), [{ monster: SHADOW, count: 51, hp: "average" }]),
+      addMonsters(
+        deps(),
+        [{ monster: SHADOW, count: 51, hp: "average" }],
+        origin,
+      ),
     ).toThrow(/between 1 and 50/);
     const { instances } = addMonsters(
       deps(),
       [{ monster: SHADOW, count: 200, hp: "average" }],
+      origin,
       { maxGroupCount: 200 },
     );
     expect(instances).toHaveLength(200);
     expect(() =>
-      addMonsters(deps(), [{ monster: SHADOW, count: 11 }], {
+      addMonsters(deps(), [{ monster: SHADOW, count: 11 }], origin, {
         maxGroupCount: 10,
       }),
     ).toThrow(/between 1 and 10/);
@@ -370,7 +413,7 @@ describe("addMonsters validation", () => {
 
   it.each([0, -1, 1.5, NaN])("rejects maxGroupCount %s", (max) => {
     expect(() =>
-      addMonsters(deps(), [{ monster: SHADOW, count: 1 }], {
+      addMonsters(deps(), [{ monster: SHADOW, count: 1 }], origin, {
         maxGroupCount: max,
       }),
     ).toThrow(AddMonstersError);
@@ -380,10 +423,14 @@ describe("addMonsters validation", () => {
 
   it("names the offending group in the message", () => {
     expect(() =>
-      addMonsters(deps(), [
-        { monster: SHADOW, count: 1 },
-        { monster: "nope", count: 1 },
-      ]),
+      addMonsters(
+        deps(),
+        [
+          { monster: SHADOW, count: 1 },
+          { monster: "nope", count: 1 },
+        ],
+        origin,
+      ),
     ).toThrow(/Group 2 \(nope\)/);
   });
 });
@@ -433,11 +480,15 @@ describe("createNumberedNaming", () => {
   });
 
   it("keeps numbering distinct monsters independent within one call", () => {
-    const { instances } = addMonsters(deps(), [
-      { monster: SHADOW, count: 2, hp: "average" },
-      { monster: GOBLIN, count: 1, hp: "average" },
-      { monster: SHADOW, count: 1, hp: "average" },
-    ]);
+    const { instances } = addMonsters(
+      deps(),
+      [
+        { monster: SHADOW, count: 2, hp: "average" },
+        { monster: GOBLIN, count: 1, hp: "average" },
+        { monster: SHADOW, count: 1, hp: "average" },
+      ],
+      origin,
+    );
     expect(instances.map((i) => i.name)).toEqual([
       "Shadow 1",
       "Shadow 2",
@@ -485,9 +536,11 @@ describe("addMonsters across connections", () => {
       if (!attempted) {
         attempted = true;
         try {
-          addMonsters(depsFor(repoB), [
-            { monster: SHADOW, count: 1, hp: "average" },
-          ]);
+          addMonsters(
+            depsFor(repoB),
+            [{ monster: SHADOW, count: 1, hp: "average" }],
+            origin,
+          );
         } catch (err) {
           concurrentError = err;
         }
@@ -495,16 +548,20 @@ describe("addMonsters across connections", () => {
       return numbered(ctx);
     };
 
-    const first = addMonsters(depsFor(repoA, racing), [
-      { monster: SHADOW, count: 1, hp: "average" },
-    ]);
+    const first = addMonsters(
+      depsFor(repoA, racing),
+      [{ monster: SHADOW, count: 1, hp: "average" }],
+      origin,
+    );
     expect(attempted).toBe(true);
     // SQLITE_BUSY: B could not take the write lock A was holding.
     expect(concurrentError).toMatchObject({ errcode: 5 });
 
-    const second = addMonsters(depsFor(repoB), [
-      { monster: SHADOW, count: 1, hp: "average" },
-    ]);
+    const second = addMonsters(
+      depsFor(repoB),
+      [{ monster: SHADOW, count: 1, hp: "average" }],
+      origin,
+    );
     expect(first.instances.map((i) => i.name)).toEqual(["Shadow 1"]);
     expect(second.instances.map((i) => i.name)).toEqual(["Shadow 2"]);
     expect(repoA.listInstances().map((i) => i.displayName)).toEqual([

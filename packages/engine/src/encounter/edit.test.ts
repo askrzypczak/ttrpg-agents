@@ -5,6 +5,9 @@ import { UnknownInstanceError } from "./errors.js";
 import { clampArmorClass, clampHp, resizeMaxHp } from "./hp.js";
 import type { EncounterRepository } from "./repository.js";
 import type { MonsterInstance } from "./types.js";
+import type { ChangeOrigin } from "./origin.js";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 /**
  * An in-memory repository whose HP, max HP and armor class setters follow the
@@ -60,11 +63,15 @@ describe("applyInstanceEdit", () => {
       makeTestInstance({ id: "i1", maxHp: 16, currentHp: 16 }),
     ]);
 
-    const result = applyInstanceEdit(repo, {
-      instanceId: "i1",
-      currentHp: 25,
-      maxHp: 30,
-    });
+    const result = applyInstanceEdit(
+      repo,
+      {
+        instanceId: "i1",
+        currentHp: 25,
+        maxHp: 30,
+      },
+      origin,
+    );
 
     expect(result).toMatchObject({ id: "i1", maxHp: 30, currentHp: 25 });
     expect(repo.snapshot()[0]).toMatchObject({ maxHp: 30, currentHp: 25 });
@@ -80,11 +87,15 @@ describe("applyInstanceEdit", () => {
       }),
     ]);
 
-    const result = applyInstanceEdit(repo, {
-      instanceId: "i1",
-      currentHp: 99,
-      armorClass: -3,
-    });
+    const result = applyInstanceEdit(
+      repo,
+      {
+        instanceId: "i1",
+        currentHp: 99,
+        armorClass: -3,
+      },
+      origin,
+    );
 
     expect(result).toMatchObject({
       id: "i1",
@@ -106,12 +117,16 @@ describe("applyInstanceEdit", () => {
     const before = repo.snapshot();
 
     expect(() =>
-      applyInstanceEdit(repo, {
-        instanceId: "nope",
-        currentHp: 5,
-        maxHp: 20,
-        armorClass: 14,
-      }),
+      applyInstanceEdit(
+        repo,
+        {
+          instanceId: "nope",
+          currentHp: 5,
+          maxHp: 20,
+          armorClass: 14,
+        },
+        origin,
+      ),
     ).toThrow(UnknownInstanceError);
     expect(repo.snapshot()).toEqual(before);
   });

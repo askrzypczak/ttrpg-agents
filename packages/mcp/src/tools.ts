@@ -7,6 +7,7 @@ import {
   resolveTargets,
   getMonsterByKey,
   searchMonsters,
+  type ChangeOrigin,
   type MonsterInstance,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
@@ -33,6 +34,11 @@ export interface ToolDefinition {
   annotations?: ToolAnnotations;
   /** Validates `args` against `inputSchema`; domain errors become isError results. */
   handler(ctx: ToolContext, args: unknown): ToolResult | Promise<ToolResult>;
+}
+
+/** The origin of every write in one tool call: source `mcp`, one command id per call. */
+function mcpOrigin(ctx: ToolContext): ChangeOrigin {
+  return { source: "mcp", commandId: ctx.newCommandId() };
 }
 
 function ok(text: string, structured?: Record<string, unknown>): ToolResult {
@@ -188,6 +194,7 @@ const addMonstersTool = defineTool({
         newGroupId: ctx.newGroupId,
       },
       groups,
+      mcpOrigin(ctx),
       initiative === undefined ? {} : { initiative },
     );
     const text = [
@@ -248,9 +255,10 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
     run(ctx, { target, amount }) {
       const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
       if (!instance) return fail(`Unknown target "${target}"`);
+      const origin = mcpOrigin(ctx);
       const { before, after } = damage
-        ? ctx.repo.applyDamage(instance.id, amount)
-        : ctx.repo.applyHealing(instance.id, amount);
+        ? ctx.repo.applyDamage(instance.id, amount, origin)
+        : ctx.repo.applyHealing(instance.id, amount, origin);
       return ok(
         `${after.displayName}: ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)} HP`,
         { instance: instanceView(after) },
@@ -275,7 +283,10 @@ const removeMonstersTool = defineTool({
       }
       throw e;
     }
-    const removed = ctx.repo.removeInstances(resolved.map((i) => i.id));
+    const removed = ctx.repo.removeInstances(
+      resolved.map((i) => i.id),
+      mcpOrigin(ctx),
+    );
     const names = removed.map((i) => i.displayName);
     return ok(`Removed ${String(names.length)}: ${names.join(", ")}`, {
       removed: removed.map(instanceView),
@@ -293,7 +304,7 @@ const renameMonsterTool = defineTool({
     const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
     // Stryker disable next-line ConditionalExpression: equivalent, resolveTargets throws for an unknown target
     if (!instance) return fail(`Unknown target "${target}"`);
-    const updated = ctx.repo.renameInstance(instance.id, name);
+    const updated = ctx.repo.renameInstance(instance.id, name, mcpOrigin(ctx));
     return ok(`${instance.displayName} renamed to ${updated.displayName}`, {
       instance: instanceView(updated),
     });
@@ -311,7 +322,11 @@ const setInitiativeTool = defineTool({
     // Stryker disable next-line ConditionalExpression: equivalent, resolveTargets throws for an unknown target
     if (!instance) return fail(`Unknown target "${target}"`);
     const before = instance.initiative;
-    const updated = ctx.repo.setInitiative(instance.id, initiative);
+    const updated = ctx.repo.setInitiative(
+      instance.id,
+      initiative,
+      mcpOrigin(ctx),
+    );
     return ok(
       `${updated.displayName}: initiative ${String(before ?? "unset")} -> ${String(updated.initiative)}`,
       { instance: instanceView(updated), before },
@@ -335,8 +350,9 @@ const setStatsVisibilityTool = defineTool({
       }
       throw e;
     }
+    const origin = mcpOrigin(ctx);
     const updated = resolved.map((i) =>
-      ctx.repo.setStatsVisible(i.id, visible),
+      ctx.repo.setStatsVisible(i.id, visible, origin),
     );
     const names = updated.map((i) => i.displayName).join(", ");
     return ok(
@@ -353,7 +369,7 @@ const clearEncounterTool = defineTool({
   inputSchema: {},
   run(ctx) {
     const count = ctx.repo.listInstances().length;
-    ctx.repo.clearEncounter();
+    ctx.repo.clearEncounter(mcpOrigin(ctx));
     return ok(
       `Cleared ${String(count)} ${count === 1 ? "monster" : "monsters"}.`,
       { removed: count },

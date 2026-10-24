@@ -41,8 +41,17 @@ const event = (payload: EncounterEventPayload): BridgeMessage => ({
   payload,
 });
 const added = (...ns: number[]) =>
-  event({ type: "added", instances: ns.map(inst) });
-const removed = (n: number) => event({ type: "removed", id: `i${n}` });
+  event({
+    type: "added",
+    instances: ns.map(inst),
+    origin: { source: "mcp", commandId: "test" },
+  });
+const removed = (n: number) =>
+  event({
+    type: "removed",
+    id: `i${n}`,
+    origin: { source: "mcp", commandId: "test" },
+  });
 
 const foreign: SceneItem = {
   id: "map",
@@ -232,7 +241,13 @@ describe("createEncounterSync", () => {
     await sync.handleMessage(snapshot(1, 2));
     expect(instanceIds(scene)).toEqual(["i2"]);
     await sync.handleMessage(
-      event({ type: "hp-changed", id: "i1", currentHp: 3, maxHp: 16 }),
+      event({
+        type: "hp-changed",
+        id: "i1",
+        currentHp: 3,
+        maxHp: 16,
+        origin: { source: "mcp", commandId: "test" },
+      }),
     );
     expect(instanceIds(scene)).toEqual(["i2"]);
     scene.setReady(false);
@@ -358,7 +373,13 @@ describe("createEncounterSync", () => {
     expect(instanceIds(scene)).toEqual(["i2", "i3"]);
     const before = scene.getItems();
     await sync.handleMessage(
-      event({ type: "hp-changed", id: "i2", currentHp: 3, maxHp: 16 }),
+      event({
+        type: "hp-changed",
+        id: "i2",
+        currentHp: 3,
+        maxHp: 16,
+        origin: { source: "mcp", commandId: "test" },
+      }),
     );
     // Only i2's stat bubbles value and its entry in the synced record may change.
     const withoutBubbles = (items: SceneItem[]) =>
@@ -378,7 +399,9 @@ describe("createEncounterSync", () => {
     expect(tokenOf(scene, 2).metadata[STAT_BUBBLES_METADATA_KEY]).toMatchObject(
       { health: 3, "max health": 16 },
     );
-    await sync.handleMessage(event({ type: "cleared" }));
+    await sync.handleMessage(
+      event({ type: "cleared", origin: { source: "mcp", commandId: "test" } }),
+    );
     expect(instanceIds(scene)).toEqual([]);
     await sync.handleMessage(added(4));
     expect(instanceIds(scene)).toEqual(["i4"]);
@@ -390,7 +413,13 @@ describe("createEncounterSync", () => {
     const sync = createEncounterSync(obr);
     await sync.handleMessage(snapshot(1, 2));
     await sync.handleMessage(
-      event({ type: "hp-changed", id: "i1", currentHp: 3, maxHp: 20 }),
+      event({
+        type: "hp-changed",
+        id: "i1",
+        currentHp: 3,
+        maxHp: 20,
+        origin: { source: "mcp", commandId: "test" },
+      }),
     );
 
     const bubblesOf = (n: number) =>
@@ -522,7 +551,9 @@ describe("createEncounterSync", () => {
     await sync.handleMessage(snapshot(5));
     expect(sync.appliedInstanceCount(), "replacing snapshot").toBe(1);
 
-    await sync.handleMessage(event({ type: "cleared" }));
+    await sync.handleMessage(
+      event({ type: "cleared", origin: { source: "mcp", commandId: "test" } }),
+    );
     expect(sync.appliedInstanceCount(), "cleared").toBe(0);
   });
 

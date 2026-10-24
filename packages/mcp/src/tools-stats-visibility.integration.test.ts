@@ -1,4 +1,4 @@
-import type { NewMonsterInstance } from "@ttrpg-agents/engine";
+import type { NewMonsterInstance, ChangeOrigin } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
@@ -7,6 +7,8 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 const SHADOW = "srd-2024_shadow";
 
@@ -20,6 +22,7 @@ beforeEach(() => {
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group",
+    newCommandId: () => "command",
   };
 });
 
@@ -37,7 +40,7 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): void {
-  ctx.repo.addInstances(() => items);
+  ctx.repo.addInstances(() => items, origin);
 }
 
 function item(displayName: string, initiative: number): NewMonsterInstance {

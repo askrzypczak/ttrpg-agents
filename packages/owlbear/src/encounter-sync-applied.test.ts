@@ -18,7 +18,13 @@ describe("appliedInstanceCount", () => {
     await sync.handleMessage({
       v: 1,
       type: "encounter-event",
-      payload: { type: "hp-changed", id: "i1", currentHp: 3, maxHp: 16 },
+      payload: {
+        type: "hp-changed",
+        id: "i1",
+        currentHp: 3,
+        maxHp: 16,
+        origin: { source: "mcp", commandId: "test" },
+      },
     });
     expect(sync.appliedInstanceCount()).toBe(2);
   });

@@ -14,4 +14,6 @@ export interface ToolContext {
   rng: Rng;
   now: () => Date;
   newGroupId: () => string;
+  /** Source of command ids: one per tool call, shared by all its writes. */
+  newCommandId: () => string;
 }

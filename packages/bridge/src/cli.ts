@@ -48,8 +48,8 @@ const server = await startBridgeServer({
   token,
   agentToken,
   snapshot: () => snapshotMessage(repo, artRepo),
-  removeInstance: (id) => removeInstance(repo, id),
-  editInstance: (edit) => editInstance(repo, edit),
+  removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
+  editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
 });
 const stopPolling = broadcastSnapshotsOnChange(

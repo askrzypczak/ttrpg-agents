@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { TokenArt, ChangeOrigin } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
@@ -21,6 +21,8 @@ import {
   type BridgeServer,
   type BridgeServerOptions,
 } from "./server.js";
+
+const origin: ChangeOrigin = { source: "table", commandId: "test" };
 
 const shadowArt: TokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/shadow.png",
@@ -64,9 +66,10 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "token-art-"));
   dbPath = join(dir, "test.db");
   openStore();
-  repo.addInstances(() => [
-    { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
-  ]);
+  repo.addInstances(
+    () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
+    origin,
+  );
   servers = [];
   sockets = [];
 });

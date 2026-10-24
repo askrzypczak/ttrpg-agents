@@ -13,6 +13,9 @@ import {
 } from "./migrations.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 import { SqliteTokenArtRepository } from "./token-art-repository.js";
+import type { ChangeOrigin } from "@ttrpg-agents/engine";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -154,9 +157,10 @@ describe("migrations", () => {
     dirs.push(dir);
     const path = join(dir, "nested", "enc.db");
     const db1 = openDatabase(path);
-    new SqliteEncounterRepository(db1).addInstances(() => [
-      { monsterKey: "orc", displayName: "Orc", maxHp: 15 },
-    ]);
+    new SqliteEncounterRepository(db1).addInstances(
+      () => [{ monsterKey: "orc", displayName: "Orc", maxHp: 15 }],
+      origin,
+    );
     db1.close();
     const db2 = openDatabase(path);
     const list = new SqliteEncounterRepository(db2).listInstances();

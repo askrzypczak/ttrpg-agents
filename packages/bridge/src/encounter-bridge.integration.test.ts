@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  createEncounterEmitter,
-  observeRepository,
+  type ChangeOrigin,
   type EncounterRepository,
   type MonsterInstance,
   type TokenArtRepository,
@@ -24,19 +23,20 @@ const noArt: TokenArtRepository = {
   setTokenArt: () => {},
 };
 
-function setup() {
-  const inner = new SqliteEncounterRepository(openDatabase(":memory:"));
-  const emitter = createEncounterEmitter();
-  return { inner, repo: observeRepository(inner, emitter) };
+const origin: ChangeOrigin = { source: "table", commandId: "test" };
+
+function setup(): SqliteEncounterRepository {
+  return new SqliteEncounterRepository(openDatabase(":memory:"));
 }
 
 describe("snapshotMessage", () => {
   it("contains the current instances", () => {
-    const { repo, inner } = setup();
-    const created = repo.addInstances(() => [
-      { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
-    ]);
-    expect(snapshotMessage(inner, noArt)).toEqual({
+    const repo = setup();
+    const created = repo.addInstances(
+      () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
+      origin,
+    );
+    expect(snapshotMessage(repo, noArt)).toEqual({
       v: 1,
       type: "encounter-snapshot",
       payload: { instances: created },
@@ -46,26 +46,29 @@ describe("snapshotMessage", () => {
 
 describe("removeInstance", () => {
   const addTwo = (repo: EncounterRepository) =>
-    repo.addInstances(() => [
-      { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
-      { monsterKey: "shadow", displayName: "Shadow 2", maxHp: 16 },
-    ]);
+    repo.addInstances(
+      () => [
+        { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
+        { monsterKey: "shadow", displayName: "Shadow 2", maxHp: 16 },
+      ],
+      origin,
+    );
 
   it("removes and returns ok", () => {
-    const { inner } = setup();
-    const [first, second] = addTwo(inner);
-    expect(removeInstance(inner, first!.id)).toEqual({ ok: true });
-    expect(inner.listInstances().map((i) => i.id)).toEqual([second!.id]);
+    const repo = setup();
+    const [first, second] = addTwo(repo);
+    expect(removeInstance(repo, first!.id, "test")).toEqual({ ok: true });
+    expect(repo.listInstances().map((i) => i.id)).toEqual([second!.id]);
   });
 
   it("maps UnknownInstanceError to unknown-instance", () => {
-    const { inner } = setup();
-    const before = addTwo(inner);
-    const result = removeInstance(inner, "no-such-instance");
+    const repo = setup();
+    const before = addTwo(repo);
+    const result = removeInstance(repo, "no-such-instance", "test");
     expect(result).toMatchObject({ ok: false, code: "unknown-instance" });
     if (result.ok) return;
     expect(typeof result.message).toBe("string");
-    expect(inner.listInstances()).toEqual(before);
+    expect(repo.listInstances()).toEqual(before);
   });
 
   it("rethrows other errors", () => {
@@ -77,7 +80,7 @@ describe("removeInstance", () => {
     };
     let caught: unknown;
     try {
-      removeInstance(stub as EncounterRepository, "i1");
+      removeInstance(stub as EncounterRepository, "i1", "test");
     } catch (e) {
       caught = e;
     }

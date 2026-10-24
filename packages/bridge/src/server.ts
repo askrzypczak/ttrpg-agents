@@ -67,11 +67,11 @@ export interface BridgeServerOptions {
   /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
   queryTimeoutMs?: number;
   /** Removes an instance from the store when the GM deletes its token on the table. */
-  removeInstance?: (instanceId: string) => WriteBackResult;
+  removeInstance?: (instanceId: string, commandId: string) => WriteBackResult;
   /** Stores the art the GM picked for a monster type. */
   setTokenArt?: (monsterKey: string, art: TokenArt) => void;
   /** Applies HP, max HP or armor class edited on the table to the store. */
-  editInstance?: (edit: InstanceEdit) => WriteBackResult;
+  editInstance?: (edit: InstanceEdit, commandId: string) => WriteBackResult;
 }
 
 /** Outcome of a write the table asked for; a refusal changes nothing. */
@@ -137,9 +137,11 @@ interface Hooks {
   token: string;
   pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
-  removeInstance: ((instanceId: string) => WriteBackResult) | undefined;
+  removeInstance:
+    ((instanceId: string, commandId: string) => WriteBackResult) | undefined;
   setTokenArt: ((monsterKey: string, art: TokenArt) => void) | undefined;
-  editInstance: ((edit: InstanceEdit) => WriteBackResult) | undefined;
+  editInstance:
+    ((edit: InstanceEdit, commandId: string) => WriteBackResult) | undefined;
   onAuthenticated: () => void;
 }
 
@@ -167,6 +169,14 @@ function sendSnapshot(ws: WebSocket, hooks: Hooks, cause?: string): void {
       ),
     );
   }
+}
+
+/**
+ * The command a write-back belongs to: the envelope id, or a fresh id when the
+ * message has none or an empty one.
+ */
+function commandIdOf(id: string | undefined): string {
+  return id === undefined || id === "" ? randomUUID() : id;
 }
 
 // Authorization is decided only by the token. The client-supplied `role` in
@@ -227,7 +237,10 @@ function handleMessage(
       }
       let outcome: WriteBackResult;
       try {
-        outcome = hooks.removeInstance(message.payload.instanceId);
+        outcome = hooks.removeInstance(
+          message.payload.instanceId,
+          commandIdOf(message.id),
+        );
       } catch (e) {
         send(
           ws,
@@ -261,7 +274,7 @@ function handleMessage(
       }
       let outcome: WriteBackResult;
       try {
-        outcome = hooks.editInstance(message.payload);
+        outcome = hooks.editInstance(message.payload, commandIdOf(message.id));
       } catch (e) {
         send(
           ws,

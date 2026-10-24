@@ -10,6 +10,7 @@ import {
   validateInstanceName,
 } from "@ttrpg-agents/engine";
 import type {
+  ChangeOrigin,
   Encounter,
   EncounterRepository,
   HpChange,
@@ -88,7 +89,11 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  addInstances(build: InstanceBuilder): MonsterInstance[] {
+  addInstances(
+    build: InstanceBuilder,
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    void origin;
     return this.transaction(() => {
       const encounter = this.getOrCreateActiveEncounter();
       const names = this.listInstances().map((i) => i.displayName);
@@ -156,15 +161,21 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  applyDamage(id: string, amount: number): HpChange {
+  applyDamage(id: string, amount: number, origin: ChangeOrigin): HpChange {
+    void origin;
     return this.adjustHp(id, amount, -1);
   }
 
-  applyHealing(id: string, amount: number): HpChange {
+  applyHealing(id: string, amount: number, origin: ChangeOrigin): HpChange {
+    void origin;
     return this.adjustHp(id, amount, 1);
   }
 
-  removeInstances(ids: readonly string[]): MonsterInstance[] {
+  removeInstances(
+    ids: readonly string[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    void origin;
     return this.transaction(() => {
       const existing = this.listInstances();
       const removed = ids.map((id) => {
@@ -180,7 +191,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  renameInstance(id: string, name: string): MonsterInstance {
+  renameInstance(
+    id: string,
+    name: string,
+    origin: ChangeOrigin,
+  ): MonsterInstance {
+    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -200,7 +216,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  setInitiative(id: string, initiative: number): MonsterInstance {
+  setInitiative(
+    id: string,
+    initiative: number,
+    origin: ChangeOrigin,
+  ): MonsterInstance {
+    void origin;
     if (!Number.isInteger(initiative)) {
       throw new InvalidInitiativeError(
         `initiative must be an integer, got ${String(initiative)}`,
@@ -221,7 +242,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  setHp(id: string, hp: number): HpChange {
+  setHp(id: string, hp: number, origin: ChangeOrigin): HpChange {
+    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -241,7 +263,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  setMaxHp(id: string, maxHp: number): HpChange {
+  setMaxHp(id: string, maxHp: number, origin: ChangeOrigin): HpChange {
+    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -267,7 +290,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  setArmorClass(id: string, armorClass: number): MonsterInstance {
+  setArmorClass(
+    id: string,
+    armorClass: number,
+    origin: ChangeOrigin,
+  ): MonsterInstance {
+    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -284,7 +312,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  setStatsVisible(id: string, visible: boolean): MonsterInstance {
+  setStatsVisible(
+    id: string,
+    visible: boolean,
+    origin: ChangeOrigin,
+  ): MonsterInstance {
+    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -301,7 +334,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  clearEncounter(): void {
+  clearEncounter(origin: ChangeOrigin): void {
+    void origin;
     this.db
       .prepare(
         `DELETE FROM monster_instances

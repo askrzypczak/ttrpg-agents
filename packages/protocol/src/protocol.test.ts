@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   monsterInstanceSchema,
+  type ChangeOrigin,
   type MonsterInstance,
 } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
@@ -28,6 +29,7 @@ function sampleInstance(): MonsterInstance {
 }
 
 const instance = makeTestInstance({ createdAt: 5 });
+const origin: ChangeOrigin = { source: "mcp", commandId: "c1" };
 
 const samples: BridgeMessage[] = [
   {
@@ -47,14 +49,24 @@ const samples: BridgeMessage[] = [
   {
     v: 1,
     type: "encounter-event",
-    payload: { type: "added", instances: [instance] },
+    payload: { type: "added", instances: [instance], origin },
   },
-  { v: 1, type: "encounter-event", payload: { type: "removed", id: "i1" } },
-  { v: 1, type: "encounter-event", payload: { type: "cleared" } },
   {
     v: 1,
     type: "encounter-event",
-    payload: { type: "hp-changed", id: "i1", currentHp: 3, maxHp: 16 },
+    payload: { type: "removed", id: "i1", origin },
+  },
+  { v: 1, type: "encounter-event", payload: { type: "cleared", origin } },
+  {
+    v: 1,
+    type: "encounter-event",
+    payload: {
+      type: "hp-changed",
+      id: "i1",
+      currentHp: 3,
+      maxHp: 16,
+      origin,
+    },
   },
   { v: 1, type: "encounter-snapshot", payload: { instances: [instance] } },
 ];
@@ -312,7 +324,11 @@ describe("protocol", () => {
       JSON.stringify({
         v: 1,
         type: "encounter-event",
-        payload: { type: "added", instances: [withoutFootprint] },
+        payload: {
+          type: "added",
+          instances: [withoutFootprint],
+          origin: { source: "mcp", commandId: "c1" },
+        },
       }),
     );
     expect(event).toEqual({
@@ -320,7 +336,11 @@ describe("protocol", () => {
       message: {
         v: 1,
         type: "encounter-event",
-        payload: { type: "added", instances: [withFootprint] },
+        payload: {
+          type: "added",
+          instances: [withFootprint],
+          origin: { source: "mcp", commandId: "c1" },
+        },
       },
     });
 

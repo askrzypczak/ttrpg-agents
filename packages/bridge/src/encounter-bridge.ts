@@ -12,14 +12,16 @@ import type { WriteBackResult } from "./server.js";
 
 /**
  * Removes one instance for a `token-deleted` request: an unknown id is a
- * refusal (`unknown-instance`), any other failure is rethrown.
+ * refusal (`unknown-instance`), any other failure is rethrown. The write
+ * carries origin source `table` and `commandId`.
  */
 export function removeInstance(
   repo: EncounterRepository,
   instanceId: string,
+  commandId: string,
 ): WriteBackResult {
   try {
-    repo.removeInstances([instanceId]);
+    repo.removeInstances([instanceId], { source: "table", commandId });
     return { ok: true };
   } catch (e) {
     if (e instanceof UnknownInstanceError)
@@ -31,14 +33,15 @@ export function removeInstance(
 /**
  * Applies a table edit for an `instance-edit` request: a domain error (unknown
  * instance, invalid value) is a refusal carrying its code, anything else is
- * rethrown.
+ * rethrown. The writes carry origin source `table` and `commandId`.
  */
 export function editInstance(
   repo: EncounterRepository,
   edit: InstanceEdit,
+  commandId: string,
 ): WriteBackResult {
   try {
-    applyInstanceEdit(repo, edit);
+    applyInstanceEdit(repo, edit, { source: "table", commandId });
     return { ok: true };
   } catch (e) {
     if (e instanceof DomainError)
