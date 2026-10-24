@@ -22,6 +22,10 @@ export const tokenArtSchema = z.object({
     .regex(/^image\//),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
+  sha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
 }) satisfies z.ZodType<TokenArt>;
 
 /** Monster key -> the art its tokens are created with. */

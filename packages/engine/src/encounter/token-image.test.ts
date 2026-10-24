@@ -109,6 +109,14 @@ describe("validateTokenImage", () => {
       '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>',
     );
     expect(rejectionOf(withProlog).code).toBe("svg");
+    const percentSize = text(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"/>',
+    );
+    expect(rejectionOf(percentSize).code).toBe("svg");
+    const noSize = text(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
+    );
+    expect(rejectionOf(noSize).code).toBe("svg");
   });
 
   it("rejects GIF and unknown bytes with unsupported_type", () => {
@@ -134,5 +142,16 @@ describe("validateTokenImage", () => {
   it("rejects a header that declares a zero width or height with unreadable", () => {
     expect(rejectionOf(pngDeclaring(0, 10)).code).toBe("unreadable");
     expect(rejectionOf(pngDeclaring(10, 0)).code).toBe("unreadable");
+  });
+
+  it("rejects a truncated header that is a view into a larger buffer with unreadable", () => {
+    // The buffer still holds the bytes past the view's end, which must not count.
+    const buffer = new Uint8Array(4096);
+    buffer.set(PNG_1X1, 0);
+    expect(rejectionOf(buffer.subarray(0, 20)).code).toBe("unreadable");
+    // Control: the complete header is accepted through the same view shape.
+    expect(validateTokenImage(buffer.subarray(0, PNG_1X1.length)).ok).toBe(
+      true,
+    );
   });
 });
