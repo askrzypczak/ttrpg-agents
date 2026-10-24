@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
   openDatabase,
@@ -42,12 +43,13 @@ const agentToken = await loadOrCreateToken(agentTokenPath);
 const db = openDatabase();
 const repo = new SqliteEncounterRepository(db);
 const artRepo = new SqliteTokenArtRepository(db);
+const log = new SqliteEncounterLog(db);
 const server = await startBridgeServer({
   port,
   staticDir,
   token,
   agentToken,
-  snapshot: () => snapshotMessage(repo, artRepo),
+  snapshot: () => snapshotMessage(repo, artRepo, log),
   removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
   editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),

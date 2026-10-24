@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { ChangeOrigin } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { nextDelay } from "./backoff.js";
@@ -25,33 +26,49 @@ import {
 const inst = (n: number): EncounterInstance =>
   makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
 
-const snapshot = (...ns: number[]): BridgeMessage => ({
+/** `T` without `K`, applied to each member of a union. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
+type EventBody = DistributiveOmit<EncounterEventPayload, "seq">;
+
+const mcp: ChangeOrigin = { source: "mcp", commandId: "test" };
+const table: ChangeOrigin = { source: "table", commandId: "test" };
+
+// Events made without an explicit seq follow on from the last snapshot made.
+let nextSeq = 1;
+beforeEach(() => {
+  nextSeq = 1;
+});
+
+const snapshotAt = (
+  seq: number,
+  ...instances: EncounterInstance[]
+): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: ns.map(inst) },
+  payload: { instances, seq },
 });
-const snapshotOf = (...instances: EncounterInstance[]): BridgeMessage => ({
-  v: 1,
-  type: "encounter-snapshot",
-  payload: { instances },
-});
-const event = (payload: EncounterEventPayload): BridgeMessage => ({
-  v: 1,
-  type: "encounter-event",
-  payload,
-});
+const snapshotOf = (...instances: EncounterInstance[]): BridgeMessage => {
+  nextSeq = 1;
+  return snapshotAt(0, ...instances);
+};
+const snapshot = (...ns: number[]): BridgeMessage =>
+  snapshotOf(...ns.map(inst));
+const eventAt = (seq: number, payload: EventBody): BridgeMessage =>
+  ({
+    v: 1,
+    type: "encounter-event",
+    payload: { ...payload, seq },
+  }) as BridgeMessage;
+const event = (payload: EventBody): BridgeMessage =>
+  eventAt(nextSeq++, payload);
 const added = (...ns: number[]) =>
-  event({
-    type: "added",
-    instances: ns.map(inst),
-    origin: { source: "mcp", commandId: "test" },
-  });
+  event({ type: "added", instances: ns.map(inst), origin: mcp });
 const removed = (n: number) =>
-  event({
-    type: "removed",
-    id: `i${n}`,
-    origin: { source: "mcp", commandId: "test" },
-  });
+  event({ type: "removed", id: `i${n}`, origin: mcp });
+const addedAt = (seq: number, origin: ChangeOrigin, ...ns: number[]) =>
+  eventAt(seq, { type: "added", instances: ns.map(inst), origin });
 
 const foreign: SceneItem = {
   id: "map",
@@ -246,7 +263,7 @@ describe("createEncounterSync", () => {
         id: "i1",
         currentHp: 3,
         maxHp: 16,
-        origin: { source: "mcp", commandId: "test" },
+        origin: mcp,
       }),
     );
     expect(instanceIds(scene)).toEqual(["i2"]);
@@ -378,7 +395,7 @@ describe("createEncounterSync", () => {
         id: "i2",
         currentHp: 3,
         maxHp: 16,
-        origin: { source: "mcp", commandId: "test" },
+        origin: mcp,
       }),
     );
     // Only i2's stat bubbles value and its entry in the synced record may change.
@@ -399,9 +416,7 @@ describe("createEncounterSync", () => {
     expect(tokenOf(scene, 2).metadata[STAT_BUBBLES_METADATA_KEY]).toMatchObject(
       { health: 3, "max health": 16 },
     );
-    await sync.handleMessage(
-      event({ type: "cleared", origin: { source: "mcp", commandId: "test" } }),
-    );
+    await sync.handleMessage(event({ type: "cleared", origin: mcp }));
     expect(instanceIds(scene)).toEqual([]);
     await sync.handleMessage(added(4));
     expect(instanceIds(scene)).toEqual(["i4"]);
@@ -418,7 +433,7 @@ describe("createEncounterSync", () => {
         id: "i1",
         currentHp: 3,
         maxHp: 20,
-        origin: { source: "mcp", commandId: "test" },
+        origin: mcp,
       }),
     );
 
@@ -551,9 +566,7 @@ describe("createEncounterSync", () => {
     await sync.handleMessage(snapshot(5));
     expect(sync.appliedInstanceCount(), "replacing snapshot").toBe(1);
 
-    await sync.handleMessage(
-      event({ type: "cleared", origin: { source: "mcp", commandId: "test" } }),
-    );
+    await sync.handleMessage(event({ type: "cleared", origin: mcp }));
     expect(sync.appliedInstanceCount(), "cleared").toBe(0);
   });
 
@@ -640,5 +653,164 @@ describe("createEncounterSync", () => {
     expect(calls).toEqual([]);
     expect(applied).toBe(1);
     expect(instanceIds(scene)).toEqual(["i1"]);
+  });
+});
+
+describe("createEncounterSync event sequence", () => {
+  it("applies mcp events in seq order after the snapshot", async () => {
+    const { obr, scene } = createFakeObr();
+    let storeChanges = 0;
+    const sync = createEncounterSync(obr, undefined, undefined, {
+      onStoreChange: () => storeChanges++,
+    });
+    await sync.handleMessage(snapshotAt(0, inst(1)));
+
+    await sync.handleMessage(addedAt(1, mcp, 2));
+    await sync.handleMessage(addedAt(2, mcp, 3));
+    await sync.handleMessage(
+      eventAt(3, { type: "removed", id: "i1", origin: mcp }),
+    );
+
+    expect(instanceIds(scene)).toEqual(["i2", "i3"]);
+    // The snapshot and each applied event.
+    expect(storeChanges).toBe(4);
+  });
+
+  it("ignores an event whose seq is not after the last snapshot or applied event", async () => {
+    const { obr, scene } = createFakeObr();
+    let gaps = 0;
+    const sync = createEncounterSync(obr, undefined, undefined, {
+      onGap: () => gaps++,
+    });
+    await sync.handleMessage(snapshotAt(3, inst(1)));
+
+    await sync.handleMessage(addedAt(3, mcp, 2));
+    await sync.handleMessage(addedAt(2, mcp, 2));
+    await sync.handleMessage(addedAt(4, mcp, 3));
+    await sync.handleMessage(addedAt(4, mcp, 4));
+    await sync.handleMessage(addedAt(1, mcp, 5));
+
+    expect(instanceIds(scene)).toEqual(["i1", "i3"]);
+    expect(gaps).toBe(0);
+  });
+
+  it("does not fold a table event but advances past it, so the next mcp event applies", async () => {
+    const { obr, scene } = createFakeObr();
+    let gaps = 0;
+    const sync = createEncounterSync(obr, undefined, undefined, {
+      onGap: () => gaps++,
+    });
+    await sync.handleMessage(snapshotAt(0, inst(1)));
+
+    await sync.handleMessage(addedAt(1, table, 2));
+    expect(instanceIds(scene)).toEqual(["i1"]);
+    await sync.handleMessage(addedAt(2, mcp, 3));
+
+    expect(instanceIds(scene)).toEqual(["i1", "i3"]);
+    expect(gaps).toBe(0);
+  });
+
+  it("on a gap applies nothing, calls onGap once and ignores later events until the next snapshot", async () => {
+    const { obr, scene } = createFakeObr();
+    let gaps = 0;
+    const sync = createEncounterSync(obr, undefined, undefined, {
+      onGap: () => gaps++,
+    });
+    await sync.handleMessage(snapshotAt(0, inst(1)));
+
+    await sync.handleMessage(addedAt(2, mcp, 2));
+    expect(instanceIds(scene)).toEqual(["i1"]);
+    expect(gaps).toBe(1);
+
+    await sync.handleMessage(addedAt(1, mcp, 3));
+    await sync.handleMessage(addedAt(3, mcp, 4));
+    await sync.handleMessage(addedAt(5, mcp, 5));
+
+    expect(instanceIds(scene)).toEqual(["i1"]);
+    expect(gaps).toBe(1);
+  });
+
+  it("a snapshot after a gap resumes applying events after its seq", async () => {
+    const { obr, scene } = createFakeObr();
+    let gaps = 0;
+    const sync = createEncounterSync(obr, undefined, undefined, {
+      onGap: () => gaps++,
+    });
+    await sync.handleMessage(snapshotAt(0, inst(1)));
+    await sync.handleMessage(addedAt(2, mcp, 2));
+    expect(gaps).toBe(1);
+
+    await sync.handleMessage(snapshotAt(5, inst(1), inst(4)));
+    await sync.handleMessage(addedAt(6, mcp, 6));
+
+    expect(instanceIds(scene)).toEqual(["i1", "i4", "i6"]);
+    expect(gaps).toBe(1);
+  });
+
+  describe("resetting what the table reported", () => {
+    /** A sync with token i1 deleted and i2's health typed as text, both reported. */
+    async function reported() {
+      const { obr, scene } = createFakeObr();
+      const deleted: string[] = [];
+      const rejected: string[] = [];
+      let storeChanges = 0;
+      const sync = createEncounterSync(obr, undefined, undefined, {
+        onTokenDeleted: (id) => deleted.push(id),
+        onEditRejected: (text) => rejected.push(text),
+        onStoreChange: () => storeChanges++,
+      });
+      await sync.handleMessage(snapshotAt(0, inst(1), inst(2)));
+      await settle();
+      const second = tokenOf(scene, 2);
+      scene.setItemMetadata([
+        {
+          id: second.id,
+          key: STAT_BUBBLES_METADATA_KEY,
+          value: {
+            ...(second.metadata[STAT_BUBBLES_METADATA_KEY] as object),
+            health: "lots",
+          },
+        },
+      ]);
+      scene.deleteItems([tokenOf(scene, 1).id]);
+      await settle();
+      expect(deleted).toEqual(["i1"]);
+      expect(rejected).toHaveLength(1);
+      return { sync, deleted, rejected, storeChanges: () => storeChanges };
+    }
+
+    it.each([
+      ["snapshot", snapshotAt(5, inst(1), inst(2))],
+      ["applied mcp event", addedAt(1, mcp, 3)],
+    ])(
+      "re-reports a deleted token and an unreadable value and calls onStoreChange (%s)",
+      async (_name, message) => {
+        const { sync, deleted, rejected, storeChanges } = await reported();
+        const before = storeChanges();
+
+        await sync.handleMessage(message);
+        await settle();
+
+        expect(deleted).toEqual(["i1", "i1"]);
+        expect(rejected).toHaveLength(2);
+        expect(storeChanges()).toBe(before + 1);
+      },
+    );
+
+    it("a table event does not call onStoreChange", async () => {
+      const { sync, deleted, rejected, storeChanges } = await reported();
+      const before = storeChanges();
+
+      await sync.handleMessage(addedAt(1, table, 3));
+      await settle();
+
+      expect(storeChanges()).toBe(before);
+      expect(deleted).toEqual(["i1"]);
+      expect(rejected).toHaveLength(1);
+
+      // Control: the next mcp event does call it.
+      await sync.handleMessage(addedAt(2, mcp, 4));
+      expect(storeChanges()).toBe(before + 1);
+    });
   });
 });

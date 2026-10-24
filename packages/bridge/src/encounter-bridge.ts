@@ -3,6 +3,7 @@ import {
   DomainError,
   UnknownInstanceError,
   applyInstanceEdit,
+  type EncounterLog,
   type EncounterRepository,
   type InstanceEdit,
   type TokenArtRepository,
@@ -54,7 +55,9 @@ export function editInstance(
 export function snapshotMessage(
   repo: EncounterRepository,
   artRepo: TokenArtRepository,
+  log: EncounterLog,
 ): BridgeMessage {
+  void log;
   const art = artRepo.listTokenArt();
   return {
     v: 1,
@@ -65,6 +68,21 @@ export function snapshotMessage(
       ...(Object.keys(art).length > 0 ? { art } : {}),
     },
   };
+}
+
+/**
+ * Polls the change log and broadcasts every event committed after the log's
+ * latest `seq` at the time of the call, as an `encounter-event` carrying its
+ * `seq`, oldest first. A failed read is retried on the next tick. Returns a
+ * stop function.
+ */
+export function broadcastLogEvents(
+  log: EncounterLog,
+  target: { broadcast(message: BridgeMessage): void },
+): () => void {
+  void log;
+  void target;
+  throw new Error("not implemented");
 }
 
 const SNAPSHOT_POLL_INTERVAL_MS = 250;
@@ -102,7 +120,12 @@ export function broadcastSnapshotsOnChange(
     try {
       const version = readVersion();
       if (version === seen) return;
-      target.broadcast(snapshotMessage(repo, artRepo));
+      // Stub: this poller is replaced by `broadcastLogEvents`.
+      const emptyLog: EncounterLog = {
+        latestSeq: () => 0,
+        eventsSince: () => [],
+      };
+      target.broadcast(snapshotMessage(repo, artRepo, emptyLog));
       seen = version;
     } catch {
       // Keep `seen` so the next tick retries.

@@ -49,14 +49,18 @@ const samples: BridgeMessage[] = [
   {
     v: 1,
     type: "encounter-event",
-    payload: { type: "added", instances: [instance], origin },
+    payload: { type: "added", instances: [instance], origin, seq: 1 },
   },
   {
     v: 1,
     type: "encounter-event",
-    payload: { type: "removed", id: "i1", origin },
+    payload: { type: "removed", id: "i1", origin, seq: 2 },
   },
-  { v: 1, type: "encounter-event", payload: { type: "cleared", origin } },
+  {
+    v: 1,
+    type: "encounter-event",
+    payload: { type: "cleared", origin, seq: 3 },
+  },
   {
     v: 1,
     type: "encounter-event",
@@ -66,9 +70,14 @@ const samples: BridgeMessage[] = [
       currentHp: 3,
       maxHp: 16,
       origin,
+      seq: 4,
     },
   },
-  { v: 1, type: "encounter-snapshot", payload: { instances: [instance] } },
+  {
+    v: 1,
+    type: "encounter-snapshot",
+    payload: { instances: [instance], seq: 0 },
+  },
 ];
 
 describe("protocol", () => {
@@ -87,7 +96,7 @@ describe("protocol", () => {
       encodeMessage({
         v: 1,
         type: "encounter-snapshot",
-        payload: { instances: [sample] },
+        payload: { instances: [sample], seq: 0 },
       }),
     );
     expect(decoded.ok).toBe(true);
@@ -108,7 +117,7 @@ describe("protocol", () => {
       encodeMessage({
         v: 1,
         type: "encounter-snapshot",
-        payload: { instances: [revealed, hidden] },
+        payload: { instances: [revealed, hidden], seq: 0 },
       }),
     );
     expect(decoded).toEqual({
@@ -116,7 +125,7 @@ describe("protocol", () => {
       message: {
         v: 1,
         type: "encounter-snapshot",
-        payload: { instances: [revealed, hidden] },
+        payload: { instances: [revealed, hidden], seq: 0 },
       },
     });
 
@@ -126,7 +135,7 @@ describe("protocol", () => {
       JSON.stringify({
         v: 1,
         type: "encounter-snapshot",
-        payload: { instances: [withoutFlag] },
+        payload: { instances: [withoutFlag], seq: 0 },
       }),
     );
     expect(missing.ok).toBe(false);
@@ -140,6 +149,7 @@ describe("protocol", () => {
       payload: {
         instances: [makeTestInstance({ id: "i1" })],
         cause: "instance-edit:i1",
+        seq: 0,
       },
     };
 
@@ -153,7 +163,7 @@ describe("protocol", () => {
       JSON.stringify({
         v: 1,
         type: "encounter-snapshot",
-        payload: { instances: [makeTestInstance({ id: "i1" })] },
+        payload: { instances: [makeTestInstance({ id: "i1" })], seq: 0 },
       }),
     );
 
@@ -162,6 +172,42 @@ describe("protocol", () => {
       expect(decoded.message.payload.cause).toBeUndefined();
     else throw new Error("expected a decoded encounter-snapshot");
   });
+
+  it("an encounter-event round-trips the engine event's fields and its seq", () => {
+    const message: BridgeMessage = {
+      v: 1,
+      type: "encounter-event",
+      payload: {
+        type: "hp-changed",
+        id: "i1",
+        currentHp: 3,
+        maxHp: 16,
+        origin: { source: "table", commandId: "instance-edit:i1" },
+        seq: 7,
+      },
+    };
+
+    const decoded = decodeMessage(JSON.stringify(message));
+
+    expect(decoded).toEqual({ ok: true, message });
+    expect(JSON.parse(encodeMessage(message))).toEqual(message);
+  });
+
+  it.each([
+    [
+      "encounter-event",
+      { type: "cleared", origin: { source: "mcp", commandId: "c1" } },
+    ],
+    ["encounter-snapshot", { instances: [] }],
+  ])(
+    "an encounter-event or encounter-snapshot without seq is invalid-payload (%s)",
+    (type, payload) => {
+      const r = decodeMessage(JSON.stringify({ v: 1, type, payload }));
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("invalid-payload");
+    },
+  );
 
   it("rejects malformed JSON", () => {
     const r = decodeMessage("{nope");
@@ -208,7 +254,7 @@ describe("protocol", () => {
 
   it("rejects an encounter-event with an unknown event type", () => {
     const r = decodeMessage(
-      '{"v":1,"type":"encounter-event","payload":{"type":"exploded"}}',
+      '{"v":1,"type":"encounter-event","payload":{"type":"exploded","seq":1}}',
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
@@ -216,7 +262,7 @@ describe("protocol", () => {
 
   it("rejects an encounter-snapshot with a malformed instance", () => {
     const r = decodeMessage(
-      '{"v":1,"type":"encounter-snapshot","payload":{"instances":[{"id":"x"}]}}',
+      '{"v":1,"type":"encounter-snapshot","payload":{"instances":[{"id":"x"}],"seq":0}}',
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
@@ -328,6 +374,7 @@ describe("protocol", () => {
           type: "added",
           instances: [withoutFootprint],
           origin: { source: "mcp", commandId: "c1" },
+          seq: 1,
         },
       }),
     );
@@ -340,6 +387,7 @@ describe("protocol", () => {
           type: "added",
           instances: [withFootprint],
           origin: { source: "mcp", commandId: "c1" },
+          seq: 1,
         },
       },
     });
@@ -348,7 +396,7 @@ describe("protocol", () => {
       JSON.stringify({
         v: 1,
         type: "encounter-snapshot",
-        payload: { instances: [withoutFootprint] },
+        payload: { instances: [withoutFootprint], seq: 0 },
       }),
     );
     expect(snapshot).toEqual({
@@ -356,7 +404,7 @@ describe("protocol", () => {
       message: {
         v: 1,
         type: "encounter-snapshot",
-        payload: { instances: [withFootprint] },
+        payload: { instances: [withFootprint], seq: 0 },
       },
     });
   });

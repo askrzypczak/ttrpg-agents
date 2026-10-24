@@ -105,6 +105,10 @@ export function createEncounterSync(
     onEditRejected?: (text: string) => void;
     /** Called once per answered edit whose table value differs from the store's, with the note to show. */
     onEditDiffers?: (text: string) => void;
+    /** Called when a snapshot or an applied `mcp` event changes what the store says. */
+    onStoreChange?: () => void;
+    /** Called once when an event arrives with a gap in `seq`: the caller should reconnect for a snapshot. */
+    onGap?: () => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;

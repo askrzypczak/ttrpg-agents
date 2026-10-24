@@ -6,12 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import type { ChangeOrigin, EncounterRepository } from "@ttrpg-agents/engine";
 import {
+  SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
-import { encodeMessage } from "@ttrpg-agents/protocol";
+import { decodeMessage, encodeMessage } from "@ttrpg-agents/protocol";
 import {
+  broadcastLogEvents,
   editInstance,
   removeInstance,
   snapshotMessage,
@@ -27,6 +29,8 @@ let server: BridgeServer;
 let socket: WebSocket;
 let received: string[];
 let connectMessages: number;
+let log: SqliteEncounterLog;
+let stopPolling: (() => void) | undefined;
 
 /** Delegates to `inner` and records the origin of every mutation. */
 function recordingRepo(inner: SqliteEncounterRepository): EncounterRepository {
@@ -87,10 +91,12 @@ beforeEach(async () => {
   );
   instanceId = shadow!.id;
   const recording = recordingRepo(repo);
+  log = new SqliteEncounterLog(db);
   server = await startBridgeServer({
     port: 0,
     staticDir: dir,
-    snapshot: () => snapshotMessage(repo, new SqliteTokenArtRepository(db)),
+    snapshot: () =>
+      snapshotMessage(repo, new SqliteTokenArtRepository(db), log),
     editInstance: (edit, commandId) => editInstance(recording, edit, commandId),
     removeInstance: (id, commandId) => removeInstance(recording, id, commandId),
   });
@@ -116,6 +122,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  stopPolling?.();
+  stopPolling = undefined;
   socket.close();
   await server.close();
   db.close();
@@ -144,6 +152,28 @@ const tokenDeleted = (id?: string): Record<string, unknown> => ({
 });
 
 describe("write-back origin", () => {
+  it.each([
+    ["instance-edit", edit, "instance-edit:abc"],
+    ["token-deleted", tokenDeleted, "token-deleted:abc"],
+  ])(
+    "an accepted write-back reaches the client as an encounter-event with source table and the message id (%s)",
+    async (_type, build, id) => {
+      stopPolling = broadcastLogEvents(log, server);
+      const eventOrigins = () =>
+        received.flatMap((raw) => {
+          const r = decodeMessage(raw);
+          return r.ok && r.message.type === "encounter-event"
+            ? [r.message.payload.origin]
+            : [];
+        });
+
+      send(build(id));
+      await waitFor(() => eventOrigins().length > 0);
+
+      expect(eventOrigins()).toEqual([{ source: "table", commandId: id }]);
+    },
+  );
+
   it("an instance-edit write-back reaches the repository with source table and the message id", async () => {
     send(edit("instance-edit:abc"));
     await awaitReply(1);
