@@ -71,7 +71,7 @@ export type Projector = {
    * Reads a value edited on the table back into the instance fields it
    * changed; `invalid` names the fields whose value could not be read.
    */
-  invert?(
+  readBack?(
     value: unknown,
     instance: EncounterInstance,
   ): { edit: Omit<InstanceEdit, "instanceId">; invalid: string[] };
@@ -191,7 +191,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * - d == o: nothing, but re-baseline when b != r.
  * - d != o, b present, r != b (the encounter changed): push d, b := r.
  * - d != o, b present, r == b (the table was edited): leave it. If the
- *   projector can `invert` the value, the changed fields are planned as an
+ *   projector can `readBack` the value, the changed fields are planned as an
  *   edit to write back and b := o (the baseline temporarily holds the edited
  *   table value, so the store's answer is judged by the rules above: accepted
  *   exactly is d == o, a different value is r != b and is pushed). Values that
@@ -244,7 +244,7 @@ export function planSync(
     const instance = wanted.get(id)!;
     const baseline = asRecord(token.metadata[SYNCED_METADATA_KEY]);
     const next = { ...baseline };
-    for (const { key, project, invert } of owned) {
+    for (const { key, project, readBack } of owned) {
       const raw = project(instance);
       const o = token.metadata[key];
       const d = project(instance, o, baseline[key]);
@@ -257,10 +257,10 @@ export function planSync(
         if (!deepEqual(raw, baseline[key])) {
           plan.update.push({ id: token.id, key, value: d });
           next[key] = raw;
-        } else if (invert) {
+        } else if (readBack) {
           // The table was edited: write the change back and keep the table
           // value as the baseline until the store answers.
-          const { edit, invalid } = invert(o, instance);
+          const { edit, invalid } = readBack(o, instance);
           if (Object.keys(edit).length > 0) {
             plan.edits.push({ instanceId: id, ...edit });
             next[key] = o;
