@@ -57,7 +57,7 @@ const server = await startBridgeServer({
 const stopPolling = broadcastLogEvents(log, server, {
   onUnreadable: ({ seq, error }) =>
     console.error(
-      `change log row ${seq} could not be read and was skipped: ${error}`,
+      `change log row ${seq} could not be read and was skipped: ${error.replace(/\s+/g, " ")}`,
     ),
   snapshot: () => snapshotMessage(repo, artRepo, log),
 });
