@@ -24,6 +24,7 @@ Runtime view (processes, ports, auth, data flow): [`docs/architecture.md`](docs/
 ## Conventions
 - Owner: Tony (personal GitHub account `askrzypczak`). Public repo, openly an agent-written test project for claude-workflow (see README). Tony is the only contributor: issues are for directing agents, outside PRs are not accepted. No license yet (all rights reserved); the SRD data is CC-BY 4.0.
 - Keep this file short; record decisions here as they are made.
+- Table wins, per field: a value changed on the Owlbear table (by the GM or anyone) stays until the agent/MCP gives that same value something new (the encounter changes it). `planSync` implements it with a baseline per owned key; a projector with several fields in one key applies it per field using the baseline passed as its third argument. Only Stat Bubbles `hide` does so today; its other fields are still one value (see `packages/owlbear/README.md`, #162).
 - Never authorize by the client-supplied `role` (bridge `hello`); it only drives UI. Bridge clients authenticate with the token.
 - The bridge's agent channel carries queries only. The agent changes the game through the engine's model, and the extension reconciles the scene to it. Never add a write to the table through a query.
 - Supported setup is one machine with one Owlbear GM tab. The bridge keeps at most one authenticated extension client: the newest wins, and the displaced tab gets a fatal `superseded` error, stops reconnecting and shows "Connected in another tab." with a "Use this tab" button. Several GM tabs or GMs are not supported.

@@ -205,6 +205,7 @@ export function addMonsters(
           maxHp,
           armorClass: monster.ac,
           groupId,
+          statsVisible: group.statsVisible ?? false,
         });
         hpModes.push(hpMode);
         acs.push(monster.ac);

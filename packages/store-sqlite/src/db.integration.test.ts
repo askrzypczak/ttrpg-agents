@@ -175,17 +175,19 @@ describe("migrations", () => {
           .all() as { name: string }[]
       ).map((row) => row.name);
 
-    // Build the database as the previous release left it.
-    const previous = LATEST_VERSION - 1;
+    // Build the database at version 2, before token_art existed.
+    const previous = 2;
     const old = new DatabaseSync(path);
     for (const m of migrations.filter((m) => m.version <= previous))
       old.exec(m.sql);
     old.exec(`PRAGMA user_version = ${previous}`);
     expect(tables(old)).toContain("monster_instances");
     expect(tables(old)).not.toContain("token_art");
-    new SqliteEncounterRepository(old).addInstances(() => [
-      { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
-    ]);
+    old.exec(
+      `INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 1);
+       INSERT INTO monster_instances (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at)
+       VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 16, 1);`,
+    );
     old.close();
 
     const db = openDatabase(path);

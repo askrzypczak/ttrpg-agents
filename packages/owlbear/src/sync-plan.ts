@@ -166,6 +166,8 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * - d != o, b present, r != b (the encounter changed): push d, b := r.
  * - d != o, b present, r == b (the table was edited): leave it.
  * - d != o, no b: push d if o is absent, else keep o; either way b := r.
+ * A projector may use the baseline to apply this rule per field inside its
+ * value: a table edit wins until the encounter changes that field.
  * An undefined r means no key: it is never written or baselined, and its
  * baseline is dropped (the token's value is left alone).
  * The token name follows the same rule, with its baseline under
@@ -212,7 +214,7 @@ export function planSync(
     for (const { key, project } of owned) {
       const raw = project(instance);
       const o = token.metadata[key];
-      const d = project(instance, o);
+      const d = project(instance, o, baseline[key]);
       const hasBaseline = Object.hasOwn(baseline, key);
       if (raw === undefined) {
         delete next[key];

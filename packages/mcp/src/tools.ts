@@ -168,7 +168,9 @@ const addMonstersTool = defineTool({
         statsVisible: z
           .boolean()
           .optional()
-          .describe("Reveal the group's stats to players (default: GM-only)"),
+          .describe(
+            "Players can see the Stat Bubbles (HP/AC); default false, GM-only",
+          ),
       }),
     ),
     initiative: z
@@ -323,8 +325,24 @@ const setStatsVisibilityTool = defineTool({
   description:
     "Reveal monsters' stats to players (visible: true) or hide them again (visible: false). Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
   inputSchema: { targets: z.array(z.string()).min(1), visible: z.boolean() },
-  run() {
-    throw new Error("not implemented");
+  run(ctx, { targets, visible }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const updated = resolved.map((i) =>
+      ctx.repo.setStatsVisible(i.id, visible),
+    );
+    const names = updated.map((i) => i.displayName).join(", ");
+    return ok(
+      `${visible ? "Revealed stats to players" : "Hid stats from players"}: ${names}`,
+      { instances: updated.map(instanceView) },
+    );
   },
 });
 
