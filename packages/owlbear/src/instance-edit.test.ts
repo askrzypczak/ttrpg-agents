@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
-import { instanceEditErrorText, instanceEditMessage } from "./instance-edit.js";
+import {
+  instanceEditErrorText,
+  instanceEditMessage,
+  instanceIdOfEditCause,
+} from "./instance-edit.js";
 
 const error = (
   id: string | undefined,
@@ -39,5 +43,22 @@ describe("instance-edit", () => {
         payload: {},
       }),
     ).toBe(undefined);
+  });
+
+  it("instanceIdOfEditCause reads the instance id from an edit cause", () => {
+    const request = instanceEditMessage({ instanceId: "i7", currentHp: 5 });
+
+    expect(instanceIdOfEditCause(request.id)).toBe("i7");
+    expect(instanceIdOfEditCause("instance-edit:goblin-2")).toBe("goblin-2");
+  });
+
+  it("instanceIdOfEditCause is undefined for other or missing causes", () => {
+    // Control: an edit cause reads.
+    expect(instanceIdOfEditCause("instance-edit:i7")).toBe("i7");
+
+    expect(instanceIdOfEditCause(undefined)).toBe(undefined);
+    expect(instanceIdOfEditCause("token-deleted:i7")).toBe(undefined);
+    expect(instanceIdOfEditCause("q1")).toBe(undefined);
+    expect(instanceIdOfEditCause("")).toBe(undefined);
   });
 });

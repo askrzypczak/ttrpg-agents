@@ -129,6 +129,15 @@ export const defaultSyncConfig: SyncConfig = {
   },
 };
 
+/**
+ * Per instance id, per projector key: the edit fields already sent to the
+ * store for what is on the table, so they are not sent again.
+ */
+export type EditMemory = Record<
+  string,
+  Record<string, Omit<InstanceEdit, "instanceId">>
+>;
+
 export type SyncPlan = {
   add: SceneItem[];
   /** Key-level item metadata writes; `value: undefined` clears the key. */
@@ -144,6 +153,10 @@ export type SyncPlan = {
   edits: InstanceEdit[];
   /** Table values that could not be read back, left on the table. */
   rejected: { instanceId: string; message: string }[];
+  /** The edits now on the table, to remember so they are not sent again. */
+  sent: EditMemory;
+  /** Answered edits whose table value differs from the store's, left on the table. */
+  differs: { instanceId: string; message: string }[];
 };
 
 /** The instance id a scene item is linked to, if it is one of our tokens. */
@@ -216,8 +229,14 @@ export function planSync(
     placed: ReadonlySet<string>;
     /** Monster key -> the art its new tokens are created with. */
     art: Readonly<Record<string, TokenArt>>;
+    /** Instances as the store answered a write-back of their edit. */
+    answered?: ReadonlyMap<string, EncounterInstance>;
+    /** Edits already sent for what is on the table. */
+    sent?: Readonly<EditMemory>;
   },
 ): SyncPlan {
+  if (context.answered !== undefined || context.sent !== undefined)
+    throw new Error("not implemented");
   const plan: SyncPlan = {
     add: [],
     update: [],
@@ -227,6 +246,8 @@ export function planSync(
     needsArt: [],
     edits: [],
     rejected: [],
+    sent: {},
+    differs: [],
   };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();

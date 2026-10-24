@@ -18,6 +18,17 @@ export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
 }
 
 /**
+ * The instance id an `instance-edit` snapshot answers, read from the
+ * snapshot's cause; `undefined` for any other cause or none.
+ */
+export function instanceIdOfEditCause(
+  cause: string | undefined,
+): string | undefined {
+  void cause;
+  throw new Error("not implemented");
+}
+
+/**
  * Panel text for a non-fatal bridge `error` that answers an `instance-edit`
  * request; `undefined` for any other message.
  */

@@ -28,17 +28,6 @@ const plan = (desired: EncounterInstance[], observed: SceneItem[]): SyncPlan =>
     art: {},
   });
 
-const emptyPlan: SyncPlan = {
-  add: [],
-  update: [],
-  delete: [],
-  rename: [],
-  deleted: [],
-  needsArt: [],
-  edits: [],
-  rejected: [],
-};
-
 /** Applies the plan's key-level metadata updates to copies of `items`. */
 function applyUpdates(items: SceneItem[], p: SyncPlan): SceneItem[] {
   const out = structuredClone(items);
@@ -77,7 +66,7 @@ const bubblesBaselineOf = (item: SceneItem): unknown =>
   ];
 
 describe("planSync write-back of table edits", () => {
-  it("planSync emits an edit for a table-edited owned key and sets its baseline to the table value", () => {
+  it("planSync emits an edit for a table-edited owned key and leaves the table value", () => {
     const token = editedToken(inst(), {
       health: 18,
       "max health": 20,
@@ -91,9 +80,7 @@ describe("planSync write-back of table edits", () => {
     ]);
     expect(p.rejected).toEqual([]);
     const [after] = applyUpdates([token], p);
-    // The table value stays, and becomes the baseline.
     expect(bubblesOf(after!)).toEqual(bubblesOf(token));
-    expect(bubblesBaselineOf(after!)).toEqual(bubblesOf(token));
   });
 
   it("planSync emits no edit when the encounter changed as well", () => {
@@ -110,36 +97,6 @@ describe("planSync write-back of table edits", () => {
     expect(plan([inst()], [token]).edits).toEqual([
       { instanceId: "i1", currentHp: 5 },
     ]);
-  });
-
-  it("planSync pushes the store's clamped value back after the store answers with a different value", () => {
-    const token = editedToken(inst(), { health: 99 });
-    const first = plan([inst()], [token]);
-    expect(first.edits).toEqual([{ instanceId: "i1", currentHp: 99 }]);
-    const [sent] = applyUpdates([token], first);
-
-    // The store clamped 99 to max HP.
-    const answered = inst({ currentHp: 16 });
-    const second = plan([answered], [sent!]);
-
-    expect(second.edits).toEqual([]);
-    const [after] = applyUpdates([sent!], second);
-    expect(bubblesOf(after!)).toMatchObject({ health: 16 });
-    expect(bubblesBaselineOf(after!)).toMatchObject({ health: 16 });
-    expect(plan([answered], [after!])).toEqual(emptyPlan);
-  });
-
-  it("planSync plans nothing after the store accepted the edit exactly", () => {
-    const token = editedToken(inst(), { health: 5, "armor class": 15 });
-    const first = plan([inst()], [token]);
-    expect(first.edits).toEqual([
-      { instanceId: "i1", currentHp: 5, armorClass: 15 },
-    ]);
-    const [sent] = applyUpdates([token], first);
-
-    expect(plan([inst({ currentHp: 5, armorClass: 15 })], [sent!])).toEqual(
-      emptyPlan,
-    );
   });
 
   it("planSync reports an unparseable value and leaves it on the table", () => {

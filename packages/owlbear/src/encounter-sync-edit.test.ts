@@ -24,6 +24,13 @@ const snapshot = (instance: EncounterInstance): BridgeMessage => ({
   payload: { instances: [instance] },
 });
 
+/** The bridge's snapshot answering the accepted `instance-edit` for i1. */
+const answer = (instance: EncounterInstance): BridgeMessage => ({
+  v: 1,
+  type: "encounter-snapshot",
+  payload: { instances: [instance], cause: "instance-edit:i1" },
+});
+
 const foreign: SceneItem = {
   id: "map",
   type: "IMAGE",
@@ -91,7 +98,7 @@ describe("createEncounterSync table edit write-back", () => {
 
     // The bridge answers with the stored edit: nothing more is sent and the
     // table keeps the value.
-    await sync.handleMessage(snapshot(inst({ currentHp: 5 })));
+    await sync.handleMessage(answer(inst({ currentHp: 5 })));
     await settle();
     expect(edits).toHaveLength(1);
     expect(bubbles(scene).health).toBe(5);
@@ -105,11 +112,20 @@ describe("createEncounterSync table edit write-back", () => {
     ]);
   });
 
-  it("createEncounterSync reverts the table to the store value when the bridge answers an edit with an error", async () => {
-    const { sync, scene, edits } = await setup();
+  it("a refused edit leaves the token unchanged and causes no reconcile", async () => {
+    const { obr, scene } = createFakeObr();
+    const edits: InstanceEdit[] = [];
+    let applied = 0;
+    const sync = createEncounterSync(obr, undefined, () => applied++, {
+      onInstanceEdit: (edit) => edits.push(edit),
+    });
+    await sync.handleMessage(snapshot(inst()));
+    await settle();
     editAtTable(scene, { health: 5 });
     await settle();
     expect(edits).toEqual([{ instanceId: "i1", currentHp: 5 }]);
+    const appliedBefore = applied;
+    const itemsBefore = JSON.stringify(scene.getItems());
 
     await sync.handleMessage({
       v: 1,
@@ -119,7 +135,9 @@ describe("createEncounterSync table edit write-back", () => {
     });
     await settle();
 
-    expect(bubbles(scene).health).toBe(10);
+    expect(applied).toBe(appliedBefore);
+    expect(JSON.stringify(scene.getItems())).toBe(itemsBefore);
+    expect(bubbles(scene).health).toBe(5);
     expect(edits).toHaveLength(1);
   });
 

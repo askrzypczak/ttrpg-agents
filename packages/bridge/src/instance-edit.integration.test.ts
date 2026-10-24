@@ -15,7 +15,11 @@ import {
   encodeMessage,
   type BridgeMessage,
 } from "@ttrpg-agents/protocol";
-import { editInstance, snapshotMessage } from "./encounter-bridge.js";
+import {
+  editInstance,
+  removeInstance,
+  snapshotMessage,
+} from "./encounter-bridge.js";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
 let dir: string;
@@ -31,6 +35,7 @@ async function startServer(): Promise<BridgeServer> {
     staticDir: dir,
     snapshot: () => snapshotMessage(repo, new SqliteTokenArtRepository(db)),
     editInstance: (edit) => editInstance(repo, edit),
+    removeInstance: (id) => removeInstance(repo, id),
   });
   servers.push(server);
   return server;
@@ -85,6 +90,8 @@ interface Client {
   /** Resolves with the close code. */
   closed: Promise<number>;
   snapshots(): MonsterInstance[][];
+  /** The `cause` of each snapshot received, in order. */
+  causes(): (string | undefined)[];
   errors(): Extract<BridgeMessage, { type: "error" }>[];
 }
 
@@ -112,6 +119,10 @@ async function connect(server: BridgeServer): Promise<Client> {
     snapshots: () =>
       received.flatMap((m) =>
         m.type === "encounter-snapshot" ? [m.payload.instances] : [],
+      ),
+    causes: () =>
+      received.flatMap((m) =>
+        m.type === "encounter-snapshot" ? [m.payload.cause] : [],
       ),
     errors: () => received.flatMap((m) => (m.type === "error" ? [m] : [])),
   };
@@ -267,5 +278,71 @@ describe("instance-edit over the bridge", () => {
       currentHp: 16,
       maxHp: 16,
     });
+  });
+
+  it("the snapshot after an accepted instance-edit carries the edit's envelope id as its cause", async () => {
+    const server = await startServer();
+    const [first] = shadows;
+    const client = await authed(server);
+
+    await editAndAwaitSnapshot(client, first!.id, { currentHp: 5 });
+
+    expect(client.causes().at(-1)).toBe(`instance-edit:${first!.id}`);
+  });
+
+  it("the snapshot sent on connect carries no cause", async () => {
+    const server = await startServer();
+    const [first] = shadows;
+    const client = await authed(server);
+
+    expect(client.causes()).toEqual([undefined]);
+
+    // Control: the snapshot after an edit does carry one.
+    await editAndAwaitSnapshot(client, first!.id, { currentHp: 5 });
+    expect(client.causes()).toEqual([undefined, `instance-edit:${first!.id}`]);
+  });
+
+  it("the snapshot after a token-deleted carries no cause", async () => {
+    const server = await startServer();
+    const [first, second] = shadows;
+    const client = await authed(server);
+
+    client.ws.send(
+      JSON.stringify({
+        v: 1,
+        type: "token-deleted",
+        id: `token-deleted:${first!.id}`,
+        payload: { instanceId: first!.id },
+      }),
+    );
+    await waitFor(() => client.snapshots().length > 1);
+
+    expect(client.causes()).toEqual([undefined, undefined]);
+
+    // Control: the snapshot after an edit does carry one.
+    await editAndAwaitSnapshot(client, second!.id, { currentHp: 5 });
+    expect(client.causes().at(-1)).toBe(`instance-edit:${second!.id}`);
+  });
+
+  it("an instance-edit without an envelope id gets a snapshot without a cause", async () => {
+    const server = await startServer();
+    const [first] = shadows;
+    const client = await authed(server);
+
+    client.ws.send(
+      JSON.stringify({
+        v: 1,
+        type: "instance-edit",
+        payload: { instanceId: first!.id, currentHp: 5 },
+      }),
+    );
+    await waitFor(() => client.snapshots().length > 1);
+
+    expect(stored(first!.id).currentHp).toBe(5);
+    expect(client.causes()).toEqual([undefined, undefined]);
+
+    // Control: with an envelope id the cause is carried.
+    await editAndAwaitSnapshot(client, first!.id, { currentHp: 6 });
+    expect(client.causes().at(-1)).toBe(`instance-edit:${first!.id}`);
   });
 });

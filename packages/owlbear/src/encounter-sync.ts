@@ -90,6 +90,8 @@ export function createEncounterSync(
     onInstanceEdit?: (edit: InstanceEdit) => void;
     /** Called once per snapshot for each table value that could not be read back. */
     onEditRejected?: (text: string) => void;
+    /** Called once per answered edit whose table value differs from the store's, with the note to show. */
+    onEditDiffers?: (text: string) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
@@ -266,6 +268,8 @@ export function createEncounterSync(
   return {
     handleMessage(message) {
       if (message.type === "encounter-snapshot") {
+        if (message.payload.cause !== undefined)
+          throw new Error("not implemented");
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
         reported.clear();

@@ -234,6 +234,8 @@ describe("planSync", () => {
       needsArt: [],
       edits: [],
       rejected: [],
+      sent: {},
+      differs: [],
     });
   });
 
@@ -282,6 +284,8 @@ describe("planSync", () => {
       needsArt: [],
       edits: [],
       rejected: [],
+      sent: {},
+      differs: [],
     });
   });
 

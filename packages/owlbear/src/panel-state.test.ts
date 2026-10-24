@@ -180,3 +180,44 @@ describe("describeError", () => {
     expect(describeError(null)).toBe("null");
   });
 });
+
+describe("panelView note", () => {
+  const connected: PanelInput = {
+    role: "gm",
+    socketState: "open",
+    disconnectedMs: 0,
+  };
+
+  it("panelView shows editNote as note", () => {
+    const v = panelView({ ...connected, editNote: "The store holds HP 10." });
+
+    expect(v.kind).toBe("connected");
+    expect(v.note).toBe("The store holds HP 10.");
+    expect(v.error).toBeUndefined();
+  });
+
+  it("panelView has no note without editNote", () => {
+    // Control: the same input with a note shows it.
+    expect(panelView({ ...connected, editNote: "x" }).note).toBe("x");
+
+    expect(panelView(connected).note).toBeUndefined();
+    expect(panelView({ ...connected, editNote: "" }).note).toBeUndefined();
+  });
+
+  it("panelView shows no note for the gm-only and token-missing views", () => {
+    // Control: a connected view shows the note.
+    expect(panelView({ ...connected, editNote: "x" }).note).toBe("x");
+
+    const player = panelView({ ...connected, role: "player", editNote: "x" });
+    expect(player.kind).toBe("gm-only");
+    expect(player.note).toBeUndefined();
+
+    const noToken = panelView({
+      ...connected,
+      tokenMissing: true,
+      editNote: "x",
+    });
+    expect(noToken.kind).toBe("token-missing");
+    expect(noToken.note).toBeUndefined();
+  });
+});

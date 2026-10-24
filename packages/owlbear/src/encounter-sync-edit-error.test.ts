@@ -58,11 +58,11 @@ async function healthAfter(message: BridgeMessage): Promise<unknown> {
 }
 
 describe("createEncounterSync reacting to errors", () => {
-  it("reverts the table for a non-fatal error answering an instance-edit", async () => {
-    expect(await healthAfter(error("instance-edit:i1", false))).toBe(10);
-  });
-
   it.each([
+    [
+      "a non-fatal error answering an instance-edit",
+      error("instance-edit:i1", false),
+    ],
     ["a fatal error with that id", error("instance-edit:i1", true)],
     ["a non-fatal error with another id", error("token-deleted:i1", false)],
     ["a non-fatal error without an id", error(undefined, false)],

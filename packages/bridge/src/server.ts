@@ -143,11 +143,16 @@ interface Hooks {
   onAuthenticated: () => void;
 }
 
-/** Sends the current snapshot, if configured; a failing one is a non-fatal error. */
-function sendSnapshot(ws: WebSocket, hooks: Hooks): void {
+/**
+ * Sends the current snapshot, if configured; a failing one is a non-fatal
+ * error. `cause` names the request the snapshot answers.
+ */
+function sendSnapshot(ws: WebSocket, hooks: Hooks, cause?: string): void {
   if (!hooks.snapshot) return;
   try {
-    send(ws, hooks.snapshot());
+    const snapshot = hooks.snapshot();
+    void cause;
+    send(ws, snapshot);
   } catch (e) {
     send(
       ws,
