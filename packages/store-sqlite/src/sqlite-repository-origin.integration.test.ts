@@ -47,3 +47,28 @@ describe("SqliteEncounterRepository mutations", () => {
     expect(repo.setHp(created!.id, 5, origin).after.currentHp).toBe(5);
   });
 });
+
+describe("SqliteEncounterRepository change log", () => {
+  it("a change-log write that fails rolls the mutation back", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteEncounterRepository(db);
+    const seed: ChangeOrigin = { source: "table", commandId: "seed" };
+    const [, damaged] = repo.addInstances(
+      () => [
+        { monsterKey: "goblin", displayName: "Goblin 1", maxHp: 7 },
+        { monsterKey: "goblin", displayName: "Goblin 2", maxHp: 7 },
+      ],
+      seed,
+    );
+    repo.applyDamage(damaged!.id, 3, seed);
+    const before = repo.listInstances();
+    db.exec("DROP TABLE encounter_events");
+
+    expect(() => repo.applyDamage(damaged!.id, 1, seed)).toThrow();
+    expect(() => repo.setHp(damaged!.id, 1, seed)).toThrow();
+    expect(() => repo.clearEncounter(seed)).toThrow();
+
+    expect(repo.listInstances()).toEqual(before);
+    expect(repo.listInstances().map((i) => i.currentHp)).toEqual([7, 4]);
+  });
+});
