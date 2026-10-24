@@ -18,7 +18,7 @@ export const monsterInstanceSchema = z.object({
   groupId: z.string().nullable(),
   createdAt: z.number(),
   /** Grid cells per side the monster's token spans. */
-  footprint: z.number(),
+  footprint: z.number().int().min(1).default(1),
 });
 
 export type MonsterInstance = z.infer<typeof monsterInstanceSchema>;

@@ -1,6 +1,7 @@
 import { createLogEntry, type RollLogEntry } from "../dice/log.js";
 import { roll } from "../dice/roll.js";
 import type { Rng } from "../dice/rng.js";
+import { footprintForSize } from "../monsters/footprint.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import { DomainError } from "../errors.js";
@@ -203,6 +204,7 @@ export function addMonsters(
           maxHp,
           armorClass: monster.ac,
           groupId,
+          footprint: footprintForSize(monster.size),
         });
         hpModes.push(hpMode);
         acs.push(monster.ac);

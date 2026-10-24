@@ -148,9 +148,14 @@ describe("migrations", () => {
     old.exec(`PRAGMA user_version = ${previous}`);
     expect(tables(old)).toContain("monster_instances");
     expect(tables(old)).not.toContain("token_art");
-    new SqliteEncounterRepository(old).addInstances(() => [
-      { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
-    ]);
+    old.exec(
+      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+    );
+    old.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at)
+       VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 16, 100)`,
+    );
     old.close();
 
     const db = openDatabase(path);

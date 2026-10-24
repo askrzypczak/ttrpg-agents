@@ -93,8 +93,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const items = build(names);
       const insert = this.db.prepare(
         `INSERT INTO monster_instances
-          (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at, footprint)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const created: MonsterInstance[] = [];
       for (const item of items) {
@@ -144,6 +144,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           instance.armorClass,
           instance.groupId,
           instance.createdAt,
+          instance.footprint,
         );
         created.push(instance);
       }
