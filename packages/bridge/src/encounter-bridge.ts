@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  DomainError,
   UnknownInstanceError,
+  applyInstanceEdit,
   type EncounterRepository,
   type InstanceEdit,
   type TokenArtRepository,
@@ -35,9 +37,14 @@ export function editInstance(
   repo: EncounterRepository,
   edit: InstanceEdit,
 ): WriteBackResult {
-  void repo;
-  void edit;
-  throw new Error("not implemented");
+  try {
+    applyInstanceEdit(repo, edit);
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof DomainError)
+      return { ok: false, code: e.code, message: e.message };
+    throw e;
+  }
 }
 
 /** Full current instance list and token art, for a client that just connected. */

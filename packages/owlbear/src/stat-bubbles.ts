@@ -1,3 +1,4 @@
+import type { InstanceEdit } from "@ttrpg-agents/engine";
 import type { Projector } from "./sync-plan.js";
 
 /** Metadata key used by the Stat Bubbles for D&D extension. */
@@ -34,7 +35,25 @@ export const statBubblesProjector: Projector = {
       hide: typeof fields.hide === "boolean" ? fields.hide : true,
     };
   },
-  invert: () => {
-    throw new Error("not implemented");
+  invert: (value, instance) => {
+    const fields = currentFields(value);
+    const edit: Omit<InstanceEdit, "instanceId"> = {};
+    const invalid: string[] = [];
+    const read = (
+      key: string,
+      stored: number | null | undefined,
+      set: (n: number) => void,
+    ): void => {
+      if (typeof stored !== "number" || !Object.hasOwn(fields, key)) return;
+      const edited = fields[key];
+      // Stryker disable next-line ConditionalExpression: equivalent, `Number.isInteger` is already false for a non-number
+      if (typeof edited !== "number" || !Number.isInteger(edited))
+        invalid.push(key);
+      else if (edited !== stored) set(edited);
+    };
+    read("health", instance.currentHp, (n) => (edit.currentHp = n));
+    read("max health", instance.maxHp, (n) => (edit.maxHp = n));
+    read("armor class", instance.armorClass, (n) => (edit.armorClass = n));
+    return { edit, invalid };
   },
 };

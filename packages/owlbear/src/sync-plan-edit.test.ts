@@ -56,7 +56,11 @@ function editedToken(
   instance: EncounterInstance,
   fields: Record<string, unknown>,
 ): SceneItem {
-  const [created] = plan([instance], []).add;
+  const [created] = planSync([instance], [], defaultSyncConfig, {
+    viewportCenter: { x: 0, y: 0 },
+    placed: new Set(),
+    art: {},
+  }).add;
   const token = structuredClone(created!);
   token.metadata[STAT_BUBBLES_METADATA_KEY] = {
     ...(token.metadata[STAT_BUBBLES_METADATA_KEY] as object),

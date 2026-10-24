@@ -71,6 +71,7 @@ export function panelView(input: PanelInput): PanelView {
   const errors = [
     input.syncError ? `Encounter sync failed: ${input.syncError}` : undefined,
     input.removeError,
+    input.editError,
   ].filter((e): e is string => !!e);
   return errors.length > 0 ? { ...view, error: errors.join(" ") } : view;
 }

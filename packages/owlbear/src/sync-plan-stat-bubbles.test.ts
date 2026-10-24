@@ -153,7 +153,12 @@ describe("planSync with the stat bubbles projector", () => {
       health: 5,
     };
 
-    expect(plan([inst()], [edited], ["i1"]).update).toEqual([]);
+    // The table value is written back to the store and is not overwritten.
+    const written = plan([inst()], [edited], ["i1"]);
+    expect(written.edits).toEqual([{ instanceId: "i1", currentHp: 5 }]);
+    expect(
+      applyUpdates([edited], written)[0]!.metadata[STAT_BUBBLES_METADATA_KEY],
+    ).toEqual(edited.metadata[STAT_BUBBLES_METADATA_KEY]);
 
     const changed = plan([inst({ currentHp: 8 })], [edited], ["i1"]);
     const metadata = applyUpdates([edited], changed)[0]!.metadata;

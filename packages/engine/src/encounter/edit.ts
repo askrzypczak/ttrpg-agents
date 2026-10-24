@@ -1,3 +1,4 @@
+import { UnknownInstanceError } from "./errors.js";
 import type { EncounterRepository } from "./repository.js";
 import type { MonsterInstance } from "./types.js";
 
@@ -18,7 +19,11 @@ export function applyInstanceEdit(
   repo: EncounterRepository,
   edit: InstanceEdit,
 ): MonsterInstance {
-  void repo;
-  void edit;
-  throw new Error("not implemented");
+  if (!repo.listInstances().some((i) => i.id === edit.instanceId))
+    throw new UnknownInstanceError(`no instance ${edit.instanceId}`);
+  if (edit.maxHp !== undefined) repo.setMaxHp(edit.instanceId, edit.maxHp);
+  if (edit.currentHp !== undefined) repo.setHp(edit.instanceId, edit.currentHp);
+  if (edit.armorClass !== undefined)
+    repo.setArmorClass(edit.instanceId, edit.armorClass);
+  return repo.listInstances().find((i) => i.id === edit.instanceId)!;
 }

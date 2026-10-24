@@ -238,6 +238,40 @@ function handleMessage(
       }
       break;
     }
+    case "instance-edit": {
+      if (!hooks.editInstance) {
+        send(
+          ws,
+          errorMessage(
+            "unexpected-type",
+            `server does not accept "${message.type}"`,
+          ),
+        );
+        break;
+      }
+      let outcome: WriteBackResult;
+      try {
+        outcome = hooks.editInstance(message.payload);
+      } catch (e) {
+        send(
+          ws,
+          errorMessage(
+            "edit-failed",
+            e instanceof Error ? e.message : String(e),
+            message.id,
+          ),
+        );
+        break;
+      }
+      if (outcome.ok) {
+        // The bridge's own commit does not bump data_version; send the new
+        // state directly, like token-deleted.
+        sendSnapshot(ws, hooks);
+      } else {
+        send(ws, errorMessage(outcome.code, outcome.message, message.id));
+      }
+      break;
+    }
     case "token-art-set": {
       if (!hooks.setTokenArt) {
         send(

@@ -25,7 +25,13 @@ const instanceEditPayload = z
     maxHp: z.number().int().optional(),
     armorClass: z.number().int().optional(),
   })
-  .refine(() => false, { message: "not implemented" });
+  .refine(
+    (edit) =>
+      edit.currentHp !== undefined ||
+      edit.maxHp !== undefined ||
+      edit.armorClass !== undefined,
+    { message: "an edit needs at least one of currentHp, maxHp, armorClass" },
+  );
 const emptyPayload = z.object({});
 const errorPayload = z.object({
   code: z.string(),

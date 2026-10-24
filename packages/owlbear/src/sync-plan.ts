@@ -168,7 +168,12 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * push), b = baseline (the raw projection we last wrote):
  * - d == o: nothing, but re-baseline when b != r.
  * - d != o, b present, r != b (the encounter changed): push d, b := r.
- * - d != o, b present, r == b (the table was edited): leave it.
+ * - d != o, b present, r == b (the table was edited): leave it. If the
+ *   projector can `invert` the value, the changed fields are planned as an
+ *   edit to write back and b := o (the baseline temporarily holds the edited
+ *   table value, so the store's answer is judged by the rules above: accepted
+ *   exactly is d == o, a different value is r != b and is pushed). Values that
+ *   cannot be read are planned as rejected and left on the table, b untouched.
  * - d != o, no b: push d if o is absent, else keep o; either way b := r.
  * An undefined r means no key: it is never written or baselined, and its
  * baseline is dropped (the token's value is left alone).
@@ -215,7 +220,7 @@ export function planSync(
     const instance = wanted.get(id)!;
     const baseline = asRecord(token.metadata[SYNCED_METADATA_KEY]);
     const next = { ...baseline };
-    for (const { key, project } of owned) {
+    for (const { key, project, invert } of owned) {
       const raw = project(instance);
       const o = token.metadata[key];
       const d = project(instance, o);
@@ -228,6 +233,19 @@ export function planSync(
         if (!deepEqual(raw, baseline[key])) {
           plan.update.push({ id: token.id, key, value: d });
           next[key] = raw;
+        } else if (invert) {
+          // The table was edited: write the change back and keep the table
+          // value as the baseline until the store answers.
+          const { edit, invalid } = invert(o, instance);
+          if (Object.keys(edit).length > 0) {
+            plan.edits.push({ instanceId: id, ...edit });
+            next[key] = o;
+          }
+          if (invalid.length > 0)
+            plan.rejected.push({
+              instanceId: id,
+              message: `${invalid.join(" and ")} on ${instance.displayName} is not a whole number`,
+            });
         }
       } else {
         if (o === undefined) plan.update.push({ id: token.id, key, value: d });
