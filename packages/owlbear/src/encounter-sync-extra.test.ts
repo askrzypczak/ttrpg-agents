@@ -13,7 +13,7 @@ const inst = (n: number): EncounterInstance =>
 const snapshot = (...ns: number[]): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: ns.map(inst) },
+  payload: { instances: ns.map(inst), seq: 0 },
 });
 const foreign = (id: string): SceneItem => ({
   id,

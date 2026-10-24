@@ -13,7 +13,7 @@ describe("appliedInstanceCount", () => {
     await sync.handleMessage({
       v: 1,
       type: "encounter-snapshot",
-      payload: { instances: [inst(1), inst(2)] },
+      payload: { instances: [inst(1), inst(2)], seq: 0 },
     });
     await sync.handleMessage({
       v: 1,
@@ -24,6 +24,7 @@ describe("appliedInstanceCount", () => {
         currentHp: 3,
         maxHp: 16,
         origin: { source: "mcp", commandId: "test" },
+        seq: 1,
       },
     });
     expect(sync.appliedInstanceCount()).toBe(2);

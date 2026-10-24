@@ -17,7 +17,7 @@ const inst = (n: number): EncounterInstance =>
 const snapshot = (...ns: number[]): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: ns.map(inst) },
+  payload: { instances: ns.map(inst), seq: 0 },
 });
 
 const foreign: SceneItem = {
@@ -90,7 +90,7 @@ describe("createEncounterSync token deletion", () => {
     expect(reported).toEqual(["i1"]);
   });
 
-  it("reports each deletion once per snapshot and again after the next snapshot while it is still wanted", async () => {
+  it("reports each deletion once per store change and again after the next snapshot while it is still wanted", async () => {
     const { sync, scene, reported } = setup();
     await sync.handleMessage(snapshot(1, 2));
     await settle();
@@ -98,19 +98,8 @@ describe("createEncounterSync token deletion", () => {
     await settle();
     expect(reported).toEqual(["i1"]);
 
-    // More reconciles without a new snapshot: an event, an unrelated item
-    // change and a ready flip.
-    await sync.handleMessage({
-      v: 1,
-      type: "encounter-event",
-      payload: {
-        type: "hp-changed",
-        id: "i2",
-        currentHp: 3,
-        maxHp: 16,
-        origin: { source: "mcp", commandId: "test" },
-      },
-    });
+    // More reconciles without a store change: an unrelated item change and
+    // a ready flip.
     scene.addItems([foreign]);
     await settle();
     scene.setReady(false);

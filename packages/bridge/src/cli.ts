@@ -1,13 +1,13 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
-  broadcastSnapshotsOnChange,
-  dataVersion,
+  broadcastLogEvents,
   editInstance,
   removeInstance,
   snapshotMessage,
@@ -37,27 +37,24 @@ if (resolve(tokenPath) === resolve(agentTokenPath)) {
 const token = await loadOrCreateToken(tokenPath);
 const agentToken = await loadOrCreateToken(agentTokenPath);
 
-// The snapshot is sent after each hello-ack and again whenever another process
-// (the MCP server) commits a change, detected by polling PRAGMA data_version.
+// The snapshot is sent after each hello-ack. Every later change, by the MCP
+// server process or by this one, reaches the client as an event polled from the
+// change log.
 const db = openDatabase();
 const repo = new SqliteEncounterRepository(db);
 const artRepo = new SqliteTokenArtRepository(db);
+const log = new SqliteEncounterLog(db);
 const server = await startBridgeServer({
   port,
   staticDir,
   token,
   agentToken,
-  snapshot: () => snapshotMessage(repo, artRepo),
+  snapshot: () => snapshotMessage(repo, artRepo, log),
   removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
   editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
 });
-const stopPolling = broadcastSnapshotsOnChange(
-  () => dataVersion(db),
-  repo,
-  artRepo,
-  server,
-);
+const stopPolling = broadcastLogEvents(log, server);
 console.log(`bridge listening on http://localhost:${server.port}`);
 console.log(`serving ${staticDir}`);
 console.log(`token file: ${tokenPath}`);

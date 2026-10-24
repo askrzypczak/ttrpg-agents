@@ -14,7 +14,7 @@ The domain engine: dice, monster schema and search, encounter events, map geomet
 
 `src/encounter/origin.ts` (`changeOriginSchema`, `ChangeOrigin`): who made a change, `{source: "mcp" | "table", commandId}`. Every `EncounterRepository` mutation takes one as its last argument.
 
-Each event carries the `origin` of the mutation that caused it. `instance-changed` covers rename, initiative, armor class and stats visibility, and carries only the fields that the mutation set. The store records every mutation's event in an ordered log readable through `EncounterLog` (`src/encounter/log.ts`); nothing reads it yet. The bridge still sends an `encounter-snapshot` after each `hello-ack` and whenever the database changes (polling `PRAGMA data_version`) until #224; the `encounter-event` message type remains in the protocol.
+Each event carries the `origin` of the mutation that caused it. `instance-changed` covers rename, initiative, armor class and stats visibility, and carries only the fields that the mutation set. The store records every mutation's event in an ordered log readable through `EncounterLog` (`src/encounter/log.ts`); the bridge polls it and broadcasts each event as an `encounter-event` with its `seq`, and sends an `encounter-snapshot` carrying the `seq` it is current as of after each `hello-ack`.
 
 `src/encounter/hp.ts`: the rules behind absolute HP and armor class, which the store calls: `clampHp` (current HP kept within 0..max HP), `resizeMaxHp` (max HP raised to at least 1, current HP lowered to it when above, never raised) and `clampArmorClass` (raised to at least 0). Non-integers throw `InvalidAmountError`, or `InvalidArmorClassError` for armor class.
 

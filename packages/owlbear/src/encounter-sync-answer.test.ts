@@ -21,14 +21,14 @@ const inst = (over: Partial<EncounterInstance> = {}): EncounterInstance =>
 const snapshot = (instance: EncounterInstance): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: [instance] },
+  payload: { instances: [instance], seq: 0 },
 });
 
 /** The bridge's snapshot answering the accepted `instance-edit` for `id`. */
 const answer = (instance: EncounterInstance, id = "i1"): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: [instance], cause: `instance-edit:${id}` },
+  payload: { instances: [instance], cause: `instance-edit:${id}`, seq: 0 },
 });
 
 const hpChanged = (currentHp: number): BridgeMessage => ({
@@ -40,6 +40,7 @@ const hpChanged = (currentHp: number): BridgeMessage => ({
     currentHp,
     maxHp: 16,
     origin: { source: "mcp", commandId: "test" },
+    seq: 1,
   },
 });
 
@@ -167,6 +168,26 @@ describe("createEncounterSync after a write-back answer", () => {
     scene.addItems([foreign]);
     await settle();
     expect(notes).toHaveLength(1);
+  });
+
+  it("an answer snapshot that clamps still shows the clamp note: onStoreChange is called before onEditDiffers", async () => {
+    const { obr, scene } = createFakeObr();
+    const order: string[] = [];
+    const sync = createEncounterSync(obr, undefined, undefined, {
+      onStoreChange: () => order.push("onStoreChange"),
+      onEditDiffers: () => order.push("onEditDiffers"),
+    });
+    await sync.handleMessage(snapshot(inst()));
+    await settle();
+    editAtTable(scene, { health: 99 });
+    await settle();
+    order.length = 0;
+
+    // The store clamped 99 to max HP.
+    await sync.handleMessage(answer(inst({ currentHp: 16 })));
+    await settle();
+
+    expect(order).toEqual(["onStoreChange", "onEditDiffers"]);
   });
 
   it("an MCP event after an answer is pushed", async () => {

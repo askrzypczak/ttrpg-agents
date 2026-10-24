@@ -22,7 +22,7 @@ An experiment, not a supported product. Expect rough edges and breaking changes.
 | [`packages/srd`](packages/srd/README.md)                              | SRD 5.2 monster data, loader and import script.                                                      |
 | [`packages/store-sqlite`](packages/store-sqlite/README.md)            | SQLite encounter store (database path, migrations).                                                  |
 | [`packages/mcp`](packages/mcp/README.md)                              | MCP server (stdio) with the encounter tools.                                                         |
-| [`packages/bridge`](packages/bridge/README.md)                        | Local bridge server (separate process) that serves the extension and pushes encounter snapshots.     |
+| [`packages/bridge`](packages/bridge/README.md)                        | Local bridge server (separate process) that serves the extension and pushes encounter events.        |
 | [`packages/owlbear`](packages/owlbear/README.md)                      | Owlbear Rodeo extension (Vite) that shows the encounter, tested browser-free through an SDK adapter. |
 | [`.claude/skills/dm-encounter`](.claude/skills/dm-encounter/SKILL.md) | Skill that turns "goblin 2 takes 7" into the fewest correct tool calls.                              |
 
@@ -51,7 +51,7 @@ Warning: `BRIDGE_STATIC_DIR` overrides the served folder, and the bridge serves 
 
 The panel is GM-only and shows connection status; it reconnects with backoff if the bridge restarts.
 
-The bridge polls the SQLite file every 250 ms and pushes a fresh snapshot when the MCP server changes it, so tokens appear without reloading the panel. For the processes, ports and data flow, see [`docs/architecture.md`](docs/architecture.md).
+The bridge polls the SQLite file every 250 ms and pushes each change the MCP server makes as an event, so tokens appear without reloading the panel. For the processes, ports and data flow, see [`docs/architecture.md`](docs/architecture.md).
 
 ## Attribution
 

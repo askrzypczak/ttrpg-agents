@@ -1,8 +1,8 @@
-import type { DatabaseSync } from "node:sqlite";
 import {
   DomainError,
   UnknownInstanceError,
   applyInstanceEdit,
+  type EncounterLog,
   type EncounterRepository,
   type InstanceEdit,
   type TokenArtRepository,
@@ -50,11 +50,19 @@ export function editInstance(
   }
 }
 
-/** Full current instance list and token art, for a client that just connected. */
+/**
+ * Full current instance list and token art, for a client that just connected,
+ * plus the log position it is current as of. The position is read before the
+ * instances, so a commit in between makes the snapshot newer than its `seq`
+ * and the client sees that event again as a duplicate or a harmless re-fold,
+ * never misses it.
+ */
 export function snapshotMessage(
   repo: EncounterRepository,
   artRepo: TokenArtRepository,
+  log: EncounterLog,
 ): BridgeMessage {
+  const seq = log.latestSeq();
   const art = artRepo.listTokenArt();
   return {
     v: 1,
@@ -63,50 +71,40 @@ export function snapshotMessage(
     payload: {
       instances: repo.listInstances(),
       ...(Object.keys(art).length > 0 ? { art } : {}),
+      seq,
     },
   };
 }
 
-const SNAPSHOT_POLL_INTERVAL_MS = 250;
-
-/** SQLite `PRAGMA data_version`: changes when another connection commits. */
-export function dataVersion(db: DatabaseSync): number {
-  const row = db.prepare("PRAGMA data_version").get() as
-    { data_version?: unknown } | undefined;
-  const version = row?.data_version;
-  if (typeof version !== "number") {
-    throw new Error("PRAGMA data_version did not return a number");
-  }
-  return version;
-}
+const LOG_POLL_INTERVAL_MS = 250;
 
 /**
- * Polls `readVersion` and broadcasts `snapshotMessage(repo, artRepo)` whenever it
- * changes. Returns a stop function.
- *
- * Meant to be fed by `dataVersion` on a connection to the shared database:
- * SQLite only bumps it for commits made by other connections, so this
- * process's own writes (token art and removals) do not trigger one; the
- * bridge sends those snapshots directly. A failed read or snapshot is
- * retried on the next tick.
+ * Polls the change log and broadcasts every event committed after the log's
+ * latest `seq` at the time of the call, as an `encounter-event` carrying its
+ * `seq`, oldest first. Rows from before the bridge started are never read
+ * (a client that connects gets a snapshot instead), so an old row this code
+ * cannot parse cannot stall it. The poll also sees this process's own commits,
+ * such as an applied write-back. A failed read or broadcast is retried on the
+ * next tick from the last event sent. Returns a stop function.
  */
-export function broadcastSnapshotsOnChange(
-  readVersion: () => number,
-  repo: EncounterRepository,
-  artRepo: TokenArtRepository,
+export function broadcastLogEvents(
+  log: EncounterLog,
   target: { broadcast(message: BridgeMessage): void },
-  options?: { intervalMs?: number },
 ): () => void {
-  let seen = readVersion();
+  let lastSent = log.latestSeq();
   const timer = setInterval(() => {
     try {
-      const version = readVersion();
-      if (version === seen) return;
-      target.broadcast(snapshotMessage(repo, artRepo));
-      seen = version;
+      for (const { seq, event } of log.eventsSince(lastSent)) {
+        target.broadcast({
+          v: 1,
+          type: "encounter-event",
+          payload: { ...event, seq },
+        });
+        lastSent = seq;
+      }
     } catch {
-      // Keep `seen` so the next tick retries.
+      // Keep `lastSent` so the next tick retries.
     }
-  }, options?.intervalMs ?? SNAPSHOT_POLL_INTERVAL_MS);
+  }, LOG_POLL_INTERVAL_MS);
   return () => clearInterval(timer);
 }

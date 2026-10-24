@@ -9,7 +9,7 @@ flowchart LR
   claude["Claude Code"] --> mcp
   subgraph driving["Driving adapters"]
     mcp["mcp: tools, formatting"]
-    bsrv["bridge server: serves extension, pushes snapshots, relays queries"]
+    bsrv["bridge server: serves extension, pushes events and snapshots, relays queries"]
   end
   subgraph core["Engine (no I/O)"]
     uc["use cases: addMonsters, getTableStatus, ..."]
@@ -31,7 +31,7 @@ flowchart LR
   bsrv <-->|"WebSocket + token"| ext["Owlbear extension (protocol)"]
 ```
 
-The bridge is both sides. The server is a driving adapter: table edits become engine commands (an `instance-edit` runs the engine's `applyInstanceEdit`; a `token-deleted` calls `EncounterRepository.removeInstances` directly), and it reads the encounter through the `EncounterRepository` port and the token art through `TokenArtRepository` to push snapshots, and stores the art the extension sends. The client is a driven adapter: the driven end of `TablePort`. The mcp-to-bridge arrow in the runtime diagram below is made by the bridge client adapter that `mcp/src/stdio.ts` wires in. The channel is read-only by rule: it carries queries only, and the agent changes the game through the engine's model (see the rule in [`CLAUDE.md`](../CLAUDE.md)).
+The bridge is both sides. The server is a driving adapter: table edits become engine commands (an `instance-edit` runs the engine's `applyInstanceEdit`; a `token-deleted` calls `EncounterRepository.removeInstances` directly), and it reads the encounter through the `EncounterRepository` port and the token art through `TokenArtRepository` to build snapshots, polls the change log through the `EncounterLog` port to push events, and stores the art the extension sends. The client is a driven adapter: the driven end of `TablePort`. The mcp-to-bridge arrow in the runtime diagram below is made by the bridge client adapter that `mcp/src/stdio.ts` wires in. The channel is read-only by rule: it carries queries only, and the agent changes the game through the engine's model (see the rule in [`CLAUDE.md`](../CLAUDE.md)).
 
 ## Runtime (processes)
 
@@ -79,14 +79,16 @@ Errors: 401 `unauthorized`, 400 `bad-request`, 503 `not-connected` (no GM tab), 
 
 ## What reaches the table
 
-The bridge polls `PRAGMA data_version` every 250 ms. When another process committed, it broadcasts an `encounter-snapshot` (the full instance list, HP included) to authenticated clients. It also sends one after each `hello-ack`.
+The bridge polls the change log every 250 ms and broadcasts each new event to authenticated clients as an `encounter-event` carrying its `seq`, oldest first. Only events committed after the bridge started are read. The poll sees every commit, the MCP server's and the bridge's own write-backs.
 
-The extension (GM role only) reconciles the scene against the latest encounter. It keeps the instances from the last snapshot, folded with the `encounter-event` messages, and fixes the difference with the scene on every snapshot, event, scene-ready change and retry after a failed apply (backoff). Nothing touches the scene until it is ready.
+A client that connects gets an `encounter-snapshot` (the full instance list, HP included, plus the `seq` it is current as of) after the `hello-ack`. Until #209, the bridge also answers the extension's own commands (`instance-edit`, `token-deleted`, `token-art-set`) with a snapshot. There is no resume: a client that reconnects gets a new snapshot.
+
+The extension (GM role only) reconciles the scene against the latest encounter. It keeps the instances from the last snapshot, folded with later `mcp` events in `seq` order, and fixes the difference with the scene on every snapshot, applied event, scene-ready change and retry after a failed apply (backoff). It ignores an event it already has (a `seq` at or before the last one) and advances past a `table` event without applying it. When an event skips a `seq`, it applies nothing and reconnects for a snapshot. Nothing touches the scene until it is ready.
 
 - **Tokens.** Our tokens carry the metadata key `com.ttrpg-agents/instance`; anything else on the scene is never touched. By default each instance is a hidden IMAGE token drawn with the art the GM picked from their Owlbear asset library for its monster type (asked once per type, when a token is first created for it, then remembered in the database as a VTT-neutral reference `{ url, mime, width, height }`; the extension derives an Owlbear grid with the image centred when it creates the token, its longer side spanning the instance's footprint in cells), or a hidden circle SHAPE token when there is no art (no usable pick: cancel, picker error or invalid image). The engine sets each instance's footprint from its monster's size category (small and medium 1 cell, large 2, huge 3, gargantuan 4; tiny and unknown sizes 1), and the store keeps it per instance (rows from before it existed read as 1). A new hidden circle is footprint cells wide and high, and tokens created in one batch sit side by side, each in a slot as wide as its footprint. Tokens that already exist are never resized or re-skinned. Per-feature values are set by projectors (`owned` or `create-only`) and written one metadata key at a time, so other extensions' keys survive.
 - **Only the MCP writes the table.** Each token records the value last written for every `owned` key (metadata key `com.ttrpg-agents/synced`). A value is pushed only when the encounter changed since then. A table edit stands until the encounter's value changes again, and then the encounter overwrites it. An edit of HP, max HP or armor class is also written back (`instance-edit`). The table is written only for a store change caused by the MCP. The store's answer to an edit is a snapshot carrying `cause` (the edit's envelope id) and never writes to the table: the extension adopts its values as the baseline, so a clamp keeps the typed value (the panel shows a note) and a refusal shows the error. The exception is a field the store moved that differs in the answer (an MCP change, or a store clamp of another field, such as HP lowered by a max HP edit): the whole Stat Bubbles value is then pushed with the store's values (typed ones included), and no edit or note follows. A value typed and not yet sent when an older answer arrives is adopted and sent, not overwritten, unless the store also moved a field of that value (a `statsVisible` change carried by the answer counts), which pushes the store's values. After a reload a typed value is sent once more.
 - **Deleted tokens stay deleted.** The scene metadata key `com.ttrpg-agents/placed` lists the instances already placed on the scene, so a token the GM deleted is not recreated. A scene with no record is populated.
-- **Token deletion is written back.** A deleted token (a wanted instance in `placed` with no token) is reported to the bridge, which removes the instance from the store and replies with a fresh snapshot, so the `placed` record is pruned.
+- **Token deletion is written back.** A deleted token (a wanted instance in `placed` with no token) is reported to the bridge, which removes the instance from the store and replies with a fresh snapshot (the extension ignores the `table` event for it), so the `placed` record is pruned.
 
 ### Who owns what
 
@@ -111,8 +113,8 @@ Per synced value: which side has authority, and how a change on the other side r
 Every change to the store carries an origin (`mcp` or `table`) and a command id. A consumer applies changes from other origins and treats changes from its own commands as acknowledgements. A consumer never writes a value to the table because the store's answer differs from what it asked: no clamp push-back and no refusal push-back (the #204 rule, stated for the general case).
 
 - In force: the #204 rule. The table is written only for a store change caused by the MCP; the answer to an edit carries `cause` and never writes to the table.
-- In force (#208, engine): every repository mutation takes a `ChangeOrigin`, and `encounterEventSchema` has an origin-carrying event for each mutation. The store records each event, with its origin, in an ordered log (`encounter_events`, read through the engine's `EncounterLog` port; #128), and nothing reads it yet.
-- Lands with #224 (bridge deltas): the bridge broadcasts the log as ordered `encounter-event`s with `seq`, and a snapshot only on connect or on a gap.
+- In force (#208, engine): every repository mutation takes a `ChangeOrigin`, and `encounterEventSchema` has an origin-carrying event for each mutation. The store records each event, with its origin, in an ordered log (`encounter_events`, read through the engine's `EncounterLog` port; #128), and the bridge polls it (#224).
+- In force (#224, bridge and extension): the bridge broadcasts the log as ordered `encounter-event`s with `seq`; a snapshot carries the `seq` it is current as of and is sent on connect and, until #209, as the answer to the extension's own commands. The extension applies `mcp` events in `seq` order, ignores duplicates, advances past `table` events, and reconnects for a snapshot on a gap.
 - Lands with #209 (extension consumer): applies deltas by origin, treats its own commands as acknowledgements, queues commands sent while the socket is down, and retires the answer snapshot, `cause` and the sent-edit memory.
 
 Each landing removes its line.

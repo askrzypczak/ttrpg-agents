@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type ChangeOrigin,
+  type EncounterLog,
   type EncounterRepository,
-  type MonsterInstance,
+  type LoggedEvent,
   type TokenArtRepository,
 } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
-import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import {
-  broadcastSnapshotsOnChange,
+  broadcastLogEvents,
   removeInstance,
   snapshotMessage,
 } from "./encounter-bridge.js";
@@ -29,6 +29,23 @@ function setup(): SqliteEncounterRepository {
   return new SqliteEncounterRepository(openDatabase(":memory:"));
 }
 
+/** A log that serves whatever is in `events`; `calls` records its reads. */
+function stubLog(events: LoggedEvent[] = []) {
+  const calls: string[] = [];
+  const log: EncounterLog & { events: LoggedEvent[] } = {
+    events,
+    latestSeq: () => (
+      calls.push("latestSeq"),
+      events.reduce((max, e) => Math.max(max, e.seq), 0)
+    ),
+    eventsSince: (seq) => (
+      calls.push("eventsSince"),
+      events.filter((e) => e.seq > seq)
+    ),
+  };
+  return { log, calls };
+}
+
 describe("snapshotMessage", () => {
   it("contains the current instances", () => {
     const repo = setup();
@@ -36,11 +53,37 @@ describe("snapshotMessage", () => {
       () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
       origin,
     );
-    expect(snapshotMessage(repo, noArt)).toEqual({
+    const { log } = stubLog([
+      { seq: 1, event: { type: "added", instances: created, origin } },
+      { seq: 2, event: { type: "cleared", origin } },
+    ]);
+    expect(snapshotMessage(repo, noArt, log)).toEqual({
       v: 1,
       type: "encounter-snapshot",
-      payload: { instances: created },
+      payload: { instances: created, seq: 2 },
     });
+  });
+
+  it("snapshotMessage carries the log's latest seq, read before the instances", () => {
+    const { log, calls } = stubLog([
+      { seq: 4, event: { type: "cleared", origin } },
+    ]);
+    const repoStub: Pick<EncounterRepository, "listInstances"> = {
+      listInstances: () => (calls.push("listInstances"), []),
+    };
+
+    const message = snapshotMessage(
+      repoStub as EncounterRepository,
+      noArt,
+      log,
+    );
+
+    expect(message).toEqual({
+      v: 1,
+      type: "encounter-snapshot",
+      payload: { instances: [], seq: 4 },
+    });
+    expect(calls).toEqual(["latestSeq", "listInstances"]);
   });
 });
 
@@ -88,95 +131,95 @@ describe("removeInstance", () => {
   });
 });
 
-describe("broadcastSnapshotsOnChange", () => {
-  const INTERVAL = 100;
-  const shadow: MonsterInstance = makeTestInstance({ createdAt: 0 });
-  const expected: BridgeMessage = {
+describe("broadcastLogEvents", () => {
+  const POLL_MS = 250;
+  const cleared = (seq: number): LoggedEvent => ({
+    seq,
+    event: { type: "cleared", origin },
+  });
+  const removedEvent = (seq: number, id: string): LoggedEvent => ({
+    seq,
+    event: { type: "removed", id, origin },
+  });
+  const message = ({ seq, event }: LoggedEvent): BridgeMessage => ({
     v: 1,
-    type: "encounter-snapshot",
-    payload: { instances: [shadow] },
-  };
+    type: "encounter-event",
+    payload: { ...event, seq },
+  });
 
-  let version: number;
-  let readVersion: ReturnType<typeof vi.fn<() => number>>;
   let sent: BridgeMessage[];
-  let repo: EncounterRepository;
   const target = { broadcast: (m: BridgeMessage) => sent.push(m) };
 
   beforeEach(() => {
     vi.useFakeTimers();
-    version = 1;
-    readVersion = vi.fn(() => version);
     sent = [];
-    const stub: Pick<EncounterRepository, "listInstances"> = {
-      listInstances: () => [shadow],
-    };
-    repo = stub as EncounterRepository;
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("broadcasts a snapshot when the data version changes", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
-      intervalMs: INTERVAL,
-    });
-    version = 2;
-    vi.advanceTimersByTime(INTERVAL);
-    expect(sent).toEqual([expected]);
+  it("broadcastLogEvents broadcasts each new log event as an encounter-event with its seq, oldest first", () => {
+    const { log } = stubLog();
+    const stop = broadcastLogEvents(log, target);
+
+    log.events.push(removedEvent(1, "i1"), cleared(2));
+    vi.advanceTimersByTime(POLL_MS);
+    expect(sent).toEqual([message(removedEvent(1, "i1")), message(cleared(2))]);
+
+    log.events.push(cleared(3));
+    vi.advanceTimersByTime(POLL_MS * 4);
+    expect(sent).toEqual([
+      message(removedEvent(1, "i1")),
+      message(cleared(2)),
+      message(cleared(3)),
+    ]);
     stop();
   });
 
-  it("broadcasts nothing while the data version is unchanged", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
-      intervalMs: INTERVAL,
-    });
-    vi.advanceTimersByTime(INTERVAL * 10);
-    expect(readVersion.mock.calls.length).toBeGreaterThan(1);
+  it("broadcastLogEvents starts after the log's latest seq, so events already in the log are not broadcast", () => {
+    const { log } = stubLog([cleared(1), cleared(2)]);
+    const stop = broadcastLogEvents(log, target);
+
+    vi.advanceTimersByTime(POLL_MS * 2);
     expect(sent).toEqual([]);
+
+    log.events.push(cleared(3));
+    vi.advanceTimersByTime(POLL_MS);
+    expect(sent).toEqual([message(cleared(3))]);
     stop();
   });
 
-  it("broadcasts once per change, not once per tick", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
-      intervalMs: INTERVAL,
-    });
-    version = 2;
-    vi.advanceTimersByTime(INTERVAL * 5);
-    expect(sent).toEqual([expected]);
-    version = 3;
-    vi.advanceTimersByTime(INTERVAL * 5);
-    expect(sent).toEqual([expected, expected]);
-    stop();
-  });
-
-  it("stops reading and broadcasting after stop() is called", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
-      intervalMs: INTERVAL,
-    });
-    vi.advanceTimersByTime(INTERVAL);
-    expect(readVersion).toHaveBeenCalled();
-    stop();
-    readVersion.mockClear();
-    version = 2;
-    vi.advanceTimersByTime(INTERVAL * 10);
-    expect(readVersion).not.toHaveBeenCalled();
-    expect(sent).toEqual([]);
-  });
-
-  it("keeps running and broadcasts on a later tick after a failing read", () => {
-    const stop = broadcastSnapshotsOnChange(readVersion, repo, noArt, target, {
-      intervalMs: INTERVAL,
-    });
-    version = 2;
-    readVersion.mockImplementationOnce(() => {
+  it("broadcastLogEvents retries a failing read on the next tick and skips no event", () => {
+    const { log } = stubLog();
+    const stop = broadcastLogEvents(log, target);
+    log.events.push(cleared(1), cleared(2));
+    const read = log.eventsSince;
+    log.eventsSince = () => {
+      log.eventsSince = read;
       throw new Error("database is locked");
-    });
-    expect(() => vi.advanceTimersByTime(INTERVAL)).not.toThrow();
+    };
+
+    expect(() => vi.advanceTimersByTime(POLL_MS)).not.toThrow();
     expect(sent).toEqual([]);
-    vi.advanceTimersByTime(INTERVAL);
-    expect(sent).toEqual([expected]);
+
+    vi.advanceTimersByTime(POLL_MS);
+    expect(sent).toEqual([message(cleared(1)), message(cleared(2))]);
     stop();
+  });
+
+  it("broadcastLogEvents stops reading after stop() is called", () => {
+    const { log, calls } = stubLog();
+    const stop = broadcastLogEvents(log, target);
+    vi.advanceTimersByTime(POLL_MS);
+    expect(calls).toContain("eventsSince");
+
+    stop();
+    calls.length = 0;
+    log.events.push(cleared(1));
+    vi.advanceTimersByTime(POLL_MS * 10);
+
+    expect(calls).toEqual([]);
+    expect(sent).toEqual([]);
   });
 });

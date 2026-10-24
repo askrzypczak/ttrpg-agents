@@ -10,6 +10,7 @@ describe("encounter-event origin", () => {
         type: "removed",
         id: "i1",
         origin: { source: "mcp", commandId: "c1" },
+        seq: 1,
       },
     };
     // Control: the same event with an origin decodes.
@@ -31,6 +32,7 @@ describe("encounter-event origin", () => {
         id: "i1",
         changes: { name: "Boss", statsVisible: true },
         origin: { source: "table" as const, commandId: "c7" },
+        seq: 3,
       },
     };
 

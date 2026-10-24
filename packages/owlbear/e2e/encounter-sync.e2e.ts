@@ -157,7 +157,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     const repo = new SqliteEncounterRepository(db);
     let renamed = false;
     try {
-      // The bridge's data_version poll pushes a snapshot after this commit.
+      // The bridge's change-log poll pushes an event after this commit.
       repo.renameInstance(SHADOW_IDS[1]!, "Boss", origin);
       renamed = true;
       await expect
@@ -189,6 +189,45 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     }
   });
 
+  test("a gap in the event seq makes the extension reconnect and take the fresh snapshot", async ({
+    page,
+    bridge,
+  }) => {
+    await openHarness(page, { role: "gm" });
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+
+    const db = openDatabase(bridge.dbPath);
+    const rename = db.prepare(
+      "UPDATE monster_instances SET display_name = ? WHERE id = ?",
+    );
+    try {
+      // The new name is in no log row, so only a snapshot can carry it.
+      rename.run("Gap", SHADOW_IDS[1]!);
+      // A log row that skips a seq and changes nothing visible: the extension
+      // sees a gap and reconnects, and the bridge answers with a snapshot.
+      db.prepare(
+        "INSERT INTO encounter_events (seq, event) VALUES ((SELECT COALESCE(MAX(seq), 0) + 2 FROM encounter_events), ?)",
+      ).run(
+        JSON.stringify({
+          type: "hp-changed",
+          id: SHADOW_IDS[2]!,
+          currentHp: 16,
+          maxHp: 16,
+          origin,
+        }),
+      );
+      await expect
+        .poll(async () => nameOf(await readItems(page), SHADOW_IDS[1]!))
+        .toBe("Gap");
+    } finally {
+      try {
+        rename.run("Shadow 2", SHADOW_IDS[1]!);
+      } finally {
+        db.close();
+      }
+    }
+  });
+
   test("a token the GM renamed on the table keeps its name across an unrelated store change", async ({
     page,
     bridge,
@@ -207,7 +246,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     let renamed = false;
     try {
       // Unrelated to the token's name: its monster takes damage, and another
-      // monster is renamed, whose token shows when the snapshot has landed.
+      // monster is renamed, whose token shows when the event has landed.
       repo.applyDamage(SHADOW_IDS[0]!, 3, origin);
       damaged = true;
       repo.renameInstance(SHADOW_IDS[2]!, "Ghost", origin);
