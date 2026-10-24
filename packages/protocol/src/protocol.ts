@@ -48,7 +48,7 @@ const encounterSnapshotPayload = z.object({
   /**
    * What this snapshot answers: the envelope id of the request (an accepted
    * `instance-edit`) whose store change it carries. Absent for every other
-   * snapshot.
+   * snapshot. Interim until #209 (origin-tagged deltas): do not build on it.
    */
   cause: z.string().optional(),
 });

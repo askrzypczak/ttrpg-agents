@@ -131,7 +131,8 @@ export const defaultSyncConfig: SyncConfig = {
 
 /**
  * Per instance id, per projector key: the edit fields already sent to the
- * store for what is on the table, so they are not sent again.
+ * store for what is on the table, so they are not sent again. Interim until
+ * #209 (origin-tagged deltas): do not build on it.
  */
 export type EditMemory = Record<
   string,
@@ -240,8 +241,12 @@ function differsMessage(
  *   that cannot be read are planned as rejected and left on the table.
  * Only a change of the encounter writes to the table: the store's answer to a
  * write-back (`context.answered`) sets b := the raw projection of the answered
- * instance for keys that can be read back, so a clamped or refused edit stays
- * on the table (reported in `differs`) and is not pushed or sent again.
+ * instance for keys that can be read back. A clamped or refused edit then stays
+ * on the table (reported in `differs`) and is not pushed or sent again, and a
+ * value typed since is adopted and sent as an edit. If the store moved a field
+ * (the table still holds the old baseline value there and it is not in
+ * `context.sent`: an MCP change, or a clamp of another field), b is kept and
+ * the rule above pushes the whole value.
  * - d != o, no b: push d if o is absent, else keep o; either way b := r.
  * A projector may use the baseline to apply this rule per field inside its
  * value: a table edit wins until the encounter changes that field.
@@ -300,10 +305,35 @@ export function planSync(
     for (const { key, project, readBack } of owned) {
       const raw = project(instance);
       const o = token.metadata[key];
-      // The store's answer to a write-back is the baseline: the table value
-      // it differs from stays, and only a later encounter change is pushed.
-      const adopted = answer !== undefined && readBack !== undefined;
-      const b = adopted ? project(answer) : baseline[key];
+      // The store's answer to a write-back is the baseline unless the store
+      // moved a field since we last wrote it (an MCP change or a clamp): then
+      // the table differs from the answer in a field that still holds the old
+      // baseline value, and the normal rule pushes the answer. Any other
+      // difference is the table's own: a value we sent (it stays, only a later
+      // encounter change is pushed) or one typed since (adopted, then sent).
+      const sentFields: Record<string, unknown> =
+        context.sent?.[id]?.[key] ?? {};
+      const answerRaw =
+        answer !== undefined && readBack !== undefined
+          ? project(answer)
+          : undefined;
+      // A field the projector applies its own rule to (Stat Bubbles `hide`)
+      // that the answer moved also blocks adoption: it is pushed.
+      const adopted =
+        answer !== undefined &&
+        readBack !== undefined &&
+        deepEqual(
+          project(answer, o, baseline[key]),
+          project(answer, o, answerRaw),
+        ) &&
+        Object.entries(readBack(o, answer).edit).every(
+          ([field, value]) =>
+            sentFields[field] === value ||
+            (readBack(baseline[key], answer).edit as Record<string, unknown>)[
+              field
+            ] !== value,
+        );
+      const b = adopted ? answerRaw : baseline[key];
       // Stryker disable next-line ConditionalExpression: equivalent, without an answer b is the stored baseline, which next already holds
       if (adopted) next[key] = b;
       const d = project(instance, o, b);
