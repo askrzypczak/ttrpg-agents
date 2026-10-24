@@ -29,7 +29,7 @@ import {
   type BridgeMessage,
   type Query,
 } from "@ttrpg-agents/protocol";
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { InstanceEdit, TokenArt } from "@ttrpg-agents/engine";
 
 export const DEFAULT_BRIDGE_PORT = 5199;
 export const SERVER_VERSION = "0.0.0";
@@ -67,12 +67,15 @@ export interface BridgeServerOptions {
   /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
   queryTimeoutMs?: number;
   /** Removes an instance from the store when the GM deletes its token on the table. */
-  removeInstance?: (instanceId: string) => RemoveInstanceResult;
+  removeInstance?: (instanceId: string) => WriteBackResult;
   /** Stores the art the GM picked for a monster type. */
   setTokenArt?: (monsterKey: string, art: TokenArt) => void;
+  /** Applies HP, max HP or armor class edited on the table to the store. */
+  editInstance?: (edit: InstanceEdit) => WriteBackResult;
 }
 
-export type RemoveInstanceResult =
+/** Outcome of a write the table asked for; a refusal changes nothing. */
+export type WriteBackResult =
   { ok: true } | { ok: false; code: string; message: string };
 
 export interface BridgeServer {
@@ -134,8 +137,9 @@ interface Hooks {
   token: string;
   pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
-  removeInstance: ((instanceId: string) => RemoveInstanceResult) | undefined;
+  removeInstance: ((instanceId: string) => WriteBackResult) | undefined;
   setTokenArt: ((monsterKey: string, art: TokenArt) => void) | undefined;
+  editInstance: ((edit: InstanceEdit) => WriteBackResult) | undefined;
   onAuthenticated: () => void;
 }
 
@@ -211,7 +215,7 @@ function handleMessage(
         );
         break;
       }
-      let outcome: RemoveInstanceResult;
+      let outcome: WriteBackResult;
       try {
         outcome = hooks.removeInstance(message.payload.instanceId);
       } catch (e) {
@@ -228,6 +232,40 @@ function handleMessage(
       if (outcome.ok) {
         // The bridge's own commit does not bump data_version, so the poller
         // would not tell the client; send the new state directly.
+        sendSnapshot(ws, hooks);
+      } else {
+        send(ws, errorMessage(outcome.code, outcome.message, message.id));
+      }
+      break;
+    }
+    case "instance-edit": {
+      if (!hooks.editInstance) {
+        send(
+          ws,
+          errorMessage(
+            "unexpected-type",
+            `server does not accept "${message.type}"`,
+          ),
+        );
+        break;
+      }
+      let outcome: WriteBackResult;
+      try {
+        outcome = hooks.editInstance(message.payload);
+      } catch (e) {
+        send(
+          ws,
+          errorMessage(
+            "edit-failed",
+            e instanceof Error ? e.message : String(e),
+            message.id,
+          ),
+        );
+        break;
+      }
+      if (outcome.ok) {
+        // The bridge's own commit does not bump data_version; send the new
+        // state directly, like token-deleted.
         sendSnapshot(ws, hooks);
       } else {
         send(ws, errorMessage(outcome.code, outcome.message, message.id));
@@ -321,6 +359,7 @@ export async function startBridgeServer(
     queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS,
     removeInstance,
     setTokenArt,
+    editInstance,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
@@ -453,6 +492,7 @@ export async function startBridgeServer(
         snapshot,
         removeInstance,
         setTokenArt,
+        editInstance,
         onAuthenticated: () => {
           if (active !== null) {
             rejectAndClose(active, "superseded", "another tab connected");

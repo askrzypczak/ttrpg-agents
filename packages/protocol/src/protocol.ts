@@ -17,6 +17,21 @@ const helloPayload = z.object({
 const helloAckPayload = z.object({ serverVersion: z.string() });
 // Extension -> bridge: the GM deleted this instance's token on the table.
 const tokenDeletedPayload = z.object({ instanceId: z.string() });
+// Extension -> bridge: HP, max HP or armor class edited on the table.
+const instanceEditPayload = z
+  .object({
+    instanceId: z.string(),
+    currentHp: z.number().int().optional(),
+    maxHp: z.number().int().optional(),
+    armorClass: z.number().int().optional(),
+  })
+  .refine(
+    (edit) =>
+      edit.currentHp !== undefined ||
+      edit.maxHp !== undefined ||
+      edit.armorClass !== undefined,
+    { message: "an edit needs at least one of currentHp, maxHp, armorClass" },
+  );
 const emptyPayload = z.object({});
 const errorPayload = z.object({
   code: z.string(),
@@ -101,6 +116,7 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("query-result", queryResultSchema),
   envelope("token-deleted", tokenDeletedPayload),
   envelope("token-art-set", tokenArtSetPayload),
+  envelope("instance-edit", instanceEditPayload),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;

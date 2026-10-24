@@ -1,4 +1,4 @@
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { InstanceEdit, TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { initiativeProjector } from "./initiative.js";
 import type { GridSpec, SceneItem, Vec2 } from "./scene-model.js";
@@ -67,6 +67,14 @@ export type Projector = {
     current?: unknown,
     baseline?: unknown,
   ): unknown;
+  /**
+   * Reads a value edited on the table back into the instance fields it
+   * changed; `invalid` names the fields whose value could not be read.
+   */
+  invert?(
+    value: unknown,
+    instance: EncounterInstance,
+  ): { edit: Omit<InstanceEdit, "instanceId">; invalid: string[] };
 };
 
 export type TokenKind = Pick<
@@ -132,6 +140,10 @@ export type SyncPlan = {
   deleted: string[];
   /** Monster keys, once each, of instances getting a token that have no art. */
   needsArt: string[];
+  /** Table edits of owned keys to write back to the store. */
+  edits: InstanceEdit[];
+  /** Table values that could not be read back, left on the table. */
+  rejected: { instanceId: string; message: string }[];
 };
 
 /** The instance id a scene item is linked to, if it is one of our tokens. */
@@ -178,7 +190,12 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * push), b = baseline (the raw projection we last wrote):
  * - d == o: nothing, but re-baseline when b != r.
  * - d != o, b present, r != b (the encounter changed): push d, b := r.
- * - d != o, b present, r == b (the table was edited): leave it.
+ * - d != o, b present, r == b (the table was edited): leave it. If the
+ *   projector can `invert` the value, the changed fields are planned as an
+ *   edit to write back and b := o (the baseline temporarily holds the edited
+ *   table value, so the store's answer is judged by the rules above: accepted
+ *   exactly is d == o, a different value is r != b and is pushed). Values that
+ *   cannot be read are planned as rejected and left on the table, b untouched.
  * - d != o, no b: push d if o is absent, else keep o; either way b := r.
  * A projector may use the baseline to apply this rule per field inside its
  * value: a table edit wins until the encounter changes that field.
@@ -208,6 +225,8 @@ export function planSync(
     rename: [],
     deleted: [],
     needsArt: [],
+    edits: [],
+    rejected: [],
   };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();
@@ -225,7 +244,7 @@ export function planSync(
     const instance = wanted.get(id)!;
     const baseline = asRecord(token.metadata[SYNCED_METADATA_KEY]);
     const next = { ...baseline };
-    for (const { key, project } of owned) {
+    for (const { key, project, invert } of owned) {
       const raw = project(instance);
       const o = token.metadata[key];
       const d = project(instance, o, baseline[key]);
@@ -238,6 +257,19 @@ export function planSync(
         if (!deepEqual(raw, baseline[key])) {
           plan.update.push({ id: token.id, key, value: d });
           next[key] = raw;
+        } else if (invert) {
+          // The table was edited: write the change back and keep the table
+          // value as the baseline until the store answers.
+          const { edit, invalid } = invert(o, instance);
+          if (Object.keys(edit).length > 0) {
+            plan.edits.push({ instanceId: id, ...edit });
+            next[key] = o;
+          }
+          if (invalid.length > 0)
+            plan.rejected.push({
+              instanceId: id,
+              message: `${invalid.join(" and ")} on ${instance.displayName} is not a whole number`,
+            });
         }
       } else {
         if (o === undefined) plan.update.push({ id: token.id, key, value: d });

@@ -8,6 +8,7 @@ import {
 import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
+import { instanceEditErrorText, instanceEditMessage } from "./instance-edit.js";
 import { describeError, panelView } from "./panel-state.js";
 import { tokenArtMessage } from "./token-art.js";
 import { tokenDeletedErrorText, tokenDeletedMessage } from "./token-deleted.js";
@@ -33,6 +34,7 @@ obr.onReady(async () => {
   let streakStart = Date.now();
   let syncError: string | undefined;
   let removeError: string | undefined;
+  let editError: string | undefined;
 
   let rejection: RejectionCode | undefined;
   const render = () => {
@@ -43,6 +45,7 @@ obr.onReady(async () => {
       ...(rejection ? { rejection } : {}),
       syncError,
       ...(removeError !== undefined ? { removeError } : {}),
+      ...(editError !== undefined ? { editError } : {}),
       disconnectedMs: Date.now() - streakStart,
     });
     const status = el("status");
@@ -74,6 +77,11 @@ obr.onReady(async () => {
     },
     {
       onTokenDeleted: (id) => sendToBridge(tokenDeletedMessage(id)),
+      onInstanceEdit: (edit) => sendToBridge(instanceEditMessage(edit)),
+      onEditRejected: (text) => {
+        editError = text;
+        render();
+      },
       onTokenArt: (monsterKey, art) =>
         sendToBridge(tokenArtMessage(monsterKey, art)),
     },
@@ -95,11 +103,17 @@ obr.onReady(async () => {
       }
       if (message.type === "encounter-snapshot") {
         removeError = undefined;
+        editError = undefined;
         render();
       } else {
         const text = tokenDeletedErrorText(message);
         if (text !== undefined) {
           removeError = text;
+          render();
+        }
+        const editText = instanceEditErrorText(message);
+        if (editText !== undefined) {
+          editError = editText;
           render();
         }
       }
