@@ -9,7 +9,6 @@ import {
   SYNCED_METADATA_KEY,
   defaultSyncConfig,
   planSync,
-  rowPositions,
   type EncounterInstance,
   type Projector,
   type SyncConfig,
@@ -157,7 +156,11 @@ describe("planSync", () => {
     expect(plan.add.every((i) => i.visible === false)).toBe(true);
     expect(plan.add.every((i) => i.type === "SHAPE")).toBe(true);
     expect(plan.add.every((i) => i.shape?.shapeType === "CIRCLE")).toBe(true);
-    expect(plan.add.map((i) => i.position)).toEqual(rowPositions(3, center));
+    expect(plan.add.map((i) => i.position)).toEqual([
+      { x: 850, y: 500 },
+      { x: 1000, y: 500 },
+      { x: 1150, y: 500 },
+    ]);
     expect(new Set(plan.add.map((i) => i.id)).size).toBe(3);
   });
 
@@ -673,13 +676,37 @@ describe("planSync initiative tracker", () => {
   });
 });
 
-describe("rowPositions", () => {
-  it("rowPositions centres a row", () => {
-    expect(rowPositions(3, { x: 1000, y: 500 })).toEqual([
+describe("planSync row layout", () => {
+  it("planSync places a row of one-cell tokens 150 apart, centred on the viewport (unchanged layout)", () => {
+    const row = planSync(
+      [inst(1), inst(2), inst(3)],
+      [],
+      defaultSyncConfig,
+      ctx(),
+    );
+    expect(row.add.map((i) => i.position)).toEqual([
       { x: 850, y: 500 },
       { x: 1000, y: 500 },
       { x: 1150, y: 500 },
     ]);
-    expect(rowPositions(1, { x: 10, y: 20 })).toEqual([{ x: 10, y: 20 }]);
+    const single = planSync([inst(1)], [], defaultSyncConfig, {
+      ...ctx(),
+      viewportCenter: { x: 10, y: 20 },
+    });
+    expect(single.add.map((i) => i.position)).toEqual([{ x: 10, y: 20 }]);
+  });
+
+  it("a row of mixed footprints gives each token its own slot, centred as a whole", () => {
+    // Slots 150 and 300 wide side by side: the 450-wide row spans x 775..1225.
+    const plan = planSync(
+      [inst(1, { footprint: 1 }), inst(2, { footprint: 2 })],
+      [],
+      defaultSyncConfig,
+      ctx(),
+    );
+    expect(plan.add.map((i) => i.position)).toEqual([
+      { x: 850, y: 500 },
+      { x: 1075, y: 500 },
+    ]);
   });
 });

@@ -33,6 +33,7 @@ interface InstanceRow {
   armor_class: number | null;
   group_id: string | null;
   created_at: number;
+  footprint: number;
 }
 
 const ACTIVE_SCOPE =
@@ -50,6 +51,7 @@ function toInstance(row: InstanceRow): MonsterInstance {
     armorClass: row.armor_class,
     groupId: row.group_id,
     createdAt: row.created_at,
+    footprint: row.footprint,
   };
 }
 
@@ -91,8 +93,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const items = build(names);
       const insert = this.db.prepare(
         `INSERT INTO monster_instances
-          (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at, footprint)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const created: MonsterInstance[] = [];
       for (const item of items) {
@@ -129,6 +131,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           armorClass: item.armorClass ?? null,
           groupId: item.groupId ?? null,
           createdAt: this.now(),
+          footprint: item.footprint ?? 1,
         };
         insert.run(
           instance.id,
@@ -141,6 +144,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           instance.armorClass,
           instance.groupId,
           instance.createdAt,
+          instance.footprint,
         );
         created.push(instance);
       }
