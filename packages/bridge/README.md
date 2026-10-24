@@ -4,7 +4,7 @@ Local bridge server for the Owlbear Rodeo extension. It serves the built
 extension over HTTP and a versioned WebSocket at `/ws` (wire contract in
 `@ttrpg-agents/protocol`). It is a separate process, not part of the MCP
 server: the MCP server writes the encounter to SQLite, and the bridge polls
-that file and pushes a fresh snapshot to the extension when it changes.
+the change log in that file and pushes each new event to the extension.
 
 ## Run
 
@@ -45,14 +45,20 @@ to the connected Owlbear tab and returns its `query-result`. Errors: 401, 400,
 MCP server's `stdio.ts` wires in; `createBridgeTable` implements the engine's
 `TablePort` with it; it reads the agent token file on every call.
 
-The bridge polls SQLite's `data_version` every 250 ms and pushes a snapshot
-when another process commits, so tokens appear without reloading the panel.
+The bridge polls the change log every 250 ms (`broadcastLogEvents`) and
+broadcasts each event committed since it started as an `encounter-event`
+carrying its `seq`, oldest first, so tokens appear without reloading the panel.
+The poll sees the bridge's own commits too. A client that connects gets an
+`encounter-snapshot` carrying the `seq` it is current as of, read before the
+instances; events at or before that `seq` may still arrive and the client
+ignores them. A failed read is retried on the next tick.
 
 An authenticated client can send `token-deleted` (`{ instanceId }`, sent by the
 extension when the GM deletes one of our tokens). The server's optional
 `removeInstance` option performs the removal (`cli.ts` wires
 `removeInstance(repo, id)` from `encounter-bridge.ts`) and the bridge replies
-with a fresh snapshot, since its own commits do not bump `data_version`. A
+with a fresh snapshot (the extension ignores the `table` event the poll sends
+for the same removal). A
 refusal (`unknown-instance`) or a failed write (`remove-failed`) is a non-fatal
 `error` that echoes the request id. Without the option the type is
 `unexpected-type`. The client's `role` is never read.
