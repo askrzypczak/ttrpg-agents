@@ -34,6 +34,7 @@ interface InstanceRow {
   group_id: string | null;
   created_at: number;
   footprint: number;
+  stats_visible: number;
 }
 
 const ACTIVE_SCOPE =
@@ -52,6 +53,7 @@ function toInstance(row: InstanceRow): MonsterInstance {
     groupId: row.group_id,
     createdAt: row.created_at,
     footprint: row.footprint,
+    statsVisible: row.stats_visible === 1,
   };
 }
 
@@ -93,8 +95,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const items = build(names);
       const insert = this.db.prepare(
         `INSERT INTO monster_instances
-          (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at, footprint)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at, footprint, stats_visible)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const created: MonsterInstance[] = [];
       for (const item of items) {
@@ -132,6 +134,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           groupId: item.groupId ?? null,
           createdAt: this.now(),
           footprint: item.footprint ?? 1,
+          statsVisible: item.statsVisible ?? false,
         };
         insert.run(
           instance.id,
@@ -145,6 +148,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           instance.groupId,
           instance.createdAt,
           instance.footprint,
+          instance.statsVisible ? 1 : 0,
         );
         created.push(instance);
       }
@@ -277,6 +281,23 @@ export class SqliteEncounterRepository implements EncounterRepository {
         .prepare("UPDATE monster_instances SET armor_class = ? WHERE id = ?")
         .run(value, id);
       return toInstance({ ...row, armor_class: value });
+    });
+  }
+
+  setStatsVisible(id: string, visible: boolean): MonsterInstance {
+    return this.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
+        .get(id) as InstanceRow | undefined;
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      const value = visible ? 1 : 0;
+      this.db
+        .prepare("UPDATE monster_instances SET stats_visible = ? WHERE id = ?")
+        .run(value, id);
+      return toInstance({ ...row, stats_visible: value });
     });
   }
 

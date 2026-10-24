@@ -13,6 +13,7 @@ const instance = {
   groupId: null,
   createdAt: 5,
   footprint: 1,
+  statsVisible: false,
 };
 
 const art = {

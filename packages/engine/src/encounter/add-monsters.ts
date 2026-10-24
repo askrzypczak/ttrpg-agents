@@ -19,6 +19,8 @@ export interface AddMonstersGroup {
   count: number;
   /** Defaults to `rolled`. */
   hp?: HpMode;
+  /** Reveal the group's stats to players; defaults to false (GM-only). */
+  statsVisible?: boolean;
 }
 
 export interface AddMonstersOptions {
@@ -205,6 +207,7 @@ export function addMonsters(
           armorClass: monster.ac,
           groupId,
           footprint: footprintForSize(monster.size),
+          statsVisible: group.statsVisible ?? false,
         });
         hpModes.push(hpMode);
         acs.push(monster.ac);

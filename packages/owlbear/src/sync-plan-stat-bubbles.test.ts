@@ -169,4 +169,122 @@ describe("planSync with the stat bubbles projector", () => {
       hide: true,
     });
   });
+
+  describe("hide follows statsVisible", () => {
+    const shown = { health: 16, "max health": 16, "armor class": 12 };
+
+    /** Our token for `inst()`, with the hide it shows and the hide we last wrote. */
+    const bubblesToken = (hide: boolean, baselineHide: boolean): SceneItem => ({
+      id: "token-1",
+      type: "SHAPE",
+      name: "Shadow 1",
+      visible: false,
+      position: { x: 0, y: 0 },
+      shape: { shapeType: "CIRCLE", width: 150, height: 150 },
+      metadata: {
+        [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+        [INITIATIVE_METADATA_KEY]: { count: "14", active: false },
+        [STAT_BUBBLES_METADATA_KEY]: { ...shown, hide },
+        [SYNCED_METADATA_KEY]: {
+          [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+          [INITIATIVE_METADATA_KEY]: { count: "14", active: false },
+          [STAT_BUBBLES_METADATA_KEY]: { ...shown, hide: baselineHide },
+          [NAME_BASELINE_KEY]: "Shadow 1",
+        },
+      },
+    });
+
+    const bubblesAfter = (token: SceneItem, p: SyncPlan): unknown =>
+      applyUpdates([token], p)[0]!.metadata[STAT_BUBBLES_METADATA_KEY];
+
+    const syncedBubblesAfter = (token: SceneItem, p: SyncPlan): unknown =>
+      (
+        applyUpdates([token], p)[0]!.metadata[SYNCED_METADATA_KEY] as Record<
+          string,
+          unknown
+        >
+      )[STAT_BUBBLES_METADATA_KEY];
+
+    it("planSync pushes hide false when the encounter reveals a token whose baseline hide was true", () => {
+      const token = bubblesToken(true, true);
+      const p = plan([inst({ statsVisible: true })], [token], ["i1"]);
+      expect(p.update).toContainEqual({
+        id: "token-1",
+        key: STAT_BUBBLES_METADATA_KEY,
+        value: { ...shown, hide: false },
+      });
+      expect(bubblesAfter(token, p)).toEqual({ ...shown, hide: false });
+      expect(syncedBubblesAfter(token, p)).toEqual({ ...shown, hide: false });
+    });
+
+    it("planSync pushes hide true again when the encounter hides it", () => {
+      const token = bubblesToken(false, false);
+      const p = plan([inst({ statsVisible: false })], [token], ["i1"]);
+      expect(p.update).toContainEqual({
+        id: "token-1",
+        key: STAT_BUBBLES_METADATA_KEY,
+        value: { ...shown, hide: true },
+      });
+      expect(bubblesAfter(token, p)).toEqual({ ...shown, hide: true });
+      expect(syncedBubblesAfter(token, p)).toEqual({ ...shown, hide: true });
+    });
+
+    it("a hide toggled at the table survives an HP change while statsVisible is unchanged", () => {
+      for (const statsVisible of [false, true]) {
+        const label = `statsVisible ${String(statsVisible)}`;
+        const [created] = plan([inst({ statsVisible })], []).add;
+        expect(created!.metadata[STAT_BUBBLES_METADATA_KEY], label).toEqual({
+          ...shown,
+          hide: !statsVisible,
+        });
+
+        const toggled: SceneItem = structuredClone(created!);
+        toggled.metadata[STAT_BUBBLES_METADATA_KEY] = {
+          ...shown,
+          hide: statsVisible,
+        };
+        expect(
+          plan([inst({ statsVisible })], [toggled], ["i1"]).update,
+          label,
+        ).toEqual([]);
+
+        const hit = plan(
+          [inst({ statsVisible, currentHp: 10 })],
+          [toggled],
+          ["i1"],
+        );
+        expect(bubblesAfter(toggled, hit), label).toEqual({
+          ...shown,
+          health: 10,
+          hide: statsVisible,
+        });
+      }
+    });
+
+    it("a revealed instance's new token is created with hide false", () => {
+      const { add } = plan(
+        [
+          inst({ statsVisible: true }),
+          inst({ id: "i2", displayName: "Shadow 2" }),
+        ],
+        [],
+      );
+      const written = add.map((t) => [
+        t.metadata[STAT_BUBBLES_METADATA_KEY],
+        (t.metadata[SYNCED_METADATA_KEY] as Record<string, unknown>)[
+          STAT_BUBBLES_METADATA_KEY
+        ],
+      ]);
+      expect(written).toEqual([
+        [
+          { ...shown, hide: false },
+          { ...shown, hide: false },
+        ],
+        [
+          { ...shown, hide: true },
+          { ...shown, hide: true },
+        ],
+      ]);
+    });
+  });
 });

@@ -66,6 +66,12 @@ export interface EncounterRepository {
    * an id not in the active encounter; nothing changes on a throw.
    */
   setArmorClass(id: string, armorClass: number): MonsterInstance;
+  /**
+   * Sets whether players see the stats of an instance of the active encounter
+   * and returns it updated. Throws UnknownInstanceError for an id not in the
+   * active encounter; nothing changes on a throw.
+   */
+  setStatsVisible(id: string, visible: boolean): MonsterInstance;
   /** Deletes all instances of the active encounter. */
   clearEncounter(): void;
   /** Instances of the active encounter, ordered by creation. */

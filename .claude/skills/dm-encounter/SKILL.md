@@ -5,7 +5,7 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `clear_encounter`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `set_stats_visibility`, `clear_encounter`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -46,3 +46,12 @@ Positions and flavour ("on the left", "circling from behind", "ambushing from th
 - "The goblins act on 14" is one `set_initiative` call per goblin, each with `initiative` 14. The tool takes one target, so run the calls in parallel. Target each goblin as under Damage and healing.
 - Use only the number the DM gives. If they name a monster without a number, ask for it.
 - Do not call `list_encounter` after the calls. Relay the tool's line verbatim (for example "Goblin Warrior 1: initiative 12 -> 14").
+
+## Showing stats to players
+
+Monsters' HP and AC (the Stat Bubbles on their tokens) are GM-only by default. The DM can show them to the players and hide them again.
+
+- "Let the players see the goblins' stats" / "reveal the shadow's HP" is one `set_stats_visibility` call with `visible: true` and every matching monster in `targets` (names or ids; a group is its members, so list "Goblin Warrior 1", "Goblin Warrior 2", ...). "Hide the goblins from the players" is the same call with `visible: false`.
+- To add monsters the players can see stats for ("add 2 wolves the players can see"), set `statsVisible: true` on that group in the `add_monsters` call; one call, no second step.
+- If you do not know the exact names, call `list_encounter` once to find them. Do not call it after the change. Relay the tool's line verbatim.
+- This only controls the stat bubbles. The token itself stays hidden from players until the DM shows it in Owlbear.

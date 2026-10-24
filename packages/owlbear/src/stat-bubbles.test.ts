@@ -16,6 +16,21 @@ describe("statBubblesProjector", () => {
     });
   });
 
+  it("the projector writes hide true for a default instance and hide false for a visible one", () => {
+    expect(statBubblesProjector.project(inst())).toEqual({
+      health: 9,
+      "max health": 27,
+      "armor class": 12,
+      hide: true,
+    });
+    expect(statBubblesProjector.project(inst({ statsVisible: true }))).toEqual({
+      health: 9,
+      "max health": 27,
+      "armor class": 12,
+      hide: false,
+    });
+  });
+
   it("sets hide true when the token has no stat bubbles value", () => {
     const value = statBubblesProjector.project(inst(), undefined) as Record<
       string,

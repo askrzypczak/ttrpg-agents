@@ -21,6 +21,7 @@ describe("makeTestInstance", () => {
       groupId: null,
       createdAt: 1,
       footprint: 1,
+      statsVisible: false,
     });
   });
 });
