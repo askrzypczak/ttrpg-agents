@@ -6,6 +6,7 @@ import {
   type EncounterRepository,
   type InstanceEdit,
   type TokenArtRepository,
+  type UnreadableLogEntry,
 } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import type { WriteBackResult } from "./server.js";
@@ -90,11 +91,18 @@ const LOG_POLL_INTERVAL_MS = 250;
 export function broadcastLogEvents(
   log: EncounterLog,
   target: { broadcast(message: BridgeMessage): void },
+  options: {
+    onUnreadable?: (entry: UnreadableLogEntry) => void;
+    snapshot?: () => BridgeMessage;
+  } = {},
 ): () => void {
+  void options;
   let lastSent = log.latestSeq();
   const timer = setInterval(() => {
     try {
-      for (const { seq, event } of log.eventsSince(lastSent)) {
+      for (const entry of log.eventsSince(lastSent)) {
+        if (!("event" in entry)) continue;
+        const { seq, event } = entry;
         target.broadcast({
           v: 1,
           type: "encounter-event",

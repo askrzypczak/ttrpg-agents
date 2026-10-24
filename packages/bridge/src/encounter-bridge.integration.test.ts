@@ -5,6 +5,7 @@ import {
   type EncounterRepository,
   type LoggedEvent,
   type TokenArtRepository,
+  type UnreadableLogEntry,
 } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
@@ -30,9 +31,11 @@ function setup(): SqliteEncounterRepository {
 }
 
 /** A log that serves whatever is in `events`; `calls` records its reads. */
-function stubLog(events: LoggedEvent[] = []) {
+function stubLog(events: (LoggedEvent | UnreadableLogEntry)[] = []) {
   const calls: string[] = [];
-  const log: EncounterLog & { events: LoggedEvent[] } = {
+  const log: EncounterLog & {
+    events: (LoggedEvent | UnreadableLogEntry)[];
+  } = {
     events,
     latestSeq: () => (
       calls.push("latestSeq"),
@@ -147,6 +150,11 @@ describe("broadcastLogEvents", () => {
     payload: { ...event, seq },
   });
 
+  const unreadable = (seq: number): UnreadableLogEntry => ({
+    seq,
+    error: "unknown event type",
+  });
+
   let sent: BridgeMessage[];
   const target = { broadcast: (m: BridgeMessage) => sent.push(m) };
 
@@ -205,6 +213,72 @@ describe("broadcastLogEvents", () => {
 
     vi.advanceTimersByTime(POLL_MS);
     expect(sent).toEqual([message(cleared(1)), message(cleared(2))]);
+    stop();
+  });
+
+  it("broadcastLogEvents passes over an unreadable entry and broadcasts the later events with their own seq", () => {
+    const { log } = stubLog();
+    const onUnreadable = vi.fn();
+    const stop = broadcastLogEvents(log, target, { onUnreadable });
+
+    log.events.push(unreadable(1), cleared(2), cleared(3));
+    vi.advanceTimersByTime(POLL_MS * 4);
+    expect(onUnreadable).toHaveBeenCalledWith(unreadable(1));
+    expect(sent).toEqual([message(cleared(2)), message(cleared(3))]);
+
+    log.events.push(cleared(4));
+    vi.advanceTimersByTime(POLL_MS * 2);
+    expect(sent).toEqual([
+      message(cleared(2)),
+      message(cleared(3)),
+      message(cleared(4)),
+    ]);
+    stop();
+  });
+
+  it("broadcastLogEvents reports an unreadable entry once with its seq and error, also when it is the newest entry", () => {
+    const { log } = stubLog();
+    const onUnreadable = vi.fn();
+    const stop = broadcastLogEvents(log, target, { onUnreadable });
+
+    log.events.push(cleared(1), unreadable(2));
+    vi.advanceTimersByTime(POLL_MS * 10);
+    expect(onUnreadable).toHaveBeenCalledTimes(1);
+    expect(onUnreadable).toHaveBeenCalledWith(unreadable(2));
+
+    log.events.push(cleared(3));
+    vi.advanceTimersByTime(POLL_MS * 4);
+    expect(onUnreadable).toHaveBeenCalledTimes(1);
+    expect(sent).toEqual([message(cleared(1)), message(cleared(3))]);
+    stop();
+  });
+
+  it("broadcastLogEvents broadcasts a snapshot in place of an unreadable entry, also when it is the newest entry", () => {
+    const snapshotMsg: BridgeMessage = {
+      v: 1,
+      type: "encounter-snapshot",
+      payload: { instances: [], seq: 2 },
+    };
+    const { log } = stubLog();
+    const stop = broadcastLogEvents(log, target, {
+      snapshot: () => snapshotMsg,
+    });
+
+    log.events.push(cleared(1), unreadable(2));
+    vi.advanceTimersByTime(POLL_MS * 10);
+    expect(sent).toEqual([message(cleared(1)), snapshotMsg]);
+
+    sent.length = 0;
+    log.events.push(unreadable(3), cleared(4), cleared(5));
+    vi.advanceTimersByTime(POLL_MS);
+    expect(sent).toEqual([snapshotMsg]);
+
+    vi.advanceTimersByTime(POLL_MS * 4);
+    expect(sent).toEqual([
+      snapshotMsg,
+      message(cleared(4)),
+      message(cleared(5)),
+    ]);
     stop();
   });
 

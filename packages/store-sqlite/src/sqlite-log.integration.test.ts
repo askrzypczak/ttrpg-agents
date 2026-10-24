@@ -3,7 +3,9 @@ import type { DatabaseSync } from "node:sqlite";
 import type {
   ChangeOrigin,
   EncounterEvent,
+  LoggedEvent,
   MonsterInstance,
+  UnreadableLogEntry,
 } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
@@ -39,8 +41,15 @@ beforeEach(() => {
   repo.applyDamage(first.id, 3, origin("setup"));
 });
 
+const isEvent = (
+  entry: LoggedEvent | UnreadableLogEntry,
+): entry is LoggedEvent => "event" in entry;
+
 const eventsAfter = (seq: number): EncounterEvent[] =>
-  log.eventsSince(seq).map((logged) => logged.event);
+  log
+    .eventsSince(seq)
+    .filter(isEvent)
+    .map((logged) => logged.event);
 
 interface MutationCase {
   name: string;
@@ -245,7 +254,7 @@ describe("SqliteEncounterLog", () => {
     repo.setHp(first.id, 1, origin("a"));
     repo.renameInstance(second.id, "Boss", origin("b"));
     repo.setArmorClass(second.id, 12, origin("c"));
-    const all = log.eventsSince(0);
+    const all = log.eventsSince(0).filter(isEvent);
     const middle = all[all.length - 2]!;
     expect(log.eventsSince(middle.seq)).toEqual([all[all.length - 1]]);
     expect(log.eventsSince(all[all.length - 1]!.seq)).toEqual([]);
@@ -253,6 +262,32 @@ describe("SqliteEncounterLog", () => {
     expect(
       all.map((logged) => logged.event.origin.commandId).slice(-3),
     ).toEqual(["a", "b", "c"]);
+  });
+
+  describe("eventsSince returns a row that does not parse as an unreadable entry with its seq, and the rows after it as events", () => {
+    it.each([
+      { name: "invalid JSON", raw: "{not json" },
+      {
+        name: "a JSON event of an unknown type",
+        raw: JSON.stringify({ type: "from-the-future", origin: origin("x") }),
+      },
+    ])("$name", ({ raw }) => {
+      const before = log.latestSeq();
+      db.prepare("INSERT INTO encounter_events (seq, event) VALUES (?, ?)").run(
+        before + 1,
+        raw,
+      );
+      const o = origin("after-bad-row");
+      repo.setHp(first.id, 1, o);
+
+      expect(log.eventsSince(before)).toEqual([
+        { seq: before + 1, error: expect.stringMatching(/./) },
+        {
+          seq: before + 2,
+          event: expect.objectContaining({ type: "hp-changed", origin: o }),
+        },
+      ]);
+    });
   });
 
   it("latestSeq is 0 on an empty log and the last event's seq otherwise", () => {
