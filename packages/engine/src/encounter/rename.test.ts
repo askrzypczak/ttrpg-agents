@@ -55,6 +55,7 @@ describe("observeRepository", () => {
       setHp: unexpected,
       setMaxHp: unexpected,
       setArmorClass: unexpected,
+      setStatsVisible: unexpected,
       renameInstance: (id, name) => {
         calls.push([id, name]);
         return renamed;

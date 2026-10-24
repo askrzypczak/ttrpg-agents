@@ -16,15 +16,23 @@ function currentFields(current: unknown): Record<string, unknown> {
 
 /**
  * Writes the instance's HP, max HP and armor class for the Stat Bubbles
- * extension, hidden from players unless the GM changed `hide` at the table.
+ * extension. `hide` follows the instance's `statsVisible` (hidden unless
+ * revealed); a GM edit of `hide` at the table wins until the encounter changes
+ * the instance's `statsVisible`.
  * The token's other fields (temporary health, `name`, ...) are carried over,
  * and so is its armor class when the instance has none.
  */
 export const statBubblesProjector: Projector = {
   key: STAT_BUBBLES_METADATA_KEY,
   mode: "owned",
-  project: (instance, current) => {
+  project: (instance, current, baseline) => {
     const fields = currentFields(current);
+    const raw = !instance.statsVisible;
+    // Without a baseline the planner keeps the token's value anyway.
+    const encounterChanged =
+      baseline !== undefined && currentFields(baseline).hide !== raw;
+    const hide =
+      !encounterChanged && typeof fields.hide === "boolean" ? fields.hide : raw;
     return {
       ...fields,
       health: instance.currentHp,
@@ -32,7 +40,7 @@ export const statBubblesProjector: Projector = {
       ...(typeof instance.armorClass === "number"
         ? { "armor class": instance.armorClass }
         : {}),
-      hide: typeof fields.hide === "boolean" ? fields.hide : true,
+      hide,
     };
   },
   readBack: (value, instance) => {

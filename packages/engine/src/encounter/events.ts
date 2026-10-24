@@ -64,7 +64,7 @@ function emitHp(emitter: EncounterEmitter, { after }: HpChange): void {
 
 /**
  * Wraps a repository so every successful mutation emits an event afterwards,
- * except renameInstance, setInitiative and setArmorClass (the bridge syncs
+ * except renameInstance, setInitiative, setArmorClass and setStatsVisible (the bridge syncs
  * those by snapshot). Failed calls (throws) emit nothing.
  */
 export function observeRepository(
@@ -112,6 +112,8 @@ export function observeRepository(
     },
     // Snapshot-only: setting armor class emits no event.
     setArmorClass: (id, armorClass) => repo.setArmorClass(id, armorClass),
+    // Snapshot-only: revealing stats emits no event.
+    setStatsVisible: (id, visible) => repo.setStatsVisible(id, visible),
     clearEncounter() {
       repo.clearEncounter();
       emitter.emit({ type: "cleared" });

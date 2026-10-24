@@ -58,7 +58,15 @@ function rowPositions(footprints: readonly number[], center: Vec2): Vec2[] {
 export type Projector = {
   key: string;
   mode: "owned" | "create-only";
-  project(instance: EncounterInstance, current?: unknown): unknown;
+  /**
+   * `current` is the token's value for the key; `baseline` is the raw value
+   * last written for it (see planSync).
+   */
+  project(
+    instance: EncounterInstance,
+    current?: unknown,
+    baseline?: unknown,
+  ): unknown;
   /**
    * Reads a value edited on the table back into the instance fields it
    * changed; `invalid` names the fields whose value could not be read.
@@ -189,6 +197,8 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  *   exactly is d == o, a different value is r != b and is pushed). Values that
  *   cannot be read are planned as rejected and left on the table, b untouched.
  * - d != o, no b: push d if o is absent, else keep o; either way b := r.
+ * A projector may use the baseline to apply this rule per field inside its
+ * value: a table edit wins until the encounter changes that field.
  * An undefined r means no key: it is never written or baselined, and its
  * baseline is dropped (the token's value is left alone).
  * The token name follows the same rule, with its baseline under
@@ -237,7 +247,7 @@ export function planSync(
     for (const { key, project, readBack } of owned) {
       const raw = project(instance);
       const o = token.metadata[key];
-      const d = project(instance, o);
+      const d = project(instance, o, baseline[key]);
       const hasBaseline = Object.hasOwn(baseline, key);
       if (raw === undefined) {
         delete next[key];

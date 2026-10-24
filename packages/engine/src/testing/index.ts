@@ -16,6 +16,7 @@ const DEFAULTS: MonsterInstance = {
   groupId: null,
   createdAt: 1,
   footprint: 1,
+  statsVisible: false,
 };
 
 /**

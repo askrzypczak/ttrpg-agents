@@ -29,6 +29,7 @@ const inst = (
   groupId: null,
   createdAt: n,
   footprint,
+  statsVisible: false,
 });
 
 const shadowArt: TokenArt = {

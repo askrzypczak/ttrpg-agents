@@ -87,6 +87,7 @@ function wrapRepo(
     setHp: (id, hp) => inner.setHp(id, hp),
     setMaxHp: (id, maxHp) => inner.setMaxHp(id, maxHp),
     setArmorClass: (id, ac) => inner.setArmorClass(id, ac),
+    setStatsVisible: (id, visible) => inner.setStatsVisible(id, visible),
     clearEncounter: () => inner.clearEncounter(),
     listInstances: () => inner.listInstances(),
     ...over,
@@ -116,7 +117,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the eleven tools", () => {
+  it("exposes the twelve tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -128,6 +129,7 @@ describe("tool registry", () => {
       "rename_monster",
       "search_monsters",
       "set_initiative",
+      "set_stats_visibility",
       "table_status",
     ]);
   });
@@ -256,6 +258,23 @@ describe("add_monsters", () => {
     expect(r.isError).toBe(true);
     expect(text(r)).toContain("Invalid arguments");
     expect(names()).toEqual([]);
+  });
+
+  it("add_monsters creates a group revealed when statsVisible is true", async () => {
+    const r = await call("add_monsters", {
+      groups: [
+        { monster: SHADOW, count: 2, statsVisible: true },
+        { monster: "srd-2024_goblin-warrior", count: 1 },
+      ],
+    });
+    expect(r.isError).toBeUndefined();
+    expect(
+      ctx.repo.listInstances().map((i) => [i.displayName, i.statsVisible]),
+    ).toEqual([
+      ["Shadow 1", true],
+      ["Shadow 2", true],
+      ["Goblin Warrior 1", false],
+    ]);
   });
 
   it("returns an error result for malformed arguments", async () => {
@@ -531,6 +550,66 @@ describe("set_initiative", () => {
     expect(r.isError).toBe(true);
     expect(text(r)).toContain("Nobody");
     expect(initiatives()).toEqual([5, 3]);
+  });
+});
+
+describe("set_stats_visibility", () => {
+  const visibility = () =>
+    ctx.repo.listInstances().map((i) => [i.displayName, i.statsVisible]);
+
+  it("set_stats_visibility reveals several targets in one call", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    const idC = ctx.repo.listInstances()[2]?.id ?? "";
+
+    const r = await call("set_stats_visibility", {
+      targets: ["A", idC],
+      visible: true,
+    });
+    expect(r.isError).toBeUndefined();
+    expect(visibility()).toEqual([
+      ["A", true],
+      ["B", false],
+      ["C", true],
+    ]);
+  });
+
+  it("set_stats_visibility hides previously revealed targets", async () => {
+    seed(
+      { ...item("A", 1), statsVisible: true },
+      { ...item("B", 2), statsVisible: true },
+      { ...item("C", 3), statsVisible: true },
+    );
+    expect(visibility()).toEqual([
+      ["A", true],
+      ["B", true],
+      ["C", true],
+    ]);
+
+    const r = await call("set_stats_visibility", {
+      targets: ["A", "B"],
+      visible: false,
+    });
+    expect(r.isError).toBeUndefined();
+    expect(visibility()).toEqual([
+      ["A", false],
+      ["B", false],
+      ["C", true],
+    ]);
+  });
+
+  it("set_stats_visibility fails and changes nothing when a target is unknown", async () => {
+    seed(item("A", 1), item("B", 2));
+
+    const r = await call("set_stats_visibility", {
+      targets: ["A", "Ghost"],
+      visible: true,
+    });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("Ghost");
+    expect(visibility()).toEqual([
+      ["A", false],
+      ["B", false],
+    ]);
   });
 });
 
