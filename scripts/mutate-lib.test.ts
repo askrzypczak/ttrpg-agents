@@ -166,4 +166,40 @@ describe("formatMutationSummary", () => {
   it("shows n/a for a report with no valid mutants", () => {
     expect(formatMutationSummary({ files: {} })).toContain("**Score n/a**");
   });
+
+  const withIgnored: MutationReport = {
+    files: {
+      "a.ts": {
+        mutants: [
+          mutant("Killed", 1),
+          mutant("Survived", 2),
+          mutant("Ignored", 3),
+          mutant("Ignored", 4),
+        ],
+      },
+      "b.ts": { mutants: [mutant("Killed", 1), mutant("Ignored", 2)] },
+    },
+  };
+
+  it("appends the ignored count to the summary line when mutants were ignored", () => {
+    expect(formatMutationSummary(withIgnored)).toContain(
+      "over 6 mutants: 2 killed, 0 timeout, 1 survived, 0 no coverage, 3 ignored.\n",
+    );
+  });
+
+  it("leaves the summary line unchanged when no mutant was ignored", () => {
+    const out = formatMutationSummary(report);
+    expect(out).toContain(
+      "**Score 50.0%** over 7 mutants: 2 killed, 1 timeout, 1 survived, 2 no coverage.\n",
+    );
+    expect(out).not.toContain("ignored");
+  });
+
+  it("does not count ignored mutants in the score or the per-file uncaught column", () => {
+    const out = formatMutationSummary(withIgnored);
+    expect(out).toContain("**Score 66.7%**");
+    expect(out).toContain("| a.ts | 4 | 1 | 50.0% |");
+    expect(out).toContain("| b.ts | 3 | 0 | 100.0% |");
+    expect(out).toContain("3 ignored.");
+  });
 });
