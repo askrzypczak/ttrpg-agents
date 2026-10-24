@@ -12,6 +12,7 @@ const instance = {
   armorClass: null,
   groupId: null,
   createdAt: 5,
+  footprint: 1,
   statsVisible: false,
 };
 

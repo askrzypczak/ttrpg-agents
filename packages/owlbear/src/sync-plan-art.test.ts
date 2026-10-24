@@ -9,7 +9,6 @@ import {
   defaultSyncConfig,
   instanceIdOf,
   planSync,
-  rowPositions,
   type EncounterInstance,
 } from "./sync-plan.js";
 
@@ -17,6 +16,7 @@ const inst = (
   n: number,
   monsterKey = "shadow",
   displayName = `Shadow ${n}`,
+  footprint = 1,
 ): EncounterInstance => ({
   id: `i${n}`,
   encounterId: "e1",
@@ -28,6 +28,7 @@ const inst = (
   armorClass: null,
   groupId: null,
   createdAt: n,
+  footprint,
   statsVisible: false,
 });
 
@@ -138,7 +139,7 @@ describe("planSync token art", () => {
       grid: { dpi: 300, offset: { x: 150, y: 140 } },
       name: "Shadow 1",
       visible: false,
-      position: rowPositions(1, center)[0],
+      position: center,
     });
     expect(plan.add[0]!.shape).toBeUndefined();
     expect(plan.needsArt).toEqual([]);
@@ -202,4 +203,61 @@ describe("planSync token art sizing", () => {
       expect(plan.add[0]).toMatchObject({ type: "IMAGE", image: art, grid });
     },
   );
+});
+
+describe("planSync token footprint", () => {
+  it.each([1, 2, 3, 4])(
+    "a new image token spans its instance's footprint, centred (footprint %i)",
+    (cells) => {
+      const plan = planSync(
+        [inst(1, "shadow", "Shadow 1", cells)],
+        [],
+        defaultSyncConfig,
+        ctx({ shadow: shadowArt }),
+      );
+      // shadowArt is 300 x 280: the longer side spans `cells` grid cells.
+      expect(plan.add[0]).toMatchObject({
+        type: "IMAGE",
+        image: shadowArt,
+        grid: { dpi: 300 / cells, offset: { x: 150, y: 140 } },
+        position: center,
+      });
+    },
+  );
+
+  it("a new hidden circle is footprint times the base token size", () => {
+    const plan = planSync(
+      [inst(1, "shadow", "Shadow 1", 3), inst(2, "ghoul", "Ghoul 2", 2)],
+      [],
+      defaultSyncConfig,
+      ctx(),
+    );
+    expect(addedFor(plan.add, "i1")).toMatchObject({
+      type: "SHAPE",
+      shape: { shapeType: "CIRCLE", width: 450, height: 450 },
+      visible: false,
+    });
+    expect(addedFor(plan.add, "i2")).toMatchObject({
+      type: "SHAPE",
+      shape: { shapeType: "CIRCLE", width: 300, height: 300 },
+    });
+  });
+
+  it("a token already on the scene is not resized when the instance footprint differs", () => {
+    const existing = circleToken(1);
+    const plan = planSync(
+      [inst(1, "shadow", "Shadow 1", 3), inst(2, "shadow", "Shadow 2", 3)],
+      [existing],
+      defaultSyncConfig,
+      ctx({}, ["i1"]),
+    );
+    expect(plan.delete).toEqual([]);
+    expect(plan.update).toEqual([]);
+    expect(plan.rename).toEqual([]);
+    expect(addedFor(plan.add, "i1")).toBeUndefined();
+    // Control: a new token for the same footprint is created at full size.
+    expect(addedFor(plan.add, "i2")).toMatchObject({
+      shape: { shapeType: "CIRCLE", width: 450, height: 450 },
+    });
+  });
 });

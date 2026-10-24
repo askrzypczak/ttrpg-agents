@@ -118,8 +118,8 @@ describe("migrations", () => {
     // The schema as it was before instances could reveal their stats.
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON");
-    for (const m of migrations.filter((m) => m.version <= 3)) db.exec(m.sql);
-    db.exec("PRAGMA user_version = 3");
+    for (const m of migrations.filter((m) => m.version <= 4)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 4");
     db.exec(
       "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
     );
@@ -175,7 +175,7 @@ describe("migrations", () => {
           .all() as { name: string }[]
       ).map((row) => row.name);
 
-    // Build the database at version 2, before token_art existed.
+    // Build the database as the release before token_art (version 3) left it.
     const previous = 2;
     const old = new DatabaseSync(path);
     for (const m of migrations.filter((m) => m.version <= previous))
@@ -184,9 +184,12 @@ describe("migrations", () => {
     expect(tables(old)).toContain("monster_instances");
     expect(tables(old)).not.toContain("token_art");
     old.exec(
-      `INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 1);
-       INSERT INTO monster_instances (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at)
-       VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 16, 1);`,
+      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+    );
+    old.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at)
+       VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 16, 100)`,
     );
     old.close();
 
@@ -199,6 +202,67 @@ describe("migrations", () => {
         .map((i) => i.displayName),
     ).toEqual(["Shadow 1"]);
     expect(new SqliteTokenArtRepository(db).listTokenArt()).toEqual({});
+    db.close();
+  });
+
+  it("a row stored before migration 4 reads as footprint 1", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 3)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 3");
+    db.exec(
+      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+    );
+    db.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at)
+       VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200)`,
+    );
+
+    migrate(db);
+
+    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+      makeTestInstance({
+        currentHp: 9,
+        initiative: 12,
+        armorClass: 13,
+        groupId: "g1",
+        createdAt: 200,
+        footprint: 1,
+      }),
+    ]);
+    db.close();
+  });
+
+  it("the footprint column rejects a value below 1", () => {
+    const db = openDatabase(":memory:");
+    db.exec(
+      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+    );
+    const insert = (id: string, footprint: number) =>
+      db
+        .prepare(
+          `INSERT INTO monster_instances
+            (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at, footprint)
+           VALUES (?, 'e1', 'ogre', ?, 59, 59, 200, ?)`,
+        )
+        .run(id, `Ogre ${id}`, footprint);
+
+    let error: unknown;
+    try {
+      insert("i0", 0);
+    } catch (e) {
+      error = e;
+    }
+    // SQLITE_CONSTRAINT_CHECK
+    expect(error).toMatchObject({ errcode: 275 });
+    insert("i2", 2);
+    expect(
+      new SqliteEncounterRepository(db)
+        .listInstances()
+        .map((i) => [i.id, i.footprint]),
+    ).toEqual([["i2", 2]]);
     db.close();
   });
 });

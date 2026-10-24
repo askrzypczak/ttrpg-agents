@@ -21,10 +21,12 @@ import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const SHADOW = "srd-2024_shadow";
 const GOBLIN = "srd-2024_goblin-warrior";
+const OGRE = "srd-2024_ogre";
 const monsters = loadSrdMonsters();
 const shadow = monsters.byKey.get(SHADOW);
 const goblin = monsters.byKey.get(GOBLIN);
-if (!shadow || !goblin) throw new Error("SRD fixtures missing");
+const ogre = monsters.byKey.get(OGRE);
+if (!shadow || !goblin || !ogre) throw new Error("SRD fixtures missing");
 const zeroRng: Rng = { nextInt: () => 0 };
 
 let repo: SqliteEncounterRepository;
@@ -239,6 +241,18 @@ describe("addMonsters", () => {
       shadow.ac,
       goblin.ac,
     ]);
+  });
+
+  it("addMonsters stores footprint 2 for a Large monster and 1 for a Medium one", () => {
+    expect(ogre.size).toBe("large");
+    expect(shadow.size).toBe("medium");
+    const { instances } = addMonsters(deps(), [
+      { monster: OGRE, count: 2, hp: "average" },
+      { monster: SHADOW, count: 1, hp: "average" },
+    ]);
+    const stored = repo.listInstances();
+    expect(stored.map((s) => s.id)).toEqual(instances.map((i) => i.id));
+    expect(stored.map((s) => s.footprint)).toEqual([2, 2, 1]);
   });
 
   it("a new instance has statsVisible false unless its group asks for true", () => {

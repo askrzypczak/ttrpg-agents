@@ -272,4 +272,42 @@ describe("protocol", () => {
       message: { v: 1, type: "ping", payload: {} },
     });
   });
+
+  it("an added event and an encounter-snapshot message without footprint decode with footprint 1", () => {
+    const withoutFootprint: Record<string, unknown> = { ...instance };
+    delete withoutFootprint.footprint;
+    const withFootprint = { ...instance, footprint: 1 };
+
+    const event = decodeMessage(
+      JSON.stringify({
+        v: 1,
+        type: "encounter-event",
+        payload: { type: "added", instances: [withoutFootprint] },
+      }),
+    );
+    expect(event).toEqual({
+      ok: true,
+      message: {
+        v: 1,
+        type: "encounter-event",
+        payload: { type: "added", instances: [withFootprint] },
+      },
+    });
+
+    const snapshot = decodeMessage(
+      JSON.stringify({
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances: [withoutFootprint] },
+      }),
+    );
+    expect(snapshot).toEqual({
+      ok: true,
+      message: {
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances: [withFootprint] },
+      },
+    });
+  });
 });
