@@ -114,6 +114,41 @@ describe("migrations", () => {
     db.close();
   });
 
+  it("the migration adds stats_visible defaulting to 0 for existing rows", () => {
+    // The schema as it was before instances could reveal their stats.
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 3)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 3");
+    db.exec(
+      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+    );
+    db.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at)
+       VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 16, NULL, 13, NULL, 200)`,
+    );
+
+    migrate(db);
+
+    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    const column = (
+      db.prepare("PRAGMA table_info(monster_instances)").all() as {
+        name: string;
+        notnull: number;
+        dflt_value: string | null;
+      }[]
+    ).find((c) => c.name === "stats_visible");
+    expect(column).toMatchObject({ notnull: 1, dflt_value: "0" });
+    expect(
+      db.prepare("SELECT stats_visible FROM monster_instances").all(),
+    ).toEqual([{ stats_visible: 0 }]);
+    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+      makeTestInstance({ armorClass: 13, createdAt: 200, statsVisible: false }),
+    ]);
+    db.close();
+  });
+
   it("persists data across reopen of a file-backed database", () => {
     const dir = mkdtempSync(join(tmpdir(), "ttrpg-db-"));
     dirs.push(dir);

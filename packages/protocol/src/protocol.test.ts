@@ -15,7 +15,7 @@ import {
 // One value per schema key, the first of these that its field accepts. A new
 // field type needs a new candidate here.
 function sampleInstance(): MonsterInstance {
-  const candidates: unknown[] = ["s", 1, null];
+  const candidates: unknown[] = ["s", 1, null, true];
   const instance: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(monsterInstanceSchema.shape)) {
     const value = candidates.find((c) => field.safeParse(c).success);
@@ -87,6 +87,38 @@ describe("protocol", () => {
     expect(Object.keys(decodedInstance ?? {}).sort()).toEqual(
       Object.keys(monsterInstanceSchema.shape).sort(),
     );
+  });
+
+  it("snapshot instances carry statsVisible", () => {
+    const revealed = makeTestInstance({ id: "i1", statsVisible: true });
+    const hidden = makeTestInstance({ id: "i2", statsVisible: false });
+    const decoded = decodeMessage(
+      encodeMessage({
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances: [revealed, hidden] },
+      }),
+    );
+    expect(decoded).toEqual({
+      ok: true,
+      message: {
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances: [revealed, hidden] },
+      },
+    });
+
+    const withoutFlag: Partial<MonsterInstance> = { ...revealed };
+    delete withoutFlag.statsVisible;
+    const missing = decodeMessage(
+      JSON.stringify({
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances: [withoutFlag] },
+      }),
+    );
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.reason).toBe("invalid-payload");
   });
 
   it("rejects malformed JSON", () => {

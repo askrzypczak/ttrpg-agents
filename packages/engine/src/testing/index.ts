@@ -15,6 +15,7 @@ const DEFAULTS: MonsterInstance = {
   armorClass: null,
   groupId: null,
   createdAt: 1,
+  statsVisible: false,
 };
 
 /**

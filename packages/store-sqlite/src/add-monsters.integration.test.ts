@@ -241,6 +241,22 @@ describe("addMonsters", () => {
     ]);
   });
 
+  it("a new instance has statsVisible false unless its group asks for true", () => {
+    addMonsters(deps(), [
+      { monster: SHADOW, count: 2, hp: "average", statsVisible: true },
+      { monster: GOBLIN, count: 1, hp: "average" },
+      { monster: GOBLIN, count: 1, hp: "average", statsVisible: false },
+    ]);
+    expect(
+      repo.listInstances().map((s) => [s.displayName, s.statsVisible]),
+    ).toEqual([
+      ["Shadow 1", true],
+      ["Shadow 2", true],
+      ["Goblin Warrior 1", false],
+      ["Goblin Warrior 2", false],
+    ]);
+  });
+
   it("clamps rolled HP to 1 but logs the raw total", () => {
     const weak = {
       ...shadow,

@@ -112,6 +112,9 @@ export function observeRepository(
     },
     // Snapshot-only: setting armor class emits no event.
     setArmorClass: (id, armorClass) => repo.setArmorClass(id, armorClass),
+    setStatsVisible() {
+      throw new Error("not implemented");
+    },
     clearEncounter() {
       repo.clearEncounter();
       emitter.emit({ type: "cleared" });

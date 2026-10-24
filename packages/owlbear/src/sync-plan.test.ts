@@ -134,6 +134,38 @@ function applyUpdates(items: SceneItem[], plan: SyncPlan): SceneItem[] {
 const metadataOf = (items: SceneItem[], id: string) =>
   items.find((i) => i.id === id)!.metadata;
 
+describe("planSync projector arguments", () => {
+  it("planSync passes the key's baseline value to the projector", () => {
+    const calls: { id: string; current: unknown; baseline: unknown }[] = [];
+    const recording: Projector = {
+      key: HP_KEY,
+      mode: "owned",
+      project: (i, current, baseline) => {
+        calls.push({ id: i.id, current, baseline });
+        return i.currentHp;
+      },
+    };
+    const withBaseline = token(1, {
+      [HP_KEY]: 7,
+      [SYNCED_METADATA_KEY]: { ...linkBaseline(1), [HP_KEY]: 9 },
+    });
+    const withoutBaseline = token(2, {
+      [HP_KEY]: 5,
+      [SYNCED_METADATA_KEY]: linkBaseline(2),
+    });
+
+    planSync(
+      [inst(1), inst(2)],
+      [withBaseline, withoutBaseline],
+      config(link, recording),
+      ctx(["i1", "i2"]),
+    );
+
+    expect(calls).toContainEqual({ id: "i1", current: 7, baseline: 9 });
+    expect(calls).toContainEqual({ id: "i2", current: 5, baseline: undefined });
+  });
+});
+
 describe("planSync", () => {
   it("adds an instance with no token", () => {
     const plan = planSync(

@@ -165,6 +165,10 @@ const addMonstersTool = defineTool({
         monster: z.string().describe("Monster key, e.g. srd-2024_shadow"),
         count: z.number().int().min(1),
         hp: z.enum(["rolled", "average"]).optional(),
+        statsVisible: z
+          .boolean()
+          .optional()
+          .describe("Reveal the group's stats to players (default: GM-only)"),
       }),
     ),
     initiative: z
@@ -313,6 +317,17 @@ const setInitiativeTool = defineTool({
   },
 });
 
+const setStatsVisibilityTool = defineTool({
+  name: "set_stats_visibility",
+  annotations: { destructiveHint: false },
+  description:
+    "Reveal monsters' stats to players (visible: true) or hide them again (visible: false). Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
+  inputSchema: { targets: z.array(z.string()).min(1), visible: z.boolean() },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 const clearEncounterTool = defineTool({
   name: "clear_encounter",
   annotations: { destructiveHint: true },
@@ -366,6 +381,7 @@ export const tools: readonly ToolDefinition[] = [
   removeMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
+  setStatsVisibilityTool,
   clearEncounterTool,
   tableStatusTool,
 ];

@@ -426,6 +426,44 @@ describe("setArmorClass", () => {
   });
 });
 
+describe("setStatsVisible", () => {
+  it("setStatsVisible persists true and back to false and returns the updated instance", () => {
+    const [a, b] = repo.addInstances(() => [
+      goblin({ displayName: "Goblin 1" }),
+      goblin({ displayName: "Goblin 2" }),
+    ]);
+    expect(a!.statsVisible).toBe(false);
+
+    const revealed = repo.setStatsVisible(a!.id, true);
+    expect(revealed).toEqual({ ...a, statsVisible: true });
+    expect(repo.listInstances()).toEqual([revealed, b]);
+
+    const hidden = repo.setStatsVisible(a!.id, false);
+    expect(hidden).toEqual({ ...a, statsVisible: false });
+    expect(repo.listInstances()).toEqual([hidden, b]);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setStatsVisible throws UnknownInstanceError for an id not in the active encounter", () => {
+    const [old] = repo.addInstances(() => [goblin()]);
+    db.exec("UPDATE encounters SET active = 0");
+    const current = repo.addInstances(() => [goblin({ displayName: "New" })]);
+
+    for (const id of ["nope", old!.id]) {
+      expect(() => repo.setStatsVisible(id, true), id).toThrow(
+        UnknownInstanceError,
+      );
+    }
+    expect(repo.listInstances()).toEqual(current);
+    expect(
+      db
+        .prepare("SELECT stats_visible FROM monster_instances WHERE id = ?")
+        .get(old!.id),
+    ).toEqual({ stats_visible: 0 });
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
 describe("armor class on insert", () => {
   it("addInstances stores the given armorClass and null when none is given", () => {
     const added = repo.addInstances(() => [

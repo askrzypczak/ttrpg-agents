@@ -18,6 +18,8 @@ export interface AddMonstersGroup {
   count: number;
   /** Defaults to `rolled`. */
   hp?: HpMode;
+  /** Reveal the group's stats to players; defaults to false (GM-only). */
+  statsVisible?: boolean;
 }
 
 export interface AddMonstersOptions {

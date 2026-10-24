@@ -50,6 +50,7 @@ function toInstance(row: InstanceRow): MonsterInstance {
     armorClass: row.armor_class,
     groupId: row.group_id,
     createdAt: row.created_at,
+    statsVisible: false,
   };
 }
 
@@ -129,6 +130,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           armorClass: item.armorClass ?? null,
           groupId: item.groupId ?? null,
           createdAt: this.now(),
+          statsVisible: false,
         };
         insert.run(
           instance.id,
@@ -274,6 +276,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
         .run(value, id);
       return toInstance({ ...row, armor_class: value });
     });
+  }
+
+  setStatsVisible(id: string, visible: boolean): MonsterInstance {
+    void id;
+    void visible;
+    throw new Error("not implemented");
   }
 
   clearEncounter(): void {

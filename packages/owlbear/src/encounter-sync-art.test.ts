@@ -24,6 +24,7 @@ const inst = (n: number, monsterKey = "shadow"): EncounterInstance => ({
   armorClass: null,
   groupId: null,
   createdAt: n,
+  statsVisible: false,
 });
 
 const snapshot = (

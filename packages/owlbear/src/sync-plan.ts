@@ -46,7 +46,15 @@ export function rowPositions(count: number, center: Vec2): Vec2[] {
 export type Projector = {
   key: string;
   mode: "owned" | "create-only";
-  project(instance: EncounterInstance, current?: unknown): unknown;
+  /**
+   * `current` is the token's value for the key; `baseline` is the raw value
+   * last written for it (see planSync).
+   */
+  project(
+    instance: EncounterInstance,
+    current?: unknown,
+    baseline?: unknown,
+  ): unknown;
 };
 
 export type TokenKind = Pick<

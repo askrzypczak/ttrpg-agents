@@ -17,6 +17,8 @@ export const monsterInstanceSchema = z.object({
   armorClass: z.number().nullable(),
   groupId: z.string().nullable(),
   createdAt: z.number(),
+  /** Whether players see the instance's stats on the table; false = GM-only. */
+  statsVisible: z.boolean(),
 });
 
 export type MonsterInstance = z.infer<typeof monsterInstanceSchema>;
@@ -29,4 +31,6 @@ export interface NewMonsterInstance {
   initiative?: number | null;
   armorClass?: number | null;
   groupId?: string | null;
+  /** Defaults to false (GM-only). */
+  statsVisible?: boolean;
 }

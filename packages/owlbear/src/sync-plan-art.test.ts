@@ -28,6 +28,7 @@ const inst = (
   armorClass: null,
   groupId: null,
   createdAt: n,
+  statsVisible: false,
 });
 
 const shadowArt: TokenArt = {
