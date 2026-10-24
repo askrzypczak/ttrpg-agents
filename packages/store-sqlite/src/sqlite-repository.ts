@@ -12,6 +12,7 @@ import {
 import type {
   ChangeOrigin,
   Encounter,
+  EncounterEvent,
   EncounterRepository,
   HpChange,
   InstanceBuilder,
@@ -93,7 +94,6 @@ export class SqliteEncounterRepository implements EncounterRepository {
     build: InstanceBuilder,
     origin: ChangeOrigin,
   ): MonsterInstance[] {
-    void origin;
     return this.transaction(() => {
       const encounter = this.getOrCreateActiveEncounter();
       const names = this.listInstances().map((i) => i.displayName);
@@ -157,25 +157,23 @@ export class SqliteEncounterRepository implements EncounterRepository {
         );
         created.push(instance);
       }
+      this.record({ type: "added", instances: created, origin });
       return created;
     });
   }
 
   applyDamage(id: string, amount: number, origin: ChangeOrigin): HpChange {
-    void origin;
-    return this.adjustHp(id, amount, -1);
+    return this.adjustHp(id, amount, -1, origin);
   }
 
   applyHealing(id: string, amount: number, origin: ChangeOrigin): HpChange {
-    void origin;
-    return this.adjustHp(id, amount, 1);
+    return this.adjustHp(id, amount, 1, origin);
   }
 
   removeInstances(
     ids: readonly string[],
     origin: ChangeOrigin,
   ): MonsterInstance[] {
-    void origin;
     return this.transaction(() => {
       const existing = this.listInstances();
       const removed = ids.map((id) => {
@@ -186,7 +184,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const del = this.db.prepare(
         `DELETE FROM monster_instances WHERE id = ? AND ${ACTIVE_SCOPE}`,
       );
-      for (const instance of removed) del.run(instance.id);
+      for (const instance of removed) {
+        del.run(instance.id);
+        this.record({ type: "removed", id: instance.id, origin });
+      }
       return removed;
     });
   }
@@ -196,7 +197,6 @@ export class SqliteEncounterRepository implements EncounterRepository {
     name: string,
     origin: ChangeOrigin,
   ): MonsterInstance {
-    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -212,6 +212,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET display_name = ? WHERE id = ?")
         .run(displayName, id);
+      this.record({
+        type: "instance-changed",
+        id,
+        changes: { name: displayName },
+        origin,
+      });
       return toInstance({ ...row, display_name: displayName });
     });
   }
@@ -221,7 +227,6 @@ export class SqliteEncounterRepository implements EncounterRepository {
     initiative: number,
     origin: ChangeOrigin,
   ): MonsterInstance {
-    void origin;
     if (!Number.isInteger(initiative)) {
       throw new InvalidInitiativeError(
         `initiative must be an integer, got ${String(initiative)}`,
@@ -238,12 +243,17 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET initiative = ? WHERE id = ?")
         .run(initiative, id);
+      this.record({
+        type: "instance-changed",
+        id,
+        changes: { initiative },
+        origin,
+      });
       return toInstance({ ...row, initiative });
     });
   }
 
   setHp(id: string, hp: number, origin: ChangeOrigin): HpChange {
-    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -256,15 +266,16 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET current_hp = ? WHERE id = ?")
         .run(currentHp, id);
+      const after = toInstance({ ...row, current_hp: currentHp });
+      this.recordHp(after, origin);
       return {
         before: toInstance(row),
-        after: toInstance({ ...row, current_hp: currentHp }),
+        after,
       };
     });
   }
 
   setMaxHp(id: string, maxHp: number, origin: ChangeOrigin): HpChange {
-    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -279,13 +290,15 @@ export class SqliteEncounterRepository implements EncounterRepository {
           "UPDATE monster_instances SET max_hp = ?, current_hp = ? WHERE id = ?",
         )
         .run(resized.maxHp, resized.currentHp, id);
+      const after = toInstance({
+        ...row,
+        max_hp: resized.maxHp,
+        current_hp: resized.currentHp,
+      });
+      this.recordHp(after, origin);
       return {
         before: toInstance(row),
-        after: toInstance({
-          ...row,
-          max_hp: resized.maxHp,
-          current_hp: resized.currentHp,
-        }),
+        after,
       };
     });
   }
@@ -295,7 +308,6 @@ export class SqliteEncounterRepository implements EncounterRepository {
     armorClass: number,
     origin: ChangeOrigin,
   ): MonsterInstance {
-    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -308,6 +320,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET armor_class = ? WHERE id = ?")
         .run(value, id);
+      this.record({
+        type: "instance-changed",
+        id,
+        changes: { armorClass: value },
+        origin,
+      });
       return toInstance({ ...row, armor_class: value });
     });
   }
@@ -317,7 +335,6 @@ export class SqliteEncounterRepository implements EncounterRepository {
     visible: boolean,
     origin: ChangeOrigin,
   ): MonsterInstance {
-    void origin;
     return this.transaction(() => {
       const row = this.db
         .prepare(
@@ -330,18 +347,26 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET stats_visible = ? WHERE id = ?")
         .run(value, id);
+      this.record({
+        type: "instance-changed",
+        id,
+        changes: { statsVisible: visible },
+        origin,
+      });
       return toInstance({ ...row, stats_visible: value });
     });
   }
 
   clearEncounter(origin: ChangeOrigin): void {
-    void origin;
-    this.db
-      .prepare(
-        `DELETE FROM monster_instances
-         WHERE encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
-      )
-      .run();
+    this.transaction(() => {
+      this.db
+        .prepare(
+          `DELETE FROM monster_instances
+           WHERE encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
+        )
+        .run();
+      this.record({ type: "cleared", origin });
+    });
   }
 
   listInstances(): MonsterInstance[] {
@@ -356,7 +381,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
     return rows.map(toInstance);
   }
 
-  private adjustHp(id: string, amount: number, sign: 1 | -1): HpChange {
+  private adjustHp(
+    id: string,
+    amount: number,
+    sign: 1 | -1,
+    origin: ChangeOrigin,
+  ): HpChange {
     if (!Number.isInteger(amount) || amount < 0) {
       throw new InvalidAmountError(
         `amount must be a non-negative integer, got ${amount}`,
@@ -377,10 +407,30 @@ export class SqliteEncounterRepository implements EncounterRepository {
       this.db
         .prepare("UPDATE monster_instances SET current_hp = ? WHERE id = ?")
         .run(hp, id);
+      const after = toInstance({ ...row, current_hp: hp });
+      this.recordHp(after, origin);
       return {
         before: toInstance(row),
-        after: toInstance({ ...row, current_hp: hp }),
+        after,
       };
+    });
+  }
+
+  /** Appends an event to the change log; call it inside the mutation's transaction. */
+  private record(event: EncounterEvent): void {
+    this.db
+      .prepare("INSERT INTO encounter_events (event) VALUES (?)")
+      .run(JSON.stringify(event));
+  }
+
+  /** Records the HP values an instance has after a change. */
+  private recordHp(after: MonsterInstance, origin: ChangeOrigin): void {
+    this.record({
+      type: "hp-changed",
+      id: after.id,
+      currentHp: after.currentHp,
+      maxHp: after.maxHp,
+      origin,
     });
   }
 

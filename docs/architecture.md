@@ -111,8 +111,8 @@ Per synced value: which side has authority, and how a change on the other side r
 Every change to the store carries an origin (`mcp` or `table`) and a command id. A consumer applies changes from other origins and treats changes from its own commands as acknowledgements. A consumer never writes a value to the table because the store's answer differs from what it asked: no clamp push-back and no refusal push-back (the #204 rule, stated for the general case).
 
 - In force: the #204 rule. The table is written only for a store change caused by the MCP; the answer to an edit carries `cause` and never writes to the table.
-- In force (#208, engine): every repository mutation takes a `ChangeOrigin`, and `encounterEventSchema` has an origin-carrying event for each mutation. Nothing emits those events yet.
-- Lands with #128 (change log): the store records the events as an ordered, origin-tagged log; the bridge broadcasts deltas, and a snapshot only on connect or on a gap.
+- In force (#208, engine): every repository mutation takes a `ChangeOrigin`, and `encounterEventSchema` has an origin-carrying event for each mutation. The store records each event, with its origin, in an ordered log (`encounter_events`, read through the engine's `EncounterLog` port; #128), and nothing reads it yet.
+- Lands with #224 (bridge deltas): the bridge broadcasts the log as ordered `encounter-event`s with `seq`, and a snapshot only on connect or on a gap.
 - Lands with #209 (extension consumer): applies deltas by origin, treats its own commands as acknowledgements, queues commands sent while the socket is down, and retires the answer snapshot, `cause` and the sent-edit memory.
 
 Each landing removes its line.

@@ -56,6 +56,10 @@ export const migrations: Migration[] = [
   },
   {
     version: 6,
+    sql: "CREATE TABLE encounter_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, event TEXT NOT NULL);",
+  },
+  {
+    version: 7,
     sql: `
       CREATE TABLE token_art_image (
         sha256 TEXT PRIMARY KEY CHECK (length(sha256) = 64),
