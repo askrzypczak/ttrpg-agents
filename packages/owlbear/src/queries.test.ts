@@ -35,7 +35,7 @@ describe("handleQuery scene-status", () => {
     await sync.handleMessage({
       v: 1,
       type: "encounter-snapshot",
-      payload: { instances: [inst(1), inst(2)] },
+      payload: { instances: [inst(1), inst(2)], seq: 0 },
     });
     // A foreign item, and one of our tokens the sync did not place.
     scene.addItems([foreign, unplaced]);

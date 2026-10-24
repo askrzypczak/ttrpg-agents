@@ -157,7 +157,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     const repo = new SqliteEncounterRepository(db);
     let renamed = false;
     try {
-      // The bridge's data_version poll pushes a snapshot after this commit.
+      // The bridge's change-log poll pushes an event after this commit.
       repo.renameInstance(SHADOW_IDS[1]!, "Boss", origin);
       renamed = true;
       await expect
@@ -207,7 +207,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     let renamed = false;
     try {
       // Unrelated to the token's name: its monster takes damage, and another
-      // monster is renamed, whose token shows when the snapshot has landed.
+      // monster is renamed, whose token shows when the event has landed.
       repo.applyDamage(SHADOW_IDS[0]!, 3, origin);
       damaged = true;
       repo.renameInstance(SHADOW_IDS[2]!, "Ghost", origin);

@@ -22,7 +22,7 @@ const snapshot = (
 ): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: [instance], ...(cause ? { cause } : {}) },
+  payload: { instances: [instance], ...(cause ? { cause } : {}), seq: 0 },
 });
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));

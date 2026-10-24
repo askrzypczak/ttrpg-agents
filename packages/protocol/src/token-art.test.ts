@@ -28,7 +28,7 @@ describe("token art on the wire", () => {
     const raw = {
       v: 1,
       type: "encounter-snapshot",
-      payload: { instances: [instance], art: { shadow: art } },
+      payload: { instances: [instance], art: { shadow: art }, seq: 0 },
     };
     const decoded = decodeMessage(JSON.stringify(raw));
     expect(decoded).toEqual({ ok: true, message: raw });
@@ -43,7 +43,7 @@ describe("token art on the wire", () => {
     const raw = {
       v: 1,
       type: "encounter-snapshot",
-      payload: { instances: [instance] },
+      payload: { instances: [instance], seq: 0 },
     };
     expect(decodeMessage(JSON.stringify(raw))).toEqual({
       ok: true,

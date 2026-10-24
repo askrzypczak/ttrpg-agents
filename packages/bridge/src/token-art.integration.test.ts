@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import type { TokenArt, ChangeOrigin } from "@ttrpg-agents/engine";
 import {
+  SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
   openDatabase,
@@ -48,7 +49,8 @@ async function startServer(
   const server = await startBridgeServer({
     port: 0,
     staticDir: dir,
-    snapshot: () => snapshotMessage(encounters, art),
+    snapshot: () =>
+      snapshotMessage(encounters, art, new SqliteEncounterLog(db)),
     setTokenArt: (monsterKey, value) => art.setTokenArt(monsterKey, value),
     ...options,
   });

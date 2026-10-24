@@ -37,6 +37,7 @@ describe("createEncounterSync instance-changed", () => {
             statsVisible: false,
           }),
         ],
+        seq: 0,
       },
     });
     expect(token(scene).name).toBe("Shadow 1");
@@ -49,6 +50,7 @@ describe("createEncounterSync instance-changed", () => {
         id: "i1",
         changes: { name: "Boss", armorClass: 18, statsVisible: true },
         origin: { source: "mcp", commandId: "c1" },
+        seq: 1,
       },
     });
 

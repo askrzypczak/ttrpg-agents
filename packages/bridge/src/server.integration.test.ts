@@ -387,7 +387,7 @@ describe("bridge server broadcast and snapshot", () => {
   const snapshot: BridgeMessage = {
     v: 1,
     type: "encounter-snapshot",
-    payload: { instances: [] },
+    payload: { instances: [], seq: 0 },
   };
   const cleared: BridgeMessage = {
     v: 1,
@@ -395,6 +395,7 @@ describe("bridge server broadcast and snapshot", () => {
     payload: {
       type: "cleared",
       origin: { source: "mcp", commandId: "test" },
+      seq: 1,
     },
   };
 

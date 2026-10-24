@@ -34,7 +34,8 @@ const snapshot = (
 ): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: art === undefined ? { instances } : { instances, art },
+  payload:
+    art === undefined ? { instances, seq: 0 } : { instances, art, seq: 0 },
 });
 
 const artFor = (name: string): TokenArt => ({

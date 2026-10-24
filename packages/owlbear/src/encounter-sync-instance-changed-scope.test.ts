@@ -40,6 +40,7 @@ async function syncWithTwoInstances() {
           armorClass: 12,
         }),
       ],
+      seq: 0,
     },
   });
   return { sync, scene };
@@ -57,6 +58,7 @@ describe("createEncounterSync instance-changed scope", () => {
         id: "i1",
         changes: { name: "Boss" },
         origin: { source: "mcp", commandId: "c1" },
+        seq: 1,
       },
     });
 
@@ -75,6 +77,7 @@ describe("createEncounterSync instance-changed scope", () => {
         id: "i1",
         changes: { armorClass: 18 },
         origin: { source: "mcp", commandId: "c2" },
+        seq: 1,
       },
     });
 
@@ -95,6 +98,7 @@ describe("createEncounterSync instance-changed scope", () => {
         id: "i1",
         changes: { armorClass: 18 },
         origin: { source: "mcp", commandId: "c3" },
+        seq: 1,
       },
     });
     scene.updateItems([tokenOf(scene, "i1").id], { name: "Gargoyle" });
@@ -114,6 +118,7 @@ describe("createEncounterSync instance-changed scope", () => {
             armorClass: 12,
           }),
         ],
+        seq: 1,
       },
     });
 

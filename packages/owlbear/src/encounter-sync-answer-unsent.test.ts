@@ -21,14 +21,14 @@ const inst = (over: Partial<EncounterInstance> = {}): EncounterInstance =>
 const snapshot = (instance: EncounterInstance): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: [instance] },
+  payload: { instances: [instance], seq: 0 },
 });
 
 /** The bridge's snapshot answering the accepted `instance-edit` for `i1`. */
 const answer = (instance: EncounterInstance): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: [instance], cause: "instance-edit:i1" },
+  payload: { instances: [instance], cause: "instance-edit:i1", seq: 0 },
 });
 
 /** Lets fire-and-forget reconciles (item changes) finish. */

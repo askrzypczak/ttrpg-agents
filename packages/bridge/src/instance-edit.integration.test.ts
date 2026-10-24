@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import type { MonsterInstance, ChangeOrigin } from "@ttrpg-agents/engine";
 import {
+  SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
   openDatabase,
@@ -35,7 +36,12 @@ async function startServer(): Promise<BridgeServer> {
   const server = await startBridgeServer({
     port: 0,
     staticDir: dir,
-    snapshot: () => snapshotMessage(repo, new SqliteTokenArtRepository(db)),
+    snapshot: () =>
+      snapshotMessage(
+        repo,
+        new SqliteTokenArtRepository(db),
+        new SqliteEncounterLog(db),
+      ),
     editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
     removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
   });

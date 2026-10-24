@@ -12,7 +12,7 @@ const inst = (n: number): EncounterInstance =>
 const snapshot = (...ns: number[]): BridgeMessage => ({
   v: 1,
   type: "encounter-snapshot",
-  payload: { instances: ns.map(inst) },
+  payload: { instances: ns.map(inst), seq: 0 },
 });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -123,6 +123,7 @@ describe("createEncounterSync guards", () => {
         currentHp: 3,
         maxHp: 16,
         origin: { source: "mcp", commandId: "test" },
+        seq: 1,
       },
     });
     await sync.handleMessage({
@@ -132,6 +133,7 @@ describe("createEncounterSync guards", () => {
         type: "added",
         instances: [inst(5)],
         origin: { source: "mcp", commandId: "test" },
+        seq: 2,
       },
     });
     expect(errors).toEqual([]);

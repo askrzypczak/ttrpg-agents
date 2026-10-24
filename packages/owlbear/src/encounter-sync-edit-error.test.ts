@@ -31,6 +31,7 @@ async function healthAfter(message: BridgeMessage): Promise<unknown> {
           armorClass: 12,
         }),
       ],
+      seq: 0,
     },
   });
   await settle();

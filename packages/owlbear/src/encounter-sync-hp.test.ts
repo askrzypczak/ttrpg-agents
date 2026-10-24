@@ -37,6 +37,7 @@ describe("createEncounterSync stat bubbles", () => {
             currentHp: 16,
           }),
         ],
+        seq: 0,
       },
     });
     await sync.handleMessage({
@@ -48,6 +49,7 @@ describe("createEncounterSync stat bubbles", () => {
         currentHp: 3,
         maxHp: 20,
         origin: { source: "mcp", commandId: "test" },
+        seq: 1,
       },
     });
 
