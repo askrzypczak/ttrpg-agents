@@ -54,7 +54,13 @@ const server = await startBridgeServer({
   editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
 });
-const stopPolling = broadcastLogEvents(log, server);
+const stopPolling = broadcastLogEvents(log, server, {
+  onUnreadable: ({ seq, error }) =>
+    console.error(
+      `change log row ${seq} could not be read and was skipped: ${error}`,
+    ),
+  snapshot: () => snapshotMessage(repo, artRepo, log),
+});
 console.log(`bridge listening on http://localhost:${server.port}`);
 console.log(`serving ${staticDir}`);
 console.log(`token file: ${tokenPath}`);

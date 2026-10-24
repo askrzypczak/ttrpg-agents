@@ -236,6 +236,16 @@ describe("broadcastLogEvents", () => {
     stop();
   });
 
+  it("broadcastLogEvents without a snapshot sends the events after an unreadable entry in the same tick", () => {
+    const { log } = stubLog();
+    const stop = broadcastLogEvents(log, target);
+
+    log.events.push(unreadable(1), cleared(2));
+    vi.advanceTimersByTime(POLL_MS);
+    expect(sent).toEqual([message(cleared(2))]);
+    stop();
+  });
+
   it("broadcastLogEvents reports an unreadable entry once with its seq and error, also when it is the newest entry", () => {
     const { log } = stubLog();
     const onUnreadable = vi.fn();
