@@ -7,6 +7,7 @@ import {
   defaultSyncConfig,
   planSync,
   type EncounterInstance,
+  type FieldContext,
   type SyncPlan,
 } from "./sync-plan.js";
 
@@ -21,11 +22,18 @@ const inst = (over: Partial<EncounterInstance> = {}): EncounterInstance =>
     ...over,
   });
 
-const plan = (desired: EncounterInstance[], observed: SceneItem[]): SyncPlan =>
+const plan = (
+  desired: EncounterInstance[],
+  observed: SceneItem[],
+  fields?: FieldContext,
+  snapshot = false,
+): SyncPlan =>
   planSync(desired, observed, defaultSyncConfig, {
     viewportCenter: { x: 0, y: 0 },
     placed: new Set(["i1"]),
     art: {},
+    ...(snapshot ? { snapshot } : {}),
+    ...(fields ? { fields: new Map([["i1", fields]]) } : {}),
   });
 
 /** Applies the plan's key-level metadata updates to copies of `items`. */
@@ -86,7 +94,9 @@ describe("planSync write-back of table edits", () => {
   it("planSync emits no edit when the encounter changed as well", () => {
     const token = editedToken(inst(), { health: 5 });
 
-    const p = plan([inst({ currentHp: 8 })], [token]);
+    const p = plan([inst({ currentHp: 8 })], [token], {
+      moved: new Set(["currentHp"]),
+    });
 
     expect(p.edits).toEqual([]);
     const [after] = applyUpdates([token], p);
@@ -109,5 +119,123 @@ describe("planSync write-back of table edits", () => {
     ]);
     expect(p.edits).toEqual([]);
     expect(p.update).toEqual([]);
+  });
+});
+
+describe("planSync with edit fields in flight, settled or moved", () => {
+  const stored = (over: Partial<EncounterInstance> = {}) =>
+    inst({ displayName: "Goblin 2", ...over });
+
+  /** The token's Stat Bubbles value after the plan's metadata writes. */
+  const bubblesAfter = (token: SceneItem, p: SyncPlan): unknown =>
+    bubblesOf(applyUpdates([token], p)[0]!);
+
+  const pushesBubbles = (p: SyncPlan): boolean =>
+    p.update.some((u) => u.key === STAT_BUBBLES_METADATA_KEY);
+
+  it("a field the store moved is pushed while a field in flight keeps its sent value", () => {
+    const token = editedToken(stored(), { "max health": 20 });
+
+    const p = plan([stored({ currentHp: 7 })], [token], {
+      moved: new Set(["currentHp"]),
+      inflight: { maxHp: 20 },
+    });
+
+    expect(bubblesAfter(token, p)).toMatchObject({
+      health: 7,
+      "max health": 20,
+    });
+    expect(p.edits).toEqual([]);
+  });
+
+  it("a settled field is recorded in the baseline without a push", () => {
+    // 99 was sent and the store clamped it to its max HP of 16.
+    const token = editedToken(stored(), { health: 99 });
+
+    const p = plan([stored({ currentHp: 16 })], [token], {
+      settled: { currentHp: 99 },
+    });
+
+    expect(pushesBubbles(p)).toBe(false);
+    expect(p.edits).toEqual([]);
+    expect(p.overrides).toEqual([]);
+    const [after] = applyUpdates([token], p);
+    expect(bubblesOf(after!)).toMatchObject({ health: 99 });
+    expect(bubblesBaselineOf(after!)).toMatchObject({ health: 99 });
+  });
+
+  it("a field in flight is not planned as an edit again", () => {
+    const token = editedToken(stored(), { health: 5 });
+
+    // Control: without the command in flight the table value is an edit.
+    expect(plan([stored()], [token]).edits).toEqual([
+      { instanceId: "i1", currentHp: 5 },
+    ]);
+
+    const p = plan([stored()], [token], { inflight: { currentHp: 5 } });
+
+    expect(p.edits).toEqual([]);
+    expect(pushesBubbles(p)).toBe(false);
+  });
+
+  it("a field moved by mcp is pushed over a table edit of it", () => {
+    // HP 5 was typed after the last write; the store now says 10 again.
+    const token = editedToken(stored(), { health: 5 });
+
+    const p = plan([stored()], [token], { moved: new Set(["currentHp"]) });
+
+    expect(bubblesAfter(token, p)).toMatchObject({ health: 10 });
+    expect(p.edits).toEqual([]);
+  });
+
+  it("a field in flight keeps its sent value although the store moved it", () => {
+    const token = editedToken(stored(), { health: 5 });
+
+    const p = plan([stored({ currentHp: 7 })], [token], {
+      moved: new Set(["currentHp"]),
+      inflight: { currentHp: 5 },
+    });
+
+    expect(bubblesAfter(token, p)).toMatchObject({ health: 5 });
+    expect(p.edits).toEqual([]);
+  });
+
+  describe("overrides", () => {
+    /** A token whose clamped value 99 was recorded as the baseline. */
+    function clampedToken(): SceneItem {
+      const token = editedToken(stored(), { health: 99 });
+      const synced = token.metadata[SYNCED_METADATA_KEY] as Record<
+        string,
+        unknown
+      >;
+      synced[STAT_BUBBLES_METADATA_KEY] = {
+        ...(synced[STAT_BUBBLES_METADATA_KEY] as object),
+        health: 99,
+      };
+      return token;
+    }
+
+    it("a field a snapshot pushes over a different token value is reported as an override naming the instance, field, table value and store value", () => {
+      const token = clampedToken();
+
+      const p = plan([stored({ currentHp: 16 })], [token], undefined, true);
+
+      expect(bubblesAfter(token, p)).toMatchObject({ health: 16 });
+      expect(p.overrides).toHaveLength(1);
+      expect(p.overrides[0]!.instanceId).toBe("i1");
+      for (const part of ["Goblin 2", "HP", "99", "16"])
+        expect(p.overrides[0]!.message).toContain(part);
+    });
+
+    it("a field an mcp event pushes is not reported as an override", () => {
+      const token = editedToken(stored({ currentHp: 16 }), { health: 99 });
+
+      const p = plan([stored({ currentHp: 16 })], [token], {
+        moved: new Set(["currentHp"]),
+      });
+
+      expect(bubblesAfter(token, p)).toMatchObject({ health: 16 });
+      expect(p.overrides).toEqual([]);
+    });
   });
 });

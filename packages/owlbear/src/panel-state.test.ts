@@ -221,3 +221,46 @@ describe("panelView note", () => {
     expect(noToken.note).toBeUndefined();
   });
 });
+
+describe("panelView waiting edits and overrides", () => {
+  const connected: PanelInput = {
+    role: "gm",
+    socketState: "open",
+    disconnectedMs: 0,
+  };
+
+  it("the note line says how many table edits are waiting", () => {
+    const waiting = panelView({ ...connected, waitingCommands: 3 });
+    expect(waiting.note ?? "").toMatch(/3/);
+    expect(waiting.note ?? "").toMatch(/waiting/);
+
+    // Alongside the clamp note, not instead of it.
+    const both = panelView({
+      ...connected,
+      waitingCommands: 3,
+      editNote: "The store holds HP 10.",
+    });
+    expect(both.note ?? "").toContain("The store holds HP 10.");
+    expect(both.note ?? "").toMatch(/3/);
+
+    // Control: nothing waiting, no mention.
+    expect(
+      panelView({ ...connected, waitingCommands: 0 }).note,
+    ).toBeUndefined();
+  });
+
+  it("the override records render in the panel view, and an empty list renders none", () => {
+    const records = [
+      "After connecting, the store set Goblin 2 HP to 16; the table showed 99.",
+      "After connecting, the store set Goblin 3 armor class to 15; the table showed 3.",
+    ];
+
+    expect(panelView({ ...connected, overrides: records }).overrides).toEqual(
+      records,
+    );
+    expect(
+      panelView({ ...connected, overrides: [] }).overrides,
+    ).toBeUndefined();
+    expect(panelView(connected).overrides).toBeUndefined();
+  });
+});

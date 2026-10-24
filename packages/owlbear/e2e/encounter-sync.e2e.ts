@@ -5,13 +5,14 @@ import {
 import type { SceneItem } from "../src/scene-model.js";
 import { SHADOW_IDS } from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
-import { readItems } from "./helpers.js";
+import { controlBridgeSocket, readItems } from "./helpers.js";
 import type { ChangeOrigin } from "@ttrpg-agents/engine";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 const INSTANCE_KEY = "com.ttrpg-agents/instance";
 const INITIATIVE_KEY = "rodeo.owlbear.initiative-tracker/metadata";
+const STAT_BUBBLES_KEY = "com.owlbear-rodeo-bubbles-extension/metadata";
 
 /** Our token for the instance with this id. */
 function tokenOf(items: SceneItem[], instanceId: string): SceneItem {
@@ -265,6 +266,63 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       try {
         if (renamed) repo.renameInstance(SHADOW_IDS[2]!, "Shadow 3", origin);
         if (damaged) repo.applyHealing(SHADOW_IDS[0]!, 3, origin);
+      } finally {
+        db.close();
+      }
+    }
+  });
+
+  test("an HP change made while the socket is down is written to the token at the reconnect, listed in the panel, and the list clears on dismiss", async ({
+    page,
+    bridge,
+  }) => {
+    const socket = await controlBridgeSocket(page);
+    await openHarness(page, { role: "gm" });
+    const panel = page.frameLocator("#extension");
+    await expect(panel.locator("#status")).toHaveText(
+      "Connected to the local bridge.",
+    );
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    const health = async () =>
+      (
+        tokenOf(await readItems(page), SHADOW_IDS[0]!).metadata[
+          STAT_BUBBLES_KEY
+        ] as { health: number }
+      ).health;
+    expect(await health()).toBe(16);
+    await expect(panel.locator("#overrides")).toBeHidden();
+
+    await socket.drop();
+    await expect(panel.locator("#status")).not.toHaveText(
+      "Connected to the local bridge.",
+    );
+    const db = openDatabase(bridge.dbPath);
+    try {
+      // Nobody is listening: the change reaches the store, not the table.
+      new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 7, origin);
+      await page.waitForTimeout(500);
+      expect(await health()).toBe(16);
+
+      socket.restore();
+      await expect(panel.locator("#status")).toHaveText(
+        "Connected to the local bridge.",
+        { timeout: 20_000 },
+      );
+      await expect.poll(health).toBe(7);
+
+      // The snapshot cannot tell the DM's agent from a clamp, so it is listed
+      // with the instance, the field, the table's value and the store's.
+      const overrides = panel.locator("#overrides");
+      await expect(overrides).toBeVisible();
+      for (const part of ["Shadow 1", "HP", "7", "16"])
+        await expect(overrides).toContainText(part);
+
+      await panel.locator("#dismiss-overrides").click();
+      await expect(overrides).toBeHidden();
+      await expect(panel.locator("#sync-error")).toHaveText("");
+    } finally {
+      try {
+        new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 16, origin);
       } finally {
         db.close();
       }

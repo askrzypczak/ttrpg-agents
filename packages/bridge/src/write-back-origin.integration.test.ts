@@ -28,7 +28,6 @@ let origins: ChangeOrigin[];
 let server: BridgeServer;
 let socket: WebSocket;
 let received: string[];
-let connectMessages: number;
 let log: SqliteEncounterLog;
 let stopPolling: (() => void) | undefined;
 
@@ -118,7 +117,6 @@ beforeEach(async () => {
     }),
   );
   await waitFor(() => received.some((m) => m.includes("encounter-snapshot")));
-  connectMessages = received.length;
 });
 
 afterEach(async () => {
@@ -130,9 +128,9 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-/** Waits for the server's `n`th reply (snapshot or error) to a write-back. */
-const awaitReply = (n: number): Promise<void> =>
-  waitFor(() => received.length >= connectMessages + n);
+/** Waits until `n` write-backs have reached the repository. */
+const awaitWrites = (n: number): Promise<void> =>
+  waitFor(() => origins.length >= n);
 
 /** Raw JSON, as the extension sends it. */
 function send(message: Record<string, unknown>): void {
@@ -176,7 +174,7 @@ describe("write-back origin", () => {
 
   it("an instance-edit write-back reaches the repository with source table and the message id", async () => {
     send(edit("instance-edit:abc"));
-    await awaitReply(1);
+    await awaitWrites(1);
 
     expect(origins[0]).toEqual({
       source: "table",
@@ -186,7 +184,7 @@ describe("write-back origin", () => {
 
   it("a token-deleted write-back reaches the repository with source table and the message id", async () => {
     send(tokenDeleted("token-deleted:abc"));
-    await awaitReply(1);
+    await awaitWrites(1);
 
     expect(origins[0]).toEqual({
       source: "table",
@@ -196,9 +194,9 @@ describe("write-back origin", () => {
 
   it("a write-back message without an id gets a minted command id", async () => {
     send(edit());
-    await awaitReply(1);
+    await awaitWrites(1);
     send(edit());
-    await awaitReply(2);
+    await awaitWrites(2);
 
     expect(origins[0]?.source).toBe("table");
     expect(origins[0]?.commandId).toMatch(/\S/);
@@ -209,7 +207,7 @@ describe("write-back origin", () => {
 
   it("a write-back message with an empty id gets a minted command id", async () => {
     send(tokenDeleted(""));
-    await awaitReply(1);
+    await awaitWrites(1);
 
     expect(origins[0]?.source).toBe("table");
     expect(origins[0]?.commandId).toMatch(/\S/);

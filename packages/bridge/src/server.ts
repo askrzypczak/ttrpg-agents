@@ -145,21 +145,11 @@ interface Hooks {
   onAuthenticated: () => void;
 }
 
-/**
- * Sends the current snapshot, if configured; a failing one is a non-fatal
- * error. `cause` names the request the snapshot answers.
- */
-function sendSnapshot(ws: WebSocket, hooks: Hooks, cause?: string): void {
+/** Sends the current snapshot, if configured; a failing one is a non-fatal error. */
+function sendSnapshot(ws: WebSocket, hooks: Hooks): void {
   if (!hooks.snapshot) return;
   try {
-    const snapshot = hooks.snapshot();
-    send(
-      ws,
-      // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent on the wire, JSON drops an undefined cause and the hook only returns snapshots
-      cause !== undefined && snapshot.type === "encounter-snapshot"
-        ? { ...snapshot, payload: { ...snapshot.payload, cause } }
-        : snapshot,
-    );
+    send(ws, hooks.snapshot());
   } catch (e) {
     send(
       ws,
@@ -288,10 +278,9 @@ function handleMessage(
         break;
       }
       if (outcome.ok) {
-        // Answer with the new state, like token-deleted: the log poller's
-        // `table` event for this edit is ignored by the extension. The snapshot
-        // names the request it answers (`cause`) until #209.
-        sendSnapshot(ws, hooks, message.id);
+        // Answer with the new state, like token-deleted, until the extension
+        // takes the log poller's `table` event as the answer (#209).
+        sendSnapshot(ws, hooks);
       } else {
         send(ws, errorMessage(outcome.code, outcome.message, message.id));
       }

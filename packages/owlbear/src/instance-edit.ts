@@ -5,8 +5,8 @@ export const INSTANCE_EDIT_ID_PREFIX = "instance-edit:";
 
 /**
  * The `instance-edit` request for HP, max HP or armor class edited on the
- * table. Its envelope id is `instance-edit:<instanceId>`, so the bridge's
- * error reply can be matched back to it.
+ * table. Its envelope id is unique per call and names the instance, so the
+ * bridge's error reply and the store's event can be matched back to it.
  */
 export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
   return {
@@ -18,15 +18,12 @@ export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
 }
 
 /**
- * The instance id an `instance-edit` snapshot answers, read from the
- * snapshot's cause; `undefined` for any other cause or none.
+ * An edit as single-field edits, one per field it sets, in the order the
+ * store applies them: max HP, then HP, then armor class.
  */
-export function instanceIdOfEditCause(
-  cause: string | undefined,
-): string | undefined {
-  return cause?.startsWith(INSTANCE_EDIT_ID_PREFIX)
-    ? cause.slice(INSTANCE_EDIT_ID_PREFIX.length)
-    : undefined;
+export function splitEdit(edit: InstanceEdit): InstanceEdit[] {
+  void edit;
+  throw new Error("not implemented");
 }
 
 /**

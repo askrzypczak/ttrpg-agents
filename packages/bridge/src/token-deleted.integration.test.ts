@@ -155,32 +155,39 @@ async function authed(
   return client;
 }
 
-/** Sends token-deleted and waits for the fresh snapshot it answers with. */
-async function deleteAndAwaitSnapshot(
+let pings = 0;
+
+/** Resolves once the bridge has handled everything this client sent so far. */
+async function handled(client: Client): Promise<void> {
+  const id = `handled-${++pings}`;
+  client.ws.send(encodeMessage({ v: 1, type: "ping", id, payload: {} }));
+  await waitFor(() =>
+    client.received.some((m) => m.type === "pong" && m.id === id),
+  );
+}
+
+/** Sends token-deleted and waits until the bridge has handled it. */
+async function deleteAndAwaitHandled(
   client: Client,
   instanceId: string,
-): Promise<MonsterInstance[]> {
-  const before = client.snapshots().length;
+): Promise<void> {
   client.ws.send(tokenDeleted(instanceId));
-  await waitFor(() => client.snapshots().length > before);
-  return client.snapshots().at(-1)!;
+  await handled(client);
 }
 
 async function expectStillOpen(client: Client): Promise<void> {
-  client.ws.send(encodeMessage({ v: 1, type: "ping", id: "p1", payload: {} }));
-  await waitFor(() => client.received.some((m) => m.type === "pong"));
+  await handled(client);
   expect(client.ws.readyState).toBe(WebSocket.OPEN);
 }
 
 describe("token-deleted over the bridge", () => {
-  it("authenticated token-deleted removes the instance and replies with a snapshot without it", async () => {
+  it("authenticated token-deleted removes the instance", async () => {
     const server = await startServer();
     const [first, second] = shadows;
     const client = await authed(server);
 
-    const instances = await deleteAndAwaitSnapshot(client, first!.id);
+    await deleteAndAwaitHandled(client, first!.id);
 
-    expect(instances.map((i) => i.id)).toEqual([second!.id]);
     expect(storedIds()).toEqual([second!.id]);
   });
 
@@ -200,7 +207,7 @@ describe("token-deleted over the bridge", () => {
 
     // Control: the same request from an authenticated client is honoured.
     const gm = await authed(server);
-    await deleteAndAwaitSnapshot(gm, first!.id);
+    await deleteAndAwaitHandled(gm, first!.id);
     expect(storedIds()).toEqual([second!.id]);
   });
 
@@ -219,7 +226,7 @@ describe("token-deleted over the bridge", () => {
 
     // Control: the same request after a valid hello is honoured.
     const gm = await authed(server);
-    await deleteAndAwaitSnapshot(gm, first!.id);
+    await deleteAndAwaitHandled(gm, first!.id);
     expect(storedIds()).toEqual([second!.id]);
   });
 
@@ -228,9 +235,8 @@ describe("token-deleted over the bridge", () => {
     const [first, second] = shadows;
     const client = await authed(server, "player");
 
-    const instances = await deleteAndAwaitSnapshot(client, first!.id);
+    await deleteAndAwaitHandled(client, first!.id);
 
-    expect(instances.map((i) => i.id)).toEqual([second!.id]);
     expect(storedIds()).toEqual([second!.id]);
   });
 

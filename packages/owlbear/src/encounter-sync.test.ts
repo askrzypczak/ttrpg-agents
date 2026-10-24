@@ -694,7 +694,7 @@ describe("createEncounterSync event sequence", () => {
     expect(gaps).toBe(0);
   });
 
-  it("does not fold a table event but advances past it, so the next mcp event applies", async () => {
+  it("a table event advances the seq, so the next mcp event applies", async () => {
     const { obr, scene } = createFakeObr();
     let gaps = 0;
     const sync = createEncounterSync(obr, undefined, undefined, {
@@ -702,8 +702,15 @@ describe("createEncounterSync event sequence", () => {
     });
     await sync.handleMessage(snapshotAt(0, inst(1)));
 
-    await sync.handleMessage(addedAt(1, table, 2));
-    expect(instanceIds(scene)).toEqual(["i1"]);
+    await sync.handleMessage(
+      eventAt(1, {
+        type: "hp-changed",
+        id: "i1",
+        currentHp: 3,
+        maxHp: 16,
+        origin: table,
+      }),
+    );
     await sync.handleMessage(addedAt(2, mcp, 3));
 
     expect(instanceIds(scene)).toEqual(["i1", "i3"]);
@@ -755,7 +762,11 @@ describe("createEncounterSync event sequence", () => {
       const rejected: string[] = [];
       let storeChanges = 0;
       const sync = createEncounterSync(obr, undefined, undefined, {
-        onTokenDeleted: (id) => deleted.push(id),
+        send: (message) => {
+          if (message.type === "token-deleted")
+            deleted.push(message.payload.instanceId);
+          return true;
+        },
         onEditRejected: (text) => rejected.push(text),
         onStoreChange: () => storeChanges++,
       });
@@ -783,7 +794,7 @@ describe("createEncounterSync event sequence", () => {
       ["snapshot", snapshotAt(5, inst(1), inst(2))],
       ["applied mcp event", addedAt(1, mcp, 3)],
     ])(
-      "re-reports a deleted token and an unreadable value and calls onStoreChange (%s)",
+      "re-reports an unreadable value and calls onStoreChange, but not a deletion still in flight (%s)",
       async (_name, message) => {
         const { sync, deleted, rejected, storeChanges } = await reported();
         const before = storeChanges();
@@ -791,7 +802,7 @@ describe("createEncounterSync event sequence", () => {
         await sync.handleMessage(message);
         await settle();
 
-        expect(deleted).toEqual(["i1", "i1"]);
+        expect(deleted).toEqual(["i1"]);
         expect(rejected).toHaveLength(2);
         expect(storeChanges()).toBe(before + 1);
       },

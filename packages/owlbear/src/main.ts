@@ -8,10 +8,10 @@ import {
 import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
-import { instanceEditErrorText, instanceEditMessage } from "./instance-edit.js";
+import { instanceEditErrorText } from "./instance-edit.js";
 import { describeError, panelView } from "./panel-state.js";
 import { tokenArtMessage } from "./token-art.js";
-import { tokenDeletedErrorText, tokenDeletedMessage } from "./token-deleted.js";
+import { tokenDeletedErrorText } from "./token-deleted.js";
 
 const EXTENSION_VERSION = "0.0.0";
 
@@ -65,7 +65,7 @@ obr.onReady(async () => {
   }
 
   // The socket is created after the sync, which reports deletions and gaps through it.
-  let sendToBridge: (message: BridgeMessage) => void = () => {};
+  let sendToBridge: (message: BridgeMessage) => boolean = () => false;
   let reconnect: () => void = () => {};
   const sync = createEncounterSync(
     obr,
@@ -80,8 +80,7 @@ obr.onReady(async () => {
       render();
     },
     {
-      onTokenDeleted: (id) => sendToBridge(tokenDeletedMessage(id)),
-      onInstanceEdit: (edit) => sendToBridge(instanceEditMessage(edit)),
+      send: (message) => sendToBridge(message),
       onEditRejected: (text) => {
         editError = text;
         render();
@@ -90,8 +89,9 @@ obr.onReady(async () => {
         editNote = text;
         render();
       },
-      onTokenArt: (monsterKey, art) =>
-        sendToBridge(tokenArtMessage(monsterKey, art)),
+      onTokenArt: (monsterKey, art) => {
+        sendToBridge(tokenArtMessage(monsterKey, art));
+      },
       onStoreChange: () => {
         removeError = undefined;
         editError = undefined;

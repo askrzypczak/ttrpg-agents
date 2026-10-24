@@ -14,21 +14,30 @@ const error = (
 });
 
 describe("token-deleted", () => {
-  it("tokenDeletedMessage carries the instance id in payload and a `token-deleted:` envelope id", () => {
-    expect(tokenDeletedMessage("i7")).toEqual({
+  it("tokenDeletedMessage carries the instance id in payload", () => {
+    expect(tokenDeletedMessage("i7")).toMatchObject({
       v: 1,
       type: "token-deleted",
-      id: "token-deleted:i7",
       payload: { instanceId: "i7" },
     });
   });
 
-  it("tokenDeletedErrorText returns the text for a matching non-fatal error and undefined for others", () => {
-    const text = tokenDeletedErrorText(error("token-deleted:i7"));
-    expect(text).toContain("no such instance");
-    expect(text).toContain("i7");
+  it("two token-deleted messages for one instance carry distinct ids", () => {
+    const first = tokenDeletedMessage("i7");
+    const second = tokenDeletedMessage("i7");
 
-    expect(tokenDeletedErrorText(error("token-deleted:i7", true))).toBe(
+    expect(first.id).toEqual(expect.any(String));
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it("tokenDeletedErrorText returns the text for a matching non-fatal error and undefined for others", () => {
+    const request = tokenDeletedMessage("i7");
+    expect(tokenDeletedErrorText(error(request.id))).toBe(
+      "Could not remove i7 from the encounter: no such instance",
+    );
+
+    expect(tokenDeletedErrorText(error(request.id, true))).toBe(undefined);
+    expect(tokenDeletedErrorText(error("instance-edit:i7:abc"))).toBe(
       undefined,
     );
     expect(tokenDeletedErrorText(error("q1"))).toBe(undefined);
@@ -37,7 +46,7 @@ describe("token-deleted", () => {
       tokenDeletedErrorText({
         v: 1,
         type: "pong",
-        id: "token-deleted:i7",
+        id: request.id,
         payload: {},
       }),
     ).toBe(undefined);

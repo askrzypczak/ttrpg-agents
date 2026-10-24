@@ -1,10 +1,7 @@
-import {
-  tokenArtSchema,
-  type InstanceEdit,
-  type TokenArt,
-} from "@ttrpg-agents/engine";
+import { tokenArtSchema, type TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
-import { instanceIdOfEditCause } from "./instance-edit.js";
+import { instanceEditMessage } from "./instance-edit.js";
+import { tokenDeletedMessage } from "./token-deleted.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
@@ -14,7 +11,6 @@ import {
   defaultSyncConfig,
   instanceIdOf,
   planSync,
-  type EditMemory,
   type EncounterInstance,
   type SyncPlan,
 } from "./sync-plan.js";
@@ -98,12 +94,18 @@ export function createEncounterSync(
   options: {
     timers?: Timers;
     backoff?: BackoffOptions;
-    /** Called once per store change (a snapshot or an applied `mcp` event) for each wanted, placed instance whose token the GM deleted. */
-    onTokenDeleted?: (instanceId: string) => void;
+    /**
+     * Sends a command (a token deletion or a table edit) to the bridge;
+     * returns false when it did not go out. Without it commands are neither
+     * sent nor remembered.
+     */
+    send?: (message: BridgeMessage) => boolean;
+    /** Called when the number of commands waiting for the bridge changes. */
+    onWaitingChange?: (waiting: number) => void;
+    /** Called once per Stat Bubbles field a snapshot pushed over a different token value, with the record to show. */
+    onSnapshotOverride?: (text: string) => void;
     /** Called with the art the GM picked for a monster type, to store it. */
     onTokenArt?: (monsterKey: string, art: TokenArt) => void;
-    /** Called once per table edit of HP, max HP or armor class, to write it back. */
-    onInstanceEdit?: (edit: InstanceEdit) => void;
     /** Called once per store change (a snapshot or an applied `mcp` event) for each table value that could not be read back. */
     onEditRejected?: (text: string) => void;
     /** Called once per answered edit whose table value differs from the store's, with the note to show. */
@@ -135,12 +137,6 @@ export function createEncounterSync(
   // raised synchronously by our own write calls (`writing`) are ignored.
   let writing = false;
   let queued = false;
-  // Instances as the store answered their write-back, until a reconcile has
-  // applied the answer.
-  const answered = new Map<string, EncounterInstance>();
-  // Edits already sent for what is on the table (not persisted: after a
-  // reload a typed value is sent once more).
-  let sent: EditMemory = {};
 
   const enqueue = (task: () => Promise<void>): Promise<void> => {
     // Never let the chain reject, or every later trigger would be skipped.
@@ -168,10 +164,7 @@ export function createEncounterSync(
     return undefined;
   }
 
-  async function apply(
-    wanted: EncounterInstance[],
-    answers: ReadonlyMap<string, EncounterInstance>,
-  ): Promise<SyncPlan> {
+  async function apply(wanted: EncounterInstance[]): Promise<SyncPlan> {
     const items = await obr.getItems();
     const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
     const placed = new Set(
@@ -186,8 +179,6 @@ export function createEncounterSync(
     const first = planSync(wanted, items, defaultSyncConfig, {
       ...context,
       art,
-      answered: answers,
-      sent,
     });
     // Ask once per new monster type, before anything is written, so its
     // tokens are created once with the right look.
@@ -204,8 +195,6 @@ export function createEncounterSync(
     const plan = planSync(wanted, items, defaultSyncConfig, {
       ...context,
       art,
-      answered: answers,
-      sent,
     });
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
@@ -242,10 +231,9 @@ export function createEncounterSync(
     }
     if (desired === null || !(await obr.isSceneReady())) return;
     const applying = desired;
-    const answers = new Map(answered);
     let plan: SyncPlan;
     try {
-      plan = await apply(applying, answers);
+      plan = await apply(applying);
     } catch (error) {
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
@@ -266,12 +254,8 @@ export function createEncounterSync(
     const recovered = attempt > 0;
     attempt = 0;
     appliedCount = applying.length;
-    sent = plan.sent;
-    for (const [id, instance] of answers)
-      if (answered.get(id) === instance) answered.delete(id);
     if (!quiet || recovered) onApplied();
-    for (const edit of plan.edits) options.onInstanceEdit?.(edit);
-    for (const { message } of plan.differs) options.onEditDiffers?.(message);
+    for (const edit of plan.edits) options.send?.(instanceEditMessage(edit));
     for (const { message } of plan.rejected) {
       if (rejectedReported.has(message)) continue;
       rejectedReported.add(message);
@@ -280,7 +264,7 @@ export function createEncounterSync(
     for (const id of plan.deleted) {
       if (reported.has(id)) continue;
       reported.add(id);
-      options.onTokenDeleted?.(id);
+      options.send?.(tokenDeletedMessage(id));
     }
   }
 
@@ -309,11 +293,6 @@ export function createEncounterSync(
   return {
     handleMessage(message) {
       if (message.type === "encounter-snapshot") {
-        const answeredId = instanceIdOfEditCause(message.payload.cause);
-        const answer = message.payload.instances.find(
-          (i) => i.id === answeredId,
-        );
-        if (answer !== undefined) answered.set(answer.id, answer);
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
         seq = message.payload.seq;

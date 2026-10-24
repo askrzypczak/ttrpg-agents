@@ -44,6 +44,8 @@ async function startServer(): Promise<BridgeServer> {
       ),
     editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
     removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
+    setTokenArt: (monsterKey, art) =>
+      new SqliteTokenArtRepository(db).setTokenArt(monsterKey, art),
   });
   servers.push(server);
   return server;
@@ -101,8 +103,6 @@ interface Client {
   /** Resolves with the close code. */
   closed: Promise<number>;
   snapshots(): MonsterInstance[][];
-  /** The `cause` of each snapshot received, in order. */
-  causes(): (string | undefined)[];
   errors(): Extract<BridgeMessage, { type: "error" }>[];
 }
 
@@ -130,10 +130,6 @@ async function connect(server: BridgeServer): Promise<Client> {
     snapshots: () =>
       received.flatMap((m) =>
         m.type === "encounter-snapshot" ? [m.payload.instances] : [],
-      ),
-    causes: () =>
-      received.flatMap((m) =>
-        m.type === "encounter-snapshot" ? [m.payload.cause] : [],
       ),
     errors: () => received.flatMap((m) => (m.type === "error" ? [m] : [])),
   };
@@ -173,42 +169,41 @@ async function authed(
   return client;
 }
 
-/** Sends instance-edit and waits for the fresh snapshot it answers with. */
-async function editAndAwaitSnapshot(
+let pings = 0;
+
+/** Resolves once the bridge has handled everything this client sent so far. */
+async function handled(client: Client): Promise<void> {
+  const id = `handled-${++pings}`;
+  client.ws.send(encodeMessage({ v: 1, type: "ping", id, payload: {} }));
+  await waitFor(() =>
+    client.received.some((m) => m.type === "pong" && m.id === id),
+  );
+}
+
+/** Sends instance-edit and waits until the bridge has handled it. */
+async function edit(
   client: Client,
   instanceId: string,
   fields: { currentHp?: number; maxHp?: number; armorClass?: number },
-): Promise<MonsterInstance[]> {
-  const before = client.snapshots().length;
+): Promise<void> {
   client.ws.send(instanceEdit(instanceId, fields));
-  await waitFor(() => client.snapshots().length > before);
-  return client.snapshots().at(-1)!;
+  await handled(client);
 }
 
 async function expectStillOpen(client: Client): Promise<void> {
-  client.ws.send(encodeMessage({ v: 1, type: "ping", id: "p1", payload: {} }));
-  await waitFor(() => client.received.some((m) => m.type === "pong"));
+  await handled(client);
   expect(client.ws.readyState).toBe(WebSocket.OPEN);
 }
 
 describe("instance-edit over the bridge", () => {
-  it("bridge: an authenticated instance-edit updates the store and sends a snapshot", async () => {
+  it("bridge: an authenticated instance-edit updates the store", async () => {
     const server = await startServer();
     const [first, second] = shadows;
     const client = await authed(server);
 
-    const instances = await editAndAwaitSnapshot(client, first!.id, {
-      currentHp: 18,
-      maxHp: 20,
-      armorClass: 14,
-    });
+    await edit(client, first!.id, { currentHp: 18, maxHp: 20, armorClass: 14 });
 
     expect(stored(first!.id)).toMatchObject({
-      currentHp: 18,
-      maxHp: 20,
-      armorClass: 14,
-    });
-    expect(instances.find((i) => i.id === first!.id)).toMatchObject({
       currentHp: 18,
       maxHp: 20,
       armorClass: 14,
@@ -232,7 +227,7 @@ describe("instance-edit over the bridge", () => {
 
     // Control: the same request after a valid hello is honoured.
     const gm = await authed(server);
-    await editAndAwaitSnapshot(gm, first!.id, { currentHp: 3 });
+    await edit(gm, first!.id, { currentHp: 3 });
     expect(stored(first!.id).currentHp).toBe(3);
   });
 
@@ -241,18 +236,12 @@ describe("instance-edit over the bridge", () => {
     const [first] = shadows;
 
     const player = await authed(server, "player");
-    const afterPlayer = await editAndAwaitSnapshot(player, first!.id, {
-      currentHp: 7,
-    });
+    await edit(player, first!.id, { currentHp: 7 });
     expect(stored(first!.id).currentHp).toBe(7);
-    expect(afterPlayer.find((i) => i.id === first!.id)?.currentHp).toBe(7);
 
     const gm = await authed(server, "gm");
-    const afterGm = await editAndAwaitSnapshot(gm, first!.id, {
-      currentHp: 4,
-    });
+    await edit(gm, first!.id, { currentHp: 4 });
     expect(stored(first!.id).currentHp).toBe(4);
-    expect(afterGm.find((i) => i.id === first!.id)?.currentHp).toBe(4);
   });
 
   it("bridge: an instance-edit for an unknown instance gets a non-fatal error with the message id and changes nothing", async () => {
@@ -274,86 +263,63 @@ describe("instance-edit over the bridge", () => {
     expect(client.snapshots()).toHaveLength(snapshotsBefore);
   });
 
-  it("bridge: HP above max is clamped in the store and the snapshot carries the clamp", async () => {
+  it("bridge: HP above max is clamped in the store", async () => {
     const server = await startServer();
     const [first] = shadows;
     repo.setHp(first!.id, 5, origin);
     const client = await authed(server);
 
-    const instances = await editAndAwaitSnapshot(client, first!.id, {
-      currentHp: 99,
-    });
+    await edit(client, first!.id, { currentHp: 99 });
 
     expect(stored(first!.id)).toMatchObject({ currentHp: 16, maxHp: 16 });
-    expect(instances.find((i) => i.id === first!.id)).toMatchObject({
-      currentHp: 16,
-      maxHp: 16,
-    });
   });
 
-  it("the snapshot after an accepted instance-edit carries the edit's envelope id as its cause", async () => {
-    const server = await startServer();
-    const [first] = shadows;
-    const client = await authed(server);
+  it.each([
+    ["instance-edit", (id: string) => instanceEdit(id, { currentHp: 5 })],
+    [
+      "token-deleted",
+      (id: string) =>
+        JSON.stringify({
+          v: 1,
+          type: "token-deleted",
+          id: `token-deleted:${id}`,
+          payload: { instanceId: id },
+        }),
+    ],
+    [
+      "token-art-set",
+      () =>
+        JSON.stringify({
+          v: 1,
+          type: "token-art-set",
+          payload: {
+            monsterKey: "shadow",
+            art: {
+              url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+              mime: "image/png",
+              width: 300,
+              height: 280,
+            },
+          },
+        }),
+    ],
+  ])(
+    "an accepted command gets no snapshot reply (%s)",
+    async (_type, command: (instanceId: string) => string) => {
+      const server = await startServer();
+      const [first] = shadows;
+      const client = await authed(server);
+      const before = client.received.length;
 
-    await editAndAwaitSnapshot(client, first!.id, { currentHp: 5 });
+      client.ws.send(command(first!.id));
+      await handled(client);
 
-    expect(client.causes().at(-1)).toBe(`instance-edit:${first!.id}`);
-  });
-
-  it("the snapshot sent on connect carries no cause", async () => {
-    const server = await startServer();
-    const [first] = shadows;
-    const client = await authed(server);
-
-    expect(client.causes()).toEqual([undefined]);
-
-    // Control: the snapshot after an edit does carry one.
-    await editAndAwaitSnapshot(client, first!.id, { currentHp: 5 });
-    expect(client.causes()).toEqual([undefined, `instance-edit:${first!.id}`]);
-  });
-
-  it("the snapshot after a token-deleted carries no cause", async () => {
-    const server = await startServer();
-    const [first, second] = shadows;
-    const client = await authed(server);
-
-    client.ws.send(
-      JSON.stringify({
-        v: 1,
-        type: "token-deleted",
-        id: `token-deleted:${first!.id}`,
-        payload: { instanceId: first!.id },
-      }),
-    );
-    await waitFor(() => client.snapshots().length > 1);
-
-    expect(client.causes()).toEqual([undefined, undefined]);
-
-    // Control: the snapshot after an edit does carry one.
-    await editAndAwaitSnapshot(client, second!.id, { currentHp: 5 });
-    expect(client.causes().at(-1)).toBe(`instance-edit:${second!.id}`);
-  });
-
-  it("an instance-edit without an envelope id gets a snapshot without a cause", async () => {
-    const server = await startServer();
-    const [first] = shadows;
-    const client = await authed(server);
-
-    client.ws.send(
-      JSON.stringify({
-        v: 1,
-        type: "instance-edit",
-        payload: { instanceId: first!.id, currentHp: 5 },
-      }),
-    );
-    await waitFor(() => client.snapshots().length > 1);
-
-    expect(stored(first!.id).currentHp).toBe(5);
-    expect(client.causes()).toEqual([undefined, undefined]);
-
-    // Control: with an envelope id the cause is carried.
-    await editAndAwaitSnapshot(client, first!.id, { currentHp: 6 });
-    expect(client.causes().at(-1)).toBe(`instance-edit:${first!.id}`);
-  });
+      expect(client.errors()).toEqual([]);
+      expect(
+        client.received
+          .slice(before)
+          .filter((m) => m.type === "encounter-snapshot"),
+      ).toEqual([]);
+    },
+  );
 });

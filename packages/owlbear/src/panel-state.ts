@@ -21,6 +21,10 @@ export interface PanelInput {
   editError?: string;
   /** A note on the latest write-back answer that differs from the table, if any. */
   editNote?: string;
+  /** How many table edits wait for the bridge (see outbox.ts). */
+  waitingCommands?: number;
+  /** Records of store values a snapshot wrote over a different token value, until dismissed. */
+  overrides?: readonly string[];
   /** Why the bridge rejected us, when socketState is "rejected". */
   rejection?: RejectionCode;
 }
@@ -45,6 +49,8 @@ export interface PanelView {
   error?: string;
   /** Quiet note, e.g. the store's answer differs from a table edit. */
   note?: string;
+  /** The override records to list; present only when there are any. */
+  overrides?: string[];
 }
 
 /**

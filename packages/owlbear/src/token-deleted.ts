@@ -4,8 +4,8 @@ const ID_PREFIX = "token-deleted:";
 
 /**
  * The `token-deleted` request for an instance whose token the GM deleted.
- * Its envelope id is `token-deleted:<instanceId>`, so the bridge's error
- * reply can be matched back to it.
+ * Its envelope id is unique per call and names the instance, so the bridge's
+ * error reply and the store's event can be matched back to it.
  */
 export function tokenDeletedMessage(instanceId: string): BridgeMessage {
   return {
