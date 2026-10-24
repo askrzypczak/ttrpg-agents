@@ -44,6 +44,8 @@ const emptyPlan: SyncPlan = {
   needsArt: [],
   edits: [],
   rejected: [],
+  sent: {},
+  differs: [],
 };
 
 /** Applies the plan's key-level metadata updates to copies of `items`. */

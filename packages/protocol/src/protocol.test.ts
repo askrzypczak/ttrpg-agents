@@ -121,6 +121,36 @@ describe("protocol", () => {
     if (!missing.ok) expect(missing.reason).toBe("invalid-payload");
   });
 
+  it("a snapshot with a cause decodes", () => {
+    const message: BridgeMessage = {
+      v: 1,
+      type: "encounter-snapshot",
+      payload: {
+        instances: [makeTestInstance({ id: "i1" })],
+        cause: "instance-edit:i1",
+      },
+    };
+
+    const decoded = decodeMessage(encodeMessage(message));
+
+    expect(decoded).toEqual({ ok: true, message });
+  });
+
+  it("a snapshot without a cause decodes", () => {
+    const decoded = decodeMessage(
+      JSON.stringify({
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances: [makeTestInstance({ id: "i1" })] },
+      }),
+    );
+
+    expect(decoded.ok).toBe(true);
+    if (decoded.ok && decoded.message.type === "encounter-snapshot")
+      expect(decoded.message.payload.cause).toBeUndefined();
+    else throw new Error("expected a decoded encounter-snapshot");
+  });
+
   it("rejects malformed JSON", () => {
     const r = decodeMessage("{nope");
     expect(r.ok).toBe(false);

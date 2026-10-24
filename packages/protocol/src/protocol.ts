@@ -45,6 +45,12 @@ const encounterSnapshotPayload = z.object({
   instances: z.array(monsterInstanceSchema),
   /** Monster key -> the art new tokens of that type are created with. */
   art: z.record(z.string(), tokenArtSchema).optional(),
+  /**
+   * What this snapshot answers: the envelope id of the request (an accepted
+   * `instance-edit`) whose store change it carries. Absent for every other
+   * snapshot. Interim until #209 (origin-tagged deltas): do not build on it.
+   */
+  cause: z.string().optional(),
 });
 // Extension -> bridge: the GM picked this art for a monster type.
 const tokenArtSetPayload = z.object({

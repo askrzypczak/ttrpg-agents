@@ -35,6 +35,7 @@ obr.onReady(async () => {
   let syncError: string | undefined;
   let removeError: string | undefined;
   let editError: string | undefined;
+  let editNote: string | undefined;
 
   let rejection: RejectionCode | undefined;
   const render = () => {
@@ -46,6 +47,7 @@ obr.onReady(async () => {
       syncError,
       ...(removeError !== undefined ? { removeError } : {}),
       ...(editError !== undefined ? { editError } : {}),
+      ...(editNote !== undefined ? { editNote } : {}),
       disconnectedMs: Date.now() - streakStart,
     });
     const status = el("status");
@@ -54,6 +56,7 @@ obr.onReady(async () => {
     el("hint").textContent = view.hint ?? "";
     el("use-this-tab").hidden = view.action !== "use-this-tab";
     el("sync-error").textContent = view.error ?? "";
+    el("edit-note").textContent = view.note ?? "";
   };
 
   if (role !== "gm" || tokenMissing) {
@@ -82,6 +85,10 @@ obr.onReady(async () => {
         editError = text;
         render();
       },
+      onEditDiffers: (text) => {
+        editNote = text;
+        render();
+      },
       onTokenArt: (monsterKey, art) =>
         sendToBridge(tokenArtMessage(monsterKey, art)),
     },
@@ -104,6 +111,7 @@ obr.onReady(async () => {
       if (message.type === "encounter-snapshot") {
         removeError = undefined;
         editError = undefined;
+        editNote = undefined;
         render();
       } else {
         const text = tokenDeletedErrorText(message);

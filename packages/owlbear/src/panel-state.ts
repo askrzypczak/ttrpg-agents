@@ -19,6 +19,8 @@ export interface PanelInput {
   removeError?: string;
   /** The latest refused or unreadable table edit, if any (see instance-edit.ts). */
   editError?: string;
+  /** A note on the latest write-back answer that differs from the table, if any. */
+  editNote?: string;
   /** Why the bridge rejected us, when socketState is "rejected". */
   rejection?: RejectionCode;
 }
@@ -41,6 +43,8 @@ export interface PanelView {
   hint?: string;
   /** Visible encounter sync failure. */
   error?: string;
+  /** Quiet note, e.g. the store's answer differs from a table edit. */
+  note?: string;
 }
 
 /**
@@ -73,7 +77,9 @@ export function panelView(input: PanelInput): PanelView {
     input.removeError,
     input.editError,
   ].filter((e): e is string => !!e);
-  return errors.length > 0 ? { ...view, error: errors.join(" ") } : view;
+  const withErrors =
+    errors.length > 0 ? { ...view, error: errors.join(" ") } : view;
+  return input.editNote ? { ...withErrors, note: input.editNote } : withErrors;
 }
 
 function connectionView(input: PanelInput): PanelView {
