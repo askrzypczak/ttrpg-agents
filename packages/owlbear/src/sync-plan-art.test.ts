@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TokenArt } from "@ttrpg-agents/engine";
 import type { SceneItem } from "./scene-model.js";
+import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import {
   INSTANCE_METADATA_KEY,
   NAME_BASELINE_KEY,
@@ -62,8 +63,14 @@ const circleToken = (n: number): SceneItem => ({
   shape: { shapeType: "CIRCLE", width: 150, height: 150 },
   metadata: {
     [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+    [STAT_BUBBLES_METADATA_KEY]: { health: 16, "max health": 16, hide: true },
     [SYNCED_METADATA_KEY]: {
       [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [STAT_BUBBLES_METADATA_KEY]: {
+        health: 16,
+        "max health": 16,
+        hide: true,
+      },
       [NAME_BASELINE_KEY]: `Shadow ${n}`,
     },
   },

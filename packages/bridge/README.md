@@ -14,7 +14,10 @@ npm run bridge         # from the repo root; runs packages/bridge/dist/cli.js
 ```
 
 The bridge prints an `install in Owlbear` URL (`.../manifest.json?token=...`).
-In Owlbear Rodeo, Profile > Add Custom Extension, enter that URL.
+In Owlbear Rodeo, Profile > Add Custom Extension, enter that URL. Then switch
+the extension on for each room that should use it: on the profile page, click
+the pencil on the room's card, open Extensions and switch it on. Adding it to
+the account is not enough; it does not load in a room until then.
 
 Environment:
 
