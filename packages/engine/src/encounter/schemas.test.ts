@@ -34,6 +34,27 @@ describe("monsterInstanceSchema", () => {
     const wrongType = { ...instance, maxHp: "16" };
     expect(monsterInstanceSchema.safeParse(wrongType).success).toBe(false);
   });
+
+  it("monsterInstanceSchema defaults a missing footprint to 1", () => {
+    const withoutFootprint: Record<string, unknown> = { ...instance };
+    delete withoutFootprint.footprint;
+    expect(monsterInstanceSchema.parse(withoutFootprint)).toEqual({
+      ...instance,
+      footprint: 1,
+    });
+  });
+
+  it("monsterInstanceSchema rejects a footprint below 1 or non-integer", () => {
+    for (const footprint of [0, -1, 1.5]) {
+      expect(
+        monsterInstanceSchema.safeParse({ ...instance, footprint }).success,
+      ).toBe(false);
+    }
+    expect(monsterInstanceSchema.parse({ ...instance, footprint: 2 })).toEqual({
+      ...instance,
+      footprint: 2,
+    });
+  });
 });
 
 describe("encounterEventSchema", () => {
