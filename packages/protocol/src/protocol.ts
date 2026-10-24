@@ -51,7 +51,14 @@ const encounterSnapshotPayload = z.object({
    * snapshot. Interim until #209 (origin-tagged deltas): do not build on it.
    */
   cause: z.string().optional(),
+  /** The change-log position this snapshot is current as of (0 for an empty log). */
+  seq: z.number().int().min(0),
 });
+// An engine event plus its position in the change log: the extension applies
+// events in `seq` order and ignores one it already has.
+const encounterEventPayload = encounterEventSchema.and(
+  z.object({ seq: z.number().int().min(1) }),
+);
 // Extension -> bridge: the GM picked this art for a monster type.
 const tokenArtSetPayload = z.object({
   monsterKey: z.string().min(1).max(200),
@@ -116,7 +123,7 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("ping", emptyPayload),
   envelope("pong", emptyPayload),
   envelope("error", errorPayload),
-  envelope("encounter-event", encounterEventSchema),
+  envelope("encounter-event", encounterEventPayload),
   envelope("encounter-snapshot", encounterSnapshotPayload),
   envelope("query", querySchema),
   envelope("query-result", queryResultSchema),
