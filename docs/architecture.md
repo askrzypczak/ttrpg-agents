@@ -79,7 +79,7 @@ Errors: 401 `unauthorized`, 400 `bad-request`, 503 `not-connected` (no GM tab), 
 
 ## What reaches the table
 
-The bridge polls the change log every 250 ms and broadcasts each new event to authenticated clients as an `encounter-event` carrying its `seq`, oldest first. Only events committed after the bridge started are read. The poll sees every commit, the MCP server's and the bridge's own write-backs.
+The bridge polls the change log every 250 ms and broadcasts each new event to authenticated clients as an `encounter-event` carrying its `seq`, oldest first. Only events committed after the bridge started are read. The poll sees every commit, the MCP server's and the bridge's own write-backs. A row the bridge cannot parse (for example one written by a newer MCP server) comes back from `EncounterLog.eventsSince` as an unreadable entry in its place; the bridge reports it once and sends every client a snapshot instead.
 
 A client that connects gets an `encounter-snapshot` (the full instance list, HP included, plus the `seq` it is current as of) after the `hello-ack`. Until #209, the bridge also answers the extension's own commands (`instance-edit`, `token-deleted`, `token-art-set`) with a snapshot. There is no resume: a client that reconnects gets a new snapshot.
 
