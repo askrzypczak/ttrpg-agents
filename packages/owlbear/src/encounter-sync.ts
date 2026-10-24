@@ -1,4 +1,8 @@
-import { tokenArtSchema, type TokenArt } from "@ttrpg-agents/engine";
+import {
+  tokenArtSchema,
+  type InstanceEdit,
+  type TokenArt,
+} from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
@@ -80,6 +84,10 @@ export function createEncounterSync(
     onTokenDeleted?: (instanceId: string) => void;
     /** Called with the art the GM picked for a monster type, to store it. */
     onTokenArt?: (monsterKey: string, art: TokenArt) => void;
+    /** Called once per table edit of HP, max HP or armor class, to write it back. */
+    onInstanceEdit?: (edit: InstanceEdit) => void;
+    /** Called once per snapshot for each table value that could not be read back. */
+    onEditRejected?: (text: string) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;

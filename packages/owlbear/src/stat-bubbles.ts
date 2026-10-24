@@ -34,4 +34,7 @@ export const statBubblesProjector: Projector = {
       hide: typeof fields.hide === "boolean" ? fields.hide : true,
     };
   },
+  invert: () => {
+    throw new Error("not implemented");
+  },
 };

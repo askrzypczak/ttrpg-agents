@@ -17,6 +17,8 @@ export interface PanelInput {
   syncError?: string;
   /** The bridge's refusal of the latest token deletion, if any (see token-deleted.ts). */
   removeError?: string;
+  /** The latest refused or unreadable table edit, if any (see instance-edit.ts). */
+  editError?: string;
   /** Why the bridge rejected us, when socketState is "rejected". */
   rejection?: RejectionCode;
 }

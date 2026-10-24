@@ -1,4 +1,4 @@
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { InstanceEdit, TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { initiativeProjector } from "./initiative.js";
 import type { GridSpec, SceneItem, Vec2 } from "./scene-model.js";
@@ -47,6 +47,14 @@ export type Projector = {
   key: string;
   mode: "owned" | "create-only";
   project(instance: EncounterInstance, current?: unknown): unknown;
+  /**
+   * Reads a value edited on the table back into the instance fields it
+   * changed; `invalid` names the fields whose value could not be read.
+   */
+  invert?(
+    value: unknown,
+    instance: EncounterInstance,
+  ): { edit: Omit<InstanceEdit, "instanceId">; invalid: string[] };
 };
 
 export type TokenKind = Pick<
@@ -110,6 +118,10 @@ export type SyncPlan = {
   deleted: string[];
   /** Monster keys, once each, of instances getting a token that have no art. */
   needsArt: string[];
+  /** Table edits of owned keys to write back to the store. */
+  edits: InstanceEdit[];
+  /** Table values that could not be read back, left on the table. */
+  rejected: { instanceId: string; message: string }[];
 };
 
 /** The instance id a scene item is linked to, if it is one of our tokens. */
@@ -184,6 +196,8 @@ export function planSync(
     rename: [],
     deleted: [],
     needsArt: [],
+    edits: [],
+    rejected: [],
   };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();

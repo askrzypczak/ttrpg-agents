@@ -2,10 +2,11 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   UnknownInstanceError,
   type EncounterRepository,
+  type InstanceEdit,
   type TokenArtRepository,
 } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
-import type { RemoveInstanceResult } from "./server.js";
+import type { WriteBackResult } from "./server.js";
 
 /**
  * Removes one instance for a `token-deleted` request: an unknown id is a
@@ -14,7 +15,7 @@ import type { RemoveInstanceResult } from "./server.js";
 export function removeInstance(
   repo: EncounterRepository,
   instanceId: string,
-): RemoveInstanceResult {
+): WriteBackResult {
   try {
     repo.removeInstances([instanceId]);
     return { ok: true };
@@ -23,6 +24,20 @@ export function removeInstance(
       return { ok: false, code: "unknown-instance", message: e.message };
     throw e;
   }
+}
+
+/**
+ * Applies a table edit for an `instance-edit` request: a domain error (unknown
+ * instance, invalid value) is a refusal carrying its code, anything else is
+ * rethrown.
+ */
+export function editInstance(
+  repo: EncounterRepository,
+  edit: InstanceEdit,
+): WriteBackResult {
+  void repo;
+  void edit;
+  throw new Error("not implemented");
 }
 
 /** Full current instance list and token art, for a client that just connected. */
