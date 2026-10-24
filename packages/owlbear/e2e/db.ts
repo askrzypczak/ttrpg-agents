@@ -4,6 +4,9 @@ import {
   SqliteEncounterRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
+import type { ChangeOrigin } from "@ttrpg-agents/engine";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 /** Throwaway SQLite file in `dir` for an e2e bridge (TTRPG_AGENTS_DB); never the real one. */
 export function e2eDbPath(dir: string): string {
@@ -26,13 +29,15 @@ export function seedE2eDatabase(dir: string): void {
     const repo = new SqliteEncounterRepository(db, {
       newId: () => ids.shift()!,
     });
-    repo.addInstances(() =>
-      SHADOW_IDS.map((_, i) => ({
-        monsterKey: "shadow",
-        displayName: `Shadow ${i + 1}`,
-        maxHp: 16,
-        initiative: 14,
-      })),
+    repo.addInstances(
+      () =>
+        SHADOW_IDS.map((_, i) => ({
+          monsterKey: "shadow",
+          displayName: `Shadow ${i + 1}`,
+          maxHp: 16,
+          initiative: 14,
+        })),
+      origin,
     );
   } finally {
     db.close();
@@ -83,13 +88,15 @@ export function restoreE2eSeed(dir: string): void {
     const repo = new SqliteEncounterRepository(db, {
       newId: () => ids.shift()!,
     });
-    repo.clearEncounter();
-    repo.addInstances(() =>
-      SHADOW_IDS.map((_, i) => ({
-        monsterKey: "shadow",
-        displayName: `Shadow ${i + 1}`,
-        maxHp: 16,
-      })),
+    repo.clearEncounter(origin);
+    repo.addInstances(
+      () =>
+        SHADOW_IDS.map((_, i) => ({
+          monsterKey: "shadow",
+          displayName: `Shadow ${i + 1}`,
+          maxHp: 16,
+        })),
+      origin,
     );
   } finally {
     db.close();

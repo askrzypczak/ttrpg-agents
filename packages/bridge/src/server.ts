@@ -171,6 +171,14 @@ function sendSnapshot(ws: WebSocket, hooks: Hooks, cause?: string): void {
   }
 }
 
+/**
+ * The command a write-back belongs to: the envelope id, or a fresh id when the
+ * message has none or an empty one.
+ */
+function commandIdOf(id: string | undefined): string {
+  return id === undefined || id === "" ? randomUUID() : id;
+}
+
 // Authorization is decided only by the token. The client-supplied `role` in
 // `hello` is never read here; it only drives the extension UI.
 function handleMessage(
@@ -231,7 +239,7 @@ function handleMessage(
       try {
         outcome = hooks.removeInstance(
           message.payload.instanceId,
-          message.id ?? "",
+          commandIdOf(message.id),
         );
       } catch (e) {
         send(
@@ -266,7 +274,7 @@ function handleMessage(
       }
       let outcome: WriteBackResult;
       try {
-        outcome = hooks.editInstance(message.payload, message.id ?? "");
+        outcome = hooks.editInstance(message.payload, commandIdOf(message.id));
       } catch (e) {
         send(
           ws,

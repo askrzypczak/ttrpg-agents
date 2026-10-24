@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import type { MonsterInstance } from "@ttrpg-agents/engine";
+import type { MonsterInstance, ChangeOrigin } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
@@ -22,6 +22,8 @@ import {
   type BridgeServerOptions,
 } from "./server.js";
 
+const origin: ChangeOrigin = { source: "table", commandId: "test" };
+
 let dir: string;
 let db: DatabaseSync;
 let repo: SqliteEncounterRepository;
@@ -36,7 +38,7 @@ async function startServer(
     port: 0,
     staticDir: dir,
     snapshot: () => snapshotMessage(repo, new SqliteTokenArtRepository(db)),
-    removeInstance: (id) => removeInstance(repo, id),
+    removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
     ...options,
   });
   servers.push(server);
@@ -47,10 +49,13 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "token-deleted-"));
   db = openDatabase(join(dir, "test.db"));
   repo = new SqliteEncounterRepository(db);
-  shadows = repo.addInstances(() => [
-    { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
-    { monsterKey: "shadow", displayName: "Shadow 2", maxHp: 16 },
-  ]);
+  shadows = repo.addInstances(
+    () => [
+      { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
+      { monsterKey: "shadow", displayName: "Shadow 2", maxHp: 16 },
+    ],
+    origin,
+  );
   servers = [];
   sockets = [];
 });

@@ -6,6 +6,7 @@ import {
   type Rng,
   type TablePort,
   type TableSceneStatus,
+  type ChangeOrigin,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -15,6 +16,8 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 const monsters = loadSrdMonsters();
 const SHADOW = "srd-2024_shadow";
@@ -49,6 +52,7 @@ beforeEach(() => {
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${++groupN}`,
+    newCommandId: () => "command",
   };
 });
 
@@ -68,7 +72,7 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): void {
-  ctx.repo.addInstances(() => items);
+  ctx.repo.addInstances(() => items, origin);
 }
 
 /** Delegates to `inner`, with some methods replaced. */
@@ -78,17 +82,18 @@ function wrapRepo(
 ): EncounterRepository {
   return {
     getOrCreateActiveEncounter: () => inner.getOrCreateActiveEncounter(),
-    addInstances: (build) => inner.addInstances(build),
-    applyDamage: (id, amount) => inner.applyDamage(id, amount),
-    applyHealing: (id, amount) => inner.applyHealing(id, amount),
-    removeInstances: (ids) => inner.removeInstances(ids),
-    renameInstance: (id, name) => inner.renameInstance(id, name),
-    setInitiative: (id, n) => inner.setInitiative(id, n),
-    setHp: (id, hp) => inner.setHp(id, hp),
-    setMaxHp: (id, maxHp) => inner.setMaxHp(id, maxHp),
-    setArmorClass: (id, ac) => inner.setArmorClass(id, ac),
-    setStatsVisible: (id, visible) => inner.setStatsVisible(id, visible),
-    clearEncounter: () => inner.clearEncounter(),
+    addInstances: (build) => inner.addInstances(build, origin),
+    applyDamage: (id, amount) => inner.applyDamage(id, amount, origin),
+    applyHealing: (id, amount) => inner.applyHealing(id, amount, origin),
+    removeInstances: (ids) => inner.removeInstances(ids, origin),
+    renameInstance: (id, name) => inner.renameInstance(id, name, origin),
+    setInitiative: (id, n) => inner.setInitiative(id, n, origin),
+    setHp: (id, hp) => inner.setHp(id, hp, origin),
+    setMaxHp: (id, maxHp) => inner.setMaxHp(id, maxHp, origin),
+    setArmorClass: (id, ac) => inner.setArmorClass(id, ac, origin),
+    setStatsVisible: (id, visible) =>
+      inner.setStatsVisible(id, visible, origin),
+    clearEncounter: () => inner.clearEncounter(origin),
     listInstances: () => inner.listInstances(),
     ...over,
   };
@@ -347,7 +352,7 @@ describe("apply_damage and heal", () => {
     const inner = ctx.repo;
     const snapshot = inner.listInstances();
     // Another writer changes HP after the tool listed the encounter.
-    inner.applyDamage(snapshot[0]?.id ?? "", 3);
+    inner.applyDamage(snapshot[0]?.id ?? "", 3, origin);
     ctx.repo = staleRepo(inner, snapshot);
 
     const r = await call("apply_damage", { target: "Shadow 1", amount: 2 });
@@ -380,7 +385,7 @@ describe("tool errors", () => {
     const snapshot = inner.listInstances();
     const id = snapshot[0]?.id ?? "";
     // Removed by another writer after the tool resolved the target.
-    inner.clearEncounter();
+    inner.clearEncounter(origin);
     ctx.repo = staleRepo(inner, snapshot);
     for (const name of ["apply_damage", "heal"]) {
       const r = await call(name, { target: "Shadow 1", amount: 1 });

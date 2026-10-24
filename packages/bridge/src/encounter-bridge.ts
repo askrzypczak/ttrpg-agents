@@ -1,5 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  DomainError,
+  UnknownInstanceError,
+  applyInstanceEdit,
   type EncounterRepository,
   type InstanceEdit,
   type TokenArtRepository,
@@ -17,8 +20,14 @@ export function removeInstance(
   instanceId: string,
   commandId: string,
 ): WriteBackResult {
-  void [repo, instanceId, commandId];
-  throw new Error("not implemented");
+  try {
+    repo.removeInstances([instanceId], { source: "table", commandId });
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof UnknownInstanceError)
+      return { ok: false, code: "unknown-instance", message: e.message };
+    throw e;
+  }
 }
 
 /**
@@ -31,8 +40,14 @@ export function editInstance(
   edit: InstanceEdit,
   commandId: string,
 ): WriteBackResult {
-  void [repo, edit, commandId];
-  throw new Error("not implemented");
+  try {
+    applyInstanceEdit(repo, edit, { source: "table", commandId });
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof DomainError)
+      return { ok: false, code: e.code, message: e.message };
+    throw e;
+  }
 }
 
 /** Full current instance list and token art, for a client that just connected. */

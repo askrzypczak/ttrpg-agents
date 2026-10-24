@@ -6,6 +6,9 @@ import type { SceneItem } from "../src/scene-model.js";
 import { SHADOW_IDS } from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems } from "./helpers.js";
+import type { ChangeOrigin } from "@ttrpg-agents/engine";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 const INSTANCE_KEY = "com.ttrpg-agents/instance";
 const INITIATIVE_KEY = "rodeo.owlbear.initiative-tracker/metadata";
@@ -155,7 +158,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     let renamed = false;
     try {
       // The bridge's data_version poll pushes a snapshot after this commit.
-      repo.renameInstance(SHADOW_IDS[1]!, "Boss");
+      repo.renameInstance(SHADOW_IDS[1]!, "Boss", origin);
       renamed = true;
       await expect
         .poll(async () => nameOf(await readItems(page), SHADOW_IDS[1]!))
@@ -179,7 +182,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       ).toHaveText("");
     } finally {
       try {
-        if (renamed) repo.renameInstance(SHADOW_IDS[1]!, "Shadow 2");
+        if (renamed) repo.renameInstance(SHADOW_IDS[1]!, "Shadow 2", origin);
       } finally {
         db.close();
       }
@@ -205,9 +208,9 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     try {
       // Unrelated to the token's name: its monster takes damage, and another
       // monster is renamed, whose token shows when the snapshot has landed.
-      repo.applyDamage(SHADOW_IDS[0]!, 3);
+      repo.applyDamage(SHADOW_IDS[0]!, 3, origin);
       damaged = true;
-      repo.renameInstance(SHADOW_IDS[2]!, "Ghost");
+      repo.renameInstance(SHADOW_IDS[2]!, "Ghost", origin);
       renamed = true;
       await expect
         .poll(async () => nameOf(await readItems(page), SHADOW_IDS[2]!))
@@ -221,8 +224,8 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       ).toHaveText("");
     } finally {
       try {
-        if (renamed) repo.renameInstance(SHADOW_IDS[2]!, "Shadow 3");
-        if (damaged) repo.applyHealing(SHADOW_IDS[0]!, 3);
+        if (renamed) repo.renameInstance(SHADOW_IDS[2]!, "Shadow 3", origin);
+        if (damaged) repo.applyHealing(SHADOW_IDS[0]!, 3, origin);
       } finally {
         db.close();
       }

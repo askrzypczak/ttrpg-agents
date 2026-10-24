@@ -3,6 +3,9 @@ import { makeTestInstance } from "../testing/index.js";
 import { applyInstanceEdit } from "./edit.js";
 import { UnknownInstanceError } from "./errors.js";
 import type { EncounterRepository } from "./repository.js";
+import type { ChangeOrigin } from "./origin.js";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 /** A repository of several instances that records which setters were called. */
 function recordingRepo() {
@@ -30,15 +33,15 @@ describe("applyInstanceEdit guards", () => {
   it("applyInstanceEdit calls only the setters for the fields given", () => {
     const { repo, calls } = recordingRepo();
 
-    applyInstanceEdit(repo, { instanceId: "i2", armorClass: 15 });
+    applyInstanceEdit(repo, { instanceId: "i2", armorClass: 15 }, origin);
     expect(calls).toEqual(["ac:i2"]);
 
     calls.length = 0;
-    applyInstanceEdit(repo, { instanceId: "i1", currentHp: 3 });
+    applyInstanceEdit(repo, { instanceId: "i1", currentHp: 3 }, origin);
     expect(calls).toEqual(["hp:i1"]);
 
     calls.length = 0;
-    applyInstanceEdit(repo, { instanceId: "i1", maxHp: 30 });
+    applyInstanceEdit(repo, { instanceId: "i1", maxHp: 30 }, origin);
     expect(calls).toEqual(["maxHp:i1"]);
   });
 
@@ -46,12 +49,16 @@ describe("applyInstanceEdit guards", () => {
     const { repo, calls } = recordingRepo();
 
     expect(() =>
-      applyInstanceEdit(repo, {
-        instanceId: "nope",
-        currentHp: 1,
-        maxHp: 2,
-        armorClass: 3,
-      }),
+      applyInstanceEdit(
+        repo,
+        {
+          instanceId: "nope",
+          currentHp: 1,
+          maxHp: 2,
+          armorClass: 3,
+        },
+        origin,
+      ),
     ).toThrow(UnknownInstanceError);
     expect(calls).toEqual([]);
   });
@@ -59,8 +66,8 @@ describe("applyInstanceEdit guards", () => {
   it("applyInstanceEdit returns the edited instance, not another one", () => {
     const { repo } = recordingRepo();
 
-    expect(applyInstanceEdit(repo, { instanceId: "i2", maxHp: 5 }).id).toBe(
-      "i2",
-    );
+    expect(
+      applyInstanceEdit(repo, { instanceId: "i2", maxHp: 5 }, origin).id,
+    ).toBe("i2");
   });
 });

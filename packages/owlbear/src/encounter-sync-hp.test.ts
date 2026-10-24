@@ -42,7 +42,13 @@ describe("createEncounterSync stat bubbles", () => {
     await sync.handleMessage({
       v: 1,
       type: "encounter-event",
-      payload: { type: "hp-changed", id: "i1", currentHp: 3, maxHp: 20 },
+      payload: {
+        type: "hp-changed",
+        id: "i1",
+        currentHp: 3,
+        maxHp: 20,
+        origin: { source: "mcp", commandId: "test" },
+      },
     });
 
     const metadata = tokenOf(scene, 1).metadata;

@@ -34,7 +34,13 @@ const answer = (instance: EncounterInstance, id = "i1"): BridgeMessage => ({
 const hpChanged = (currentHp: number): BridgeMessage => ({
   v: 1,
   type: "encounter-event",
-  payload: { type: "hp-changed", id: "i1", currentHp, maxHp: 16 },
+  payload: {
+    type: "hp-changed",
+    id: "i1",
+    currentHp,
+    maxHp: 16,
+    origin: { source: "mcp", commandId: "test" },
+  },
 });
 
 const foreign: SceneItem = {

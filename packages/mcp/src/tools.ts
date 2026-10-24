@@ -38,8 +38,7 @@ export interface ToolDefinition {
 
 /** The origin of every write in one tool call: source `mcp`, one command id per call. */
 function mcpOrigin(ctx: ToolContext): ChangeOrigin {
-  void ctx;
-  throw new Error("not implemented");
+  return { source: "mcp", commandId: ctx.newCommandId() };
 }
 
 function ok(text: string, structured?: Record<string, unknown>): ToolResult {

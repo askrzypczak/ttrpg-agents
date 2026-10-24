@@ -11,10 +11,11 @@ const repoWith = (over: Partial<EncounterRepository>): EncounterRepository =>
 
 describe("editInstance", () => {
   it("editInstance maps a domain error to a refusal with its code", () => {
-    const result = editInstance(repoWith({ listInstances: () => [] }), {
-      instanceId: "i1",
-      currentHp: 3,
-    });
+    const result = editInstance(
+      repoWith({ listInstances: () => [] }),
+      { instanceId: "i1", currentHp: 3 },
+      "test",
+    );
 
     expect(result).toMatchObject({ ok: false, code: "unknown_instance" });
   });
@@ -27,7 +28,7 @@ describe("editInstance", () => {
     });
 
     expect(() =>
-      editInstance(repo, { instanceId: "i1", currentHp: 3 }),
+      editInstance(repo, { instanceId: "i1", currentHp: 3 }, "test"),
     ).toThrow("database is locked");
   });
 });

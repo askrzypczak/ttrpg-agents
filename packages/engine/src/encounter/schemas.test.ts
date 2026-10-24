@@ -59,10 +59,32 @@ describe("monsterInstanceSchema", () => {
 
 describe("encounterEventSchema", () => {
   it.each([
-    ["added", { type: "added", instances: [instance] }],
-    ["removed", { type: "removed", id: "i1" }],
-    ["cleared", { type: "cleared" }],
-    ["hp-changed", { type: "hp-changed", id: "i1", currentHp: 3, maxHp: 16 }],
+    [
+      "added",
+      {
+        type: "added",
+        instances: [instance],
+        origin: { source: "mcp", commandId: "c1" },
+      },
+    ],
+    [
+      "removed",
+      { type: "removed", id: "i1", origin: { source: "mcp", commandId: "c1" } },
+    ],
+    [
+      "cleared",
+      { type: "cleared", origin: { source: "mcp", commandId: "c1" } },
+    ],
+    [
+      "hp-changed",
+      {
+        type: "hp-changed",
+        id: "i1",
+        currentHp: 3,
+        maxHp: 16,
+        origin: { source: "mcp", commandId: "c1" },
+      },
+    ],
   ])("parses a %s event unchanged", (_kind, event) => {
     expect(encounterEventSchema.parse(event)).toEqual(event);
   });

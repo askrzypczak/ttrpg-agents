@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { makeTestInstance } from "../testing/index.js";
 import { InvalidNameError } from "./errors.js";
-import {
-  createEncounterEmitter,
-  observeRepository,
-  type EncounterEvent,
-} from "./events.js";
 import { validateInstanceName } from "./rename.js";
-import type { EncounterRepository } from "./repository.js";
-import type { MonsterInstance } from "./types.js";
 
 describe("validateInstanceName", () => {
   it("trims the name", () => {
@@ -33,45 +25,5 @@ describe("validateInstanceName", () => {
   it("allows the instance's own current name", () => {
     // The caller passes only the other instances' names.
     expect(validateInstanceName("Shadow 1", ["Shadow 2"])).toBe("Shadow 1");
-  });
-});
-
-describe("observeRepository", () => {
-  it("`observeRepository.renameInstance` delegates and returns the repo's result without emitting", () => {
-    const renamed: MonsterInstance = makeTestInstance({ displayName: "Boss" });
-    const calls: [string, string][] = [];
-    const unexpected = () => {
-      throw new Error("unexpected call");
-    };
-    const inner: EncounterRepository = {
-      getOrCreateActiveEncounter: unexpected,
-      addInstances: unexpected,
-      applyDamage: unexpected,
-      applyHealing: unexpected,
-      removeInstances: unexpected,
-      clearEncounter: unexpected,
-      listInstances: unexpected,
-      setInitiative: unexpected,
-      setHp: unexpected,
-      setMaxHp: unexpected,
-      setArmorClass: unexpected,
-      setStatsVisible: unexpected,
-      renameInstance: (id, name) => {
-        calls.push([id, name]);
-        return renamed;
-      },
-    };
-    const emitter = createEncounterEmitter();
-    const events: EncounterEvent[] = [];
-    emitter.subscribe((e) => events.push(e));
-
-    const result = observeRepository(inner, emitter).renameInstance(
-      "i1",
-      "Boss",
-    );
-
-    expect(result).toBe(renamed);
-    expect(calls).toEqual([["i1", "Boss"]]);
-    expect(events).toEqual([]);
   });
 });

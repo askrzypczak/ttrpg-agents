@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import type { MonsterInstance } from "@ttrpg-agents/engine";
+import type { MonsterInstance, ChangeOrigin } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
@@ -22,6 +22,8 @@ import {
 } from "./encounter-bridge.js";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
+const origin: ChangeOrigin = { source: "table", commandId: "test" };
+
 let dir: string;
 let db: DatabaseSync;
 let repo: SqliteEncounterRepository;
@@ -34,8 +36,8 @@ async function startServer(): Promise<BridgeServer> {
     port: 0,
     staticDir: dir,
     snapshot: () => snapshotMessage(repo, new SqliteTokenArtRepository(db)),
-    editInstance: (edit) => editInstance(repo, edit),
-    removeInstance: (id) => removeInstance(repo, id),
+    editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
+    removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
   });
   servers.push(server);
   return server;
@@ -45,20 +47,23 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "instance-edit-"));
   db = openDatabase(join(dir, "test.db"));
   repo = new SqliteEncounterRepository(db);
-  shadows = repo.addInstances(() => [
-    {
-      monsterKey: "shadow",
-      displayName: "Shadow 1",
-      maxHp: 16,
-      armorClass: 12,
-    },
-    {
-      monsterKey: "shadow",
-      displayName: "Shadow 2",
-      maxHp: 16,
-      armorClass: 12,
-    },
-  ]);
+  shadows = repo.addInstances(
+    () => [
+      {
+        monsterKey: "shadow",
+        displayName: "Shadow 1",
+        maxHp: 16,
+        armorClass: 12,
+      },
+      {
+        monsterKey: "shadow",
+        displayName: "Shadow 2",
+        maxHp: 16,
+        armorClass: 12,
+      },
+    ],
+    origin,
+  );
   servers = [];
   sockets = [];
 });
@@ -266,7 +271,7 @@ describe("instance-edit over the bridge", () => {
   it("bridge: HP above max is clamped in the store and the snapshot carries the clamp", async () => {
     const server = await startServer();
     const [first] = shadows;
-    repo.setHp(first!.id, 5);
+    repo.setHp(first!.id, 5, origin);
     const client = await authed(server);
 
     const instances = await editAndAwaitSnapshot(client, first!.id, {

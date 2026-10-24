@@ -392,7 +392,10 @@ describe("bridge server broadcast and snapshot", () => {
   const cleared: BridgeMessage = {
     v: 1,
     type: "encounter-event",
-    payload: { type: "cleared" },
+    payload: {
+      type: "cleared",
+      origin: { source: "mcp", commandId: "test" },
+    },
   };
 
   /** Records every decoded message a socket receives, from now on. */
