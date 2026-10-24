@@ -54,6 +54,19 @@ export const migrations: Migration[] = [
     version: 5,
     sql: "ALTER TABLE monster_instances ADD COLUMN stats_visible INTEGER NOT NULL DEFAULT 0;",
   },
+  {
+    version: 6,
+    sql: `
+      CREATE TABLE token_art_image (
+        sha256 TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+        mime TEXT NOT NULL CHECK (mime IN ('image/png', 'image/jpeg', 'image/webp')),
+        width INTEGER NOT NULL CHECK (width > 0),
+        height INTEGER NOT NULL CHECK (height > 0),
+        bytes BLOB NOT NULL
+      );
+      ALTER TABLE token_art ADD COLUMN sha256 TEXT REFERENCES token_art_image (sha256);
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));
