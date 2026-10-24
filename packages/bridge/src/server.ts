@@ -253,8 +253,9 @@ function handleMessage(
         break;
       }
       if (outcome.ok) {
-        // The bridge's own commit does not bump data_version, so the poller
-        // would not tell the client; send the new state directly.
+        // The log poller also broadcasts this removal as a `table` event, but
+        // the extension ignores `table` events, so answer with the new state
+        // until deltas replace this snapshot (#209).
         sendSnapshot(ws, hooks);
       } else {
         send(ws, errorMessage(outcome.code, outcome.message, message.id));
@@ -287,8 +288,9 @@ function handleMessage(
         break;
       }
       if (outcome.ok) {
-        // The bridge's own commit does not bump data_version; send the new
-        // state directly, like token-deleted.
+        // Answer with the new state, like token-deleted: the log poller's
+        // `table` event for this edit is ignored by the extension. The snapshot
+        // names the request it answers (`cause`) until #209.
         sendSnapshot(ws, hooks, message.id);
       } else {
         send(ws, errorMessage(outcome.code, outcome.message, message.id));
@@ -319,7 +321,8 @@ function handleMessage(
         );
         break;
       }
-      // The bridge's own commit does not bump data_version; tell the client directly.
+      // Token art is not in the change log, so no event tells the client;
+      // send the new state directly.
       sendSnapshot(ws, hooks);
       break;
     }
