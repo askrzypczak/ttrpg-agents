@@ -1,6 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import { encounterEventSchema } from "@ttrpg-agents/engine";
-import type { EncounterLog, LoggedEvent } from "@ttrpg-agents/engine";
+import type {
+  EncounterLog,
+  LoggedEvent,
+  UnreadableLogEntry,
+} from "@ttrpg-agents/engine";
 
 interface EventRow {
   seq: number;
@@ -22,15 +26,24 @@ export class SqliteEncounterLog implements EncounterLog {
     return row.seq;
   }
 
-  eventsSince(seq: number): LoggedEvent[] {
+  eventsSince(seq: number): (LoggedEvent | UnreadableLogEntry)[] {
     const rows = this.db
       .prepare(
         "SELECT seq, event FROM encounter_events WHERE seq > ? ORDER BY seq",
       )
       .all(seq) as unknown as EventRow[];
-    return rows.map((row) => ({
-      seq: row.seq,
-      event: encounterEventSchema.parse(JSON.parse(row.event)),
-    }));
+    return rows.map((row): LoggedEvent | UnreadableLogEntry => {
+      try {
+        return {
+          seq: row.seq,
+          event: encounterEventSchema.parse(JSON.parse(row.event)),
+        };
+      } catch (e) {
+        return {
+          seq: row.seq,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    });
   }
 }

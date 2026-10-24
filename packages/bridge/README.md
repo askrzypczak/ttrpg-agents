@@ -51,7 +51,10 @@ carrying its `seq`, oldest first, so tokens appear without reloading the panel.
 The poll sees the bridge's own commits too. A client that connects gets an
 `encounter-snapshot` carrying the `seq` it is current as of, read before the
 instances; events at or before that `seq` may still arrive and the client
-ignores them. A failed read is retried on the next tick.
+ignores them. A failed read is retried on the next tick. A row the bridge cannot
+parse (for example one written by a newer MCP server) is skipped: `cli.ts`
+reports it once on stderr with its `seq`, and every client gets a fresh snapshot
+in its place.
 
 An authenticated client can send `token-deleted` (`{ instanceId }`, sent by the
 extension when the GM deletes one of our tokens). The server's optional
