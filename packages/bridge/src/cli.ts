@@ -8,6 +8,7 @@ import {
 import {
   broadcastSnapshotsOnChange,
   dataVersion,
+  editInstance,
   removeInstance,
   snapshotMessage,
 } from "./encounter-bridge.js";
@@ -48,6 +49,7 @@ const server = await startBridgeServer({
   agentToken,
   snapshot: () => snapshotMessage(repo, artRepo),
   removeInstance: (id) => removeInstance(repo, id),
+  editInstance: (edit) => editInstance(repo, edit),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
 });
 const stopPolling = broadcastSnapshotsOnChange(

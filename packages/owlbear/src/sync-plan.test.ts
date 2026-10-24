@@ -200,6 +200,8 @@ describe("planSync", () => {
       rename: [],
       deleted: [],
       needsArt: [],
+      edits: [],
+      rejected: [],
     });
   });
 
@@ -246,6 +248,8 @@ describe("planSync", () => {
       rename: [],
       deleted: [],
       needsArt: [],
+      edits: [],
+      rejected: [],
     });
   });
 

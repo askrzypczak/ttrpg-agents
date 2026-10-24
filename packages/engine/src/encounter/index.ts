@@ -10,6 +10,7 @@ export type {
   InstanceBuilder,
 } from "./repository.js";
 export * from "./add-monsters.js";
+export * from "./edit.js";
 export * from "./events.js";
 export * from "./errors.js";
 export * from "./hp.js";

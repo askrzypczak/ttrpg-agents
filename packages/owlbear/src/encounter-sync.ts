@@ -1,5 +1,10 @@
-import { tokenArtSchema, type TokenArt } from "@ttrpg-agents/engine";
+import {
+  tokenArtSchema,
+  type InstanceEdit,
+  type TokenArt,
+} from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { INSTANCE_EDIT_ID_PREFIX } from "./instance-edit.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
@@ -10,6 +15,7 @@ import {
   instanceIdOf,
   planSync,
   type EncounterInstance,
+  type SyncPlan,
 } from "./sync-plan.js";
 
 export type EncounterEventPayload = Extract<
@@ -80,6 +86,10 @@ export function createEncounterSync(
     onTokenDeleted?: (instanceId: string) => void;
     /** Called with the art the GM picked for a monster type, to store it. */
     onTokenArt?: (monsterKey: string, art: TokenArt) => void;
+    /** Called once per table edit of HP, max HP or armor class, to write it back. */
+    onInstanceEdit?: (edit: InstanceEdit) => void;
+    /** Called once per snapshot for each table value that could not be read back. */
+    onEditRejected?: (text: string) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
@@ -94,6 +104,8 @@ export function createEncounterSync(
   const declined = new Set<string>();
   // Deleted tokens already reported since the last snapshot.
   const reported = new Set<string>();
+  // Unreadable table values already reported since the last snapshot.
+  const rejectedReported = new Set<string>();
   // Item changes coalesce: at most one quiet reconcile is `queued`. Changes
   // raised synchronously by our own write calls (`writing`) are ignored.
   let writing = false;
@@ -125,7 +137,7 @@ export function createEncounterSync(
     return undefined;
   }
 
-  async function apply(wanted: EncounterInstance[]): Promise<string[]> {
+  async function apply(wanted: EncounterInstance[]): Promise<SyncPlan> {
     const items = await obr.getItems();
     const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
     const placed = new Set(
@@ -182,7 +194,7 @@ export function createEncounterSync(
     );
     if (next.size !== placed.size || [...next].some((id) => !placed.has(id)))
       await obr.setSceneMetadata({ [PLACED_METADATA_KEY]: [...next] });
-    return plan.deleted;
+    return plan;
   }
 
   async function reconcile(quiet = false): Promise<void> {
@@ -192,9 +204,9 @@ export function createEncounterSync(
     }
     if (desired === null || !(await obr.isSceneReady())) return;
     const applying = desired;
-    let deleted: string[];
+    let plan: SyncPlan;
     try {
-      deleted = await apply(applying);
+      plan = await apply(applying);
     } catch (error) {
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
@@ -216,7 +228,13 @@ export function createEncounterSync(
     attempt = 0;
     appliedCount = applying.length;
     if (!quiet || recovered) onApplied();
-    for (const id of deleted) {
+    for (const edit of plan.edits) options.onInstanceEdit?.(edit);
+    for (const { message } of plan.rejected) {
+      if (rejectedReported.has(message)) continue;
+      rejectedReported.add(message);
+      options.onEditRejected?.(message);
+    }
+    for (const id of plan.deleted) {
       if (reported.has(id)) continue;
       reported.add(id);
       options.onTokenDeleted?.(id);
@@ -251,12 +269,18 @@ export function createEncounterSync(
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
         reported.clear();
+        rejectedReported.clear();
       } else if (message.type === "encounter-event") {
         if (desired === null) return Promise.resolve();
         desired = fold(desired, message.payload);
-      } else {
+      } else if (!(
+        message.type === "error" &&
+        !message.payload.fatal &&
+        message.id?.startsWith(INSTANCE_EDIT_ID_PREFIX)
+      )) {
         return Promise.resolve();
       }
+      // A snapshot, an event, or a refused edit (the table gets the store's value back).
       return enqueue(reconcile);
     },
     appliedInstanceCount() {
