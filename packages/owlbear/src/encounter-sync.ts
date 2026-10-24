@@ -4,6 +4,7 @@ import {
   type TokenArt,
 } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { EDIT_SETTLE_MS, createEditSettler } from "./edit-settle.js";
 import { INSTANCE_EDIT_ID_PREFIX } from "./instance-edit.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
@@ -72,6 +73,9 @@ function fold(
  * backoff until a later trigger or success; a scene that goes away mid-apply
  * is deferred silently. `onApplied` fires after each successful reconcile, except a quiet one (from an
  * item change) that was not recovering from a failure.
+ * Table edits of HP, max HP and armor class settle first (`EDIT_SETTLE_MS`,
+ * coalesced per instance) before `onInstanceEdit` hears them; the pending and
+ * sent values stay shown until the store answers.
  * Events before the first snapshot are ignored (the bridge sends a snapshot
  * on connect).
  */
@@ -93,6 +97,11 @@ export function createEncounterSync(
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
+  const settler = createEditSettler({
+    timers,
+    settleMs: EDIT_SETTLE_MS,
+    send: (edit) => options.onInstanceEdit?.(edit),
+  });
   let desired: EncounterInstance[] | null = null;
   let appliedCount = 0;
   let tail: Promise<void> = Promise.resolve();
@@ -206,7 +215,7 @@ export function createEncounterSync(
     const applying = desired;
     let plan: SyncPlan;
     try {
-      plan = await apply(applying);
+      plan = await apply(settler.overlay(applying));
     } catch (error) {
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
@@ -228,7 +237,9 @@ export function createEncounterSync(
     attempt = 0;
     appliedCount = applying.length;
     if (!quiet || recovered) onApplied();
-    for (const edit of plan.edits) options.onInstanceEdit?.(edit);
+    // Against the latest encounter: an answer may have landed mid-apply.
+    // Stryker disable next-line LogicalOperator: desired is never null here, it is only set, never reset
+    settler.observe(plan.edits, desired ?? applying);
     for (const { message } of plan.rejected) {
       if (rejectedReported.has(message)) continue;
       rejectedReported.add(message);
@@ -266,6 +277,7 @@ export function createEncounterSync(
   return {
     handleMessage(message) {
       if (message.type === "encounter-snapshot") {
+        settler.answered();
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
         reported.clear();
@@ -273,11 +285,13 @@ export function createEncounterSync(
       } else if (message.type === "encounter-event") {
         if (desired === null) return Promise.resolve();
         desired = fold(desired, message.payload);
-      } else if (!(
+      } else if (
         message.type === "error" &&
         !message.payload.fatal &&
         message.id?.startsWith(INSTANCE_EDIT_ID_PREFIX)
-      )) {
+      ) {
+        settler.answered(message.id.slice(INSTANCE_EDIT_ID_PREFIX.length));
+      } else {
         return Promise.resolve();
       }
       // A snapshot, an event, or a refused edit (the table gets the store's value back).
