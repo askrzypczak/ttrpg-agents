@@ -1,12 +1,44 @@
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { EDIT_SETTLE_MS } from "./edit-settle.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
+import type { Timers } from "./reconnecting-socket.js";
 import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import { INSTANCE_METADATA_KEY } from "./sync-plan.js";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+/** Timers on a fake clock that only moves when `advance` is called. */
+class FakeTimers implements Timers {
+  private now = 0;
+  private next = 1;
+  private readonly pending = new Map<number, { fn: () => void; at: number }>();
+  setTimeout(fn: () => void, ms: number) {
+    const id = this.next++;
+    this.pending.set(id, { fn, at: this.now + ms });
+    return id;
+  }
+  clearTimeout(handle: unknown) {
+    this.pending.delete(handle as number);
+  }
+  /** Moves the clock forward, firing due timers in order. */
+  advance(ms: number) {
+    const end = this.now + ms;
+    for (;;) {
+      const due = [...this.pending.entries()]
+        .filter(([, t]) => t.at <= end)
+        .sort(([, a], [, b]) => a.at - b.at)[0];
+      if (due === undefined) break;
+      const [id, t] = due;
+      this.pending.delete(id);
+      this.now = t.at;
+      t.fn();
+    }
+    this.now = end;
+  }
+}
 
 const error = (id: string | undefined, fatal: boolean): BridgeMessage => ({
   v: 1,
@@ -18,7 +50,8 @@ const error = (id: string | undefined, fatal: boolean): BridgeMessage => ({
 /** Table HP after the message arrives with an unsent-then-sent edit of 5. */
 async function healthAfter(message: BridgeMessage): Promise<unknown> {
   const { obr, scene } = createFakeObr();
-  const sync = createEncounterSync(obr);
+  const timers = new FakeTimers();
+  const sync = createEncounterSync(obr, undefined, undefined, { timers });
   await sync.handleMessage({
     v: 1,
     type: "encounter-snapshot",
@@ -48,6 +81,7 @@ async function healthAfter(message: BridgeMessage): Promise<unknown> {
     },
   ]);
   await settle();
+  timers.advance(EDIT_SETTLE_MS);
   await sync.handleMessage(message);
   await settle();
   return (

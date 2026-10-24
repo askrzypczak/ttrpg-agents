@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { InstanceEdit } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { EDIT_SETTLE_MS } from "./edit-settle.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
+import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem, SceneModel } from "./scene-model.js";
 import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
@@ -36,6 +38,36 @@ const foreign: SceneItem = {
 /** Lets fire-and-forget reconciles (item changes) finish. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
+/** Timers on a fake clock that only moves when `advance` is called. */
+class FakeTimers implements Timers {
+  private now = 0;
+  private next = 1;
+  private readonly pending = new Map<number, { fn: () => void; at: number }>();
+  setTimeout(fn: () => void, ms: number) {
+    const id = this.next++;
+    this.pending.set(id, { fn, at: this.now + ms });
+    return id;
+  }
+  clearTimeout(handle: unknown) {
+    this.pending.delete(handle as number);
+  }
+  /** Moves the clock forward, firing due timers in order. */
+  advance(ms: number) {
+    const end = this.now + ms;
+    for (;;) {
+      const due = [...this.pending.entries()]
+        .filter(([, t]) => t.at <= end)
+        .sort(([, a], [, b]) => a.at - b.at)[0];
+      if (due === undefined) break;
+      const [id, t] = due;
+      this.pending.delete(id);
+      this.now = t.at;
+      t.fn();
+    }
+    this.now = end;
+  }
+}
+
 /** Our token for instance i1. */
 const token = (scene: SceneModel): SceneItem =>
   scene
@@ -64,24 +96,29 @@ function editAtTable(scene: SceneModel, fields: Record<string, unknown>) {
 
 async function setup() {
   const { obr, scene } = createFakeObr();
+  const timers = new FakeTimers();
   const edits: InstanceEdit[] = [];
   const rejected: string[] = [];
   const sync = createEncounterSync(obr, undefined, undefined, {
+    timers,
     onInstanceEdit: (edit) => edits.push(edit),
     onEditRejected: (text) => rejected.push(text),
   });
   await sync.handleMessage(snapshot(inst()));
   await settle();
-  return { sync, scene, edits, rejected };
+  /** Lets the settle period of the table edits pass. */
+  const settlePeriod = () => timers.advance(EDIT_SETTLE_MS);
+  return { sync, scene, edits, rejected, settlePeriod };
 }
 
 describe("createEncounterSync table edit write-back", () => {
   it("createEncounterSync sends one instance-edit per table edit and not again on the next item change", async () => {
-    const { sync, scene, edits } = await setup();
+    const { sync, scene, edits, settlePeriod } = await setup();
     expect(edits).toEqual([]);
 
     editAtTable(scene, { health: 5 });
     await settle();
+    settlePeriod();
     expect(edits).toEqual([{ instanceId: "i1", currentHp: 5 }]);
 
     // An unrelated item change does not send it again.
@@ -99,6 +136,7 @@ describe("createEncounterSync table edit write-back", () => {
     // A second table edit is sent once too.
     editAtTable(scene, { "max health": 20 });
     await settle();
+    settlePeriod();
     expect(edits).toEqual([
       { instanceId: "i1", currentHp: 5 },
       { instanceId: "i1", maxHp: 20 },
@@ -106,9 +144,10 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("createEncounterSync reverts the table to the store value when the bridge answers an edit with an error", async () => {
-    const { sync, scene, edits } = await setup();
+    const { sync, scene, edits, settlePeriod } = await setup();
     editAtTable(scene, { health: 5 });
     await settle();
+    settlePeriod();
     expect(edits).toEqual([{ instanceId: "i1", currentHp: 5 }]);
 
     await sync.handleMessage({
