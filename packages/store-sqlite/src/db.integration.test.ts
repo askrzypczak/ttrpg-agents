@@ -209,6 +209,50 @@ describe("migrations", () => {
     db.close();
   });
 
+  it("the image table has no monster column and no foreign key", () => {
+    const db = openDatabase(":memory:");
+    const columns = (
+      db.prepare("PRAGMA table_info(token_art_image)").all() as {
+        name: string;
+      }[]
+    ).map((c) => c.name);
+    expect([...columns].sort()).toEqual(
+      ["bytes", "height", "mime", "sha256", "width"].sort(),
+    );
+    expect(columns.some((name) => /monster/i.test(name))).toBe(false);
+    expect(
+      db.prepare("PRAGMA foreign_key_list(token_art_image)").all(),
+    ).toEqual([]);
+    db.close();
+  });
+
+  it("a version 5 database with art migrates to the latest version keeping its art rows without an image hash", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 5)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 5");
+    db.exec(
+      `INSERT INTO token_art (monster_key, url, mime, width, height)
+       VALUES ('shadow', 'https://cdn.owlbear.rodeo/assets/shadow.png', 'image/png', 300, 280)`,
+    );
+
+    migrate(db);
+
+    expect(LATEST_VERSION).toBeGreaterThan(5);
+    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    const listed = new SqliteTokenArtRepository(db).listTokenArt();
+    expect(listed).toEqual({
+      shadow: {
+        url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+        mime: "image/png",
+        width: 300,
+        height: 280,
+      },
+    });
+    expect(Object.keys(listed.shadow ?? {})).not.toContain("sha256");
+    db.close();
+  });
+
   it("a row stored before migration 4 reads as footprint 1", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON");

@@ -6,6 +6,8 @@ export type TokenArt = {
   mime: string;
   width: number;
   height: number;
+  /** SHA-256 of a stored copy of the image, when there is one. */
+  sha256?: string;
 };
 
 /** Source of truth for `TokenArt`; the protocol reuses it as the wire shape. */
