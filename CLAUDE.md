@@ -65,6 +65,12 @@ Dispatch, label setup (`setup-labels.sh`) and close-time label cleanup now live 
 - Agents may push their own `issue-N-*` branch. Humans merge; nobody pushes to `main`, force-pushes, or runs `gh pr merge`. Enforced locally by the `ticket-workflow` plugin's git guard (claude-workflow `plugins/ticket-workflow/hooks/guard-git.sh`; change it there, not here) plus the deny rules in `.claude/settings.json`. Also enforced server-side by the `protect-main` ruleset (no bypass actors): `main` cannot be deleted or force-pushed, changes need a PR (0 required approvals), and the `check` and `e2e` CI jobs must pass. `coverage` is informational and not required. The ruleset lives in GitHub settings, not in the repo.
 - PRs are opened as active (not draft): this is a team of one human, so draft would only signal "review needed", which the `needs-review` label already does. `npm run check` is the single definition of done and what CI runs.
 
+## PRs and reviews
+- Every PR body has a review map (reading list, criteria table, decision tests). Full guide: [`docs/reviewing.md`](docs/reviewing.md).
+- One commit per layer, contract commit first; no squashing before review.
+- Adapter tests prove translation only and do not re-test engine rules.
+- A plan whose Interfaces touch five or more packages is split into a prerequisite ticket and a feature ticket at the plan gate.
+
 ## Mutation testing
 - `npm run mutate` runs Stryker (`stryker.config.json`, incremental; results in `reports/`, HTML at `reports/mutation/index.html`). `mutate` and `mutate:changed` run `npm run build:ts` first: Stryker's vitest runner selects tests with `vitest related` before vitest's `globalSetup` runs, and workspace imports resolve to the original checkout's `dist/`, so without a current `dist/` the bridge tests are not found and their files report `NoCoverage` (#158). A bare `npx stryker run` needs `npm run build:ts` first.
 - Scope it with e.g. `npm run mutate -- --mutate 'packages/engine/src/dice/*.ts,!packages/engine/src/dice/*.test.ts'` (a CLI `--mutate` replaces the config's test/`index.ts` exclusions, so repeat them); add `--force` to ignore the incremental cache.
