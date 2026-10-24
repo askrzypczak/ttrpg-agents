@@ -6,6 +6,7 @@ The domain engine: dice, monster schema and search, encounter events, map geomet
 
 - `src/monsters/schema.ts`: zod schema and the `Monster` type.
 - `src/monsters/search.ts`: `searchMonsters(index, query)` (case-insensitive, plural-tolerant, ranked) and `getMonsterByKey`.
+- `src/monsters/footprint.ts`: `footprintForSize(size)`, the grid cells per side a token of a size category spans (small and medium 1, large 2, huge 3, gargantuan 4, anything else 1). `addMonsters` stores it on each new instance as `footprint`.
 
 ## Encounter events
 

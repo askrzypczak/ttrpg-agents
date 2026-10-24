@@ -17,6 +17,8 @@ export const monsterInstanceSchema = z.object({
   armorClass: z.number().nullable(),
   groupId: z.string().nullable(),
   createdAt: z.number(),
+  /** Grid cells per side the monster's token spans. */
+  footprint: z.number().int().min(1).default(1),
 });
 
 export type MonsterInstance = z.infer<typeof monsterInstanceSchema>;
@@ -29,4 +31,6 @@ export interface NewMonsterInstance {
   initiative?: number | null;
   armorClass?: number | null;
   groupId?: string | null;
+  /** Grid cells per side; defaults to 1. */
+  footprint?: number;
 }

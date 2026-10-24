@@ -21,21 +21,33 @@ export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 /** One grid cell at Owlbear's default 150 dpi. */
 const TOKEN_SIZE = 150;
 
-/** The image spans one grid cell, its centre at the item position. */
-export function oneCellGrid(art: Pick<TokenArt, "width" | "height">): GridSpec {
+/**
+ * The longer side of the image spans `cells` grid cells, its centre at the
+ * item position.
+ */
+function cellsGrid(
+  art: Pick<TokenArt, "width" | "height">,
+  cells: number,
+): GridSpec {
   return {
-    dpi: Math.max(art.width, art.height),
+    dpi: Math.max(art.width, art.height) / cells,
     offset: { x: art.width / 2, y: art.height / 2 },
   };
 }
 
-/** Row of `count` positions centred horizontally on `center`. */
-export function rowPositions(count: number, center: Vec2): Vec2[] {
-  const startX = center.x - ((count - 1) * TOKEN_SIZE) / 2;
-  return Array.from({ length: count }, (_, i) => ({
-    x: startX + i * TOKEN_SIZE,
-    y: center.y,
-  }));
+/**
+ * One position per token, side by side: each token is centred in a slot as
+ * wide as its footprint in cells, and the whole row is centred on `center`.
+ */
+function rowPositions(footprints: readonly number[], center: Vec2): Vec2[] {
+  const total = footprints.reduce((sum, cells) => sum + cells * TOKEN_SIZE, 0);
+  let left = center.x - total / 2;
+  return footprints.map((cells) => {
+    const width = cells * TOKEN_SIZE;
+    const position = { x: left + width / 2, y: center.y };
+    left += width;
+    return position;
+  });
 }
 
 /**
@@ -75,8 +87,9 @@ export const defaultSyncConfig: SyncConfig = {
     initiativeProjector,
     statBubblesProjector,
   ],
-  tokenKind: (_instance, art) =>
-    art
+  tokenKind: (instance, art) => {
+    const cells = instance.footprint;
+    return art
       ? {
           type: "IMAGE",
           layer: "CHARACTER",
@@ -86,17 +99,18 @@ export const defaultSyncConfig: SyncConfig = {
             width: art.width,
             height: art.height,
           },
-          grid: oneCellGrid(art),
+          grid: cellsGrid(art, cells),
         }
       : {
           type: "SHAPE",
           layer: "CHARACTER",
           shape: {
             shapeType: "CIRCLE",
-            width: TOKEN_SIZE,
-            height: TOKEN_SIZE,
+            width: cells * TOKEN_SIZE,
+            height: cells * TOKEN_SIZE,
           },
-        },
+        };
+  },
 };
 
 export type SyncPlan = {
@@ -242,7 +256,10 @@ export function planSync(
   const missing = desired.filter(
     (i) => !tokens.has(i.id) && !context.placed.has(i.id),
   );
-  const positions = rowPositions(missing.length, context.viewportCenter);
+  const positions = rowPositions(
+    missing.map((i) => i.footprint),
+    context.viewportCenter,
+  );
   missing.forEach((instance, n) => {
     const metadata: Record<string, unknown> = {};
     const synced: Record<string, unknown> = {};

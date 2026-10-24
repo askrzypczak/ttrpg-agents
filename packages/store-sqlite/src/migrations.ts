@@ -46,6 +46,10 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    version: 4,
+    sql: "ALTER TABLE monster_instances ADD COLUMN footprint INTEGER NOT NULL DEFAULT 1 CHECK (footprint >= 1);",
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));
