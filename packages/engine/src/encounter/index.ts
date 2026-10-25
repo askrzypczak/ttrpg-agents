@@ -19,7 +19,9 @@ export * from "./origin.js";
 export * from "./queries.js";
 export * from "./rename.js";
 export {
+  publishedTokenArtSchema,
   tokenArtSchema,
+  type PublishedTokenArt,
   type TokenArt,
   type TokenArtRepository,
 } from "./token-art.js";

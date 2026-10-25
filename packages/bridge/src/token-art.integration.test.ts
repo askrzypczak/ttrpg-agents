@@ -223,6 +223,31 @@ describe("token-art-set over the bridge", () => {
     });
   });
 
+  it("the snapshot sent on connect carries art that has an image hash and no url", async () => {
+    const png = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const sha256 = new SqliteTokenImageRepository(db).saveTokenImage({
+      mime: "image/png",
+      width: 1,
+      height: 1,
+      bytes: png,
+    });
+    artRepo.setTokenArt("shadow", { sha256 });
+    artRepo.setTokenArt("ghoul", shadowArt);
+    const server = await startServer();
+
+    const client = await authed(server);
+
+    expect(client.snapshots()[0]?.art).toEqual({
+      shadow: { sha256 },
+      ghoul: shadowArt,
+    });
+  });
+
   it("token-art-set stores the art", async () => {
     const server = await startServer();
     const client = await authed(server);

@@ -7,7 +7,7 @@ import OBR, {
   buildShape,
   type Item,
 } from "@owlbear-rodeo/sdk";
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type {
   ItemPatch,
   Metadata,
@@ -45,7 +45,7 @@ export interface ObrAdapter {
    * `defaultSearch` filled into its search box when given; resolves with its
    * reference, or `undefined` when they cancel.
    */
-  pickImage(defaultSearch?: string): Promise<TokenArt | undefined>;
+  pickImage(defaultSearch?: string): Promise<PublishedTokenArt | undefined>;
   /**
    * Fetches the bytes of an image by url; rejects on a network error or a
    * non-2xx answer.
