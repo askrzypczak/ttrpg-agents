@@ -18,7 +18,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "check": "npm run build && npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "check:static": "npm run build && npm run typecheck && npm run lint && npm run format:check",
+    "check": "npm run check:static && npm run test",
     "test:e2e": "npm run build && npm run build:e2e -w @ttrpg-agents/owlbear && playwright test -c packages/owlbear/e2e/playwright.config.ts",
     "coverage": "node scripts/coverage.ts",
     "test:unit": "vitest run --project unit",
@@ -32,7 +33,7 @@
     "@types/istanbul-lib-report": "^3.0.3",
     "@types/istanbul-reports": "^3.0.4",
     "@types/node": "^26.6.5",
-    "@vitest/coverage-v8": "^4.1.12",
+    "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "istanbul-lib-coverage": "^3.2.2",
@@ -42,7 +43,7 @@
     "prettier": "^3.9.10",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.0",
-    "vitest": "^4.1.12"
+    "vitest": "^5.0.5"
   },
   "allowScripts": {
     "esbuild": true,

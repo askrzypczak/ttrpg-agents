@@ -33,6 +33,14 @@ export function isCompleteRun(
   );
 }
 
+/**
+ * Process exit code for the coverage script: 1 when any test run failed
+ * (`failedRuns` lists the kinds whose run failed, e.g. ["unit"]), else 0.
+ */
+export function exitCode(failedRuns: readonly string[]): 0 | 1 {
+  return failedRuns.length > 0 ? 1 : 0;
+}
+
 export function summarize(data: CoverageMapData): Summary {
   const s = libCoverage.createCoverageMap(data).getCoverageSummary();
   const pick = (m: Metric): Metric => ({
