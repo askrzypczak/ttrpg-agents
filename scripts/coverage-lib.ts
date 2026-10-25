@@ -38,8 +38,7 @@ export function isCompleteRun(
  * (`failedRuns` lists the kinds whose run failed, e.g. ["unit"]), else 0.
  */
 export function exitCode(failedRuns: readonly string[]): 0 | 1 {
-  void failedRuns;
-  throw new Error("not implemented");
+  return failedRuns.length > 0 ? 1 : 0;
 }
 
 export function summarize(data: CoverageMapData): Summary {
