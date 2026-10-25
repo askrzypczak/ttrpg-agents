@@ -280,6 +280,59 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
     await expect(syncError(page)).toHaveText("");
   });
 
+  test("stored art without a url is uploaded when its type gets its first tokens, picked with its name as the search, and the art row takes the picked url with the same hash", async ({
+    page,
+  }) => {
+    const sha256 = seedE2eTokenArt(workerDir(), "shadow", null, SHADOW_PNG);
+    expect(storedShadowArt()).toEqual({ sha256 });
+    const name = `ttrpg-art-${sha256.slice(0, 16)}`;
+    // What the GM picks once the upload is in their library.
+    const uploadedDownload = {
+      ...shadowDownload,
+      name,
+      image: {
+        url: "https://cdn.owlbear.rodeo/e2e/uploaded.png",
+        mime: "image/png",
+        width: 1,
+        height: 1,
+      },
+    };
+    await openHarness(page, {
+      role: "gm",
+      pickedImages: [uploadedDownload],
+    });
+
+    await expect.poll(() => uploads(page)).toHaveLength(1);
+    expect((await uploads(page))[0]).toEqual({
+      name,
+      typeHint: "CHARACTER",
+      type: "image/png",
+      size: SHADOW_PNG.length,
+    });
+    // The picker waits for the GM's go-ahead in the panel, which names the asset.
+    const panel = page.frameLocator("#extension");
+    await expect(panel.locator("body")).toContainText(name);
+    expect(await pickerOpens(page)).toBe(0);
+
+    await panel.locator("#pick-art").click();
+
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({
+        type: "IMAGE",
+        image: uploadedDownload.image,
+      });
+    await expect
+      .poll(() => storedShadowArt()?.url)
+      .toBe(uploadedDownload.image.url);
+    expect(storedShadowArt()).toEqual({ ...uploadedDownload.image, sha256 });
+    const requests = await imageRequests(page);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ defaultSearch: name });
+    expect(await uploads(page)).toHaveLength(1);
+    await expect(syncError(page)).toHaveText("");
+  });
+
   test("stored art whose url is alive creates image tokens with no upload and no picker", async ({
     page,
   }) => {

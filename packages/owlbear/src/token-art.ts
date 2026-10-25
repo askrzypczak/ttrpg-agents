@@ -1,4 +1,4 @@
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import {
   TOKEN_IMAGE_UPLOAD_PATH,
   tokenImagePath,
@@ -14,7 +14,7 @@ import {
  */
 export function tokenArtMessage(
   monsterKey: string,
-  art: TokenArt,
+  art: PublishedTokenArt,
 ): BridgeMessage {
   return { v: 1, type: "token-art-set", payload: { monsterKey, art } };
 }

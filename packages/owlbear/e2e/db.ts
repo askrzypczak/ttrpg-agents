@@ -9,6 +9,7 @@ import {
 import {
   storeTokenImage,
   type ChangeOrigin,
+  type PublishedTokenArt,
   type TokenArt,
   type TokenImage,
 } from "@ttrpg-agents/engine";
@@ -95,13 +96,14 @@ export function readE2eTokenArt(dir: string): Record<string, TokenArt> {
 
 /**
  * Stores `bytes` as a token image in the e2e DB and sets the art of
- * `monsterKey` to `art` with their hash; returns the hash. Call it after the
- * auto `seed` fixture, which forgets all art.
+ * `monsterKey` to `art` with their hash, or to only their hash (no url) when
+ * `art` is `null`; returns the hash. Call it after the auto `seed` fixture,
+ * which forgets all art.
  */
 export function seedE2eTokenArt(
   dir: string,
   monsterKey: string,
-  art: TokenArt,
+  art: Omit<PublishedTokenArt, "sha256"> | null,
   bytes: Uint8Array,
 ): string {
   const db = openDatabase(e2eDbPath(dir));
@@ -109,10 +111,12 @@ export function seedE2eTokenArt(
     const stored = storeTokenImage(new SqliteTokenImageRepository(db), bytes);
     if (!stored.ok)
       throw new Error(`seeding token image failed: ${stored.message}`);
-    new SqliteTokenArtRepository(db).setTokenArt(monsterKey, {
-      ...art,
-      sha256: stored.sha256,
-    });
+    new SqliteTokenArtRepository(db).setTokenArt(
+      monsterKey,
+      art === null
+        ? { sha256: stored.sha256 }
+        : { ...art, sha256: stored.sha256 },
+    );
     return stored.sha256;
   } finally {
     db.close();

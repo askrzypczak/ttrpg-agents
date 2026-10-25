@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type {
   BridgeMessage,
   TokenImageUploadResponse,
@@ -25,7 +25,7 @@ const inst = (n: number, monsterKey = "shadow"): EncounterInstance => ({
   statsVisible: false,
 });
 
-const shadowArt: TokenArt = {
+const shadowArt: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/shadow.png",
   mime: "image/png",
   width: 300,
@@ -85,7 +85,7 @@ function setup(options: {
   const uploads: Uint8Array[] = [];
   const failures: string[] = [];
   const errors: unknown[] = [];
-  const reported: [string, TokenArt][] = [];
+  const reported: [string, PublishedTokenArt][] = [];
   const sync = createEncounterSync(
     fake.obr,
     (e) => errors.push(e),

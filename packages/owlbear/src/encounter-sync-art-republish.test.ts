@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type {
   BridgeMessage,
@@ -26,7 +26,7 @@ const STORED_SHA = "c3".repeat(32);
 const REPUBLISH_NAME = `ttrpg-art-${"c3".repeat(8)}`;
 
 /** Shadow art with stored bytes; whether its url is alive is up to each test. */
-const storedArt: TokenArt = {
+const storedArt: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/shadow-old.png",
   mime: "image/png",
   width: 300,
@@ -34,7 +34,7 @@ const storedArt: TokenArt = {
   sha256: STORED_SHA,
 };
 
-const goblinArt: TokenArt = {
+const goblinArt: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/goblin.png",
   mime: "image/png",
   width: 200,
@@ -43,7 +43,7 @@ const goblinArt: TokenArt = {
 };
 
 /** What the GM picks after the upload: the new asset. */
-const republished: TokenArt = {
+const republished: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/ttrpg-art-c3c3c3c3c3c3c3c3.png",
   mime: "image/png",
   width: 300,
@@ -51,7 +51,7 @@ const republished: TokenArt = {
 };
 
 /** An art pick for a type that had none. */
-const pickedArt: TokenArt = {
+const pickedArt: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/shadow-new.png",
   mime: "image/png",
   width: 256,
@@ -69,7 +69,7 @@ const stored: TokenImageUploadResponse = {
 };
 
 /** The image fields a token is drawn with. */
-const pictureOf = ({ url, mime, width, height }: TokenArt) => ({
+const pictureOf = ({ url, mime, width, height }: PublishedTokenArt) => ({
   url,
   mime,
   width,
@@ -119,7 +119,7 @@ function setup(
   const failures: string[] = [];
   const fetched: string[] = [];
   const storedBytes: Uint8Array[] = [];
-  const reported: [string, TokenArt][] = [];
+  const reported: [string, PublishedTokenArt][] = [];
   const errors: unknown[] = [];
   const answerAlive = options.imageAlive ?? true;
   const pick = options.pickImage;
@@ -202,7 +202,7 @@ function setup(
 function expectImages(
   tokenOf: (id: string) => unknown,
   ids: string[],
-  art: TokenArt,
+  art: PublishedTokenArt,
 ): void {
   for (const id of ids)
     expect(tokenOf(id), id).toMatchObject({
@@ -505,7 +505,7 @@ describe("createEncounterSync token art republish: dead urls", () => {
 
   it("a republished pick that fails validation creates the circle and is not asked again this session", async () => {
     const feed = createMessageFeed();
-    const unusable: TokenArt = {
+    const unusable: PublishedTokenArt = {
       url: "http://insecure.example/shadow.png",
       mime: "image/png",
       width: 0,
@@ -634,7 +634,7 @@ describe("createEncounterSync token art republish: snapshots after the pick", ()
     });
     // The socket is down until the hello-ack, so the re-picked art waits.
     let connected = false;
-    const reported: [string, TokenArt][] = [];
+    const reported: [string, PublishedTokenArt][] = [];
     const errors: unknown[] = [];
     const sync = createEncounterSync(
       fake.obr,

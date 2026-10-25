@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { TokenImageUploadResponse } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
@@ -11,14 +11,14 @@ import { instanceIdOf, type EncounterInstance } from "./sync-plan.js";
 const inst = (n: number): EncounterInstance =>
   makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
 
-const shadowArt: TokenArt = {
+const shadowArt: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/shadow.png",
   mime: "image/png",
   width: 300,
   height: 280,
 };
 
-const otherArt: TokenArt = {
+const otherArt: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/shadow-2.png",
   mime: "image/png",
   width: 200,
@@ -60,7 +60,7 @@ function setup(options: {
     fetchImage: BYTES,
   });
   const uploads: Uint8Array[] = [];
-  const reported: [string, TokenArt][] = [];
+  const reported: [string, PublishedTokenArt][] = [];
   const errors: unknown[] = [];
   const sync = createEncounterSync(
     fake.obr,

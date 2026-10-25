@@ -1,6 +1,7 @@
 import {
   encounterEventSchema,
   monsterInstanceSchema,
+  publishedTokenArtSchema,
   tokenArtSchema,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
@@ -61,7 +62,7 @@ const encounterEventPayload = encounterEventSchema.and(
 // Extension -> bridge: the GM picked this art for a monster type.
 const tokenArtSetPayload = z.object({
   monsterKey: z.string().min(1).max(200),
-  art: tokenArtSchema,
+  art: publishedTokenArtSchema,
 });
 
 /**

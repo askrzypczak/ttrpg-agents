@@ -1,4 +1,4 @@
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type { ImageUpload, ObrAdapter } from "./obr-adapter.js";
 import { MissingSceneError, SceneModel, type Vec2 } from "./scene-model.js";
 
@@ -8,11 +8,12 @@ import { MissingSceneError, SceneModel, type Vec2 } from "./scene-model.js";
  * may throw or reject).
  */
 export type FakePick =
-  | TokenArt
+  | PublishedTokenArt
   | undefined
   | ((
       defaultSearch?: string,
-    ) => TokenArt | undefined | Promise<TokenArt | undefined>);
+    ) =>
+      PublishedTokenArt | undefined | Promise<PublishedTokenArt | undefined>);
 
 /** What the fake's image fetch answers: fixed bytes, or a function deciding per url (it may throw or reject). */
 export type FakeFetch =
