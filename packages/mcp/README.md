@@ -34,11 +34,12 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `set_initiative`  | Set an exact initiative by instance id or exact name; reports before and after |
 | `clear_encounter` | Remove every monster                                                           |
 | `table_status`    | Ask the Owlbear tab for its scene status; reports in sync or not               |
+| `use_map`         | Use the map aligned on the Owlbear scene; reports its grid size                |
 
-`table_status` needs the bridge running (`npm run bridge`) and a GM tab open: it
-asks the table through the engine's `TablePort` (wired to the bridge client in
-`src/stdio.ts`), and a stopped bridge, no
-tab or a slow tab come back as `isError` results.
+`table_status` and `use_map` need the bridge running (`npm run bridge`) and a GM
+tab open: they ask the table through the engine's `TablePort` (wired to the bridge
+client in `src/stdio.ts`), and a stopped bridge, no tab or a slow tab come back as
+`isError` results.
 
 Domain errors (unknown monster, ambiguous target, bad amount) come back as
 `isError` results rather than protocol errors.
