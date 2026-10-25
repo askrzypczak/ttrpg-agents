@@ -1,7 +1,9 @@
 import type { TokenArt } from "@ttrpg-agents/engine";
-import type {
-  BridgeMessage,
-  TokenImageUploadResponse,
+import {
+  TOKEN_IMAGE_UPLOAD_PATH,
+  tokenImageUploadResponseSchema,
+  type BridgeMessage,
+  type TokenImageUploadResponse,
 } from "@ttrpg-agents/protocol";
 
 /**
@@ -20,11 +22,20 @@ export function tokenArtMessage(
  * token as a bearer. Resolves with the bridge's answer, a stored image or a
  * refusal; rejects when the answer is not an upload response.
  */
-export function uploadTokenImage(
+export async function uploadTokenImage(
   bytes: Uint8Array,
   token: string,
 ): Promise<TokenImageUploadResponse> {
-  void bytes;
-  void token;
-  return Promise.reject(new Error("not implemented"));
+  // Relative: the panel is served by the bridge, so this stays same-origin.
+  const response = await fetch(TOKEN_IMAGE_UPLOAD_PATH, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/octet-stream",
+    },
+    // A copy over a plain ArrayBuffer, the only kind fetch takes as a body.
+    body: new Uint8Array(bytes),
+  });
+  // A refusal is a typed answer too, whatever its status.
+  return tokenImageUploadResponseSchema.parse(await response.json());
 }

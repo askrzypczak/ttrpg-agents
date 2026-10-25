@@ -84,6 +84,7 @@ export function panelView(input: PanelInput): PanelView {
     input.syncError ? `Encounter sync failed: ${input.syncError}` : undefined,
     input.removeError,
     input.editError,
+    input.artError,
   ].filter((e): e is string => !!e);
   const waiting = input.waitingCommands ?? 0;
   const notes = [

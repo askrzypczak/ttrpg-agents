@@ -167,9 +167,13 @@ export function createObrAdapter(): ObrAdapter {
         height: image.height,
       };
     },
-    fetchImage: (url) => {
-      void url;
-      return Promise.reject(new Error("not implemented"));
+    fetchImage: async (url) => {
+      const response = await fetch(url);
+      if (!response.ok)
+        throw new Error(
+          `fetching the image failed with HTTP ${String(response.status)}`,
+        );
+      return new Uint8Array(await response.arrayBuffer());
     },
   };
 }
