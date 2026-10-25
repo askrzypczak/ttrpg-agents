@@ -21,6 +21,8 @@ export interface PanelInput {
   editError?: string;
   /** The latest failure to store the image of picked token art, until the panel reloads. */
   artError?: string;
+  /** What the GM must do while a token art republish waits on them, if any. */
+  artPrompt?: string;
   /** A note on the latest write-back answer that differs from the table, if any. */
   editNote?: string;
   /** How many table edits, token deletions and token art picks wait for the bridge (see outbox.ts). */
@@ -53,6 +55,8 @@ export interface PanelView {
   note?: string;
   /** The override records to list; present only when there are any. */
   overrides?: string[];
+  /** What the GM must do while a token art republish waits on them. */
+  prompt?: string;
 }
 
 /**
@@ -100,6 +104,7 @@ export function panelView(input: PanelInput): PanelView {
     ...(input.overrides && input.overrides.length > 0
       ? { overrides: [...input.overrides] }
       : {}),
+    ...(input.artPrompt ? { prompt: input.artPrompt } : {}),
   };
 }
 

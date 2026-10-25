@@ -1,7 +1,12 @@
 // The ONLY module allowed to import @owlbear-rodeo/sdk (enforced by ESLint).
 // Everything else depends on the narrow ObrAdapter interface so it can be
 // unit-tested against the fake in fake-adapter.ts.
-import OBR, { buildImage, buildShape, type Item } from "@owlbear-rodeo/sdk";
+import OBR, {
+  buildImage,
+  buildImageUpload,
+  buildShape,
+  type Item,
+} from "@owlbear-rodeo/sdk";
 import type { TokenArt } from "@ttrpg-agents/engine";
 import type {
   ItemPatch,
@@ -36,16 +41,33 @@ export interface ObrAdapter {
   /** Scene coordinates of the middle of the GM's current view. */
   getViewportCenter(): Promise<Vec2>;
   /**
-   * Asks the GM to pick one image from their Owlbear asset library; resolves
-   * with its reference, or `undefined` when they cancel.
+   * Asks the GM to pick one image from their Owlbear asset library, with
+   * `defaultSearch` filled into its search box when given; resolves with its
+   * reference, or `undefined` when they cancel.
    */
-  pickImage(): Promise<TokenArt | undefined>;
+  pickImage(defaultSearch?: string): Promise<TokenArt | undefined>;
   /**
    * Fetches the bytes of an image by url; rejects on a network error or a
    * non-2xx answer.
    */
   fetchImage(url: string): Promise<Uint8Array>;
+  /**
+   * Whether an image url still answers: true on 2xx, false on 4xx; rejects
+   * on a network error or any other status (cannot tell).
+   */
+  isImageAlive(url: string): Promise<boolean>;
+  /**
+   * Uploads image bytes to the GM's Owlbear asset library under `name`.
+   * Resolves once the upload is handed over, before the GM confirms the
+   * folder dialog.
+   */
+  uploadImage(image: ImageUpload): Promise<void>;
+  /** Opens the extension's panel (its action popover). */
+  openPanel(): Promise<void>;
 }
+
+/** Image bytes to upload to the Owlbear asset library, with the asset name. */
+export type ImageUpload = { bytes: Uint8Array; mime: string; name: string };
 
 /**
  * The read-only view of the adapter that query handling gets. A query never
@@ -156,8 +178,10 @@ export function createObrAdapter(): ObrAdapter {
         y: height / 2,
       });
     },
-    pickImage: async () => {
-      const [picked] = await OBR.assets.downloadImages(false);
+    pickImage: async (defaultSearch) => {
+      const [picked] = await (defaultSearch === undefined
+        ? OBR.assets.downloadImages(false)
+        : OBR.assets.downloadImages(false, defaultSearch, "CHARACTER"));
       if (!picked) return undefined;
       const { image } = picked;
       return {
@@ -175,5 +199,24 @@ export function createObrAdapter(): ObrAdapter {
         );
       return new Uint8Array(await response.arrayBuffer());
     },
+    isImageAlive: async (url) => {
+      const response = await fetch(url, { cache: "no-cache" });
+      // Only the status matters: do not download the whole image.
+      void response.body?.cancel();
+      const { status } = response;
+      if (status >= 200 && status <= 299) return true;
+      if (status >= 400 && status <= 499) return false;
+      throw new Error(`checking the image url answered HTTP ${String(status)}`);
+    },
+    uploadImage: ({ bytes, mime, name }) =>
+      OBR.assets.uploadImages(
+        [
+          buildImageUpload(new Blob([new Uint8Array(bytes)], { type: mime }))
+            .name(name)
+            .build(),
+        ],
+        "CHARACTER",
+      ),
+    openPanel: () => OBR.action.open(),
   };
 }
