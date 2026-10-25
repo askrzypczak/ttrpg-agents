@@ -7,6 +7,7 @@
     "!packages/*/src/**/*.test.ts",
     "!packages/*/src/**/index.ts",
     "!packages/engine/src/testing/**",
+    "!packages/owlbear/src/testing/**",
     "!packages/owlbear/src/obr-adapter.ts",
     "!packages/owlbear/src/main.ts",
     "!packages/bridge/src/cli.ts",
