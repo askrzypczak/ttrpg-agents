@@ -106,16 +106,17 @@ export function seedE2eTokenArt(
   art: Omit<PublishedTokenArt, "sha256"> | null,
   bytes: Uint8Array,
 ): string {
-  if (art === null) throw new Error("not implemented");
   const db = openDatabase(e2eDbPath(dir));
   try {
     const stored = storeTokenImage(new SqliteTokenImageRepository(db), bytes);
     if (!stored.ok)
       throw new Error(`seeding token image failed: ${stored.message}`);
-    new SqliteTokenArtRepository(db).setTokenArt(monsterKey, {
-      ...art,
-      sha256: stored.sha256,
-    });
+    new SqliteTokenArtRepository(db).setTokenArt(
+      monsterKey,
+      art === null
+        ? { sha256: stored.sha256 }
+        : { ...art, sha256: stored.sha256 },
+    );
     return stored.sha256;
   } finally {
     db.close();

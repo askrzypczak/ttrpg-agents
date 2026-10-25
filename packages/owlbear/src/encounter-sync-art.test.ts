@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr, type FakePick } from "./fake-adapter.js";
@@ -32,10 +32,10 @@ const inst = (n: number, monsterKey = "shadow"): EncounterInstance => ({
 const snapshot = (
   feed: MessageFeed,
   instances: EncounterInstance[],
-  art?: Record<string, TokenArt>,
+  art?: Record<string, PublishedTokenArt>,
 ) => feed.snapshot(instances, { art });
 
-const artFor = (name: string): TokenArt => ({
+const artFor = (name: string): PublishedTokenArt => ({
   url: `https://cdn.owlbear.rodeo/assets/${name}.png`,
   mime: "image/png",
   width: 300,
@@ -77,7 +77,7 @@ const helloAck: BridgeMessage = {
 function setup(pickImage?: FakePick) {
   const fake = createFakeObr(undefined, undefined, { pickImage });
   const errors: unknown[] = [];
-  const reported: [string, TokenArt][] = [];
+  const reported: [string, PublishedTokenArt][] = [];
   const waiting: number[] = [];
   const socket = { open: true };
   const sync = createEncounterSync(
