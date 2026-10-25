@@ -204,7 +204,11 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * picker never opens afresh for its type. With `options.loadImage` it is
  * published like art whose url is dead, with no check, when its type first
  * gets tokens; the same once-per-session rule applies. Until then, or without
- * `options.loadImage`, the type's tokens are circles.
+ * `options.loadImage`, the type's tokens are circles. After an art step (the
+ * picker, or a stored art check, republish or first publish) the scene items
+ * and the placed record are read again before the writes are planned, so a
+ * table change made meanwhile is kept; a reconcile with no art step reads them
+ * once.
  *
  * A `table` event with the id of a sent edit acknowledges it: the token keeps
  * the typed value (a clamp shows a note through `onEditDiffers`), and a field the edit
@@ -277,6 +281,9 @@ export function createEncounterSync(
   // Monster types whose stored art was checked for liveness (or, without a
   // url, published) this session, or whose art the GM picked this session.
   const checked = new Set<string>();
+  // Whether the current reconcile ran an art step (a fresh pick or a stored
+  // art check), after which it reads the scene again before planning writes.
+  let artStepRan = false;
   // Monster key -> art the GM re-picked after a republish this session. It
   // wins over a snapshot's art for the type: a snapshot built before its
   // token-art-set reached the store still carries the dead art, or the art
@@ -661,6 +668,7 @@ export function createEncounterSync(
       )
         continue;
       checked.add(monsterKey);
+      artStepRan = true;
       if (current.url === undefined) {
         await republish(monsterKey, sha256, loadImage);
         continue;
@@ -675,11 +683,11 @@ export function createEncounterSync(
     }
   }
 
-  async function apply(
-    wanted: EncounterInstance[],
-    taken: Facts,
-    snapshot: boolean,
-  ): Promise<SyncPlan> {
+  /** The scene's items and the ids in its placed record, read together. */
+  async function readScene(): Promise<{
+    items: SceneItem[];
+    placed: Set<string>;
+  }> {
     const items = await obr.getItems();
     const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
     const placed = new Set(
@@ -687,13 +695,23 @@ export function createEncounterSync(
         ? stored.filter((id): id is string => typeof id === "string")
         : [],
     );
+    return { items, placed };
+  }
+
+  async function apply(
+    wanted: EncounterInstance[],
+    taken: Facts,
+    snapshot: boolean,
+  ): Promise<SyncPlan> {
+    artStepRan = false;
+    let { items, placed } = await readScene();
     const context = {
       viewportCenter: await obr.getViewportCenter(),
-      placed,
       snapshot,
     };
     const first = planSync(wanted, items, defaultSyncConfig, {
       ...context,
+      placed,
       art: usableArt(),
       fields: fieldContexts(taken),
     });
@@ -704,6 +722,7 @@ export function createEncounterSync(
       // with one is usable unless declined). It is published below from its
       // stored bytes; a fresh pick would drop the link to them.
       if (declined.has(monsterKey) || art[monsterKey] !== undefined) continue;
+      artStepRan = true;
       const chosen = await pickArt();
       if (chosen === undefined) {
         declined.add(monsterKey);
@@ -727,8 +746,16 @@ export function createEncounterSync(
       }
       await checkStoredArt(gettingTokens, options.loadImage);
     }
+    if (artStepRan) {
+      // An art step waits on the GM, so the table and the scene may have
+      // changed meanwhile: plan from what is there now.
+      const fresh = await readScene();
+      items = fresh.items;
+      placed = fresh.placed;
+    }
     const plan = planSync(wanted, items, defaultSyncConfig, {
       ...context,
+      placed,
       art: usableArt(),
       fields: fieldContexts(taken),
     });
