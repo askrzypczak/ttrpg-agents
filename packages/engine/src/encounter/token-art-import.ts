@@ -1,7 +1,8 @@
 import type { TokenArtRepository } from "./token-art.js";
-import type {
-  TokenImageErrorCode,
-  TokenImageRepository,
+import {
+  storeTokenImage,
+  type TokenImageErrorCode,
+  type TokenImageRepository,
 } from "./token-image.js";
 
 export type TokenArtImportResult =
@@ -23,10 +24,18 @@ export function importTokenArt(
   readBytes: () => Uint8Array,
   options: { replace: boolean },
 ): TokenArtImportResult {
-  void art;
-  void images;
-  void monsterKey;
-  void readBytes;
-  void options;
-  throw new Error("not implemented");
+  const all = art.listTokenArt();
+  const existing = Object.hasOwn(all, monsterKey) ? all[monsterKey] : undefined;
+  if (existing !== undefined && !options.replace)
+    return { outcome: "skipped", reason: "has_art" };
+
+  const result = storeTokenImage(images, readBytes());
+  if (!result.ok)
+    return { outcome: "rejected", code: result.code, message: result.message };
+
+  if (existing?.sha256 === result.sha256)
+    return { outcome: "skipped", reason: "same_image" };
+
+  art.setTokenArt(monsterKey, { sha256: result.sha256 });
+  return { outcome: "stored", sha256: result.sha256 };
 }

@@ -167,4 +167,20 @@ describe("importTokenArt", () => {
     expect(writes).toEqual([]);
     expect(stored).toEqual({ "srd-2024_wolf": publishedArt(OLD_HASH) });
   });
+
+  it("treats a key named after an Object property, such as constructor, as having no art", () => {
+    const { art, stored, writes } = fakeArt();
+    const { images } = fakeImages(NEW_HASH);
+    const { read } = reader(PNG_1X1);
+
+    const result = importTokenArt(art, images, "constructor", read, {
+      replace: false,
+    });
+
+    expect(result).toEqual({ outcome: "stored", sha256: NEW_HASH });
+    expect(writes).toEqual([
+      { monsterKey: "constructor", art: { sha256: NEW_HASH } },
+    ]);
+    expect(stored).toEqual({ constructor: { sha256: NEW_HASH } });
+  });
 });
