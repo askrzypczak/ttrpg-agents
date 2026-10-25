@@ -11,12 +11,23 @@ export type PublishedTokenArt = {
 };
 
 /**
- * The image a monster type's tokens are drawn with.
- *
- * Not implemented yet: still only the published shape; the hash-only member
- * (`{ sha256 }` with no url, mime, width or height) is still to come.
+ * The image a monster type's tokens are drawn with: a published reference
+ * (`PublishedTokenArt`), or only the hash of stored bytes that were never
+ * published, with no url, mime, width or height. The reference is all or
+ * nothing: mime, width and height describe the published asset.
  */
-export type TokenArt = PublishedTokenArt;
+export type TokenArt =
+  | PublishedTokenArt
+  | {
+      /** SHA-256 of the stored image, which has no published reference yet. */
+      sha256: string;
+      url?: undefined;
+      mime?: undefined;
+      width?: undefined;
+      height?: undefined;
+    };
+
+const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** Source of truth for `PublishedTokenArt`; `token-art-set` carries it. */
 export const publishedTokenArtSchema = z.object({
@@ -30,16 +41,23 @@ export const publishedTokenArtSchema = z.object({
     .regex(/^image\//),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
-  sha256: z
-    .string()
-    .regex(/^[0-9a-f]{64}$/)
-    .optional(),
+  sha256: sha256Schema.optional(),
 }) satisfies z.ZodType<PublishedTokenArt>;
 
-/** Source of truth for `TokenArt`; the protocol reuses it as the wire shape. */
-// Not implemented yet: accepts only the published shape.
-export const tokenArtSchema =
-  publishedTokenArtSchema satisfies z.ZodType<TokenArt>;
+/**
+ * Source of truth for `TokenArt`; the protocol reuses it as the wire shape.
+ * Art with only part of the reference, or neither a url nor a hash, fails.
+ */
+export const tokenArtSchema = z.union([
+  publishedTokenArtSchema,
+  z.object({
+    sha256: sha256Schema,
+    url: z.undefined().optional(),
+    mime: z.undefined().optional(),
+    width: z.undefined().optional(),
+    height: z.undefined().optional(),
+  }),
+]) satisfies z.ZodType<TokenArt>;
 
 /** Monster key -> the art its tokens are created with. */
 export interface TokenArtRepository {
