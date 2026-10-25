@@ -121,6 +121,23 @@ export const migrations: Migration[] = [
       CREATE UNIQUE INDEX map_registrations_one_active ON map_registrations (active) WHERE active = 1;
     `,
   },
+  {
+    // A map item's named rooms: each room's name, status and image-px
+    // polygons (JSON), kept in the order saved. A map item's rows are replaced
+    // as a whole; they survive a re-registration because that updates the
+    // registration row in place.
+    version: 10,
+    sql: `
+      CREATE TABLE map_rooms (
+        map_item_id TEXT NOT NULL REFERENCES map_registrations (item_id) ON DELETE CASCADE,
+        name TEXT NOT NULL CHECK (length(name) > 0),
+        status TEXT NOT NULL CHECK (status IN ('confirmed', 'proposed')),
+        polygons TEXT NOT NULL CHECK (json_valid(polygons)),
+        position INTEGER NOT NULL,
+        PRIMARY KEY (map_item_id, name)
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));
