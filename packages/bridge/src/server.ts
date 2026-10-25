@@ -22,17 +22,20 @@ import type { AddressInfo } from "node:net";
 import { WebSocketServer, type WebSocket } from "ws";
 import {
   PROTOCOL_VERSION,
+  TOKEN_IMAGE_UPLOAD_PATH,
   decodeMessage,
   encodeMessage,
   querySchema,
   type AgentQueryResponse,
   type BridgeMessage,
   type Query,
+  type TokenImageUploadResponse,
 } from "@ttrpg-agents/protocol";
-import type {
-  InstanceEdit,
-  TokenArt,
-  TokenImageStoreResult,
+import {
+  TOKEN_IMAGE_MAX_BYTES,
+  type InstanceEdit,
+  type TokenArt,
+  type TokenImageStoreResult,
 } from "@ttrpg-agents/engine";
 
 export const DEFAULT_BRIDGE_PORT = 5199;
@@ -372,6 +375,7 @@ export async function startBridgeServer(
     removeInstance,
     setTokenArt,
     editInstance,
+    storeTokenImage,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
@@ -441,6 +445,17 @@ export async function startBridgeServer(
     if (req.method === "POST" && req.url === "/agent/query") {
       // A body aborted mid-request rejects the read; the caller is gone.
       handleAgentQuery(req, res, agentToken, sendQuery).catch(() => {
+        res.destroy();
+      });
+      return;
+    }
+    if (
+      storeTokenImage &&
+      req.method === "POST" &&
+      req.url === TOKEN_IMAGE_UPLOAD_PATH
+    ) {
+      // A body aborted mid-request rejects the read; the uploader is gone.
+      handleTokenImageUpload(req, res, token, storeTokenImage).catch(() => {
         res.destroy();
       });
       return;
@@ -571,7 +586,7 @@ const STATUS_FOR_CODE: Record<string, number> = {
 function respondJson(
   res: ServerResponse,
   status: number,
-  body: AgentQueryResponse,
+  body: AgentQueryResponse | TokenImageUploadResponse,
 ): void {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
@@ -588,19 +603,26 @@ function respondError(
   });
 }
 
-/** Reads the body up to the cap; `null` when it is larger. */
-async function readBody(req: IncomingMessage): Promise<string | null> {
+/** Reads the body up to `maxBytes`; `null` when it is larger. */
+async function readBody(
+  req: IncomingMessage,
+  maxBytes: number,
+): Promise<Buffer | null> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     const buf = chunk as Buffer;
     size += buf.length;
-    // Keep draining (without storing) so the 400 can still be sent.
-    if (size <= MAX_QUERY_BODY_BYTES) chunks.push(buf);
+    // Keep draining (without storing) so the refusal can still be sent.
+    if (size <= maxBytes) chunks.push(buf);
   }
-  return size > MAX_QUERY_BODY_BYTES
-    ? null
-    : Buffer.concat(chunks).toString("utf8");
+  return size > maxBytes ? null : Buffer.concat(chunks);
+}
+
+/** The bearer token of the request, or "" when it has none. */
+function bearerOf(req: IncomingMessage): string {
+  const auth = req.headers.authorization ?? "";
+  return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
 }
 
 // No CORS headers: only a non-browser caller holding the agent token uses this.
@@ -610,20 +632,18 @@ async function handleAgentQuery(
   agentToken: string,
   sendQuery: (query: Query) => Promise<AgentQueryResponse>,
 ): Promise<void> {
-  const auth = req.headers.authorization ?? "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
-  if (!tokenMatches(agentToken, bearer)) {
+  if (!tokenMatches(agentToken, bearerOf(req))) {
     respondError(res, "unauthorized", "missing or invalid agent token");
     return;
   }
-  const body = await readBody(req);
+  const body = await readBody(req, MAX_QUERY_BODY_BYTES);
   if (body === null) {
     respondError(res, "bad-request", "body too large");
     return;
   }
   let json: unknown;
   try {
-    json = JSON.parse(body);
+    json = JSON.parse(body.toString("utf8"));
   } catch {
     respondError(res, "bad-request", "body is not valid JSON");
     return;
@@ -639,6 +659,63 @@ async function handleAgentQuery(
     response.ok ? 200 : (STATUS_FOR_CODE[response.error.code] ?? 502),
     response,
   );
+}
+
+function refuseUpload(
+  res: ServerResponse,
+  status: number,
+  code: Extract<TokenImageUploadResponse, { ok: false }>["error"]["code"],
+  message: string,
+): void {
+  respondJson(res, status, { ok: false, error: { code, message } });
+}
+
+/**
+ * `POST /token-images`: stores the raw body as a token image. Only the
+ * extension token is accepted, checked before the body is read. The body is
+ * the image itself: its claimed Content-Type is ignored, nothing in it is
+ * read as a URL, and no request goes out. No CORS headers: the extension page
+ * is served by the bridge, so its upload is same-origin.
+ */
+async function handleTokenImageUpload(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  storeTokenImage: (bytes: Uint8Array) => TokenImageStoreResult,
+): Promise<void> {
+  if (!tokenMatches(token, bearerOf(req))) {
+    refuseUpload(
+      res,
+      401,
+      "unauthorized",
+      "missing or invalid extension token",
+    );
+    return;
+  }
+  const body = await readBody(req, TOKEN_IMAGE_MAX_BYTES);
+  if (body === null) {
+    refuseUpload(res, 413, "too_large", "Image is larger than 1 MiB.");
+    return;
+  }
+  let result: TokenImageStoreResult;
+  try {
+    // A copy that owns its memory: a Buffer may be a view into Node's pool.
+    result = storeTokenImage(new Uint8Array(body));
+  } catch (e) {
+    refuseUpload(
+      res,
+      500,
+      "store_failed",
+      e instanceof Error ? e.message : String(e),
+    );
+    return;
+  }
+  if (!result.ok) {
+    refuseUpload(res, 422, result.code, result.message);
+    return;
+  }
+  const { sha256, image } = result;
+  respondJson(res, 200, { ok: true, image: { sha256, ...image } });
 }
 
 function withTokenPopover(manifestJson: string, token: string): string {
