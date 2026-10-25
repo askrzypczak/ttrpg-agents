@@ -19,6 +19,8 @@ export interface PanelInput {
   removeError?: string;
   /** The latest refused or unreadable table edit, if any (see instance-edit.ts). */
   editError?: string;
+  /** The latest failure to store the image of picked token art, until the panel reloads. */
+  artError?: string;
   /** A note on the latest write-back answer that differs from the table, if any. */
   editNote?: string;
   /** How many table edits, token deletions and token art picks wait for the bridge (see outbox.ts). */

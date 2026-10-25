@@ -40,6 +40,11 @@ export interface ObrAdapter {
    * with its reference, or `undefined` when they cancel.
    */
   pickImage(): Promise<TokenArt | undefined>;
+  /**
+   * Fetches the bytes of an image by url; rejects on a network error or a
+   * non-2xx answer.
+   */
+  fetchImage(url: string): Promise<Uint8Array>;
 }
 
 /**
@@ -161,6 +166,10 @@ export function createObrAdapter(): ObrAdapter {
         width: image.width,
         height: image.height,
       };
+    },
+    fetchImage: (url) => {
+      void url;
+      return Promise.reject(new Error("not implemented"));
     },
   };
 }

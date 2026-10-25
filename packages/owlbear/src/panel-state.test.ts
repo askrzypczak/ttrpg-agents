@@ -167,6 +167,36 @@ describe("panelView remove error", () => {
   });
 });
 
+describe("panelView art error", () => {
+  it("an art upload failure shows in the error line", () => {
+    const artError =
+      "Could not store the image of the token art for shadow; it is kept as a link: fetch failed";
+    const base: PanelInput = {
+      role: "gm",
+      socketState: "open",
+      disconnectedMs: 0,
+      artError,
+    };
+    const alone = panelView(base);
+    expect(alone.kind).toBe("connected");
+    expect(alone.error).toContain(artError);
+
+    const withOthers = panelView({
+      ...base,
+      syncError: "boom",
+      removeError: "Could not remove i7 from the encounter: gone",
+    });
+    expect(withOthers.error).toContain(artError);
+    expect(withOthers.error).toContain("Encounter sync failed: boom");
+    expect(withOthers.error).toContain(
+      "Could not remove i7 from the encounter: gone",
+    );
+
+    const player = panelView({ ...base, role: "player" });
+    expect(player.error).toBeUndefined();
+  });
+});
+
 describe("describeError", () => {
   it("handles Errors, SDK-style objects, strings and anything else", () => {
     expect(describeError(new Error("bad"))).toBe("bad");

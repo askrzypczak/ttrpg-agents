@@ -3,7 +3,10 @@ import {
   type InstanceEdit,
   type TokenArt,
 } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import type {
+  BridgeMessage,
+  TokenImageUploadResponse,
+} from "@ttrpg-agents/protocol";
 import { instanceEditMessage, splitEdit } from "./instance-edit.js";
 import { tokenDeletedMessage } from "./token-deleted.js";
 import { tokenArtMessage } from "./token-art.js";
@@ -189,6 +192,10 @@ export function createEncounterSync(
     onStoreChange?: () => void;
     /** Called once when an event arrives with a gap in `seq`: the caller should reconnect for a snapshot. */
     onGap?: () => void;
+    /** Stores the bytes of a picked image on the bridge; answers its hash or a refusal. */
+    storeImage?: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>;
+    /** Called once per pick whose image bytes could not be fetched or stored, with the text to show. */
+    onArtStoreFailed?: (text: string) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;

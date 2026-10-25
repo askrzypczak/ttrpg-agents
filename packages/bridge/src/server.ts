@@ -29,7 +29,11 @@ import {
   type BridgeMessage,
   type Query,
 } from "@ttrpg-agents/protocol";
-import type { InstanceEdit, TokenArt } from "@ttrpg-agents/engine";
+import type {
+  InstanceEdit,
+  TokenArt,
+  TokenImageStoreResult,
+} from "@ttrpg-agents/engine";
 
 export const DEFAULT_BRIDGE_PORT = 5199;
 export const SERVER_VERSION = "0.0.0";
@@ -72,6 +76,8 @@ export interface BridgeServerOptions {
   setTokenArt?: (monsterKey: string, art: TokenArt) => void;
   /** Applies HP, max HP or armor class edited on the table to the store. */
   editInstance?: (edit: InstanceEdit, commandId: string) => WriteBackResult;
+  /** Validates and stores the bytes posted to `POST /token-images`. */
+  storeTokenImage?: (bytes: Uint8Array) => TokenImageStoreResult;
 }
 
 /** Outcome of a write the table asked for; a refusal changes nothing. */
