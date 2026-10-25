@@ -4,6 +4,9 @@ import type { Projector } from "./sync-plan.js";
 export const INITIATIVE_METADATA_KEY =
   "rodeo.owlbear.initiative-tracker/metadata";
 
+/** A count the store can hold: optional sign, then digits. */
+const WHOLE_NUMBER = /^[+-]?\d+$/;
+
 /** Whether the tracker's current value on the token marks it as the active turn. */
 function isActive(current: unknown): boolean {
   return (
@@ -17,7 +20,9 @@ function isActive(current: unknown): boolean {
 /**
  * Registers a token in the Initiative Tracker with its stored initiative. The
  * tracker's `active` flag belongs to the table: it is carried over from the
- * token's current value, and a token without one starts inactive.
+ * token's current value, and a token without one starts inactive. A count
+ * typed in the tracker is read back as the initiative; a token removed from
+ * the tracker clears it.
  */
 export const initiativeProjector: Projector = {
   key: INITIATIVE_METADATA_KEY,
@@ -26,11 +31,25 @@ export const initiativeProjector: Projector = {
     instance.initiative === null
       ? undefined
       : { count: String(instance.initiative), active: isActive(current) },
-  // Stub: `editFields` (`{ initiative: "count" }`) is added with the implementation.
-  encodeField: () => {
-    throw new Error("not implemented");
-  },
-  readBack: () => {
-    throw new Error("not implemented");
+  editFields: { initiative: "count" },
+  // The tracker keeps the count as free text.
+  encodeField: (_field, value) => String(value),
+  readBack: (value, instance) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+      // The key is gone: the token left the tracker.
+      return {
+        edit: instance.initiative === null ? {} : { initiative: null },
+        invalid: [],
+      };
+    const count = (value as { count?: unknown }).count;
+    const typed = typeof count === "string" ? count.trim() : "";
+    const initiative = WHOLE_NUMBER.test(typed) ? Number(typed) : undefined;
+    // Stryker disable next-line ConditionalExpression: equivalent, Number.isSafeInteger is already false for undefined
+    if (initiative === undefined || !Number.isSafeInteger(initiative))
+      return { edit: {}, invalid: ["count"] };
+    return {
+      edit: initiative === instance.initiative ? {} : { initiative },
+      invalid: [],
+    };
   },
 };

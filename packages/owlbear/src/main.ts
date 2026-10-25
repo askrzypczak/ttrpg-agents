@@ -106,6 +106,11 @@ obr.onReady(async () => {
         editError = text;
         render();
       },
+      onEditRejectedCleared: (text) => {
+        if (editError !== text) return;
+        editError = undefined;
+        render();
+      },
       onEditDiffers: (text) => {
         editNote = text;
         render();

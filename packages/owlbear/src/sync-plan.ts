@@ -257,21 +257,31 @@ function planEditFields(
     EditField,
     string,
   ][];
+  // How a number appears in the value, so the store, the table and the sent
+  // edits are compared in one space. `null` (a clear) stays `null`.
+  const encode = (field: EditField, n: number | null): unknown =>
+    n === null || projector.encodeField === undefined
+      ? n
+      : projector.encodeField(field, n);
   for (const [field, name] of names) {
     const stored = instance[field];
     // No stored value (an instance without armor class): carried over.
     if (typeof stored !== "number") continue;
-    const inflight = fields.inflight?.[field];
-    const settled = fields.settled?.[field];
+    const storedValue = encode(field, stored);
+    // A null (a clear) sent or settled is distinct from none.
+    const hasInflight = Object.hasOwn(fields.inflight ?? {}, field);
+    const hasSettled = Object.hasOwn(fields.settled ?? {}, field);
+    const inflight = encode(field, fields.inflight?.[field] ?? null);
+    const settled = encode(field, fields.settled?.[field] ?? null);
     const moved = fields.moved?.has(field) === true;
     const storeWins =
-      inflight === undefined &&
-      (moved || (snapshot && settled === undefined && stored !== agreed[name]));
+      !hasInflight &&
+      (moved || (snapshot && !hasSettled && storedValue !== agreed[name]));
     if (storeWins) {
-      value[name] = stored;
-      nextBaseline[name] = stored;
+      value[name] = storedValue;
+      nextBaseline[name] = storedValue;
       replaced.push(name);
-      if (table[name] !== stored) {
+      if (table[name] !== storedValue) {
         storeMoved = true;
         // Only a snapshot cannot tell an MCP change from an overridden clamp.
         if (!moved)
@@ -284,13 +294,20 @@ function planEditFields(
     // The table's value stays.
     if (Object.hasOwn(table, name)) value[name] = table[name];
     else delete value[name];
-    const agreedValue = settled ?? agreed[name];
-    if (table[name] === stored) nextBaseline[name] = stored;
-    else if (agreedValue === undefined) delete nextBaseline[name];
+    const agreedValue = hasSettled ? settled : agreed[name];
+    if (table[name] === storedValue) nextBaseline[name] = storedValue;
+    else if (agreedValue === undefined || agreedValue === null)
+      delete nextBaseline[name];
     else nextBaseline[name] = agreedValue;
     const typed = read.edit[field];
-    if (typed !== undefined && typed !== agreedValue && typed !== inflight)
-      (edit as Record<EditField, number | null>)[field] = typed;
+    if (typed !== undefined) {
+      const typedValue = encode(field, typed);
+      if (
+        typedValue !== agreedValue &&
+        !(hasInflight && typedValue === inflight)
+      )
+        (edit as Record<EditField, number | null>)[field] = typed;
+    }
   }
   // Outside the edit fields (Stat Bubbles `hide`) the key-level rule holds:
   // the projector applies it, and the value is pushed when the encounter
@@ -311,6 +328,16 @@ function planEditFields(
   };
 }
 
+/** Whether the store moved one of the fields the projector reads back. */
+function movesEditField(
+  projector: Projector,
+  fields: FieldContext | undefined,
+): boolean {
+  return Object.keys(projector.editFields ?? {}).some(
+    (field) => fields?.moved?.has(field as EditField) === true,
+  );
+}
+
 /**
  * Pure diff of the desired instances against the scene's items; only items
  * carrying our instance link are ever touched.
@@ -328,8 +355,11 @@ function planEditFields(
  * A projector may use the baseline to apply this rule per field inside its
  * value: a table edit wins until the encounter changes that field.
  *
- * A key whose projector can `readBack` table edits (Stat Bubbles) and that has
- * a baseline is decided per edit field instead; its other fields keep the
+ * A key whose projector can `readBack` table edits (Stat Bubbles, the tracker's
+ * count) and that has a baseline is decided per edit field instead; stored,
+ * settled, in-flight and typed values are compared in the value's space
+ * (`encodeField`), and a null (a clear) in flight or settled is distinct from
+ * none; its other fields keep the
  * rule above. The agreed value is the settled one, else the baseline's:
  * - in flight (`fields.inflight`): the table's value stays;
  * - else the store's value wins if the field `moved`, or if the reconcile
@@ -344,7 +374,9 @@ function planEditFields(
  * clamped value is not sent again. Without `fields` or `snapshot`, a store
  * change of an edit field is not pushed.
  * An undefined r means no key: it is never written or baselined, and its
- * baseline is dropped (the token's value is left alone).
+ * baseline is dropped (the token's value is left alone). A value the token
+ * holds there is read back as an edit (adoption), unless it equals one in
+ * flight or settled; an unreadable one is planned as rejected.
  * The token name follows the same rule, with its baseline under
  * NAME_BASELINE_KEY in the synced record.
  * `create-only` keys, position and visibility are set at creation only.
@@ -401,10 +433,38 @@ export function planSync(
       const hasBaseline = Object.hasOwn(baseline, key);
       if (raw === undefined) {
         delete next[key];
+        // The instance has no value for this key: a value the table holds is
+        // adopted (the tracker's count for a monster without initiative).
+        // Stryker disable next-line ConditionalExpression: equivalent, reading an absent value back on an instance without the stored value plans nothing
+        if (readBack !== undefined && o !== undefined) {
+          const read = readBack(o, instance);
+          const known = context.fields?.get(id);
+          const edit = Object.fromEntries(
+            Object.entries(read.edit).filter(([name, typed]) => {
+              const field = name as EditField;
+              return ![known?.inflight, known?.settled].some(
+                (record) =>
+                  record !== undefined &&
+                  Object.hasOwn(record, field) &&
+                  record[field] === typed,
+              );
+            }),
+          );
+          if (Object.keys(edit).length > 0)
+            plan.edits.push({ instanceId: id, ...edit });
+          if (read.invalid.length > 0)
+            plan.rejected.push({
+              instanceId: id,
+              message: `${read.invalid.join(" and ")} on ${instance.displayName} is not a whole number`,
+            });
+        }
       } else if (
         readBack !== undefined &&
-        projector.editFields !== undefined &&
-        hasBaseline
+        (hasBaseline ||
+          // No baseline yet (a value adopted into the store): the store wins
+          // over the table when an `mcp` change moved one of its fields.
+          (o !== undefined &&
+            movesEditField(projector, context.fields?.get(id))))
       ) {
         const fields = planEditFields(
           { ...projector, readBack },

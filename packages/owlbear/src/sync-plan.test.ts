@@ -661,7 +661,10 @@ describe("planSync initiative tracker", () => {
       [inst(1, { initiative: 14 })],
       observed,
       defaultSyncConfig,
-      ctx(["i1"]),
+      {
+        ...ctx(["i1"]),
+        fields: new Map([["i1", { moved: new Set(["initiative" as const]) }]]),
+      },
     );
     expect(
       plan.update.filter(

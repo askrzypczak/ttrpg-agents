@@ -200,5 +200,11 @@ describe("createEncounterSync unreadable values", () => {
     await wait(0);
 
     expect(heard.cleared).toEqual([heard.rejected[0]]);
+
+    // The same value unreadable again is reported again.
+    editAtTable({ health: "lots" });
+    await wait(EDIT_SETTLE_MS);
+    expect(heard.rejected).toHaveLength(2);
+    expect(heard.rejected[1]).toBe(heard.rejected[0]);
   });
 });

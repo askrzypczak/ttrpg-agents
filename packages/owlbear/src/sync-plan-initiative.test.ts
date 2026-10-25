@@ -283,3 +283,30 @@ describe("planSync with a count on a token whose instance has no initiative", ()
     expect(trackerUpdates(p)).toEqual([]);
   });
 });
+
+describe("planSync with an mcp change during an adoption", () => {
+  it("an mcp initiative change during an adoption pushes the store's count and plans no edit", () => {
+    const token = withTracker(inst({ initiative: null }), {
+      count: "0",
+      active: false,
+    });
+
+    const p = plan([inst({ initiative: 7 })], [token], {
+      moved: new Set(["initiative"]),
+    });
+
+    expect(p.edits).toEqual([]);
+    expect(trackerUpdates(p)).toEqual([
+      {
+        id: token.id,
+        key: INITIATIVE_METADATA_KEY,
+        value: { count: "7", active: false },
+      },
+    ]);
+
+    // Control: without the move the token keeps its count.
+    const unmoved = plan([inst({ initiative: 7 })], [token]);
+    expect(trackerUpdates(unmoved)).toEqual([]);
+    expect(unmoved.edits).toEqual([]);
+  });
+});
