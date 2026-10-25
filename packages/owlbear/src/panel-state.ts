@@ -19,7 +19,7 @@ export interface PanelInput {
   removeError?: string;
   /** The latest refused or unreadable table edit, if any (see instance-edit.ts). */
   editError?: string;
-  /** The latest failure to store the image of picked token art, until the panel reloads. */
+  /** The latest failure to store the image of token art, or to load it for a republish, until the panel reloads. */
   artError?: string;
   /** What the GM must do while a token art republish waits on them, if any. */
   artPrompt?: string;
