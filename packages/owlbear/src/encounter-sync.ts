@@ -188,6 +188,14 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * failed upload is reported once through `onArtStoreFailed`, and the art
  * stays a link.
  *
+ * With `options.storeImage`, each snapshot's art that has a url and no hash
+ * (picked before its bytes were stored, or whose upload failed) is also
+ * checked once per session, whether or not its type gets tokens, outside the
+ * reconcile chain: when its url still answers, its bytes are fetched and
+ * stored as after a pick, with the same failure report; a dead url, or a
+ * check that cannot tell, leaves it as it is, silently. A type picked this
+ * session is not checked: its pick was its attempt.
+ *
  * With `options.loadImage`, the stored art of a type about to get tokens is
  * checked once per session, before they are created, when it has a hash and
  * the GM did not pick it this session. A url that no longer answers gets the
@@ -247,9 +255,9 @@ export function createEncounterSync(
     onStoreChange?: () => void;
     /** Called once when an event arrives with a gap in `seq`: the caller should reconnect for a snapshot. */
     onGap?: () => void;
-    /** Stores the bytes of a picked image on the bridge; answers its hash or a refusal. */
+    /** Stores image bytes on the bridge (a picked image, or art without a hash whose url still answers); answers its hash or a refusal. */
     storeImage?: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>;
-    /** Called once per pick whose image bytes could not be fetched or stored, with the text to show. */
+    /** Called once per pick, or per art without a hash, whose image bytes could not be fetched or stored, with the text to show. */
     onArtStoreFailed?: (text: string) => void;
     /**
      * Loads the stored bytes of a token image from the bridge. With it, art
@@ -279,7 +287,8 @@ export function createEncounterSync(
   // of the plan, so their tokens are circles.
   const declined = new Set<string>();
   // Monster types whose stored art was checked for liveness (or, without a
-  // url, published) this session, or whose art the GM picked this session.
+  // url, published; or, without a hash, checked to store its bytes) this
+  // session, or whose art the GM picked this session.
   const checked = new Set<string>();
   // Whether the current reconcile ran an art step (a fresh pick or a stored
   // art check), after which it reads the scene again before planning writes.
@@ -557,9 +566,11 @@ export function createEncounterSync(
   }
 
   /**
-   * Fetches the picked image and stores its bytes through `storeImage`, once.
-   * Stored: the art of that type takes the hash and is sent again with it.
-   * Otherwise the failure is reported and the art stays a link. Never rejects.
+   * Fetches the image of picked art (a fresh pick, or art without a hash whose
+   * url still answers: all such art was picked by the GM at some point) and
+   * stores its bytes through `storeImage`, once. Stored: the art of that type
+   * takes the hash and is sent again with it. Otherwise the failure is reported
+   * and the art stays a link. Never rejects.
    */
   async function storePicked(
     monsterKey: string,
@@ -594,6 +605,25 @@ export function createEncounterSync(
     } catch {
       // A throwing handler must not leave an unhandled rejection.
     }
+  }
+
+  /**
+   * Stores the bytes of art that has a url and no hash, as after a pick, when
+   * its url still answers. A dead url, or a check that cannot tell, leaves the
+   * art as it is with nothing reported. Never rejects.
+   */
+  async function backfillImage(
+    monsterKey: string,
+    linked: PublishedTokenArt,
+    storeImage: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>,
+  ): Promise<void> {
+    let alive: boolean;
+    try {
+      alive = await obr.isImageAlive(linked.url);
+    } catch {
+      return;
+    }
+    if (alive) await storePicked(monsterKey, linked, storeImage);
   }
 
   /**
@@ -870,6 +900,20 @@ export function createEncounterSync(
         outbox?.snapshot();
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
+        if (options.storeImage !== undefined)
+          for (const [monsterKey, value] of Object.entries(
+            message.payload.art ?? {},
+          ))
+            if (
+              value.url !== undefined &&
+              value.sha256 === undefined &&
+              !checked.has(monsterKey)
+            ) {
+              checked.add(monsterKey);
+              // Not part of the reconcile chain, as a pick's upload is: tokens
+              // never wait for the bytes.
+              void backfillImage(monsterKey, value, options.storeImage);
+            }
         seq = message.payload.seq;
         afterSnapshot = true;
         reported.clear();

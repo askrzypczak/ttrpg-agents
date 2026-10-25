@@ -311,7 +311,7 @@ describe("createEncounterSync token art republish: live urls", () => {
     expect(s.errors).toEqual([]);
   });
 
-  it("art without a hash is used as stored with no liveness check", async () => {
+  it("art without a hash is not republished: a dead url draws it as stored with no load, upload or picker", async () => {
     const feed = createMessageFeed();
     const linkOnly = pictureOf(storedArt);
     const s = setup({ imageAlive: false });
@@ -322,11 +322,17 @@ describe("createEncounterSync token art republish: live urls", () => {
       }),
     );
 
-    // Only the goblin, whose art has a hash, is checked.
-    expect(s.alive).toEqual([goblinArt.url]);
+    // Both urls are checked; the link-only one is not republished.
+    await vi.waitFor(() =>
+      expect([...s.alive].sort()).toEqual([goblinArt.url, linkOnly.url].sort()),
+    );
+    await settle();
     expectImages(s.tokenOf, ["shadow-1"], linkOnly);
     expect(s.fake.uploads().map((u) => u.name)).not.toContain(REPUBLISH_NAME);
     expect(s.loads).not.toContain(STORED_SHA);
+    // The picker opens only for the goblin's republish, never for the shadow.
+    expect(s.searches).toEqual([`ttrpg-art-${"d4".repeat(8)}`]);
+    expect(s.fake.pickImageCalls()).toBe(1);
   });
 
   it("without loadImage stored art is used as stored with no liveness check", async () => {

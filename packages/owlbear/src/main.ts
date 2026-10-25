@@ -36,9 +36,10 @@ obr.onReady(async () => {
   let removeError: string | undefined;
   let editError: string | undefined;
   let editNote: string | undefined;
-  // The latest failure to store a picked image's bytes or to load stored
-  // bytes for a republish. Kept until the panel reloads (no store change
-  // clears it); a later failure replaces it.
+  // The latest failure to store the bytes of token art (after a pick, or on
+  // connect for art without stored bytes) or to load stored bytes for a
+  // republish. Kept until the panel reloads (no store change clears it); a
+  // later failure replaces it.
   let artError: string | undefined;
   // What the GM must do while a token art republish waits on them.
   let artPrompt: string | undefined;

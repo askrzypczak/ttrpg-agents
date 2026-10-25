@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import {
   SqliteEncounterRepository,
+  SqliteTokenArtRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import type { ChangeOrigin } from "@ttrpg-agents/engine";
@@ -363,6 +364,43 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
     expect(await uploads(page)).toEqual([]);
     expect(await pickerOpens(page)).toBe(0);
     expect(storedShadowArt()).toEqual({ ...storedImage, sha256 });
+    await expect(syncError(page)).toHaveText("");
+  });
+
+  test("stored art without stored bytes whose url is alive gets its bytes stored and the art row takes their hash, with no upload dialog and no picker", async ({
+    page,
+  }) => {
+    // Link-only art: a url and no hash, as picked before bytes were stored.
+    const db = openDatabase(e2eDbPath(workerDir()));
+    try {
+      new SqliteTokenArtRepository(db).setTokenArt("shadow", storedImage);
+    } finally {
+      db.close();
+    }
+    expect(storedShadowArt()).toEqual(storedImage);
+    await page.route(storedImage.url, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: SHADOW_PNG,
+      }),
+    );
+    await openHarness(page, { role: "gm" });
+
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({ type: "IMAGE", image: storedImage });
+    await expect
+      .poll(() => storedShadowArt()?.sha256, { timeout: 10_000 })
+      .toMatch(/^[0-9a-f]{64}$/);
+    const sha256 = storedShadowArt()!.sha256!;
+    expect(storedShadowArt()).toEqual({ ...storedImage, sha256 });
+    const image = readE2eTokenImage(workerDir(), sha256);
+    expect(image?.mime).toBe("image/png");
+    expect(Buffer.from(image?.bytes ?? [])).toEqual(SHADOW_PNG);
+    expect(await uploads(page)).toEqual([]);
+    expect(await pickerOpens(page)).toBe(0);
     await expect(syncError(page)).toHaveText("");
   });
 
