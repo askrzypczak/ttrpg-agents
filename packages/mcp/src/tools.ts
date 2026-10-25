@@ -5,7 +5,10 @@ import {
   compareByInitiative,
   formatColumnLabel,
   getTableStatus,
+  listRooms,
+  removeRooms,
   resolveTargets,
+  setRooms,
   getMonsterByKey,
   searchMonsters,
   useMap,
@@ -438,8 +441,13 @@ const setRoomsTool = defineTool({
       .min(1),
     status: z.enum(["confirmed", "proposed"]).optional(),
   },
-  run() {
-    throw new Error("not implemented");
+  async run(ctx, { rooms, status }) {
+    const result = await setRooms(ctx.table, ctx.maps, rooms, status);
+    const saved = result.rooms
+      .map((room) => `${room.name} ${room.ranges.join(", ")}`)
+      .join("; ");
+    const text = `Saved ${roomCount(result.rooms.length)} on ${result.map.name} (${result.rooms[0]?.status ?? ""}): ${saved}.`;
+    return ok(withMovedLine(text, result.moved), { ...result });
   },
 });
 
@@ -449,8 +457,20 @@ const listRoomsTool = defineTool({
   description:
     "List the rooms saved for the map in use, with their status and display-cell ranges where the map sits now. Needs the bridge running.",
   inputSchema: {},
-  run() {
-    throw new Error("not implemented");
+  async run(ctx) {
+    const result = await listRooms(ctx.table, ctx.maps);
+    const text =
+      result.rooms.length === 0
+        ? `No rooms saved for ${result.map.name} yet.`
+        : `Rooms on ${result.map.name}:\n\n${table(
+            ["Room", "Status", "Cells"],
+            result.rooms.map((room) => [
+              room.name,
+              room.status,
+              room.ranges.length === 0 ? null : room.ranges.join(", "),
+            ]),
+          )}`;
+    return ok(withMovedLine(text, result.moved), { ...result });
   },
 });
 
@@ -460,10 +480,26 @@ const removeRoomsTool = defineTool({
   description:
     "Remove saved rooms from the map in use by name, ignoring case. Every name must match a saved room, or nothing is removed.",
   inputSchema: { names: z.array(z.string().min(1)).min(1) },
-  run() {
-    throw new Error("not implemented");
+  run(ctx, { names }) {
+    const result = removeRooms(ctx.maps, names);
+    return ok(
+      `Removed ${roomCount(result.removed.length)} from ${result.map.name}: ${result.removed.join(", ")}.`,
+      { ...result },
+    );
   },
 });
+
+/** "1 room" or "2 rooms". */
+function roomCount(n: number): string {
+  return `${String(n)} ${n === 1 ? "room" : "rooms"}`;
+}
+
+const movedLine =
+  "The map moved since it was registered; cells are read where it is now. Use the map again to confirm the new position.";
+
+function withMovedLine(text: string, moved: boolean): string {
+  return moved ? `${text}\n\n${movedLine}` : text;
+}
 
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
