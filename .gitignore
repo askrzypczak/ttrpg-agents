@@ -14,10 +14,8 @@ dist/
 .claude/settings.local.json
 .claude/worktrees/
 
-# Stryker
-.stryker-tmp/
+# Coverage reports (npm run coverage)
 reports/
-stryker.incremental.json
 
 # Playwright e2e
 dist-e2e/

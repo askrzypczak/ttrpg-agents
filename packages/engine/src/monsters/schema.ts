@@ -39,7 +39,7 @@ export const monsterSchema = z.object({
       try {
         parsed = parseDice(hp.dice);
       } catch (e) {
-        // Stryker disable next-line ConditionalExpression: parseDice only throws DiceParseError; the rethrow is defensive
+        // parseDice only throws DiceParseError; the rethrow is defensive.
         if (!(e instanceof DiceParseError)) throw e;
         ctx.addIssue({ code: "custom", path: ["dice"], message: e.message });
         return;

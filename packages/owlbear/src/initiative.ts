@@ -44,7 +44,6 @@ export const initiativeProjector: Projector = {
     const count = (value as { count?: unknown }).count;
     const typed = typeof count === "string" ? count.trim() : "";
     const initiative = WHOLE_NUMBER.test(typed) ? Number(typed) : undefined;
-    // Stryker disable next-line ConditionalExpression: equivalent, Number.isSafeInteger is already false for undefined
     if (initiative === undefined || !Number.isSafeInteger(initiative))
       return { edit: {}, invalid: ["count"] };
     return {

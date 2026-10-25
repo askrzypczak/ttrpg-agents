@@ -65,7 +65,7 @@ GitHub's per-commit review then shows one layer at a time, and the sweep commit 
 - **Variants of one behaviour use `it.each`**, not copies of the test.
 - **A new test file is for a new module.** Otherwise the test goes in the module's existing test file.
 
-Mutation testing (`npm run mutate`, see [`CLAUDE.md`](../CLAUDE.md#mutation-testing)) already guards test strength, so repeating a rule across layers buys little. Example: HP clamping was tested in eight files across five packages.
+Repeating a rule across layers buys little: the engine's test already fails when the rule breaks. Example: HP clamping was tested in eight files across five packages.
 
 ## 5. Split threshold
 

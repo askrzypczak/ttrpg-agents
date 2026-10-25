@@ -4,9 +4,7 @@ package-lock.json
 CLAUDE.md
 scripts/README.md
 packages/srd/data/
-.stryker-tmp
 reports
-stryker.incremental.json
 dist-e2e
 test-results
 playwright-report

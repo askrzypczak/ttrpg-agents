@@ -1,9 +1,9 @@
-// Added after mutation testing; kept out of the contract file status.test.ts.
+// Extra cases, kept out of the contract file status.test.ts.
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "../testing/index.js";
 import { getTableStatus } from "./index.js";
 
-describe("getTableStatus (mutation-test additions)", () => {
+describe("getTableStatus (extra cases)", () => {
   it("reports out of sync when the token count equals the encounter count but the applied count differs", async () => {
     const repo = {
       listInstances: () =>

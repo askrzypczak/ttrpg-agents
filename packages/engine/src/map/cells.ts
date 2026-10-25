@@ -3,7 +3,6 @@ import type { Cell, Point } from "./types.js";
 /** Snaps values within float noise of a cell line onto it before flooring. */
 function floorCell(value: number): number {
   const nearest = Math.round(value);
-  // Stryker disable next-line EqualityOperator: a gap of exactly the tolerance cannot be observed
   const snap = Math.abs(value - nearest) < 1e-9;
   return (snap ? nearest : Math.floor(value)) + 0;
 }

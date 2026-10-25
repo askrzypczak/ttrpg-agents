@@ -72,7 +72,6 @@ export default tseslint.config(
       "**/playwright-report/",
       "**/node_modules/",
       ".claude/",
-      ".stryker-tmp/",
       "reports/",
     ],
   },

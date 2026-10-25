@@ -106,7 +106,6 @@ function errorMessage(
   return {
     v: PROTOCOL_VERSION,
     type: "error",
-    // Stryker disable next-line ConditionalExpression: equivalent, an undefined id is dropped when the message is encoded
     ...(id !== undefined ? { id } : {}),
     payload: { code, message, fatal: FATAL_ERROR_CODES.has(code) },
   };
@@ -377,7 +376,8 @@ export async function startBridgeServer(
   /** Relays `query` to the active client and awaits its reply or the timeout. */
   const sendQuery = (query: Query): Promise<AgentQueryResponse> => {
     const target = active;
-    // Stryker disable next-line ConditionalExpression,EqualityOperator: only the `readyState` half is equivalent (`active` is cleared on close, so a non-OPEN target is a sub-millisecond race); the `null` half is killed by the not-connected test
+    // `active` is cleared on close, so a non-OPEN target is only a
+    // sub-millisecond race.
     if (target === null || target.readyState !== target.OPEN) {
       return Promise.resolve({
         ok: false,
@@ -390,7 +390,8 @@ export async function startBridgeServer(
     const id = randomUUID();
     return new Promise((resolve) => {
       const finish = (response: AgentQueryResponse): void => {
-        // Stryker disable next-line all: a leftover timer would only re-run this idempotent cleanup; it just delays process exit
+        // A leftover timer would only re-run this idempotent cleanup, but it
+        // would delay process exit.
         clearTimeout(timer);
         pending.delete(id);
         resolve(response);
@@ -490,7 +491,6 @@ export async function startBridgeServer(
       clients.add(ws);
       const forget = () => {
         clients.delete(ws);
-        // Stryker disable next-line ConditionalExpression: only the `false` variant is equivalent (broadcast re-checks readyState); `true` is killed by the late-close test
         if (active === ws) active = null;
       };
       const hooks: Hooks = {
@@ -529,7 +529,6 @@ export async function startBridgeServer(
     clientCount: () => clients.size,
     broadcast: (message) => {
       const encoded = encodeMessage(message);
-      // Stryker disable next-line ConditionalExpression: only the readyState `true` variant is equivalent (ws.send on a non-OPEN socket is a silent no-op); the other variants are killed by the broadcast tests
       if (active !== null && active.readyState === active.OPEN) {
         active.send(encoded);
       }
@@ -538,14 +537,14 @@ export async function startBridgeServer(
       for (const ws of clients) ws.terminate();
       clients.clear();
       active = null;
-      // Stryker disable all: the sockets are destroyed right after, so a pending call's HTTP response is never observable; this only releases its timer.
+      // The sockets are destroyed right after, so a pending call's HTTP
+      // response is never observable; this only releases its timer.
       for (const waiting of [...pending.values()]) {
         waiting.resolve({
           ok: false,
           error: { code: "not-connected", message: "the bridge is closing" },
         });
       }
-      // Stryker restore all
       wss.close();
       await new Promise<void>((resolve, reject) => {
         http.close((err) => (err ? reject(err) : resolve()));
@@ -591,7 +590,6 @@ async function readBody(req: IncomingMessage): Promise<string | null> {
     const buf = chunk as Buffer;
     size += buf.length;
     // Keep draining (without storing) so the 400 can still be sent.
-    // Stryker disable next-line ConditionalExpression: the `true` variant (store everything) is equivalent, the size check below still rejects
     if (size <= MAX_QUERY_BODY_BYTES) chunks.push(buf);
   }
   return size > MAX_QUERY_BODY_BYTES
