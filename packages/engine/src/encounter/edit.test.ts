@@ -32,7 +32,11 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
     applyHealing: unexpected,
     removeInstances: unexpected,
     renameInstance: unexpected,
-    setInitiative: unexpected,
+    setInitiative: (id, initiative) => {
+      const after = { ...find(id), initiative };
+      byId.set(id, after);
+      return after;
+    },
     setStatsVisible: unexpected,
     clearEncounter: unexpected,
     setHp: (id, hp) => {
@@ -129,5 +133,31 @@ describe("applyInstanceEdit", () => {
       ),
     ).toThrow(UnknownInstanceError);
     expect(repo.snapshot()).toEqual(before);
+  });
+
+  it("applyInstanceEdit sets initiative through setInitiative", () => {
+    const repo = memoryRepo([makeTestInstance({ id: "i1", initiative: 5 })]);
+
+    const result = applyInstanceEdit(
+      repo,
+      { instanceId: "i1", initiative: 14 },
+      origin,
+    );
+
+    expect(result).toMatchObject({ id: "i1", initiative: 14 });
+    expect(repo.snapshot()[0]).toMatchObject({ initiative: 14 });
+  });
+
+  it("applyInstanceEdit passes a null initiative to setInitiative", () => {
+    const repo = memoryRepo([makeTestInstance({ id: "i1", initiative: 5 })]);
+
+    const result = applyInstanceEdit(
+      repo,
+      { instanceId: "i1", initiative: null },
+      origin,
+    );
+
+    expect(result.initiative).toBeNull();
+    expect(repo.snapshot()[0]!.initiative).toBeNull();
   });
 });

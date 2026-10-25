@@ -80,6 +80,12 @@ export type Projector = {
    * planner decides each field on its own (see planSync).
    */
   editFields?: Readonly<Partial<Record<EditField, string>>>;
+  /**
+   * With `editFields`: how a stored number appears inside the value (default:
+   * the number itself), so the planner compares the store and the table in
+   * value space.
+   */
+  encodeField?(field: EditField, value: number): unknown;
 };
 
 export type TokenKind = Pick<
@@ -135,13 +141,14 @@ export const defaultSyncConfig: SyncConfig = {
 };
 
 /** The instance fields the table can edit and write back. */
-export type EditField = "currentHp" | "maxHp" | "armorClass";
+export type EditField = "currentHp" | "maxHp" | "armorClass" | "initiative";
 
 /** How the panel names each edit field. */
 export const EDIT_FIELD_NAMES: Readonly<Record<EditField, string>> = {
   currentHp: "HP",
   maxHp: "max HP",
   armorClass: "armor class",
+  initiative: "initiative",
 };
 
 /**
@@ -155,8 +162,8 @@ export const EDIT_FIELD_NAMES: Readonly<Record<EditField, string>> = {
  */
 export type FieldContext = {
   moved?: ReadonlySet<EditField>;
-  settled?: Partial<Record<EditField, number>>;
-  inflight?: Partial<Record<EditField, number>>;
+  settled?: Partial<Record<EditField, number | null>>;
+  inflight?: Partial<Record<EditField, number | null>>;
 };
 
 export type SyncPlan = {
@@ -283,7 +290,7 @@ function planEditFields(
     else nextBaseline[name] = agreedValue;
     const typed = read.edit[field];
     if (typed !== undefined && typed !== agreedValue && typed !== inflight)
-      edit[field] = typed;
+      (edit as Record<EditField, number | null>)[field] = typed;
   }
   // Outside the edit fields (Stat Bubbles `hide`) the key-level rule holds:
   // the projector applies it, and the value is pushed when the encounter
@@ -394,7 +401,11 @@ export function planSync(
       const hasBaseline = Object.hasOwn(baseline, key);
       if (raw === undefined) {
         delete next[key];
-      } else if (readBack !== undefined && hasBaseline) {
+      } else if (
+        readBack !== undefined &&
+        projector.editFields !== undefined &&
+        hasBaseline
+      ) {
         const fields = planEditFields(
           { ...projector, readBack },
           instance,

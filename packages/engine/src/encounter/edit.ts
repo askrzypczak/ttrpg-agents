@@ -9,6 +9,8 @@ export type InstanceEdit = {
   currentHp?: number;
   maxHp?: number;
   armorClass?: number;
+  /** `null` clears the initiative. */
+  initiative?: number | null;
 };
 
 /**

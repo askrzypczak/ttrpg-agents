@@ -29,6 +29,9 @@ export type EncounterEventPayload = Extract<
 export const isOurs = (item: SceneItem): boolean =>
   instanceIdOf(item) !== undefined;
 
+/** How long a table edit must stay unchanged before it is written back to the store. */
+export const EDIT_SETTLE_MS = 1500;
+
 export interface EncounterSync {
   /** Resolves once the message is applied, or deferred until the scene is ready. */
   handleMessage(message: BridgeMessage): Promise<void>;
@@ -83,7 +86,7 @@ function fold(
  */
 function editFieldsOf(
   event: EncounterEventPayload,
-): { id: string; fields: [EditField, number][] } | undefined {
+): { id: string; fields: [EditField, number | null][] } | undefined {
   if (event.type === "hp-changed")
     return {
       id: event.id,
@@ -105,7 +108,7 @@ function editFieldsOf(
  * last successful reconcile say: the store `moved` it, or it settled at a
  * value. A later fact replaces an earlier one.
  */
-type Facts = Map<string, Map<EditField, "moved" | number>>;
+type Facts = Map<string, Map<EditField, "moved" | number | null>>;
 
 /**
  * Holds the desired encounter (the latest snapshot folded with later events,
@@ -157,6 +160,8 @@ export function createEncounterSync(
     onEditRejected?: (text: string) => void;
     /** Called once per acknowledged edit whose store value differs from the sent one, with the note to show. */
     onEditDiffers?: (text: string) => void;
+    /** Called when a reported unreadable table value is no longer planned as unreadable, with the text it was reported with. */
+    onEditRejectedCleared?: (text: string) => void;
     /** Called when a snapshot or an applied `mcp` event changes what the store says. */
     onStoreChange?: () => void;
     /** Called once when an event arrives with a gap in `seq`: the caller should reconnect for a snapshot. */
@@ -213,7 +218,7 @@ export function createEncounterSync(
   function record(
     instanceId: string,
     field: EditField,
-    fact: "moved" | number,
+    fact: "moved" | number | null,
   ): void {
     let fields = facts.get(instanceId);
     if (fields === undefined) facts.set(instanceId, (fields = new Map()));
@@ -233,8 +238,8 @@ export function createEncounterSync(
       string,
       {
         moved: Set<EditField>;
-        settled: Partial<Record<EditField, number>>;
-        inflight: Partial<Record<EditField, number>>;
+        settled: Partial<Record<EditField, number | null>>;
+        inflight: Partial<Record<EditField, number | null>>;
       }
     >();
     const of = (id: string) => {
@@ -544,7 +549,7 @@ export function createEncounterSync(
         const { instanceId, ...edit } = command.message.payload;
         for (const [field, value] of Object.entries(edit) as [
           EditField,
-          number | undefined,
+          number | null | undefined,
         ][])
           // Stryker disable next-line ConditionalExpression: equivalent, a sent edit carries only the fields it sets (splitEdit), and an undefined settled value counts as unsettled
           if (value !== undefined) record(instanceId, field, value);

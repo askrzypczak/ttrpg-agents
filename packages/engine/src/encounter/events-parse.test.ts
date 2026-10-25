@@ -31,6 +31,20 @@ describe("encounterEventSchema parse", () => {
     },
   );
 
+  it("an instance-changed event with a null initiative parses", () => {
+    const event = {
+      type: "instance-changed",
+      id: "i1",
+      changes: { initiative: null },
+      origin,
+    };
+
+    const result = encounterEventSchema.safeParse(event);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(event);
+  });
+
   it("rejects an instance-changed event whose changes hold only unknown keys", () => {
     const result = encounterEventSchema.safeParse({
       type: "instance-changed",

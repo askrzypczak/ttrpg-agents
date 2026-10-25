@@ -17,6 +17,7 @@ import {
   type BridgeMessage,
 } from "@ttrpg-agents/protocol";
 import {
+  broadcastLogEvents,
   editInstance,
   removeInstance,
   snapshotMessage,
@@ -144,11 +145,15 @@ function hello(token: string, role: "gm" | "player" = "gm"): string {
   });
 }
 
+type EditFields = {
+  currentHp?: number;
+  maxHp?: number;
+  armorClass?: number;
+  initiative?: number | null;
+};
+
 /** Raw JSON, as the extension sends it. */
-function instanceEdit(
-  instanceId: string,
-  fields: { currentHp?: number; maxHp?: number; armorClass?: number },
-): string {
+function instanceEdit(instanceId: string, fields: EditFields): string {
   return JSON.stringify({
     v: 1,
     type: "instance-edit",
@@ -184,7 +189,7 @@ async function handled(client: Client): Promise<void> {
 async function edit(
   client: Client,
   instanceId: string,
-  fields: { currentHp?: number; maxHp?: number; armorClass?: number },
+  fields: EditFields,
 ): Promise<void> {
   client.ws.send(instanceEdit(instanceId, fields));
   await handled(client);
@@ -322,4 +327,61 @@ describe("instance-edit over the bridge", () => {
       ).toEqual([]);
     },
   );
+});
+
+describe("initiative instance-edit over the bridge", () => {
+  /** The `encounter-event` messages the client receives from the change log. */
+  const events = (client: Client) =>
+    client.received.flatMap((m) =>
+      m.type === "encounter-event" ? [m.payload] : [],
+    );
+
+  it("bridge: an initiative instance-edit reaches the store once and the instance list shows it", async () => {
+    const server = await startServer();
+    const [first, second] = shadows;
+    const client = await authed(server);
+    const stop = broadcastLogEvents(new SqliteEncounterLog(db), server);
+    try {
+      await edit(client, first!.id, { initiative: 14 });
+      await waitFor(() => events(client).length > 0);
+      // Time for a duplicate event, if the edit were applied twice.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(
+        repo.listInstances().find((i) => i.id === first!.id)?.initiative,
+      ).toBe(14);
+      expect(stored(second!.id)).toEqual(second);
+      expect(events(client)).toHaveLength(1);
+      expect(events(client)[0]).toMatchObject({
+        type: "instance-changed",
+        id: first!.id,
+        changes: { initiative: 14 },
+        origin: { source: "table", commandId: `instance-edit:${first!.id}` },
+      });
+    } finally {
+      stop();
+    }
+  });
+
+  it("bridge: a null initiative instance-edit clears the stored initiative", async () => {
+    const server = await startServer();
+    const [first, second] = shadows;
+    repo.setInitiative(first!.id, 12, origin);
+    const client = await authed(server);
+    const stop = broadcastLogEvents(new SqliteEncounterLog(db), server);
+    try {
+      await edit(client, first!.id, { initiative: null });
+      await waitFor(() => events(client).length > 0);
+
+      expect(stored(first!.id).initiative).toBeNull();
+      expect(stored(second!.id)).toEqual(second);
+      expect(events(client)[0]).toMatchObject({
+        type: "instance-changed",
+        id: first!.id,
+        changes: { initiative: null },
+      });
+    } finally {
+      stop();
+    }
+  });
 });

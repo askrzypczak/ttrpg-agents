@@ -26,4 +26,11 @@ export const initiativeProjector: Projector = {
     instance.initiative === null
       ? undefined
       : { count: String(instance.initiative), active: isActive(current) },
+  // Stub: `editFields` (`{ initiative: "count" }`) is added with the implementation.
+  encodeField: () => {
+    throw new Error("not implemented");
+  },
+  readBack: () => {
+    throw new Error("not implemented");
+  },
 };

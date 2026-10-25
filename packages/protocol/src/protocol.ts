@@ -24,6 +24,10 @@ const instanceEditPayload = z
     currentHp: z.number().int().optional(),
     maxHp: z.number().int().optional(),
     armorClass: z.number().int().optional(),
+    // Stub: typed as nullable, still rejects null at runtime.
+    initiative: z.number().int().optional() as unknown as z.ZodOptional<
+      z.ZodNullable<z.ZodNumber>
+    >,
   })
   .refine(
     (edit) =>

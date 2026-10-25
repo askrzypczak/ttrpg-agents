@@ -759,7 +759,9 @@ describe("createEncounterSync event sequence", () => {
       const deleted: string[] = [];
       const rejected: string[] = [];
       let storeChanges = 0;
+      const timers = new FakeTimers();
       const sync = createEncounterSync(obr, undefined, undefined, {
+        timers,
         send: (message) => {
           if (message.type === "token-deleted")
             deleted.push(message.payload.instanceId);
@@ -783,9 +785,12 @@ describe("createEncounterSync event sequence", () => {
       ]);
       scene.deleteItems([tokenOf(scene, 1).id]);
       await settle();
+      timers.fireAll();
+      await settle();
       expect(deleted).toEqual(["i1"]);
       expect(rejected).toHaveLength(1);
       return {
+        timers,
         sync,
         feed,
         deleted,
@@ -802,10 +807,13 @@ describe("createEncounterSync event sequence", () => {
     ])(
       "re-reports an unreadable value and calls onStoreChange, but not a deletion still in flight (%s)",
       async (_name, message) => {
-        const { sync, deleted, rejected, storeChanges } = await reported();
+        const { sync, timers, deleted, rejected, storeChanges } =
+          await reported();
         const before = storeChanges();
 
         await sync.handleMessage(message);
+        await settle();
+        timers.fireAll();
         await settle();
 
         expect(deleted).toEqual(["i1"]);
