@@ -111,47 +111,10 @@ jobs:
           name: coverage
           path: reports/coverage/
 
-  # Informational only: not required by (or blocking) check/e2e. Mutates the
-  # production files changed in the PR and never fails on the score. The
-  # result is posted as one sticky comment by the comment job; the HTML report
-  # is an artifact.
-  mutation:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      # Full history so `git diff origin/<base>...HEAD` works.
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: npm
-      - run: npm ci
-      # mutate:changed builds dist/ first; Stryker needs it to find the tests.
-      - run: npm run mutate:changed origin/${{ github.base_ref }}
-      # Handed to the comment job, which alone has pull-requests: write.
-      - uses: actions/upload-artifact@v7
-        if: always() && hashFiles('reports/mutation/comment.md') != ''
-        with:
-          name: mutation-comment
-          path: reports/mutation/comment.md
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: mutation
-          path: reports/mutation/
-          if-no-files-found: warn
-
-  # Posts the coverage table and the mutation result, each as one sticky
-  # comment edited in place. Separate so no job that runs repo code holds
-  # pull-requests: write. No checkout. A skipped or failed mutation job does
-  # not block it.
+  # Posts the coverage table as one sticky comment edited in place. Separate
+  # so no job that runs repo code holds pull-requests: write. No checkout.
   comment:
-    needs: [coverage, mutation]
+    needs: [coverage]
     if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -164,11 +127,6 @@ jobs:
         with:
           name: coverage-comment
           path: comment
-      - uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: mutation-comment
-          path: mutation-comment
       - name: Comment on PR
         continue-on-error: true
         env:
@@ -190,4 +148,3 @@ jobs:
             fi
           }
           post coverage comment/summary.md || echo "coverage comment failed"
-          post mutation mutation-comment/comment.md || echo "mutation comment failed"
