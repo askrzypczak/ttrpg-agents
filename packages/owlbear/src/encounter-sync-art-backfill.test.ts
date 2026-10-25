@@ -438,4 +438,43 @@ describe("createEncounterSync storing the bytes of art without a hash", () => {
     expect(s.uploads).toHaveLength(1);
     expect(s.reported.map(([key]) => key)).toEqual(["goblin"]);
   });
+
+  it("a type's tokens are created with its art without a hash while the liveness check is still pending", async () => {
+    const feed = createMessageFeed();
+    const s = setup({ imageAlive: () => new Promise<boolean>(() => {}) });
+
+    await s.sync.handleMessage(
+      feed.snapshot([inst(1)], { art: { shadow: shadowArt } }),
+    );
+
+    await vi.waitFor(() =>
+      expect(s.tokenOf("shadow-1")).toMatchObject({
+        type: "IMAGE",
+        image: pictureOf(shadowArt),
+      }),
+    );
+    expect(s.alive).toEqual([shadowArt.url]);
+    expect(s.fetched).toEqual([]);
+  });
+
+  it("a type whose bytes were stored on connect is not checked again when it first gets tokens", async () => {
+    const feed = createMessageFeed();
+    const s = setup({ imageAlive: true, withLoadImage: true });
+
+    await s.sync.handleMessage(
+      feed.snapshot([], { art: { shadow: shadowArt } }),
+    );
+    await vi.waitFor(() => expect(s.reported).toHaveLength(1));
+    await s.sync.handleMessage(
+      feed.event({ type: "added", instances: [inst(1)] }),
+    );
+    await settle();
+
+    expect(s.alive).toEqual([shadowArt.url]);
+    expect(s.loads).toEqual([]);
+    expect(s.tokenOf("shadow-1")).toMatchObject({
+      type: "IMAGE",
+      image: pictureOf(shadowArt),
+    });
+  });
 });
