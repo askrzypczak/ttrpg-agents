@@ -405,6 +405,17 @@ const tableStatusTool = defineTool({
   },
 });
 
+const useMapTool = defineTool({
+  name: "use_map",
+  annotations: { destructiveHint: false },
+  description:
+    "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the active map. Needs the bridge running.",
+  inputSchema: { name: z.string().min(1).optional() },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -418,4 +429,5 @@ export const tools: readonly ToolDefinition[] = [
   setStatsVisibilityTool,
   clearEncounterTool,
   tableStatusTool,
+  useMapTool,
 ];

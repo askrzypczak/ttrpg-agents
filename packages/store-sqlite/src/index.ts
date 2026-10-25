@@ -5,6 +5,7 @@ export {
 export { SqliteEncounterLog } from "./sqlite-log.js";
 export { SqliteTokenArtRepository } from "./token-art-repository.js";
 export { SqliteTokenImageRepository } from "./token-image-repository.js";
+export { SqliteMapRepository } from "./map-repository.js";
 export { defaultDbPath, openDatabase } from "./db.js";
 export {
   formatTokenArtImportSummary,

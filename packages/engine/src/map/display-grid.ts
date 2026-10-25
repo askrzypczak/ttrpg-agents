@@ -43,6 +43,12 @@ export function displayGrid(placement: MapPlacement): DisplayGrid {
   };
 }
 
+/** Spreadsheet-style column letters: 0 is A, 25 is Z, 26 is AA. */
+export function formatColumnLabel(col: number): string {
+  void col;
+  throw new Error("not implemented");
+}
+
 /** Spreadsheet-style label: column A, B, ..., Z, AA, ...; the row is 1-based. */
 export function formatCellLabel(cell: Cell): string {
   let letters = "";

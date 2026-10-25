@@ -14,6 +14,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   apply_damage: undefined,
   heal: undefined,
   table_status: { readOnlyHint: true },
+  use_map: { destructiveHint: false },
 };
 
 describe("tool annotations", () => {

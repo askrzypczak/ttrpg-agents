@@ -5,3 +5,5 @@ export * from "./display-grid.js";
 export * from "./rooms.js";
 export * from "./picker.js";
 export * from "./errors.js";
+export * from "./repository.js";
+export * from "./use-map.js";
