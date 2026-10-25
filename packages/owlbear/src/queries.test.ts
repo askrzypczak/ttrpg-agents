@@ -4,6 +4,7 @@ import { PROTOCOL_VERSION, type QueryResult } from "@ttrpg-agents/protocol";
 import { queryReply, handleQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
+import { createMessageFeed } from "./testing/messages.js";
 import { SceneModel, type SceneItem } from "./scene-model.js";
 import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
 
@@ -32,11 +33,7 @@ describe("handleQuery scene-status", () => {
   it("`scene-status` on a ready scene counts only our tokens and reports `sceneReady: true`", async () => {
     const { obr, scene } = createFakeObr();
     const sync = createEncounterSync(obr);
-    await sync.handleMessage({
-      v: 1,
-      type: "encounter-snapshot",
-      payload: { instances: [inst(1), inst(2)], seq: 0 },
-    });
+    await sync.handleMessage(createMessageFeed().snapshot([inst(1), inst(2)]));
     // A foreign item, and one of our tokens the sync did not place.
     scene.addItems([foreign, unplaced]);
 

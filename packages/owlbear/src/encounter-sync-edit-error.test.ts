@@ -3,6 +3,7 @@ import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
+import { createMessageFeed } from "./testing/messages.js";
 import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import { INSTANCE_METADATA_KEY } from "./sync-plan.js";
 
@@ -19,21 +20,16 @@ const error = (id: string | undefined, fatal: boolean): BridgeMessage => ({
 async function healthAfter(message: BridgeMessage): Promise<unknown> {
   const { obr, scene } = createFakeObr();
   const sync = createEncounterSync(obr);
-  await sync.handleMessage({
-    v: 1,
-    type: "encounter-snapshot",
-    payload: {
-      instances: [
-        makeTestInstance({
-          id: "i1",
-          maxHp: 16,
-          currentHp: 10,
-          armorClass: 12,
-        }),
-      ],
-      seq: 0,
-    },
-  });
+  await sync.handleMessage(
+    createMessageFeed().snapshot([
+      makeTestInstance({
+        id: "i1",
+        maxHp: 16,
+        currentHp: 10,
+        armorClass: 12,
+      }),
+    ]),
+  );
   await settle();
   const token = scene
     .getItems()

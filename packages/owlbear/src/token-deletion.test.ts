@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { SceneItem, SceneModel } from "./scene-model.js";
+import { createMessageFeed, type MessageFeed } from "./testing/messages.js";
 import {
   INSTANCE_METADATA_KEY,
   PLACED_METADATA_KEY,
@@ -14,11 +14,8 @@ import {
 const inst = (n: number): EncounterInstance =>
   makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
 
-const snapshot = (...ns: number[]): BridgeMessage => ({
-  v: 1,
-  type: "encounter-snapshot",
-  payload: { instances: ns.map(inst), seq: 0 },
-});
+const snapshot = (feed: MessageFeed, ...ns: number[]) =>
+  feed.snapshot(ns.map(inst));
 
 const foreign: SceneItem = {
   id: "map",
@@ -84,8 +81,9 @@ function setup() {
 
 describe("createEncounterSync token deletion", () => {
   it("sends token-deleted after the GM deletes a token", async () => {
+    const feed = createMessageFeed();
     const { sync, scene, reported } = setup();
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     expect(reported).toEqual([]);
 
@@ -95,8 +93,9 @@ describe("createEncounterSync token deletion", () => {
   });
 
   it("a token deletion in flight is not reported again on a store change", async () => {
+    const feed = createMessageFeed();
     const { sync, scene, reported } = setup();
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     scene.deleteItems([tokenOf(scene, "i1").id]);
     await settle();
@@ -113,7 +112,7 @@ describe("createEncounterSync token deletion", () => {
 
     // A snapshot that still wants i1 does not send it again: the command
     // waits for the store's answer.
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     expect(reported).toEqual(["i1"]);
 
@@ -124,19 +123,20 @@ describe("createEncounterSync token deletion", () => {
       type: "hello-ack",
       payload: { serverVersion: "0" },
     });
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     expect(reported).toEqual(["i1", "i1"]);
 
     // Once i1 has left the encounter it is not reported any more.
-    await sync.handleMessage(snapshot(2));
+    await sync.handleMessage(snapshot(feed, 2));
     await settle();
     expect(reported).toEqual(["i1", "i1"]);
   });
 
   it("reports nothing while the scene is not ready", async () => {
+    const feed = createMessageFeed();
     const { sync, scene, reported } = setup();
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     const tokens = scene.getItems();
 
@@ -157,8 +157,9 @@ describe("createEncounterSync token deletion", () => {
   });
 
   it("a scene switch (not ready, items cleared, placed record reset via scene.setMetadata, ready) reports nothing", async () => {
+    const feed = createMessageFeed();
     const { sync, scene, reported } = setup();
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
 
     scene.setReady(false);
@@ -179,8 +180,9 @@ describe("createEncounterSync token deletion", () => {
   });
 
   it("our own writes settle: an items change from a reconcile's own writes triggers no further writes", async () => {
+    const feed = createMessageFeed();
     const { sync, scene, reported, writes } = setup();
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     await settle();
     expect(writes).toEqual(["addItems", "setSceneMetadata"]);

@@ -7,6 +7,7 @@ import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem, SceneModel } from "./scene-model.js";
+import { createMessageFeed, type MessageFeed } from "./testing/messages.js";
 import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import {
   INSTANCE_METADATA_KEY,
@@ -24,11 +25,8 @@ const inst = (over: Partial<EncounterInstance> = {}): EncounterInstance =>
     ...over,
   });
 
-const snapshot = (instance: EncounterInstance, seq = 0): BridgeMessage => ({
-  v: 1,
-  type: "encounter-snapshot",
-  payload: { instances: [instance], seq },
-});
+const snapshot = (feed: MessageFeed, instance: EncounterInstance, seq = 0) =>
+  feed.snapshot([instance], { seq });
 
 const helloAck: BridgeMessage = {
   v: 1,
@@ -44,32 +42,28 @@ const tableOf = (commandId: string): ChangeOrigin => ({
 
 /** The store's `hp-changed` event for i1 (a max HP or HP setter records one). */
 const hpChanged = (
+  feed: MessageFeed,
   seq: number,
   currentHp: number,
   maxHp: number,
   origin: ChangeOrigin,
-): BridgeMessage => ({
-  v: 1,
-  type: "encounter-event",
-  payload: { type: "hp-changed", id: "i1", currentHp, maxHp, origin, seq },
-});
+) =>
+  feed.event(
+    { type: "hp-changed", id: "i1", currentHp, maxHp, origin },
+    { seq },
+  );
 
 /** The store's `instance-changed` event for i1 (an armor class setter records one). */
 const armorClassChanged = (
+  feed: MessageFeed,
   seq: number,
   armorClass: number,
   origin: ChangeOrigin,
-): BridgeMessage => ({
-  v: 1,
-  type: "encounter-event",
-  payload: {
-    type: "instance-changed",
-    id: "i1",
-    changes: { armorClass },
-    origin,
-    seq,
-  },
-});
+) =>
+  feed.event(
+    { type: "instance-changed", id: "i1", changes: { armorClass }, origin },
+    { seq },
+  );
 
 const refusal = (id: string | undefined): BridgeMessage => ({
   v: 1,
@@ -157,11 +151,13 @@ async function setup(options: { withSend?: boolean } = {}) {
     onSnapshotOverride: (text) => heard.overrides.push(text),
     onWaitingChange: (waiting) => heard.waiting.push(waiting),
   });
-  await sync.handleMessage(snapshot(inst()));
+  const feed = createMessageFeed();
+  await sync.handleMessage(snapshot(feed, inst()));
   await settle();
   metadataWrites.length = 0;
   return {
     sync,
+    feed,
     scene,
     socket,
     heard,
@@ -181,7 +177,7 @@ async function setup(options: { withSend?: boolean } = {}) {
 
 describe("createEncounterSync table edit write-back", () => {
   it("createEncounterSync sends one instance-edit per table edit and not again on the next item change", async () => {
-    const { sync, scene, edits } = await setup();
+    const { feed, sync, scene, edits } = await setup();
     expect(edits()).toEqual([]);
 
     editAtTable(scene, { health: 5 });
@@ -196,7 +192,9 @@ describe("createEncounterSync table edit write-back", () => {
     expect(edits()).toHaveLength(1);
 
     // The store's acknowledgement changes nothing on the table.
-    await sync.handleMessage(hpChanged(1, 5, 16, tableOf(edits()[0]!.id)));
+    await sync.handleMessage(
+      hpChanged(feed, 1, 5, 16, tableOf(edits()[0]!.id)),
+    );
     await settle();
     expect(edits()).toHaveLength(1);
     expect(bubbles(scene).health).toBe(5);
@@ -211,7 +209,7 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("createEncounterSync reports an unparseable value once per snapshot", async () => {
-    const { sync, scene, edits, heard } = await setup();
+    const { feed, sync, scene, edits, heard } = await setup();
 
     editAtTable(scene, { health: "lots" });
     await settle();
@@ -223,7 +221,7 @@ describe("createEncounterSync table edit write-back", () => {
     expect(heard.rejected).toHaveLength(1);
 
     // A new snapshot reports it again; the value stays on the table.
-    await sync.handleMessage(snapshot(inst()));
+    await sync.handleMessage(snapshot(feed, inst()));
     await settle();
     expect(heard.rejected).toHaveLength(2);
     expect(bubbles(scene).health).toBe("lots");
@@ -231,13 +229,15 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("an mcp event that changes HP is pushed to a token whose HP edit was acknowledged since the last write", async () => {
-    const { sync, scene, edits } = await setup();
+    const { feed, sync, scene, edits } = await setup();
     editAtTable(scene, { health: 5 });
     await settle();
-    await sync.handleMessage(hpChanged(1, 5, 16, tableOf(edits()[0]!.id)));
+    await sync.handleMessage(
+      hpChanged(feed, 1, 5, 16, tableOf(edits()[0]!.id)),
+    );
 
     // The agent heals back to the value the token was last written with.
-    await sync.handleMessage(hpChanged(2, 10, 16, mcp));
+    await sync.handleMessage(hpChanged(feed, 2, 10, 16, mcp));
     await settle();
 
     expect(bubbles(scene).health).toBe(10);
@@ -245,11 +245,13 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("a table event for a sent command pushes nothing and records the store value as the baseline", async () => {
-    const { sync, scene, edits, bubbleWrites } = await setup();
+    const { feed, sync, scene, edits, bubbleWrites } = await setup();
     editAtTable(scene, { health: 5 });
     await settle();
 
-    await sync.handleMessage(hpChanged(1, 5, 16, tableOf(edits()[0]!.id)));
+    await sync.handleMessage(
+      hpChanged(feed, 1, 5, 16, tableOf(edits()[0]!.id)),
+    );
     await settle();
 
     expect(bubbleWrites()).toEqual([]);
@@ -259,12 +261,14 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("a table event whose value differs from the sent one shows the clamp note and the token keeps the typed value", async () => {
-    const { sync, scene, edits, heard } = await setup();
+    const { feed, sync, scene, edits, heard } = await setup();
     editAtTable(scene, { health: 99 });
     await settle();
 
     // The store clamps HP to the max HP of 16.
-    await sync.handleMessage(hpChanged(1, 16, 16, tableOf(edits()[0]!.id)));
+    await sync.handleMessage(
+      hpChanged(feed, 1, 16, 16, tableOf(edits()[0]!.id)),
+    );
     await settle();
 
     expect(heard.notes).toHaveLength(1);
@@ -274,10 +278,12 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("a clamped field is not sent again, and the next snapshot shows the store's value", async () => {
-    const { sync, scene, edits } = await setup();
+    const { feed, sync, scene, edits } = await setup();
     editAtTable(scene, { health: 99 });
     await settle();
-    await sync.handleMessage(hpChanged(1, 16, 16, tableOf(edits()[0]!.id)));
+    await sync.handleMessage(
+      hpChanged(feed, 1, 16, 16, tableOf(edits()[0]!.id)),
+    );
     await settle();
 
     scene.addItems([foreign]);
@@ -285,7 +291,7 @@ describe("createEncounterSync table edit write-back", () => {
     expect(edits()).toHaveLength(1);
     expect(bubbles(scene).health).toBe(99);
 
-    await sync.handleMessage(snapshot(inst({ currentHp: 16 }), 1));
+    await sync.handleMessage(snapshot(feed, inst({ currentHp: 16 }), 1));
     await settle();
 
     expect(bubbles(scene).health).toBe(16);
@@ -294,12 +300,14 @@ describe("createEncounterSync table edit write-back", () => {
 
   it("a table event with a command id the extension did not send pushes nothing and records the store value", async () => {
     // No `send`: the extension remembers no command, as after a reload.
-    const { sync, scene, bubbleWrites } = await setup({ withSend: false });
+    const { feed, sync, scene, bubbleWrites } = await setup({
+      withSend: false,
+    });
     editAtTable(scene, { health: 5 });
     await settle();
 
     await sync.handleMessage(
-      hpChanged(1, 5, 16, tableOf("from-before-reload")),
+      hpChanged(feed, 1, 5, 16, tableOf("from-before-reload")),
     );
     await settle();
 
@@ -309,7 +317,7 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("two edits of one instance sent before either is acknowledged get two command ids and both typed values stay after both acknowledgements", async () => {
-    const { sync, scene, edits } = await setup();
+    const { feed, sync, scene, edits } = await setup();
     editAtTable(scene, { health: 5 });
     await settle();
     editAtTable(scene, { health: 3 });
@@ -322,27 +330,29 @@ describe("createEncounterSync table edit write-back", () => {
     expect(first!.id).not.toBe(second!.id);
 
     // The older acknowledgement does not overwrite the newer typed value.
-    await sync.handleMessage(hpChanged(1, 5, 16, tableOf(first!.id)));
+    await sync.handleMessage(hpChanged(feed, 1, 5, 16, tableOf(first!.id)));
     await settle();
     expect(bubbles(scene).health).toBe(3);
 
-    await sync.handleMessage(hpChanged(2, 3, 16, tableOf(second!.id)));
+    await sync.handleMessage(hpChanged(feed, 2, 3, 16, tableOf(second!.id)));
     await settle();
     expect(bubbles(scene).health).toBe(3);
     expect(edits()).toHaveLength(2);
   });
 
   it("an MCP change to another field between an edit and its acknowledgement is pushed and the typed value stays", async () => {
-    const { sync, scene, edits } = await setup();
+    const { feed, sync, scene, edits } = await setup();
     editAtTable(scene, { health: 5 });
     await settle();
 
-    await sync.handleMessage(armorClassChanged(1, 15, mcp));
+    await sync.handleMessage(armorClassChanged(feed, 1, 15, mcp));
     await settle();
     expect(bubbles(scene)["armor class"]).toBe(15);
     expect(bubbles(scene).health).toBe(5);
 
-    await sync.handleMessage(hpChanged(2, 5, 16, tableOf(edits()[0]!.id)));
+    await sync.handleMessage(
+      hpChanged(feed, 2, 5, 16, tableOf(edits()[0]!.id)),
+    );
     await settle();
     expect(bubbles(scene)["armor class"]).toBe(15);
     expect(bubbles(scene).health).toBe(5);
@@ -350,7 +360,7 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("an edit made while the socket is down is sent after the next hello-ack, once, and the waiting count is 1 until then", async () => {
-    const { sync, scene, socket, edits, heard } = await setup();
+    const { feed, sync, scene, socket, edits, heard } = await setup();
     socket.open = false;
 
     editAtTable(scene, { health: 5 });
@@ -365,7 +375,7 @@ describe("createEncounterSync table edit write-back", () => {
       { instanceId: "i1", currentHp: 5 },
     ]);
     expect(heard.waiting.at(-1)).toBe(0);
-    await sync.handleMessage(snapshot(inst()));
+    await sync.handleMessage(snapshot(feed, inst()));
     await settle();
 
     expect(edits()).toHaveLength(1);
@@ -388,7 +398,7 @@ describe("createEncounterSync table edit write-back", () => {
   });
 
   it("a max HP edit that lowers HP in the store pushes the lowered HP", async () => {
-    const { sync, scene, edits, heard } = await setup();
+    const { feed, sync, scene, edits, heard } = await setup();
     editAtTable(scene, { "max health": 8 });
     await settle();
     expect(edits().map((e) => e.edit)).toEqual([
@@ -396,7 +406,7 @@ describe("createEncounterSync table edit write-back", () => {
     ]);
 
     // The store lowers HP from 10 to the new max as a side effect.
-    await sync.handleMessage(hpChanged(1, 8, 8, tableOf(edits()[0]!.id)));
+    await sync.handleMessage(hpChanged(feed, 1, 8, 8, tableOf(edits()[0]!.id)));
     await settle();
 
     expect(bubbles(scene)).toMatchObject({ health: 8, "max health": 8 });
@@ -407,11 +417,13 @@ describe("createEncounterSync table edit write-back", () => {
 
 describe("createEncounterSync snapshot overrides", () => {
   it("the sync calls onSnapshotOverride once per field a snapshot pushed", async () => {
-    const { sync, heard } = await setup();
+    const { feed, sync, heard } = await setup();
     expect(heard.overrides).toEqual([]);
 
     // While the extension was away the store changed HP and max HP.
-    await sync.handleMessage(snapshot(inst({ currentHp: 7, maxHp: 12 }), 3));
+    await sync.handleMessage(
+      snapshot(feed, inst({ currentHp: 7, maxHp: 12 }), 3),
+    );
     await settle();
 
     expect(heard.overrides).toHaveLength(2);
@@ -420,18 +432,18 @@ describe("createEncounterSync snapshot overrides", () => {
     expect(heard.overrides.some((t) => t.includes("12"))).toBe(true);
 
     // The same snapshot again pushes nothing, so nothing more is recorded.
-    await sync.handleMessage(snapshot(inst({ currentHp: 7, maxHp: 12 }), 3));
+    await sync.handleMessage(
+      snapshot(feed, inst({ currentHp: 7, maxHp: 12 }), 3),
+    );
     await settle();
     expect(heard.overrides).toHaveLength(2);
   });
 });
 
 /** A snapshot of i1 with another instance, i0, listed first with other values. */
-const withOther = (i1: EncounterInstance, seq = 0): BridgeMessage => ({
-  v: 1,
-  type: "encounter-snapshot",
-  payload: {
-    instances: [
+const withOther = (feed: MessageFeed, i1: EncounterInstance, seq = 0) =>
+  feed.snapshot(
+    [
       makeTestInstance({
         id: "i0",
         displayName: "Shadow 0",
@@ -441,22 +453,20 @@ const withOther = (i1: EncounterInstance, seq = 0): BridgeMessage => ({
       }),
       i1,
     ],
-    seq,
-  },
-});
+    { seq },
+  );
 
 /** The agent's rename of i1. */
-const renamedAt = (seq: number): BridgeMessage => ({
-  v: 1,
-  type: "encounter-event",
-  payload: {
-    type: "instance-changed",
-    id: "i1",
-    changes: { name: "Shade 1" },
-    origin: mcp,
-    seq,
-  },
-});
+const renamedAt = (feed: MessageFeed, seq: number) =>
+  feed.event(
+    {
+      type: "instance-changed",
+      id: "i1",
+      changes: { name: "Shade 1" },
+      origin: mcp,
+    },
+    { seq },
+  );
 
 /**
  * Like `setup`, over two instances, with a scene whose next `getItems` can be
@@ -509,10 +519,12 @@ async function setupWithControls() {
       onEditDiffers: (text) => heard.notes.push(text),
     },
   );
-  await sync.handleMessage(withOther(inst()));
+  const feed = createMessageFeed();
+  await sync.handleMessage(withOther(feed, inst()));
   await settle();
   return {
     sync,
+    feed,
     scene: fake.scene,
     heard,
     retries,
@@ -536,9 +548,11 @@ async function setupWithControls() {
 }
 
 describe("createEncounterSync store changes across reconciles", () => {
+  // Built when the table is collected, so every seq is explicit.
+  const tableFeed = createMessageFeed();
   it.each([
-    ["an agent's HP change", hpChanged(1, 7, 16, mcp), 0],
-    ["a snapshot", withOther(inst({ currentHp: 7 }), 4), 1],
+    ["an agent's HP change", hpChanged(tableFeed, 1, 7, 16, mcp), 0],
+    ["a snapshot", withOther(tableFeed, inst({ currentHp: 7 }), 4), 1],
   ])(
     "%s is still written when the reconcile that saw it failed and is retried",
     async (_name, message, overrides) => {
@@ -559,13 +573,13 @@ describe("createEncounterSync store changes across reconciles", () => {
   );
 
   it("an agent's HP change that arrives while a reconcile applies is pushed by the next one", async () => {
-    const { sync, scene, holdNextGetItems } = await setupWithControls();
+    const { feed, sync, scene, holdNextGetItems } = await setupWithControls();
 
     // An item change starts a reconcile, which waits for the scene's items.
     const held = holdNextGetItems();
     scene.addItems([foreign]);
     await held.entered;
-    const event = sync.handleMessage(hpChanged(1, 7, 16, mcp));
+    const event = sync.handleMessage(hpChanged(feed, 1, 7, 16, mcp));
     held.release();
     await event;
     await settle();
@@ -577,13 +591,13 @@ describe("createEncounterSync store changes across reconciles", () => {
     [
       "a max HP change leaves an unreadable HP",
       { health: "lots" },
-      hpChanged(1, 10, 20, mcp),
+      hpChanged(tableFeed, 1, 10, 20, mcp),
       { health: "lots", "max health": 20 },
     ],
     [
       "a rename leaves an unreadable armor class",
       { "armor class": "x" },
-      renamedAt(1),
+      renamedAt(tableFeed, 1),
       { health: 10, "armor class": "x" },
     ],
   ])(
@@ -617,7 +631,7 @@ describe("createEncounterSync token deletions alongside edits", () => {
   });
 
   it("a refused token deletion is not sent again until the next store change", async () => {
-    const { sync, scene, deletions } = await setupWithControls();
+    const { feed, sync, scene, deletions } = await setupWithControls();
     scene.deleteItems([token(scene).id]);
     await settle();
     expect(deletions()).toHaveLength(1);
@@ -628,7 +642,7 @@ describe("createEncounterSync token deletions alongside edits", () => {
     expect(deletions()).toHaveLength(1);
 
     // A store change reports it again.
-    await sync.handleMessage(hpChanged(1, 7, 16, mcp));
+    await sync.handleMessage(hpChanged(feed, 1, 7, 16, mcp));
     await settle();
     expect(deletions()).toHaveLength(2);
   });
@@ -659,11 +673,13 @@ describe("createEncounterSync token deletions alongside edits", () => {
 
 describe("createEncounterSync answers to edits", () => {
   it("the clamp note names the instance whose edit was clamped", async () => {
-    const { sync, scene, heard, edits } = await setupWithControls();
+    const { feed, sync, scene, heard, edits } = await setupWithControls();
     editAtTable(scene, { health: 99 });
     await settle();
 
-    await sync.handleMessage(hpChanged(1, 16, 16, tableOf(edits()[0]!.id!)));
+    await sync.handleMessage(
+      hpChanged(feed, 1, 16, 16, tableOf(edits()[0]!.id!)),
+    );
     await settle();
 
     expect(heard.notes).toHaveLength(1);
@@ -672,7 +688,7 @@ describe("createEncounterSync answers to edits", () => {
   });
 
   it("an edit's answer leaves a field the edit did not set alone when the store did not change it", async () => {
-    const { sync, scene, edits } = await setup();
+    const { feed, sync, scene, edits } = await setup();
     // Max HP is not a number: it is reported and only HP is sent.
     editAtTable(scene, { health: 5, "max health": "x" });
     await settle();
@@ -681,19 +697,21 @@ describe("createEncounterSync answers to edits", () => {
     ]);
 
     // The event carries max HP too, unchanged at 16.
-    await sync.handleMessage(hpChanged(1, 5, 16, tableOf(edits()[0]!.id)));
+    await sync.handleMessage(
+      hpChanged(feed, 1, 5, 16, tableOf(edits()[0]!.id)),
+    );
     await settle();
 
     expect(bubbles(scene)).toMatchObject({ health: 5, "max health": "x" });
   });
 
   it("a table event with a command id the extension does not know records the store's value as the baseline while the token shows another", async () => {
-    const { sync, scene } = await setup({ withSend: false });
+    const { feed, sync, scene } = await setup({ withSend: false });
     editAtTable(scene, { health: 6 });
     await settle();
 
     await sync.handleMessage(
-      hpChanged(1, 5, 16, tableOf("from-before-reload")),
+      hpChanged(feed, 1, 5, 16, tableOf("from-before-reload")),
     );
     await settle();
 
@@ -728,13 +746,13 @@ describe("createEncounterSync answers to edits", () => {
   ])(
     "%s carrying an edit's id is no refusal: the edit stays in flight",
     async (_name, message) => {
-      const { sync, scene, edits } = await setup();
+      const { feed, sync, scene, edits } = await setup();
       editAtTable(scene, { health: 5 });
       await settle();
 
       await sync.handleMessage(message(edits()[0]!.id));
       // In flight, the typed value stays although the agent moves HP.
-      await sync.handleMessage(hpChanged(1, 7, 16, mcp));
+      await sync.handleMessage(hpChanged(feed, 1, 7, 16, mcp));
       await settle();
 
       expect(bubbles(scene).health).toBe(5);
@@ -748,7 +766,7 @@ describe("createEncounterSync snapshots on the same connection", () => {
   async function connectedWithEdit() {
     const ctx = await setup();
     await ctx.sync.handleMessage(helloAck);
-    await ctx.sync.handleMessage(snapshot(inst()));
+    await ctx.sync.handleMessage(snapshot(ctx.feed, inst()));
     await settle();
     editAtTable(ctx.scene, { health: 5 });
     await settle();
@@ -757,13 +775,13 @@ describe("createEncounterSync snapshots on the same connection", () => {
   }
 
   it("an edit whose answer a same-connection snapshot covers no longer blocks an agent's HP change", async () => {
-    const { sync, scene, edits } = await connectedWithEdit();
+    const { feed, sync, scene, edits } = await connectedWithEdit();
 
     // In place of an unreadable row: the edit is in the store, and its
     // answer is at or before the snapshot's seq, so it never arrives.
-    await sync.handleMessage(snapshot(inst({ currentHp: 5 }), 2));
+    await sync.handleMessage(snapshot(feed, inst({ currentHp: 5 }), 2));
     await settle();
-    await sync.handleMessage(hpChanged(3, 7, 16, mcp));
+    await sync.handleMessage(hpChanged(feed, 3, 7, 16, mcp));
     await settle();
 
     expect(bubbles(scene).health).toBe(7);
@@ -771,9 +789,9 @@ describe("createEncounterSync snapshots on the same connection", () => {
   });
 
   it("an edit a same-connection snapshot does not hold yet is sent again", async () => {
-    const { sync, scene, edits } = await connectedWithEdit();
+    const { feed, sync, scene, edits } = await connectedWithEdit();
 
-    await sync.handleMessage(snapshot(inst(), 2));
+    await sync.handleMessage(snapshot(feed, inst(), 2));
     await settle();
 
     expect(edits().map((e) => e.edit)).toEqual([
