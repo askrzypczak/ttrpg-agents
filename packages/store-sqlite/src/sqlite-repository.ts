@@ -227,8 +227,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
     initiative: number | null,
     origin: ChangeOrigin,
   ): MonsterInstance {
-    if (initiative === null) throw new Error("not implemented");
-    if (!Number.isInteger(initiative)) {
+    if (initiative !== null && !Number.isInteger(initiative)) {
       throw new InvalidInitiativeError(
         `initiative must be an integer, got ${String(initiative)}`,
       );
