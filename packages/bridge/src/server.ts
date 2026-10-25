@@ -242,14 +242,10 @@ function handleMessage(
         );
         break;
       }
-      if (outcome.ok) {
-        // The log poller also broadcasts this removal as a `table` event, but
-        // the extension ignores `table` events, so answer with the new state
-        // until deltas replace this snapshot (#209).
-        sendSnapshot(ws, hooks);
-      } else {
+      // An accepted removal is answered by the log poller's `table` event,
+      // which carries this command id.
+      if (!outcome.ok)
         send(ws, errorMessage(outcome.code, outcome.message, message.id));
-      }
       break;
     }
     case "instance-edit": {
@@ -277,13 +273,10 @@ function handleMessage(
         );
         break;
       }
-      if (outcome.ok) {
-        // Answer with the new state, like token-deleted, until the extension
-        // takes the log poller's `table` event as the answer (#209).
-        sendSnapshot(ws, hooks);
-      } else {
+      // An accepted edit is answered by the log poller's `table` events,
+      // which carry this command id.
+      if (!outcome.ok)
         send(ws, errorMessage(outcome.code, outcome.message, message.id));
-      }
       break;
     }
     case "token-art-set": {
@@ -310,9 +303,8 @@ function handleMessage(
         );
         break;
       }
-      // Token art is not in the change log, so no event tells the client;
-      // send the new state directly.
-      sendSnapshot(ws, hooks);
+      // No answer: the extension keeps its own pick, and the snapshot on the
+      // next connect carries the stored art.
       break;
     }
     case "query-result": {
