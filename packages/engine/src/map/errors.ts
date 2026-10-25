@@ -18,8 +18,9 @@ export class UnknownRoomError extends DomainError {
 
 /**
  * The map to use cannot be picked: no map on the scene, several and no name,
- * a name two maps share, or no map with that name. The message lists the
- * maps' names, or says there are none.
+ * a name two maps share, no map with that name, or the chosen map covers less
+ * than one grid cell. The selection messages list the maps' names, or say
+ * there are none.
  */
 export class MapSelectionError extends DomainError {
   constructor(message: string) {

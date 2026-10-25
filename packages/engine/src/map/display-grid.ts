@@ -45,17 +45,16 @@ export function displayGrid(placement: MapPlacement): DisplayGrid {
 
 /** Spreadsheet-style column letters: 0 is A, 25 is Z, 26 is AA. */
 export function formatColumnLabel(col: number): string {
-  void col;
-  throw new Error("not implemented");
+  let letters = "";
+  for (let n = col + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    letters = String.fromCharCode(65 + ((n - 1) % 26)) + letters;
+  }
+  return letters;
 }
 
 /** Spreadsheet-style label: column A, B, ..., Z, AA, ...; the row is 1-based. */
 export function formatCellLabel(cell: Cell): string {
-  let letters = "";
-  for (let n = cell.col + 1; n > 0; n = Math.floor((n - 1) / 26)) {
-    letters = String.fromCharCode(65 + ((n - 1) % 26)) + letters;
-  }
-  return `${letters}${cell.row + 1}`;
+  return `${formatColumnLabel(cell.col)}${cell.row + 1}`;
 }
 
 /** Parses a label such as "T5" or "ab11" (case-insensitive) to a display cell. */
