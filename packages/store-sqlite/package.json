@@ -10,6 +10,9 @@
       "default": "./dist/index.js"
     }
   },
+  "scripts": {
+    "import:token-art": "tsc -b tsconfig.build.json && node scripts/import-token-art.ts"
+  },
   "dependencies": {
     "@ttrpg-agents/engine": "*"
   },
