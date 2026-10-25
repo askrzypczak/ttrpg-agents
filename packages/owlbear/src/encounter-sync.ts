@@ -1,17 +1,21 @@
 import { tokenArtSchema, type TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
-import { instanceEditMessage } from "./instance-edit.js";
+import { instanceEditMessage, splitEdit } from "./instance-edit.js";
 import { tokenDeletedMessage } from "./token-deleted.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
+import { createOutbox } from "./outbox.js";
 import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem } from "./scene-model.js";
 import {
+  EDIT_FIELD_NAMES,
   PLACED_METADATA_KEY,
   defaultSyncConfig,
   instanceIdOf,
   planSync,
+  type EditField,
   type EncounterInstance,
+  type FieldContext,
   type SyncPlan,
 } from "./sync-plan.js";
 
@@ -73,8 +77,38 @@ function fold(
 }
 
 /**
- * Holds the desired encounter (the latest snapshot folded with later `mcp`
- * events, in `seq` order) and reconciles the scene against it on every trigger: a message, the scene
+ * The instance and the edit fields an event carries, with the store's values;
+ * `undefined` for an event that carries none.
+ */
+function editFieldsOf(
+  event: EncounterEventPayload,
+): { id: string; fields: [EditField, number][] } | undefined {
+  if (event.type === "hp-changed")
+    return {
+      id: event.id,
+      fields: [
+        ["currentHp", event.currentHp],
+        ["maxHp", event.maxHp],
+      ],
+    };
+  if (
+    event.type === "instance-changed" &&
+    event.changes.armorClass !== undefined
+  )
+    return { id: event.id, fields: [["armorClass", event.changes.armorClass]] };
+  return undefined;
+}
+
+/**
+ * Per instance id, per edit field, what the events and refusals since the
+ * last successful reconcile say: the store `moved` it, or it settled at a
+ * value. A later fact replaces an earlier one.
+ */
+type Facts = Map<string, Map<EditField, "moved" | number>>;
+
+/**
+ * Holds the desired encounter (the latest snapshot folded with later events,
+ * in `seq` order) and reconciles the scene against it on every trigger: a message, the scene
  * becoming ready, an item change, or a retry. Reconciles run one at a time,
  * in arrival order. One on a scene that is not ready is skipped (the ready flip runs it). A
  * failing one on a ready scene is reported to `onError` and retried with
@@ -84,8 +118,17 @@ function fold(
  * Events before the first snapshot are ignored (the bridge sends a snapshot
  * on connect). After it, an event whose `seq` is not past the last one seen is
  * a duplicate and ignored; one that skips ahead is a gap: nothing is applied,
- * `onGap` is called once, and events are ignored until the next snapshot. A
- * `table` event only advances the `seq` (the table already shows it).
+ * `onGap` is called once, and events are ignored until the next snapshot.
+ *
+ * Commands (table edits, one field each, and token deletions) go through an
+ * outbox over `options.send`: one that cannot go out waits for the next
+ * `hello-ack`, and each is remembered until the store settles it. A `table`
+ * event with the id of a sent edit acknowledges it: the token keeps the typed
+ * value (a clamp shows a note through `onEditDiffers`), and a field the edit
+ * did not set that the store changed is pushed. A `table` event with an id the
+ * extension does not know settles its fields at the store's value. A refused
+ * edit is settled at its sent value, so it is not sent again. An `mcp` event
+ * pushes the fields it changes, unless an edit of the field is in flight.
  */
 export function createEncounterSync(
   obr: ObrAdapter,
@@ -108,7 +151,7 @@ export function createEncounterSync(
     onTokenArt?: (monsterKey: string, art: TokenArt) => void;
     /** Called once per store change (a snapshot or an applied `mcp` event) for each table value that could not be read back. */
     onEditRejected?: (text: string) => void;
-    /** Called once per answered edit whose table value differs from the store's, with the note to show. */
+    /** Called once per acknowledged edit whose store value differs from the sent one, with the note to show. */
     onEditDiffers?: (text: string) => void;
     /** Called when a snapshot or an applied `mcp` event changes what the store says. */
     onStoreChange?: () => void;
@@ -137,6 +180,122 @@ export function createEncounterSync(
   // raised synchronously by our own write calls (`writing`) are ignored.
   let writing = false;
   let queued = false;
+  const outbox =
+    options.send === undefined
+      ? undefined
+      : createOutbox(options.send, options.onWaitingChange);
+  // What the next reconcile is told: the facts since the last successful one,
+  // and whether a snapshot arrived since.
+  let facts: Facts = new Map();
+  // Stryker disable next-line BooleanLiteral: equivalent, nothing reconciles before the first snapshot, which sets it
+  let afterSnapshot = false;
+
+  function record(
+    instanceId: string,
+    field: EditField,
+    fact: "moved" | number,
+  ): void {
+    let fields = facts.get(instanceId);
+    if (fields === undefined) facts.set(instanceId, (fields = new Map()));
+    fields.set(field, fact);
+  }
+
+  /** The facts of a reconcile that did not go through, under the newer ones. */
+  function restore(taken: Facts, snapshot: boolean): void {
+    for (const [id, earlier] of taken)
+      facts.set(id, new Map([...earlier, ...(facts.get(id) ?? [])]));
+    afterSnapshot ||= snapshot;
+  }
+
+  /** The planner's per-instance field context: `taken` plus the edits in flight. */
+  function fieldContexts(taken: Facts): Map<string, FieldContext> {
+    const contexts = new Map<
+      string,
+      {
+        moved: Set<EditField>;
+        settled: Partial<Record<EditField, number>>;
+        inflight: Partial<Record<EditField, number>>;
+      }
+    >();
+    const of = (id: string) => {
+      let context = contexts.get(id);
+      if (context === undefined)
+        contexts.set(
+          id,
+          (context = { moved: new Set(), settled: {}, inflight: {} }),
+        );
+      return context;
+    };
+    for (const [id, fields] of taken)
+      for (const [field, fact] of fields) {
+        if (fact === "moved") of(id).moved.add(field);
+        else of(id).settled[field] = fact;
+      }
+    // Later commands for a field replace earlier ones.
+    for (const { message } of outbox?.pending() ?? []) {
+      // Stryker disable next-line ConditionalExpression: equivalent, a token deletion sets no edit field; this narrows the type
+      if (message.type !== "instance-edit") continue;
+      const { instanceId, ...edit } = message.payload;
+      Object.assign(of(instanceId).inflight, edit);
+    }
+    return contexts;
+  }
+
+  const deletionPending = (instanceId: string): boolean =>
+    outbox
+      ?.pending()
+      .some(
+        ({ message }) =>
+          message.type === "token-deleted" &&
+          message.payload.instanceId === instanceId,
+      ) === true;
+
+  /**
+   * A `table` event: settles the command it acknowledges and records what it
+   * says about the edit fields, before it is folded into `desired`.
+   */
+  function acknowledge(event: EncounterEventPayload): void {
+    const command = outbox?.settle(event.origin.commandId);
+    const carried = editFieldsOf(event);
+    if (carried === undefined) return;
+    const { id, fields } = carried;
+    if (command === undefined) {
+      // Not ours (or sent before a reload): the store's values are agreed.
+      for (const [field, value] of fields) record(id, field, value);
+      return;
+    }
+    // Stryker disable next-line ConditionalExpression: equivalent, only an edit's events carry edit fields; this narrows the type
+    if (command.message.type !== "instance-edit") return;
+    const sent = command.message.payload;
+    const before = desired?.find((i) => i.id === id);
+    const clauses: string[] = [];
+    for (const [field, value] of fields) {
+      const typed = sent[field];
+      if (typed === undefined) {
+        // A side effect of the edit (HP lowered by a max HP edit).
+        if (before?.[field] !== value) record(id, field, "moved");
+        continue;
+      }
+      record(id, field, typed);
+      if (value !== typed)
+        clauses.push(
+          `${EDIT_FIELD_NAMES[field]} ${String(value)} for ${before?.displayName ?? id}, not the ${String(typed)} on the table`,
+        );
+    }
+    if (clauses.length > 0)
+      options.onEditDiffers?.(
+        `The store holds ${clauses.join("; ")}; the token keeps your value.`,
+      );
+  }
+
+  /** An `mcp` event: the edit fields whose value it changes have moved. */
+  function noteMoved(event: EncounterEventPayload): void {
+    const carried = editFieldsOf(event);
+    if (carried === undefined) return;
+    const before = desired?.find((i) => i.id === carried.id);
+    for (const [field, value] of carried.fields)
+      if (before?.[field] !== value) record(carried.id, field, "moved");
+  }
 
   const enqueue = (task: () => Promise<void>): Promise<void> => {
     // Never let the chain reject, or every later trigger would be skipped.
@@ -164,7 +323,11 @@ export function createEncounterSync(
     return undefined;
   }
 
-  async function apply(wanted: EncounterInstance[]): Promise<SyncPlan> {
+  async function apply(
+    wanted: EncounterInstance[],
+    taken: Facts,
+    snapshot: boolean,
+  ): Promise<SyncPlan> {
     const items = await obr.getItems();
     const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
     const placed = new Set(
@@ -175,10 +338,12 @@ export function createEncounterSync(
     const context = {
       viewportCenter: await obr.getViewportCenter(),
       placed,
+      snapshot,
     };
     const first = planSync(wanted, items, defaultSyncConfig, {
       ...context,
       art,
+      fields: fieldContexts(taken),
     });
     // Ask once per new monster type, before anything is written, so its
     // tokens are created once with the right look.
@@ -195,6 +360,7 @@ export function createEncounterSync(
     const plan = planSync(wanted, items, defaultSyncConfig, {
       ...context,
       art,
+      fields: fieldContexts(taken),
     });
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
@@ -231,10 +397,16 @@ export function createEncounterSync(
     }
     if (desired === null || !(await obr.isSceneReady())) return;
     const applying = desired;
+    // Facts that arrive while this reconcile applies are for the next one.
+    const taken = facts;
+    const snapshot = afterSnapshot;
+    facts = new Map();
+    afterSnapshot = false;
     let plan: SyncPlan;
     try {
-      plan = await apply(applying);
+      plan = await apply(applying, taken, snapshot);
     } catch (error) {
+      restore(taken, snapshot);
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
       try {
@@ -255,16 +427,21 @@ export function createEncounterSync(
     attempt = 0;
     appliedCount = applying.length;
     if (!quiet || recovered) onApplied();
-    for (const edit of plan.edits) options.send?.(instanceEditMessage(edit));
+    // One command per field, so each has exactly one acknowledging event.
+    for (const edit of plan.edits)
+      for (const part of splitEdit(edit))
+        outbox?.submit(instanceEditMessage(part));
+    for (const { message } of plan.overrides)
+      options.onSnapshotOverride?.(message);
     for (const { message } of plan.rejected) {
       if (rejectedReported.has(message)) continue;
       rejectedReported.add(message);
       options.onEditRejected?.(message);
     }
     for (const id of plan.deleted) {
-      if (reported.has(id)) continue;
+      if (reported.has(id) || deletionPending(id)) continue;
       reported.add(id);
-      options.send?.(tokenDeletedMessage(id));
+      outbox?.submit(tokenDeletedMessage(id));
     }
   }
 
@@ -292,10 +469,17 @@ export function createEncounterSync(
 
   return {
     handleMessage(message) {
+      if (message.type === "hello-ack") {
+        // Before the snapshot that follows is applied.
+        outbox?.helloAck();
+        return Promise.resolve();
+      }
       if (message.type === "encounter-snapshot") {
+        outbox?.snapshot();
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
         seq = message.payload.seq;
+        afterSnapshot = true;
         reported.clear();
         rejectedReported.clear();
         options.onStoreChange?.();
@@ -311,19 +495,40 @@ export function createEncounterSync(
           return Promise.resolve();
         }
         seq = eventSeq;
-        // The table already shows its own change, and the answer snapshot
-        // carried the store's value: nothing to apply or reset.
-        if (message.payload.origin.source === "table") return Promise.resolve();
-        desired = fold(desired, message.payload);
-        reported.clear();
-        rejectedReported.clear();
-        options.onStoreChange?.();
+        const event = message.payload;
+        if (event.origin.source === "table") {
+          // The table already shows its own change: no store change to
+          // report, so a clamp note it brings stays.
+          acknowledge(event);
+          desired = fold(desired, event);
+        } else {
+          noteMoved(event);
+          desired = fold(desired, event);
+          reported.clear();
+          rejectedReported.clear();
+          options.onStoreChange?.();
+        }
+      } else if (
+        message.type === "error" &&
+        !message.payload.fatal &&
+        // Stryker disable next-line ConditionalExpression: equivalent, every pending command has an id, so none is settled for an error without one
+        message.id !== undefined
+      ) {
+        // A refused edit: the token keeps the typed value (main.ts shows the
+        // error), and it is agreed so that it is not sent again.
+        const command = outbox?.settle(message.id);
+        if (command?.message.type !== "instance-edit") return Promise.resolve();
+        const { instanceId, ...edit } = command.message.payload;
+        for (const [field, value] of Object.entries(edit) as [
+          EditField,
+          number | undefined,
+        ][])
+          // Stryker disable next-line ConditionalExpression: equivalent, a sent edit carries only the fields it sets (splitEdit), and an undefined settled value counts as unsettled
+          if (value !== undefined) record(instanceId, field, value);
       } else {
-        // A refused edit needs no reconcile: the token keeps the typed value
-        // and main.ts shows the error.
         return Promise.resolve();
       }
-      // A snapshot or an event.
+      // A snapshot, an event or a refused edit.
       return enqueue(reconcile);
     },
     appliedInstanceCount() {

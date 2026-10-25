@@ -5,6 +5,7 @@ import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
+import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem, SceneModel } from "./scene-model.js";
 import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import {
@@ -423,4 +424,321 @@ describe("createEncounterSync snapshot overrides", () => {
     await settle();
     expect(heard.overrides).toHaveLength(2);
   });
+});
+
+/** A snapshot of i1 with another instance, i0, listed first with other values. */
+const withOther = (i1: EncounterInstance, seq = 0): BridgeMessage => ({
+  v: 1,
+  type: "encounter-snapshot",
+  payload: {
+    instances: [
+      makeTestInstance({
+        id: "i0",
+        displayName: "Shadow 0",
+        maxHp: 8,
+        currentHp: 3,
+        armorClass: 9,
+      }),
+      i1,
+    ],
+    seq,
+  },
+});
+
+/** The agent's rename of i1. */
+const renamedAt = (seq: number): BridgeMessage => ({
+  v: 1,
+  type: "encounter-event",
+  payload: {
+    type: "instance-changed",
+    id: "i1",
+    changes: { name: "Shade 1" },
+    origin: mcp,
+    seq,
+  },
+});
+
+/**
+ * Like `setup`, over two instances, with a scene whose next `getItems` can be
+ * held open and whose next metadata write can fail, and retry timers fired by
+ * hand.
+ */
+async function setupWithControls() {
+  const fake = createFakeObr();
+  let hold: { entered: () => void; release: Promise<void> } | undefined;
+  let failWrite = false;
+  const retries: (() => void)[] = [];
+  const obr: ObrAdapter = {
+    ...fake.obr,
+    getItems: async () => {
+      const held = hold;
+      hold = undefined;
+      if (held !== undefined) {
+        held.entered();
+        await held.release;
+      }
+      return fake.obr.getItems();
+    },
+    setItemMetadata: (updates) => {
+      if (!failWrite) return fake.obr.setItemMetadata(updates);
+      failWrite = false;
+      return Promise.reject(new Error("metadata write failed"));
+    },
+  };
+  const timers: Timers = {
+    setTimeout: (fn) => retries.push(fn),
+    clearTimeout: () => {},
+  };
+  const sent: BridgeMessage[] = [];
+  const heard = {
+    errors: [] as unknown[],
+    overrides: [] as string[],
+    notes: [] as string[],
+  };
+  const sync = createEncounterSync(
+    obr,
+    (e) => heard.errors.push(e),
+    undefined,
+    {
+      timers,
+      send: (message) => {
+        sent.push(message);
+        return true;
+      },
+      onSnapshotOverride: (text) => heard.overrides.push(text),
+      onEditDiffers: (text) => heard.notes.push(text),
+    },
+  );
+  await sync.handleMessage(withOther(inst()));
+  await settle();
+  return {
+    sync,
+    scene: fake.scene,
+    heard,
+    retries,
+    failNextMetadataWrite: () => {
+      failWrite = true;
+    },
+    /** Holds the next `getItems`; `entered` resolves once a reconcile waits in it. */
+    holdNextGetItems() {
+      let entered!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => (entered = resolve));
+      hold = {
+        entered,
+        release: new Promise<void>((resolve) => (release = resolve)),
+      };
+      return { entered: reached, release };
+    },
+    edits: () => sent.filter((m) => m.type === "instance-edit"),
+    deletions: () => sent.filter((m) => m.type === "token-deleted"),
+  };
+}
+
+describe("createEncounterSync store changes across reconciles", () => {
+  it.each([
+    ["an agent's HP change", hpChanged(1, 7, 16, mcp), 0],
+    ["a snapshot", withOther(inst({ currentHp: 7 }), 4), 1],
+  ])(
+    "%s is still written when the reconcile that saw it failed and is retried",
+    async (_name, message, overrides) => {
+      const { sync, scene, heard, retries, failNextMetadataWrite } =
+        await setupWithControls();
+
+      failNextMetadataWrite();
+      await sync.handleMessage(message);
+      expect(heard.errors).toHaveLength(1);
+      expect(bubbles(scene).health).toBe(10);
+
+      retries.shift()!();
+      await settle();
+
+      expect(bubbles(scene).health).toBe(7);
+      expect(heard.overrides).toHaveLength(overrides);
+    },
+  );
+
+  it("an agent's HP change that arrives while a reconcile applies is pushed by the next one", async () => {
+    const { sync, scene, holdNextGetItems } = await setupWithControls();
+
+    // An item change starts a reconcile, which waits for the scene's items.
+    const held = holdNextGetItems();
+    scene.addItems([foreign]);
+    await held.entered;
+    const event = sync.handleMessage(hpChanged(1, 7, 16, mcp));
+    held.release();
+    await event;
+    await settle();
+
+    expect(bubbles(scene).health).toBe(7);
+  });
+
+  it.each([
+    [
+      "a max HP change leaves an unreadable HP",
+      { health: "lots" },
+      hpChanged(1, 10, 20, mcp),
+      { health: "lots", "max health": 20 },
+    ],
+    [
+      "a rename leaves an unreadable armor class",
+      { "armor class": "x" },
+      renamedAt(1),
+      { health: 10, "armor class": "x" },
+    ],
+  ])(
+    "an agent's change pushes only the edit fields whose value it changes: %s",
+    async (_name, typed, event, expected) => {
+      const { sync, scene, edits } = await setupWithControls();
+      // Not a number: reported, kept on the table and not sent.
+      editAtTable(scene, typed);
+      await settle();
+
+      await sync.handleMessage(event);
+      await settle();
+
+      expect(bubbles(scene)).toMatchObject(expected);
+      expect(edits()).toEqual([]);
+    },
+  );
+});
+
+describe("createEncounterSync token deletions alongside edits", () => {
+  it("a token deleted while an edit of it waits for its answer is still reported", async () => {
+    const { scene, edits, deletions } = await setupWithControls();
+    editAtTable(scene, { health: 5 });
+    await settle();
+    expect(edits()).toHaveLength(1);
+
+    scene.deleteItems([token(scene).id]);
+    await settle();
+
+    expect(deletions()).toHaveLength(1);
+  });
+
+  it("a refused token deletion is not sent again until the next store change", async () => {
+    const { sync, scene, deletions } = await setupWithControls();
+    scene.deleteItems([token(scene).id]);
+    await settle();
+    expect(deletions()).toHaveLength(1);
+
+    await sync.handleMessage(refusal(deletions()[0]!.id));
+    scene.addItems([foreign]);
+    await settle();
+    expect(deletions()).toHaveLength(1);
+
+    // A store change reports it again.
+    await sync.handleMessage(hpChanged(1, 7, 16, mcp));
+    await settle();
+    expect(deletions()).toHaveLength(2);
+  });
+
+  it("a token deleted while another token's deletion waits for its answer is still reported", async () => {
+    const { scene, deletions } = await setupWithControls();
+    const tokenOf = (instanceId: string) =>
+      scene
+        .getItems()
+        .find(
+          (i) =>
+            (i.metadata[INSTANCE_METADATA_KEY] as { instanceId?: string })
+              ?.instanceId === instanceId,
+        )!;
+
+    scene.deleteItems([tokenOf("i0").id]);
+    await settle();
+    scene.deleteItems([tokenOf("i1").id]);
+    await settle();
+
+    expect(
+      deletions().map((m) =>
+        m.type === "token-deleted" ? m.payload.instanceId : undefined,
+      ),
+    ).toEqual(["i0", "i1"]);
+  });
+});
+
+describe("createEncounterSync answers to edits", () => {
+  it("the clamp note names the instance whose edit was clamped", async () => {
+    const { sync, scene, heard, edits } = await setupWithControls();
+    editAtTable(scene, { health: 99 });
+    await settle();
+
+    await sync.handleMessage(hpChanged(1, 16, 16, tableOf(edits()[0]!.id!)));
+    await settle();
+
+    expect(heard.notes).toHaveLength(1);
+    expect(heard.notes[0]).toContain("Shadow 1");
+    expect(heard.notes[0]).not.toContain("Shadow 0");
+  });
+
+  it("an edit's answer leaves a field the edit did not set alone when the store did not change it", async () => {
+    const { sync, scene, edits } = await setup();
+    // Max HP is not a number: it is reported and only HP is sent.
+    editAtTable(scene, { health: 5, "max health": "x" });
+    await settle();
+    expect(edits().map((e) => e.edit)).toEqual([
+      { instanceId: "i1", currentHp: 5 },
+    ]);
+
+    // The event carries max HP too, unchanged at 16.
+    await sync.handleMessage(hpChanged(1, 5, 16, tableOf(edits()[0]!.id)));
+    await settle();
+
+    expect(bubbles(scene)).toMatchObject({ health: 5, "max health": "x" });
+  });
+
+  it("a table event with a command id the extension does not know records the store's value as the baseline while the token shows another", async () => {
+    const { sync, scene } = await setup({ withSend: false });
+    editAtTable(scene, { health: 6 });
+    await settle();
+
+    await sync.handleMessage(
+      hpChanged(1, 5, 16, tableOf("from-before-reload")),
+    );
+    await settle();
+
+    expect(baselineBubbles(scene)).toMatchObject({ health: 5 });
+    expect(bubbles(scene).health).toBe(6);
+  });
+
+  it("without send nothing is sent, and the reconcile still reports an unreadable value beside a table edit", async () => {
+    const { scene, heard, edits } = await setup({ withSend: false });
+
+    editAtTable(scene, { health: 5, "max health": "x" });
+    await settle();
+
+    expect(edits()).toEqual([]);
+    expect(heard.rejected).toHaveLength(1);
+  });
+
+  it.each([
+    [
+      "a fatal error",
+      (id: string): BridgeMessage => ({
+        v: 1,
+        type: "error",
+        id,
+        payload: { code: "internal", message: "broken", fatal: true },
+      }),
+    ],
+    [
+      "a message that is not an error",
+      (id: string): BridgeMessage => ({ v: 1, type: "pong", id, payload: {} }),
+    ],
+  ])(
+    "%s carrying an edit's id is no refusal: the edit stays in flight",
+    async (_name, message) => {
+      const { sync, scene, edits } = await setup();
+      editAtTable(scene, { health: 5 });
+      await settle();
+
+      await sync.handleMessage(message(edits()[0]!.id));
+      // In flight, the typed value stays although the agent moves HP.
+      await sync.handleMessage(hpChanged(1, 7, 16, mcp));
+      await settle();
+
+      expect(bubbles(scene).health).toBe(5);
+      expect(edits()).toHaveLength(1);
+    },
+  );
 });

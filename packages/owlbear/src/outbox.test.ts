@@ -99,3 +99,56 @@ describe("createOutbox", () => {
     expect(outbox.pending()).toEqual([]);
   });
 });
+
+describe("createOutbox order and settling", () => {
+  it("a command submitted while older ones wait is queued behind them", () => {
+    const accepted: string[] = [];
+    let refuse: string | undefined = "*";
+    const outbox = createOutbox((message) => {
+      if (refuse === "*" || message.id === refuse) return false;
+      accepted.push(message.id ?? "");
+      return true;
+    });
+    outbox.submit(command("a"));
+    outbox.submit(command("b"));
+    refuse = "b";
+    outbox.helloAck();
+    expect(accepted).toEqual(["a"]);
+
+    // The socket would take it now, but "b" is still waiting.
+    refuse = undefined;
+    outbox.submit(command("c"));
+    expect(accepted).toEqual(["a"]);
+    expect(outbox.waiting()).toBe(2);
+
+    outbox.helloAck();
+    expect(accepted).toEqual(["a", "b", "c"]);
+  });
+
+  it("settle forgets only the named command, queued or sent, and the waiting count is reported only when it changes", () => {
+    let open = false;
+    const changes: number[] = [];
+    const outbox = createOutbox(
+      () => open,
+      (waiting) => changes.push(waiting),
+    );
+    outbox.submit(command("a"));
+    outbox.submit(command("b"));
+
+    expect(outbox.settle("unknown")).toBeUndefined();
+    expect(outbox.settle("b")).toEqual({
+      id: "b",
+      message: command("b"),
+      queued: true,
+    });
+    expect(outbox.pending().map((c) => c.id)).toEqual(["a"]);
+    expect(changes).toEqual([1, 2, 1]);
+
+    open = true;
+    outbox.helloAck();
+    expect(outbox.settle("a")).toMatchObject({ id: "a", queued: false });
+    expect(outbox.pending()).toEqual([]);
+    // Settling a sent command leaves the waiting count at 0: no new report.
+    expect(changes).toEqual([1, 2, 1, 0]);
+  });
+});

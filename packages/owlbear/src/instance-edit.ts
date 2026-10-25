@@ -12,7 +12,7 @@ export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
   return {
     v: 1,
     type: "instance-edit",
-    id: `${INSTANCE_EDIT_ID_PREFIX}${edit.instanceId}`,
+    id: `${INSTANCE_EDIT_ID_PREFIX}${edit.instanceId}:${crypto.randomUUID()}`,
     payload: edit,
   };
 }
@@ -22,8 +22,14 @@ export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
  * store applies them: max HP, then HP, then armor class.
  */
 export function splitEdit(edit: InstanceEdit): InstanceEdit[] {
-  void edit;
-  throw new Error("not implemented");
+  const { instanceId } = edit;
+  const parts: InstanceEdit[] = [];
+  if (edit.maxHp !== undefined) parts.push({ instanceId, maxHp: edit.maxHp });
+  if (edit.currentHp !== undefined)
+    parts.push({ instanceId, currentHp: edit.currentHp });
+  if (edit.armorClass !== undefined)
+    parts.push({ instanceId, armorClass: edit.armorClass });
+  return parts;
 }
 
 /**
@@ -39,6 +45,8 @@ export function instanceEditErrorText(
     !message.id?.startsWith(INSTANCE_EDIT_ID_PREFIX)
   )
     return undefined;
-  const instanceId = message.id.slice(INSTANCE_EDIT_ID_PREFIX.length);
+  // The id is `instance-edit:<instanceId>:<unique suffix>`.
+  const rest = message.id.slice(INSTANCE_EDIT_ID_PREFIX.length);
+  const instanceId = rest.slice(0, rest.lastIndexOf(":"));
   return `Could not apply the edit to ${instanceId}: ${message.payload.message}`;
 }

@@ -43,6 +43,11 @@ export const statBubblesProjector: Projector = {
       hide,
     };
   },
+  editFields: {
+    currentHp: "health",
+    maxHp: "max health",
+    armorClass: "armor class",
+  },
   readBack: (value, instance) => {
     const fields = currentFields(value);
     const edit: Omit<InstanceEdit, "instanceId"> = {};

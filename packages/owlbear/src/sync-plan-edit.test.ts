@@ -239,3 +239,109 @@ describe("planSync with edit fields in flight, settled or moved", () => {
     });
   });
 });
+
+describe("planSync per edit field", () => {
+  /** The token's Stat Bubbles write in the plan, if any. */
+  const bubblesWrite = (p: SyncPlan): unknown =>
+    p.update.find((u) => u.key === STAT_BUBBLES_METADATA_KEY)?.value;
+
+  it.each([
+    [
+      // 99 was acknowledged (and clamped to 16) just before the snapshot.
+      "a field settled since the last reconcile",
+      99,
+      16,
+      { settled: { currentHp: 99 } },
+    ],
+    [
+      // The edit to 7 reached the store, but its acknowledgement was lost.
+      "a store value the token already shows",
+      7,
+      7,
+      undefined,
+    ],
+    [
+      // The snapshot was read after the edit to 5 committed, before its answer.
+      "an edit the store already holds that is still in flight",
+      5,
+      5,
+      { inflight: { currentHp: 5 } },
+    ],
+  ])(
+    "a snapshot writes nothing and records no override for %s",
+    (_name, typed, storeHp, fields: FieldContext | undefined) => {
+      const token = editedToken(inst(), { health: typed });
+
+      const p = plan([inst({ currentHp: storeHp })], [token], fields, true);
+
+      expect(bubblesWrite(p)).toBeUndefined();
+      expect(p.overrides).toEqual([]);
+      expect(p.edits).toEqual([]);
+      const [after] = applyUpdates([token], p);
+      expect(bubblesBaselineOf(after!)).toMatchObject({ health: typed });
+    },
+  );
+
+  it("a store change of HP that no event or snapshot reports is not pushed, even to a value without hide", () => {
+    // Another extension left the value without `hide`.
+    const token = editedToken(inst(), {});
+    delete (
+      token.metadata[STAT_BUBBLES_METADATA_KEY] as Record<string, unknown>
+    ).hide;
+
+    expect(plan([inst({ currentHp: 7 })], [token]).update).toEqual([]);
+
+    // Control: reported as moved, it is pushed.
+    expect(
+      bubblesWrite(
+        plan([inst({ currentHp: 7 })], [token], {
+          moved: new Set(["currentHp"]),
+        }),
+      ),
+    ).toMatchObject({ health: 7 });
+  });
+
+  it("an unreadable value the store's change replaces is not reported", () => {
+    const token = editedToken(inst(), { health: "lots" });
+
+    const p = plan([inst({ currentHp: 7 })], [token], {
+      moved: new Set(["currentHp"]),
+    });
+
+    expect(bubblesWrite(p)).toMatchObject({ health: 7 });
+    expect(p.rejected).toEqual([]);
+
+    // Control: left on the table, it is reported.
+    expect(plan([inst()], [token]).rejected).toHaveLength(1);
+  });
+});
+
+describe("planSync per edit field, fields the token or the baseline lack", () => {
+  it("a field the token lacks stays absent when another field is pushed", () => {
+    const token = editedToken(inst(), {});
+    delete (
+      token.metadata[STAT_BUBBLES_METADATA_KEY] as Record<string, unknown>
+    )["max health"];
+
+    const p = plan([inst({ currentHp: 7 })], [token], {
+      moved: new Set(["currentHp"]),
+    });
+
+    const written = p.update.find((u) => u.key === STAT_BUBBLES_METADATA_KEY)
+      ?.value as Record<string, unknown>;
+    expect(written).toMatchObject({ health: 7 });
+    expect(Object.hasOwn(written, "max health")).toBe(false);
+  });
+
+  it("a table value with no agreed value is written back and gets no baseline entry", () => {
+    // Created without an armor class, so its baseline has none; the GM typed 14.
+    const token = editedToken(inst({ armorClass: null }), {
+      "armor class": 14,
+    });
+
+    const p = plan([inst({ armorClass: 12 })], [token]);
+
+    expect(p.edits).toEqual([{ instanceId: "i1", armorClass: 14 }]);
+    expect(p.update).toEqual([]);
+  });
+});

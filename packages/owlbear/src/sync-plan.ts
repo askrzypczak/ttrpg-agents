@@ -75,6 +75,11 @@ export type Projector = {
     value: unknown,
     instance: EncounterInstance,
   ): { edit: Omit<InstanceEdit, "instanceId">; invalid: string[] };
+  /**
+   * With `readBack`: the name each edit field has inside the value, so the
+   * planner decides each field on its own (see planSync).
+   */
+  editFields?: Readonly<Partial<Record<EditField, string>>>;
 };
 
 export type TokenKind = Pick<
@@ -131,6 +136,13 @@ export const defaultSyncConfig: SyncConfig = {
 
 /** The instance fields the table can edit and write back. */
 export type EditField = "currentHp" | "maxHp" | "armorClass";
+
+/** How the panel names each edit field. */
+export const EDIT_FIELD_NAMES: Readonly<Record<EditField, string>> = {
+  currentHp: "HP",
+  maxHp: "max HP",
+  armorClass: "armor class",
+};
 
 /**
  * What the sync knows about one instance's edit fields, from the events and
@@ -198,6 +210,100 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
+const omitKeys = (
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(value).filter(([k]) => !keys.includes(k)));
+
+/**
+ * The per-field rule for a key whose projector reads edits back, on a token
+ * that has a baseline for it (see planSync).
+ */
+function planEditFields(
+  projector: Projector & { readBack: NonNullable<Projector["readBack"]> },
+  instance: EncounterInstance,
+  current: unknown,
+  baseline: unknown,
+  snapshot: boolean,
+  fields: FieldContext,
+): {
+  /** The value to write, when the key is pushed. */
+  push?: Record<string, unknown>;
+  baseline: Record<string, unknown>;
+  edit: Omit<InstanceEdit, "instanceId">;
+  invalid: string[];
+  overrides: string[];
+} {
+  const table = asRecord(current);
+  const agreed = asRecord(baseline);
+  const raw = asRecord(projector.project(instance));
+  const value = asRecord(projector.project(instance, current, baseline));
+  const nextBaseline = { ...raw };
+  const read = projector.readBack(current, instance);
+  const edit: Omit<InstanceEdit, "instanceId"> = {};
+  // Stryker disable next-line ArrayDeclaration: equivalent, a made-up entry names no field of the value
+  const replaced: string[] = [];
+  const overrides: string[] = [];
+  let storeMoved = false;
+  const names = Object.entries(projector.editFields ?? {}) as [
+    EditField,
+    string,
+  ][];
+  for (const [field, name] of names) {
+    const stored = instance[field];
+    // No stored value (an instance without armor class): carried over.
+    if (typeof stored !== "number") continue;
+    const inflight = fields.inflight?.[field];
+    const settled = fields.settled?.[field];
+    const moved = fields.moved?.has(field) === true;
+    const storeWins =
+      inflight === undefined &&
+      (moved || (snapshot && settled === undefined && stored !== agreed[name]));
+    if (storeWins) {
+      value[name] = stored;
+      nextBaseline[name] = stored;
+      replaced.push(name);
+      if (table[name] !== stored) {
+        storeMoved = true;
+        // Only a snapshot cannot tell an MCP change from an overridden clamp.
+        if (!moved)
+          overrides.push(
+            `The store set ${instance.displayName} ${EDIT_FIELD_NAMES[field]} to ${String(stored)}; the table showed ${String(table[name])}.`,
+          );
+      }
+      continue;
+    }
+    // The table's value stays.
+    if (Object.hasOwn(table, name)) value[name] = table[name];
+    else delete value[name];
+    const agreedValue = settled ?? agreed[name];
+    if (table[name] === stored) nextBaseline[name] = stored;
+    else if (agreedValue === undefined) delete nextBaseline[name];
+    else nextBaseline[name] = agreedValue;
+    const typed = read.edit[field];
+    if (typed !== undefined && typed !== agreedValue && typed !== inflight)
+      edit[field] = typed;
+  }
+  // Outside the edit fields (Stat Bubbles `hide`) the key-level rule holds:
+  // the projector applies it, and the value is pushed when the encounter
+  // changed there.
+  const labels = names.map(([, name]) => name);
+  const otherChanged = !deepEqual(
+    omitKeys(raw, labels),
+    omitKeys(agreed, labels),
+  );
+  return {
+    ...((storeMoved || otherChanged) && !deepEqual(value, current)
+      ? { push: value }
+      : {}),
+    baseline: nextBaseline,
+    edit,
+    invalid: read.invalid.filter((name) => !replaced.includes(name)),
+    overrides,
+  };
+}
+
 /**
  * Pure diff of the desired instances against the scene's items; only items
  * carrying our instance link are ever touched.
@@ -210,13 +316,26 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * push), b = baseline (the raw projection we last wrote):
  * - d == o: nothing, but re-baseline when b != r.
  * - d != o, b present, r != b (the encounter changed): push d, b := r.
- * - d != o, b present, r == b (the table was edited): leave it. If the
- *   projector can `readBack` the value, the changed fields are planned as an
- *   edit to write back, b untouched. Values
- *   that cannot be read are planned as rejected and left on the table.
+ * - d != o, b present, r == b (the table was edited): leave it.
  * - d != o, no b: push d if o is absent, else keep o; either way b := r.
  * A projector may use the baseline to apply this rule per field inside its
  * value: a table edit wins until the encounter changes that field.
+ *
+ * A key whose projector can `readBack` table edits (Stat Bubbles) and that has
+ * a baseline is decided per edit field instead; its other fields keep the
+ * rule above. The agreed value is the settled one, else the baseline's:
+ * - in flight (`fields.inflight`): the table's value stays;
+ * - else the store's value wins if the field `moved`, or if the reconcile
+ *   follows a `snapshot`, the store differs from the agreed value and the
+ *   field is not settled; a snapshot that so writes over a different token
+ *   value is reported in `overrides`;
+ * - else the table's value stays, and is planned as an edit to write back when
+ *   it differs from the agreed value and from the one in flight. Values that
+ *   cannot be read are planned as rejected and left on the table.
+ * The key is pushed only when the result differs from the token, and b
+ * records the agreed values (settled ones at their settled value), so a
+ * clamped value is not sent again. Without `fields` or `snapshot`, a store
+ * change of an edit field is not pushed.
  * An undefined r means no key: it is never written or baselined, and its
  * baseline is dropped (the token's value is left alone).
  * The token name follows the same rule, with its baseline under
@@ -267,30 +386,41 @@ export function planSync(
     const instance = wanted.get(id)!;
     const baseline = asRecord(token.metadata[SYNCED_METADATA_KEY]);
     const next = { ...baseline };
-    for (const { key, project, readBack } of owned) {
+    for (const projector of owned) {
+      const { key, project, readBack } = projector;
       const raw = project(instance);
       const o = token.metadata[key];
       const d = project(instance, o, baseline[key]);
       const hasBaseline = Object.hasOwn(baseline, key);
       if (raw === undefined) {
         delete next[key];
+      } else if (readBack !== undefined && hasBaseline) {
+        const fields = planEditFields(
+          { ...projector, readBack },
+          instance,
+          o,
+          baseline[key],
+          context.snapshot === true,
+          context.fields?.get(id) ?? {},
+        );
+        if (fields.push !== undefined)
+          plan.update.push({ id: token.id, key, value: fields.push });
+        next[key] = fields.baseline;
+        if (Object.keys(fields.edit).length > 0)
+          plan.edits.push({ instanceId: id, ...fields.edit });
+        if (fields.invalid.length > 0)
+          plan.rejected.push({
+            instanceId: id,
+            message: `${fields.invalid.join(" and ")} on ${instance.displayName} is not a whole number`,
+          });
+        for (const message of fields.overrides)
+          plan.overrides.push({ instanceId: id, message });
       } else if (deepEqual(d, o)) {
         next[key] = raw;
       } else if (hasBaseline) {
         if (!deepEqual(raw, baseline[key])) {
           plan.update.push({ id: token.id, key, value: d });
           next[key] = raw;
-        } else if (readBack) {
-          // The table was edited: write the change back. The baseline stays;
-          // the store's answer never writes to the table.
-          const { edit, invalid } = readBack(o, instance);
-          if (Object.keys(edit).length > 0)
-            plan.edits.push({ instanceId: id, ...edit });
-          if (invalid.length > 0)
-            plan.rejected.push({
-              instanceId: id,
-              message: `${invalid.join(" and ")} on ${instance.displayName} is not a whole number`,
-            });
         }
       } else {
         if (o === undefined) plan.update.push({ id: token.id, key, value: d });

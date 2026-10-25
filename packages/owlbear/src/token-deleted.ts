@@ -11,7 +11,7 @@ export function tokenDeletedMessage(instanceId: string): BridgeMessage {
   return {
     v: 1,
     type: "token-deleted",
-    id: `${ID_PREFIX}${instanceId}`,
+    id: `${ID_PREFIX}${instanceId}:${crypto.randomUUID()}`,
     payload: { instanceId },
   };
 }
@@ -29,6 +29,8 @@ export function tokenDeletedErrorText(
     !message.id?.startsWith(ID_PREFIX)
   )
     return undefined;
-  const instanceId = message.id.slice(ID_PREFIX.length);
+  // The id is `token-deleted:<instanceId>:<unique suffix>`.
+  const rest = message.id.slice(ID_PREFIX.length);
+  const instanceId = rest.slice(0, rest.lastIndexOf(":"));
   return `Could not remove ${instanceId} from the encounter: ${message.payload.message}`;
 }

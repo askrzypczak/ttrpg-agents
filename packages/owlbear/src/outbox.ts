@@ -39,7 +39,57 @@ export function createOutbox(
   send: (message: BridgeMessage) => boolean,
   onWaitingChange?: (waiting: number) => void,
 ): Outbox {
-  void send;
-  void onWaitingChange;
-  throw new Error("not implemented");
+  // `stale`: sent on a connection that has since been replaced.
+  let commands: (PendingCommand & { stale: boolean })[] = [];
+  let reported = 0;
+
+  const waiting = (): number => commands.filter((c) => c.queued).length;
+  const report = (): void => {
+    const now = waiting();
+    if (now === reported) return;
+    reported = now;
+    onWaitingChange?.(now);
+  };
+
+  return {
+    submit(message) {
+      const older = commands.some((c) => c.queued);
+      commands.push({
+        id: message.id ?? "",
+        message,
+        queued: older || !send(message),
+        stale: false,
+      });
+      report();
+    },
+    helloAck() {
+      for (const command of commands) {
+        if (!command.queued) command.stale = true;
+      }
+      for (const command of commands) {
+        if (!command.queued) continue;
+        if (!send(command.message)) break;
+        command.queued = false;
+      }
+      report();
+    },
+    snapshot() {
+      commands = commands.filter((c) => !c.stale);
+    },
+    settle(id) {
+      const command = commands.find((c) => c.id === id);
+      if (command === undefined) return undefined;
+      commands = commands.filter((c) => c !== command);
+      report();
+      return { id, message: command.message, queued: command.queued };
+    },
+    pending() {
+      return commands.map(({ id, message, queued }) => ({
+        id,
+        message,
+        queued,
+      }));
+    },
+    waiting,
+  };
 }
