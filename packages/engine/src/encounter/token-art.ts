@@ -6,6 +6,8 @@ export type TokenArt = {
   mime: string;
   width: number;
   height: number;
+  /** SHA-256 of a stored copy of the image, when there is one. */
+  sha256?: string;
 };
 
 /** Source of truth for `TokenArt`; the protocol reuses it as the wire shape. */
@@ -20,6 +22,10 @@ export const tokenArtSchema = z.object({
     .regex(/^image\//),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
+  sha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
 }) satisfies z.ZodType<TokenArt>;
 
 /** Monster key -> the art its tokens are created with. */

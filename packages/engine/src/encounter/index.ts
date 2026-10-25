@@ -23,3 +23,14 @@ export {
   type TokenArt,
   type TokenArtRepository,
 } from "./token-art.js";
+export {
+  validateTokenImage,
+  TOKEN_IMAGE_MAX_BYTES,
+  type NewTokenImage,
+  type TokenImage,
+  type TokenImageErrorCode,
+  type TokenImageInfo,
+  type TokenImageMime,
+  type TokenImageRepository,
+  type TokenImageValidation,
+} from "./token-image.js";

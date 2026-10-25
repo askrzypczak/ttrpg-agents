@@ -18,6 +18,31 @@ describe("tokenArtSchema", () => {
     expect(tokenArtSchema.parse(art)).toEqual(art);
   });
 
+  it("accepts art with an image hash of 64 lowercase hex characters", () => {
+    const sha256 = "0123456789abcdef".repeat(4);
+    expect(sha256).toHaveLength(64);
+    expect(tokenArtSchema.parse({ ...art, sha256 })).toEqual({
+      ...art,
+      sha256,
+    });
+  });
+
+  it("rejects an image hash that is not 64 lowercase hex characters", () => {
+    const valid = "0123456789abcdef".repeat(4);
+    for (const sha256 of [
+      valid.slice(1),
+      valid + "0",
+      valid.toUpperCase(),
+      "g".repeat(64),
+      "",
+    ])
+      expect(tokenArtSchema.safeParse({ ...art, sha256 }).success).toBe(false);
+    // Control: the valid hash is accepted.
+    expect(tokenArtSchema.safeParse({ ...art, sha256: valid }).success).toBe(
+      true,
+    );
+  });
+
   it("rejects a url that is not https", () => {
     const http = withImage({ url: "http://cdn.owlbear.rodeo/shadow.png" });
     const script = withImage({ url: "javascript:alert(1)" });

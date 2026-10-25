@@ -4,4 +4,5 @@ export {
 } from "./sqlite-repository.js";
 export { SqliteEncounterLog } from "./sqlite-log.js";
 export { SqliteTokenArtRepository } from "./token-art-repository.js";
+export { SqliteTokenImageRepository } from "./token-image-repository.js";
 export { openDatabase } from "./db.js";
