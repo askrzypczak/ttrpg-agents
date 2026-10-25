@@ -5,6 +5,7 @@ import OBR, {
   buildImage,
   buildImageUpload,
   buildShape,
+  isImage,
   type Item,
 } from "@owlbear-rodeo/sdk";
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
@@ -117,15 +118,25 @@ function toItem(item: SceneItem): Item {
     .build();
 }
 
+// Read-side fields are copied as given, without reading into them: the e2e fake
+// host serves items that may lack them, and copying an absent field is harmless.
 function fromItem(item: Item): SceneItem {
-  return {
+  const read: SceneItem = {
     id: item.id,
     type: item.type,
     name: item.name,
     visible: item.visible,
     position: { x: item.position.x, y: item.position.y },
     metadata: item.metadata,
+    layer: item.layer,
+    rotation: item.rotation,
+    scale: item.scale,
   };
+  if (isImage(item)) {
+    read.image = item.image;
+    read.grid = item.grid;
+  }
+  return read;
 }
 
 export function createObrAdapter(): ObrAdapter {
@@ -185,8 +196,12 @@ export function createObrAdapter(): ObrAdapter {
         y: height / 2,
       });
     },
-    getGrid: () => {
-      throw new Error("not implemented");
+    getGrid: async () => {
+      const [dpi, type] = await Promise.all([
+        OBR.scene.grid.getDpi(),
+        OBR.scene.grid.getType(),
+      ]);
+      return { dpi, type };
     },
     pickImage: async (defaultSearch) => {
       const [picked] = await (defaultSearch === undefined

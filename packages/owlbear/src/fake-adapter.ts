@@ -55,6 +55,7 @@ export function createFakeObr(
     scene.isReady()
       ? Promise.resolve(call())
       : Promise.reject(new MissingSceneError());
+  const grid: SceneGrid = options.grid ?? { dpi: 150, type: "SQUARE" };
   const obr: ObrAdapter = {
     onReady: (callback) => {
       void Promise.resolve().then(callback);
@@ -78,9 +79,7 @@ export function createFakeObr(
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
-    getGrid: () => {
-      throw new Error("not implemented");
-    },
+    getGrid: () => whenReady(() => ({ ...grid })),
     pickImage: async (defaultSearch) => {
       picks++;
       const pick = options.pickImage;

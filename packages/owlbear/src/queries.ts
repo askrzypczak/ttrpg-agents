@@ -1,3 +1,4 @@
+import type { TableMapItem } from "@ttrpg-agents/engine";
 import {
   PROTOCOL_VERSION,
   type BridgeMessage,
@@ -7,6 +8,29 @@ import {
 import { isOurs, type EncounterSync } from "./encounter-sync.js";
 import { describeError } from "./panel-state.js";
 import type { ObrReader } from "./obr-adapter.js";
+import type { SceneItem } from "./scene-model.js";
+
+/**
+ * The table's entry for an image on the map layer, or `undefined` for any
+ * other item, and for an image without its image or grid specs.
+ */
+function mapItemOf(item: SceneItem): TableMapItem | undefined {
+  const { image, grid } = item;
+  if (item.type !== "IMAGE" || item.layer !== "MAP" || !image || !grid)
+    return undefined;
+  const scale = item.scale ?? { x: 1, y: 1 };
+  return {
+    id: item.id,
+    name: item.name,
+    imageWidth: image.width,
+    imageHeight: image.height,
+    imageDpi: grid.dpi,
+    imageOffset: { x: grid.offset.x, y: grid.offset.y },
+    position: { x: item.position.x, y: item.position.y },
+    rotation: item.rotation ?? 0,
+    scale: { x: scale.x, y: scale.y },
+  };
+}
 
 /** Answers a bridge `query` from the scene and the encounter sync state. */
 export async function handleQuery(
@@ -28,7 +52,17 @@ export async function handleQuery(
       };
     }
     case "scene-map": {
-      throw new Error("not implemented");
+      const [sceneGrid, items] = await Promise.all([
+        obr.getGrid(),
+        obr.getItems(),
+      ]);
+      return {
+        name: "scene-map",
+        result: {
+          grid: { dpi: sceneGrid.dpi, type: sceneGrid.type },
+          maps: items.flatMap((item) => mapItemOf(item) ?? []),
+        },
+      };
     }
   }
 }
