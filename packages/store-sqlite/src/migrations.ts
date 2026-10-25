@@ -71,6 +71,31 @@ export const migrations: Migration[] = [
       ALTER TABLE token_art ADD COLUMN sha256 TEXT REFERENCES token_art_image (sha256);
     `,
   },
+  {
+    // Art may be stored bytes never published: the reference (url, mime,
+    // width, height) is all set, or all NULL with an image hash. SQLite cannot
+    // alter a column's constraints, so the table is rebuilt; nothing refers
+    // to token_art.
+    version: 8,
+    sql: `
+      CREATE TABLE token_art_new (
+        monster_key TEXT PRIMARY KEY,
+        url TEXT CHECK (url LIKE 'https://%'),
+        mime TEXT CHECK (mime LIKE 'image/%'),
+        width INTEGER CHECK (width > 0),
+        height INTEGER CHECK (height > 0),
+        sha256 TEXT REFERENCES token_art_image (sha256),
+        CHECK (
+          (url IS NOT NULL AND mime IS NOT NULL AND width IS NOT NULL AND height IS NOT NULL)
+          OR (url IS NULL AND mime IS NULL AND width IS NULL AND height IS NULL AND sha256 IS NOT NULL)
+        )
+      );
+      INSERT INTO token_art_new (monster_key, url, mime, width, height, sha256)
+        SELECT monster_key, url, mime, width, height, sha256 FROM token_art;
+      DROP TABLE token_art;
+      ALTER TABLE token_art_new RENAME TO token_art;
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));
