@@ -319,4 +319,19 @@ describe("createEncounterSync scene reads around art dialogs", () => {
     expect(tokenOf(s.scene, "shadow-1")).toBeDefined();
     expect(s.sent.filter((m) => m.type === "token-deleted")).toEqual([]);
   });
+
+  it("art without a url published on first use also reads the scene again", async () => {
+    const feed = createMessageFeed();
+    const s = setup({ pickImage: pickedShadowArt });
+    await s.sync.handleMessage(
+      feed.snapshot([shadow()], {
+        art: { shadow: { sha256: "c3".repeat(32) } },
+      }),
+    );
+    await settle();
+
+    expect(tokenOf(s.scene, "shadow-1")).toBeDefined();
+    expect(s.reads).toEqual({ items: 2, placed: 2 });
+    expect(s.fake.uploads()).toHaveLength(1);
+  });
 });
