@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { TokenArt } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr, type FakePick } from "./fake-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem } from "./scene-model.js";
+import { createMessageFeed, type MessageFeed } from "./testing/messages.js";
 import {
   INSTANCE_METADATA_KEY,
   NAME_BASELINE_KEY,
@@ -29,14 +29,10 @@ const inst = (n: number, monsterKey = "shadow"): EncounterInstance => ({
 });
 
 const snapshot = (
+  feed: MessageFeed,
   instances: EncounterInstance[],
   art?: Record<string, TokenArt>,
-): BridgeMessage => ({
-  v: 1,
-  type: "encounter-snapshot",
-  payload:
-    art === undefined ? { instances, seq: 0 } : { instances, art, seq: 0 },
-});
+) => feed.snapshot(instances, { art });
 
 const artFor = (name: string): TokenArt => ({
   url: `https://cdn.owlbear.rodeo/assets/${name}.png`,
@@ -98,9 +94,10 @@ const hiddenCircle = {
 
 describe("createEncounterSync token art", () => {
   it("prompts once for a monster type and makes image tokens for all its instances", async () => {
+    const feed = createMessageFeed();
     const { fake, sync, errors, tokenOf } = setup(shadowArt);
 
-    await sync.handleMessage(snapshot([inst(1), inst(2), inst(3)]));
+    await sync.handleMessage(snapshot(feed, [inst(1), inst(2), inst(3)]));
 
     expect(fake.pickImageCalls()).toBe(1);
     for (const id of ["i1", "i2", "i3"])
@@ -115,6 +112,7 @@ describe("createEncounterSync token art", () => {
   });
 
   it("prompts once per monster type when several types are new", async () => {
+    const feed = createMessageFeed();
     const picks = [artFor("first"), artFor("second")];
     let open = 0;
     let mostOpen = 0;
@@ -127,7 +125,7 @@ describe("createEncounterSync token art", () => {
     });
     const instances = [inst(1), inst(2, "ghoul"), inst(3), inst(4, "ghoul")];
 
-    await sync.handleMessage(snapshot(instances));
+    await sync.handleMessage(snapshot(feed, instances));
 
     expect(fake.pickImageCalls()).toBe(2);
     expect(mostOpen).toBe(1);
@@ -143,18 +141,20 @@ describe("createEncounterSync token art", () => {
   });
 
   it("reports the picked art through onTokenArt", async () => {
+    const feed = createMessageFeed();
     const { sync, reported } = setup(shadowArt);
 
-    await sync.handleMessage(snapshot([inst(1), inst(2)]));
+    await sync.handleMessage(snapshot(feed, [inst(1), inst(2)]));
 
     expect(reported).toEqual([["shadow", shadowArt]]);
   });
 
   it("does not prompt when the snapshot already has art for the type", async () => {
+    const feed = createMessageFeed();
     const { fake, sync, reported, tokenOf } = setup(ghoulArt);
 
     await sync.handleMessage(
-      snapshot([inst(1), inst(2)], { shadow: shadowArt }),
+      snapshot(feed, [inst(1), inst(2)], { shadow: shadowArt }),
     );
 
     expect(fake.pickImageCalls()).toBe(0);
@@ -168,10 +168,11 @@ describe("createEncounterSync token art", () => {
   });
 
   it("does not prompt for an instance that already has a token", async () => {
+    const feed = createMessageFeed();
     const { fake, sync, reported, tokenOf } = setup(ghoulArt);
     fake.scene.addItems([circleToken(1)]);
 
-    await sync.handleMessage(snapshot([inst(1), inst(2, "ghoul")]));
+    await sync.handleMessage(snapshot(feed, [inst(1), inst(2, "ghoul")]));
 
     // Only the ghoul, which gets a new token, is asked for.
     expect(fake.pickImageCalls()).toBe(1);
@@ -184,15 +185,16 @@ describe("createEncounterSync token art", () => {
   });
 
   it("creates the circle and does not prompt again this session after a cancelled pick", async () => {
+    const feed = createMessageFeed();
     const { fake, sync, errors, reported, tokenOf } = setup(undefined);
 
-    await sync.handleMessage(snapshot([inst(1)]));
+    await sync.handleMessage(snapshot(feed, [inst(1)]));
 
     expect(fake.pickImageCalls()).toBe(1);
     expect(tokenOf("i1")).toMatchObject(hiddenCircle);
 
     // A later snapshot with a new shadow does not ask again.
-    await sync.handleMessage(snapshot([inst(1), inst(2)]));
+    await sync.handleMessage(snapshot(feed, [inst(1), inst(2)]));
 
     expect(fake.pickImageCalls()).toBe(1);
     expect(tokenOf("i2")).toMatchObject(hiddenCircle);
@@ -201,11 +203,12 @@ describe("createEncounterSync token art", () => {
   });
 
   it("creates the circle without a sync error after a picker error", async () => {
+    const feed = createMessageFeed();
     const { fake, sync, errors, reported, tokenOf } = setup(() =>
       Promise.reject(new Error("the picker failed to open")),
     );
 
-    await sync.handleMessage(snapshot([inst(1)]));
+    await sync.handleMessage(snapshot(feed, [inst(1)]));
 
     expect(fake.pickImageCalls()).toBe(1);
     expect(tokenOf("i1")).toMatchObject(hiddenCircle);
@@ -214,13 +217,14 @@ describe("createEncounterSync token art", () => {
   });
 
   it("creates the circle when the picked art fails validation", async () => {
+    const feed = createMessageFeed();
     const notHttps = {
       ...shadowArt,
       url: "http://cdn.example.test/shadow.png",
     };
     const { fake, sync, errors, reported, tokenOf } = setup(notHttps);
 
-    await sync.handleMessage(snapshot([inst(1)]));
+    await sync.handleMessage(snapshot(feed, [inst(1)]));
 
     expect(fake.pickImageCalls()).toBe(1);
     expect(tokenOf("i1")).toMatchObject(hiddenCircle);

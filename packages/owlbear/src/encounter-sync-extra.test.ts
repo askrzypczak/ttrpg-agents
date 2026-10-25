@@ -6,15 +6,13 @@ import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem } from "./scene-model.js";
+import { createMessageFeed, type MessageFeed } from "./testing/messages.js";
 import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
 
 const inst = (n: number): EncounterInstance =>
   makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
-const snapshot = (...ns: number[]): BridgeMessage => ({
-  v: 1,
-  type: "encounter-snapshot",
-  payload: { instances: ns.map(inst), seq: 0 },
-});
+const snapshot = (feed: MessageFeed, ...ns: number[]) =>
+  feed.snapshot(ns.map(inst));
 const foreign = (id: string): SceneItem => ({
   id,
   type: "IMAGE",
@@ -42,6 +40,7 @@ const idleTimers: Timers = {
 
 describe("createEncounterSync item changes", () => {
   it("an item change that recovers from a failed reconcile reports onApplied", async () => {
+    const feed = createMessageFeed();
     const fake = createFakeObr();
     let fail = true;
     const obr: ObrAdapter = {
@@ -60,7 +59,7 @@ describe("createEncounterSync item changes", () => {
       () => applied++,
       { timers: idleTimers },
     );
-    await sync.handleMessage(snapshot(1));
+    await sync.handleMessage(snapshot(feed, 1));
     expect(errors).toHaveLength(1);
     expect(applied).toBe(0);
 
@@ -76,6 +75,7 @@ describe("createEncounterSync item changes", () => {
   });
 
   it("reports a token the GM deletes in the middle of a reconcile", async () => {
+    const feed = createMessageFeed();
     const fake = createFakeObr();
     let armed = false;
     let reads = 0;
@@ -101,12 +101,12 @@ describe("createEncounterSync item changes", () => {
     const sync = createEncounterSync(obr, undefined, undefined, {
       send: recordDeletions(reported),
     });
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     expect(reported).toEqual([]);
 
     armed = true;
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     expect(reported).toEqual(["i2"]);
     // The follow-up settles: no reconcile keeps re-queueing itself.
@@ -117,6 +117,7 @@ describe("createEncounterSync item changes", () => {
   });
 
   it("our own writes cost no extra reconcile pass", async () => {
+    const feed = createMessageFeed();
     const fake = createFakeObr();
     let reads = 0;
     const obr: ObrAdapter = {
@@ -124,21 +125,22 @@ describe("createEncounterSync item changes", () => {
       getItems: (f) => (reads++, fake.obr.getItems(f)),
     };
     const sync = createEncounterSync(obr);
-    await sync.handleMessage(snapshot(1, 2));
+    await sync.handleMessage(snapshot(feed, 1, 2));
     await settle();
     expect(reads).toBe(1);
   });
 
   it("reports a deletion on a sync whose reconciles have not written anything", async () => {
+    const feed = createMessageFeed();
     const fake = createFakeObr();
-    await createEncounterSync(fake.obr).handleMessage(snapshot(1, 2));
+    await createEncounterSync(fake.obr).handleMessage(snapshot(feed, 1, 2));
     await settle();
 
     const reported: string[] = [];
     const second = createEncounterSync(fake.obr, undefined, undefined, {
       send: recordDeletions(reported),
     });
-    await second.handleMessage(snapshot(1, 2));
+    await second.handleMessage(snapshot(feed, 1, 2));
     await settle();
     const token = fake.scene
       .getItems()
@@ -153,6 +155,7 @@ describe("createEncounterSync item changes", () => {
   });
 
   it("a burst of item changes costs a bounded number of reconciles", async () => {
+    const feed = createMessageFeed();
     const fake = createFakeObr();
     let reads = 0;
     const obr: ObrAdapter = {
@@ -162,7 +165,7 @@ describe("createEncounterSync item changes", () => {
     const sync = createEncounterSync(obr);
     const ids = ["a", "b", "c", "d", "e"];
     fake.scene.addItems(ids.map(foreign));
-    await sync.handleMessage(snapshot(1));
+    await sync.handleMessage(snapshot(feed, 1));
     await settle();
     reads = 0;
     for (const id of ids) fake.scene.deleteItems([id]);
