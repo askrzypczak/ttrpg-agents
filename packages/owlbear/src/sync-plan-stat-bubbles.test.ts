@@ -10,6 +10,7 @@ import {
   defaultSyncConfig,
   planSync,
   type EncounterInstance,
+  type FieldContext,
   type SyncPlan,
 } from "./sync-plan.js";
 
@@ -28,12 +29,17 @@ const plan = (
   desired: EncounterInstance[],
   observed: SceneItem[],
   placed: string[] = [],
+  fields?: FieldContext,
 ): SyncPlan =>
   planSync(desired, observed, defaultSyncConfig, {
     viewportCenter: { x: 0, y: 0 },
     placed: new Set(placed),
     art: {},
+    ...(fields ? { fields: new Map([["i1", fields]]) } : {}),
   });
+
+/** The store moved HP, as an `mcp` event does. */
+const hpMoved: FieldContext = { moved: new Set(["currentHp"]) };
 
 const emptyPlan: SyncPlan = {
   add: [],
@@ -44,8 +50,7 @@ const emptyPlan: SyncPlan = {
   needsArt: [],
   edits: [],
   rejected: [],
-  sent: {},
-  differs: [],
+  overrides: [],
 };
 
 /** Applies the plan's key-level metadata updates to copies of `items`. */
@@ -118,7 +123,7 @@ describe("planSync with the stat bubbles projector", () => {
       },
     };
 
-    const p = plan([inst({ currentHp: 10 })], [token], ["i1"]);
+    const p = plan([inst({ currentHp: 10 })], [token], ["i1"], hpMoved);
 
     expect(p.update.map((u) => u.key).sort()).toEqual(
       [STAT_BUBBLES_METADATA_KEY, SYNCED_METADATA_KEY].sort(),
@@ -162,7 +167,7 @@ describe("planSync with the stat bubbles projector", () => {
       applyUpdates([edited], written)[0]!.metadata[STAT_BUBBLES_METADATA_KEY],
     ).toEqual(edited.metadata[STAT_BUBBLES_METADATA_KEY]);
 
-    const changed = plan([inst({ currentHp: 8 })], [edited], ["i1"]);
+    const changed = plan([inst({ currentHp: 8 })], [edited], ["i1"], hpMoved);
     const metadata = applyUpdates([edited], changed)[0]!.metadata;
     expect(metadata[STAT_BUBBLES_METADATA_KEY]).toEqual({
       health: 8,
@@ -254,6 +259,7 @@ describe("planSync with the stat bubbles projector", () => {
           [inst({ statsVisible, currentHp: 10 })],
           [toggled],
           ["i1"],
+          hpMoved,
         );
         expect(bubblesAfter(toggled, hit), label).toEqual({
           ...shown,

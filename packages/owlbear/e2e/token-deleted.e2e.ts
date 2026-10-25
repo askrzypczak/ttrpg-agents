@@ -3,7 +3,11 @@ import type { Page } from "@playwright/test";
 import { SHADOW_IDS, listE2eInstanceIds } from "./db.js";
 import { e2eDir } from "./env.js";
 import { test, expect, openHarness } from "./fixtures.js";
-import { readItems, whileExtensionAway } from "./helpers.js";
+import {
+  controlBridgeSocket,
+  readItems,
+  whileExtensionAway,
+} from "./helpers.js";
 
 const INSTANCE_KEY = "com.ttrpg-agents/instance";
 const PLACED_KEY = "com.ttrpg-agents/placed";
@@ -71,6 +75,42 @@ test.describe("deleting a token on the table", () => {
     await expect(
       page.frameLocator("#extension").locator("#sync-error"),
     ).toHaveText("");
+  });
+
+  test("a token deleted while the bridge socket is down is removed from the store once after the reconnect", async ({
+    page,
+  }) => {
+    const socket = await controlBridgeSocket(page);
+    await openHarness(page, { role: "gm" });
+    const panel = page.frameLocator("#extension");
+    await expect(panel.locator("#status")).toHaveText(
+      "Connected to the local bridge.",
+    );
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+
+    await socket.drop();
+    await expect(panel.locator("#status")).not.toHaveText(
+      "Connected to the local bridge.",
+    );
+    const instanceId = await deleteToken(page, "Shadow 2");
+
+    // The command waits in the extension: the panel says so, the store is unchanged.
+    await expect(panel.locator("#edit-note")).toHaveText(/1.*waiting/);
+    expect(storedIds()).toEqual([...SHADOW_IDS].sort());
+
+    socket.restore();
+    await expect(panel.locator("#status")).toHaveText(
+      "Connected to the local bridge.",
+      { timeout: 20_000 },
+    );
+    await expect
+      .poll(storedIds)
+      .toEqual(SHADOW_IDS.filter((id) => id !== instanceId).sort());
+    await expect(panel.locator("#edit-note")).toHaveText("");
+    // A second removal would be refused as unknown and shown here.
+    await page.waitForTimeout(500);
+    await expect(panel.locator("#sync-error")).toHaveText("");
+    expect(await readItems(page)).toHaveLength(4);
   });
 
   test("a scene that goes not ready, loses its items and its placed metadata, and becomes ready removes nothing from the store", async ({

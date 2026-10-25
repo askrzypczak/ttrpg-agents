@@ -8,10 +8,10 @@ import {
 import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
-import { instanceEditErrorText, instanceEditMessage } from "./instance-edit.js";
+import { instanceEditErrorText } from "./instance-edit.js";
 import { describeError, panelView } from "./panel-state.js";
 import { tokenArtMessage } from "./token-art.js";
-import { tokenDeletedErrorText, tokenDeletedMessage } from "./token-deleted.js";
+import { tokenDeletedErrorText } from "./token-deleted.js";
 
 const EXTENSION_VERSION = "0.0.0";
 
@@ -36,6 +36,10 @@ obr.onReady(async () => {
   let removeError: string | undefined;
   let editError: string | undefined;
   let editNote: string | undefined;
+  let waitingCommands = 0;
+  // Store values a snapshot wrote over the table's, until the DM dismisses
+  // them. In memory only: a reload starts with its own.
+  const overrides: string[] = [];
 
   let rejection: RejectionCode | undefined;
   const render = () => {
@@ -48,6 +52,8 @@ obr.onReady(async () => {
       ...(removeError !== undefined ? { removeError } : {}),
       ...(editError !== undefined ? { editError } : {}),
       ...(editNote !== undefined ? { editNote } : {}),
+      waitingCommands,
+      overrides,
       disconnectedMs: Date.now() - streakStart,
     });
     const status = el("status");
@@ -57,6 +63,14 @@ obr.onReady(async () => {
     el("use-this-tab").hidden = view.action !== "use-this-tab";
     el("sync-error").textContent = view.error ?? "";
     el("edit-note").textContent = view.note ?? "";
+    el("overrides").hidden = view.overrides === undefined;
+    el("overrides-list").replaceChildren(
+      ...(view.overrides ?? []).map((text) => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        return item;
+      }),
+    );
   };
 
   if (role !== "gm" || tokenMissing) {
@@ -65,7 +79,7 @@ obr.onReady(async () => {
   }
 
   // The socket is created after the sync, which reports deletions and gaps through it.
-  let sendToBridge: (message: BridgeMessage) => void = () => {};
+  let sendToBridge: (message: BridgeMessage) => boolean = () => false;
   let reconnect: () => void = () => {};
   const sync = createEncounterSync(
     obr,
@@ -80,8 +94,15 @@ obr.onReady(async () => {
       render();
     },
     {
-      onTokenDeleted: (id) => sendToBridge(tokenDeletedMessage(id)),
-      onInstanceEdit: (edit) => sendToBridge(instanceEditMessage(edit)),
+      send: (message) => sendToBridge(message),
+      onWaitingChange: (waiting) => {
+        waitingCommands = waiting;
+        render();
+      },
+      onSnapshotOverride: (text) => {
+        overrides.push(text);
+        render();
+      },
       onEditRejected: (text) => {
         editError = text;
         render();
@@ -90,8 +111,10 @@ obr.onReady(async () => {
         editNote = text;
         render();
       },
-      onTokenArt: (monsterKey, art) =>
-        sendToBridge(tokenArtMessage(monsterKey, art)),
+      onTokenArt: (monsterKey, art) => {
+        sendToBridge(tokenArtMessage(monsterKey, art));
+      },
+      // The override list stays: only the DM dismisses it.
       onStoreChange: () => {
         removeError = undefined;
         editError = undefined;
@@ -144,6 +167,10 @@ obr.onReady(async () => {
     socket.start();
   };
   el("use-this-tab").addEventListener("click", reconnect);
+  el("dismiss-overrides").addEventListener("click", () => {
+    overrides.length = 0;
+    render();
+  });
   socket.start();
   // Re-render periodically so the stalled hint appears without a state change.
   setInterval(render, 1000);

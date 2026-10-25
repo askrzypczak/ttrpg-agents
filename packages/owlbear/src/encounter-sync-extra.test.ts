@@ -25,6 +25,15 @@ const foreign = (id: string): SceneItem => ({
 });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
+/** A `send` that records the instance of each `token-deleted` command. */
+const recordDeletions =
+  (reported: string[]) =>
+  (message: BridgeMessage): boolean => {
+    if (message.type === "token-deleted")
+      reported.push(message.payload.instanceId);
+    return true;
+  };
+
 /** Timers that never fire, so a scheduled retry stays pending. */
 const idleTimers: Timers = {
   setTimeout: () => 1,
@@ -90,7 +99,7 @@ describe("createEncounterSync item changes", () => {
     };
     const reported: string[] = [];
     const sync = createEncounterSync(obr, undefined, undefined, {
-      onTokenDeleted: (id) => reported.push(id),
+      send: recordDeletions(reported),
     });
     await sync.handleMessage(snapshot(1, 2));
     await settle();
@@ -127,7 +136,7 @@ describe("createEncounterSync item changes", () => {
 
     const reported: string[] = [];
     const second = createEncounterSync(fake.obr, undefined, undefined, {
-      onTokenDeleted: (id) => reported.push(id),
+      send: recordDeletions(reported),
     });
     await second.handleMessage(snapshot(1, 2));
     await settle();

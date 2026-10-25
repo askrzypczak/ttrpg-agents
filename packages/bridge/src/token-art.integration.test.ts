@@ -161,24 +161,30 @@ async function authed(server: BridgeServer): Promise<Client> {
   return client;
 }
 
-/** Sends token-art-set and waits for the fresh snapshot it answers with. */
-async function setArtAndAwaitSnapshot(
+let pings = 0;
+
+/** Resolves once the bridge has handled everything this client sent so far. */
+async function handled(client: Client): Promise<void> {
+  const id = `handled-${++pings}`;
+  client.ws.send(encodeMessage({ v: 1, type: "ping", id, payload: {} }));
+  await waitFor(() =>
+    client.received.some((m) => m.type === "pong" && m.id === id),
+  );
+}
+
+/** Sends token-art-set and waits until the bridge has handled it. */
+async function setArt(
   client: Client,
   monsterKey: string,
   art: TokenArt,
-): Promise<Snapshot["payload"]> {
-  const before = client.snapshots().length;
+): Promise<void> {
   client.ws.send(tokenArtSet(monsterKey, art));
-  await waitFor(
-    () => client.snapshots().length > before || client.errors().length > 0,
-  );
+  await handled(client);
   expect(client.errors()).toEqual([]);
-  return client.snapshots().at(-1)!;
 }
 
 async function expectStillOpen(client: Client): Promise<void> {
-  client.ws.send(encodeMessage({ v: 1, type: "ping", id: "p1", payload: {} }));
-  await waitFor(() => client.received.some((m) => m.type === "pong"));
+  await handled(client);
   expect(client.ws.readyState).toBe(WebSocket.OPEN);
 }
 
@@ -192,20 +198,19 @@ describe("token-art-set over the bridge", () => {
     expect(client.snapshots()[0]?.art).toEqual({ shadow: shadowArt });
   });
 
-  it("token-art-set stores the art and replies with a snapshot carrying it", async () => {
+  it("token-art-set stores the art", async () => {
     const server = await startServer();
     const client = await authed(server);
 
-    const snapshot = await setArtAndAwaitSnapshot(client, "shadow", shadowArt);
+    await setArt(client, "shadow", shadowArt);
 
-    expect(snapshot.art).toEqual({ shadow: shadowArt });
     expect(artRepo.listTokenArt()).toEqual({ shadow: shadowArt });
   });
 
   it("stored art is served again by a restarted bridge", async () => {
     const first = await startServer();
     const client = await authed(first);
-    await setArtAndAwaitSnapshot(client, "shadow", shadowArt);
+    await setArt(client, "shadow", shadowArt);
     client.ws.close();
     await first.close();
     servers.splice(servers.indexOf(first), 1);
@@ -232,7 +237,7 @@ describe("token-art-set over the bridge", () => {
 
     // Control: the same request after a valid hello is honoured.
     const gm = await authed(server);
-    await setArtAndAwaitSnapshot(gm, "shadow", shadowArt);
+    await setArt(gm, "shadow", shadowArt);
     expect(artRepo.listTokenArt()).toEqual({ shadow: shadowArt });
   });
 
@@ -252,8 +257,8 @@ describe("token-art-set over the bridge", () => {
     // Control: a bridge with the hook accepts the same request.
     const withHook = await startServer();
     const gm = await authed(withHook);
-    const snapshot = await setArtAndAwaitSnapshot(gm, "shadow", shadowArt);
-    expect(snapshot.art).toEqual({ shadow: shadowArt });
+    await setArt(gm, "shadow", shadowArt);
+    expect(artRepo.listTokenArt()).toEqual({ shadow: shadowArt });
   });
 
   it("a failing art write answers a non-fatal token-art-failed error and sends no snapshot", async () => {

@@ -43,6 +43,11 @@ export const statBubblesProjector: Projector = {
       hide,
     };
   },
+  editFields: {
+    currentHp: "health",
+    maxHp: "max health",
+    armorClass: "armor class",
+  },
   readBack: (value, instance) => {
     const fields = currentFields(value);
     const edit: Omit<InstanceEdit, "instanceId"> = {};
@@ -54,8 +59,9 @@ export const statBubblesProjector: Projector = {
     ): void => {
       if (typeof stored !== "number" || !Object.hasOwn(fields, key)) return;
       const edited = fields[key];
-      // Stryker disable next-line ConditionalExpression: equivalent, `Number.isInteger` is already false for a non-number
-      if (typeof edited !== "number" || !Number.isInteger(edited))
+      // A whole number the protocol accepts (`int()` rejects unsafe integers).
+      // Stryker disable next-line ConditionalExpression: equivalent, `Number.isSafeInteger` is already false for a non-number
+      if (typeof edited !== "number" || !Number.isSafeInteger(edited))
         invalid.push(key);
       else if (edited !== stored) set(edited);
     };

@@ -50,7 +50,7 @@ const instanceIds = (scene: SceneModel): string[] =>
     )
     .sort();
 
-/** A sync over the fake that records `onTokenDeleted` calls and write calls. */
+/** A sync over the fake that records the `token-deleted` commands it sends and its write calls. */
 function setup() {
   const fake = createFakeObr();
   const writes: string[] = [];
@@ -73,13 +73,17 @@ function setup() {
   };
   const reported: string[] = [];
   const sync = createEncounterSync(obr, undefined, undefined, {
-    onTokenDeleted: (id) => reported.push(id),
+    send: (message) => {
+      if (message.type === "token-deleted")
+        reported.push(message.payload.instanceId);
+      return true;
+    },
   });
   return { sync, scene: fake.scene, reported, writes };
 }
 
 describe("createEncounterSync token deletion", () => {
-  it("calls onTokenDeleted after the GM deletes a token", async () => {
+  it("sends token-deleted after the GM deletes a token", async () => {
     const { sync, scene, reported } = setup();
     await sync.handleMessage(snapshot(1, 2));
     await settle();
@@ -90,7 +94,7 @@ describe("createEncounterSync token deletion", () => {
     expect(reported).toEqual(["i1"]);
   });
 
-  it("reports each deletion once per store change and again after the next snapshot while it is still wanted", async () => {
+  it("a token deletion in flight is not reported again on a store change", async () => {
     const { sync, scene, reported } = setup();
     await sync.handleMessage(snapshot(1, 2));
     await settle();
@@ -107,8 +111,19 @@ describe("createEncounterSync token deletion", () => {
     await settle();
     expect(reported).toEqual(["i1"]);
 
-    // A new snapshot that still wants i1 reports it again (the earlier
-    // request may have been lost).
+    // A snapshot that still wants i1 does not send it again: the command
+    // waits for the store's answer.
+    await sync.handleMessage(snapshot(1, 2));
+    await settle();
+    expect(reported).toEqual(["i1"]);
+
+    // Control: after the connection dropped and came back the command may
+    // have been lost, so the snapshot that follows reports it again.
+    await sync.handleMessage({
+      v: 1,
+      type: "hello-ack",
+      payload: { serverVersion: "0" },
+    });
     await sync.handleMessage(snapshot(1, 2));
     await settle();
     expect(reported).toEqual(["i1", "i1"]);

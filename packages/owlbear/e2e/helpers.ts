@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 import { expect } from "./fixtures.js";
 
 /** The items currently on the fake host's scene. */
@@ -47,4 +47,43 @@ export async function whileExtensionAway(
   await expect(page.frameLocator("#extension").locator("#status")).toHaveText(
     "Connected to the local bridge.",
   );
+}
+
+/** Takes over the extension's WebSocket to the bridge so a test can drop it. */
+export interface BridgeSocketControl {
+  /**
+   * Closes the open socket and, until `restore`, never connects a new one to
+   * the bridge: the extension gets no hello-ack and keeps retrying.
+   */
+  drop(): Promise<void>;
+  /** Lets the extension's next attempt through to the bridge. */
+  restore(): void;
+}
+
+/** Call before the extension loads; its socket to the bridge's `/ws` is then routed through here. */
+export async function controlBridgeSocket(
+  page: Page,
+): Promise<BridgeSocketControl> {
+  let down = false;
+  const open = new Set<{ page: WebSocketRoute; server: WebSocketRoute }>();
+  await page.routeWebSocket(/\/ws$/, (route) => {
+    // A mocked socket opens, but nobody answers its hello.
+    if (down) return;
+    const pair = { page: route, server: route.connectToServer() };
+    open.add(pair);
+    route.onClose(() => open.delete(pair));
+  });
+  return {
+    async drop() {
+      down = true;
+      for (const pair of [...open]) {
+        await pair.page.close();
+        await pair.server.close();
+      }
+      open.clear();
+    },
+    restore() {
+      down = false;
+    },
+  };
 }

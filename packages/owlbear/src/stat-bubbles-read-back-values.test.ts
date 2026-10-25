@@ -21,4 +21,16 @@ describe("statBubblesProjector.readBack values", () => {
       invalid: ["armor class"],
     });
   });
+
+  it("statBubbles readBack reports a whole number beyond the safe integer range as invalid", () => {
+    expect(readBack({ health: 1e20 })).toEqual({
+      edit: {},
+      invalid: ["health"],
+    });
+    // Control: the largest safe integer is read back.
+    expect(readBack({ health: Number.MAX_SAFE_INTEGER })).toEqual({
+      edit: { currentHp: Number.MAX_SAFE_INTEGER },
+      invalid: [],
+    });
+  });
 });

@@ -75,6 +75,11 @@ export type Projector = {
     value: unknown,
     instance: EncounterInstance,
   ): { edit: Omit<InstanceEdit, "instanceId">; invalid: string[] };
+  /**
+   * With `readBack`: the name each edit field has inside the value, so the
+   * planner decides each field on its own (see planSync).
+   */
+  editFields?: Readonly<Partial<Record<EditField, string>>>;
 };
 
 export type TokenKind = Pick<
@@ -129,15 +134,30 @@ export const defaultSyncConfig: SyncConfig = {
   },
 };
 
+/** The instance fields the table can edit and write back. */
+export type EditField = "currentHp" | "maxHp" | "armorClass";
+
+/** How the panel names each edit field. */
+export const EDIT_FIELD_NAMES: Readonly<Record<EditField, string>> = {
+  currentHp: "HP",
+  maxHp: "max HP",
+  armorClass: "armor class",
+};
+
 /**
- * Per instance id, per projector key: the edit fields already sent to the
- * store for what is on the table, so they are not sent again. Interim until
- * #209 (origin-tagged deltas): do not build on it.
+ * What the sync knows about one instance's edit fields, from the events and
+ * the commands since the last reconcile that succeeded:
+ * - `moved`: fields the store changed (an `mcp` change, or a field a command
+ *   did not set whose value changed);
+ * - `settled`: fields whose command the store acknowledged, at the sent value
+ *   (or, for a command the extension does not know, at the store's value);
+ * - `inflight`: fields with a sent command not yet settled, at the sent value.
  */
-export type EditMemory = Record<
-  string,
-  Record<string, Omit<InstanceEdit, "instanceId">>
->;
+export type FieldContext = {
+  moved?: ReadonlySet<EditField>;
+  settled?: Partial<Record<EditField, number>>;
+  inflight?: Partial<Record<EditField, number>>;
+};
 
 export type SyncPlan = {
   add: SceneItem[];
@@ -154,10 +174,8 @@ export type SyncPlan = {
   edits: InstanceEdit[];
   /** Table values that could not be read back, left on the table. */
   rejected: { instanceId: string; message: string }[];
-  /** The edits now on the table, to remember so they are not sent again. */
-  sent: EditMemory;
-  /** Answered edits whose table value differs from the store's, left on the table. */
-  differs: { instanceId: string; message: string }[];
+  /** Stat Bubbles fields a snapshot pushed over a different token value, for the DM to audit. */
+  overrides: { instanceId: string; message: string }[];
 };
 
 /** The instance id a scene item is linked to, if it is one of our tokens. */
@@ -192,35 +210,98 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
-const EDIT_LABELS: Record<keyof Omit<InstanceEdit, "instanceId">, string> = {
-  currentHp: "HP",
-  maxHp: "max HP",
-  armorClass: "armor class",
-};
+const omitKeys = (
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(value).filter(([k]) => !keys.includes(k)));
 
 /**
- * The note for an answered instance whose table values differ from the
- * store's, or `undefined` when the table matches.
+ * The per-field rule for a key whose projector reads edits back, on a token
+ * that has a baseline for it (see planSync).
  */
-function differsMessage(
-  owned: Projector[],
-  token: SceneItem,
-  answer: EncounterInstance,
-): string | undefined {
-  const clauses: string[] = [];
-  for (const { key, readBack } of owned) {
-    if (!readBack) continue;
-    const { edit } = readBack(token.metadata[key], answer);
-    for (const [field, table] of Object.entries(edit)) {
-      const name = field as keyof typeof EDIT_LABELS;
-      clauses.push(
-        `${EDIT_LABELS[name]} ${String(answer[name])} for ${answer.displayName}, not the ${String(table)} on the table`,
-      );
+function planEditFields(
+  projector: Projector & { readBack: NonNullable<Projector["readBack"]> },
+  instance: EncounterInstance,
+  current: unknown,
+  baseline: unknown,
+  snapshot: boolean,
+  fields: FieldContext,
+): {
+  /** The value to write, when the key is pushed. */
+  push?: Record<string, unknown>;
+  baseline: Record<string, unknown>;
+  edit: Omit<InstanceEdit, "instanceId">;
+  invalid: string[];
+  overrides: string[];
+} {
+  const table = asRecord(current);
+  const agreed = asRecord(baseline);
+  const raw = asRecord(projector.project(instance));
+  const value = asRecord(projector.project(instance, current, baseline));
+  const nextBaseline = { ...raw };
+  const read = projector.readBack(current, instance);
+  const edit: Omit<InstanceEdit, "instanceId"> = {};
+  // Stryker disable next-line ArrayDeclaration: equivalent, a made-up entry names no field of the value
+  const replaced: string[] = [];
+  const overrides: string[] = [];
+  let storeMoved = false;
+  const names = Object.entries(projector.editFields ?? {}) as [
+    EditField,
+    string,
+  ][];
+  for (const [field, name] of names) {
+    const stored = instance[field];
+    // No stored value (an instance without armor class): carried over.
+    if (typeof stored !== "number") continue;
+    const inflight = fields.inflight?.[field];
+    const settled = fields.settled?.[field];
+    const moved = fields.moved?.has(field) === true;
+    const storeWins =
+      inflight === undefined &&
+      (moved || (snapshot && settled === undefined && stored !== agreed[name]));
+    if (storeWins) {
+      value[name] = stored;
+      nextBaseline[name] = stored;
+      replaced.push(name);
+      if (table[name] !== stored) {
+        storeMoved = true;
+        // Only a snapshot cannot tell an MCP change from an overridden clamp.
+        if (!moved)
+          overrides.push(
+            `After a snapshot, the store set ${instance.displayName} ${EDIT_FIELD_NAMES[field]} to ${String(stored)}; the table showed ${String(table[name])}.`,
+          );
+      }
+      continue;
     }
+    // The table's value stays.
+    if (Object.hasOwn(table, name)) value[name] = table[name];
+    else delete value[name];
+    const agreedValue = settled ?? agreed[name];
+    if (table[name] === stored) nextBaseline[name] = stored;
+    else if (agreedValue === undefined) delete nextBaseline[name];
+    else nextBaseline[name] = agreedValue;
+    const typed = read.edit[field];
+    if (typed !== undefined && typed !== agreedValue && typed !== inflight)
+      edit[field] = typed;
   }
-  return clauses.length > 0
-    ? `The store holds ${clauses.join("; ")}; the token keeps your value.`
-    : undefined;
+  // Outside the edit fields (Stat Bubbles `hide`) the key-level rule holds:
+  // the projector applies it, and the value is pushed when the encounter
+  // changed there.
+  const labels = names.map(([, name]) => name);
+  const otherChanged = !deepEqual(
+    omitKeys(raw, labels),
+    omitKeys(agreed, labels),
+  );
+  return {
+    ...((storeMoved || otherChanged) && !deepEqual(value, current)
+      ? { push: value }
+      : {}),
+    baseline: nextBaseline,
+    edit,
+    invalid: read.invalid.filter((name) => !replaced.includes(name)),
+    overrides,
+  };
 }
 
 /**
@@ -235,21 +316,26 @@ function differsMessage(
  * push), b = baseline (the raw projection we last wrote):
  * - d == o: nothing, but re-baseline when b != r.
  * - d != o, b present, r != b (the encounter changed): push d, b := r.
- * - d != o, b present, r == b (the table was edited): leave it. If the
- *   projector can `readBack` the value, the changed fields not already in
- *   `context.sent` are planned as an edit to write back, b untouched. Values
- *   that cannot be read are planned as rejected and left on the table.
- * Only a change of the encounter writes to the table: the store's answer to a
- * write-back (`context.answered`) sets b := the raw projection of the answered
- * instance for keys that can be read back. A clamped or refused edit then stays
- * on the table (reported in `differs`) and is not pushed or sent again, and a
- * value typed since is adopted and sent as an edit. If the store moved a field
- * (the table still holds the old baseline value there and it is not in
- * `context.sent`: an MCP change, or a clamp of another field), b is kept and
- * the rule above pushes the whole value.
+ * - d != o, b present, r == b (the table was edited): leave it.
  * - d != o, no b: push d if o is absent, else keep o; either way b := r.
  * A projector may use the baseline to apply this rule per field inside its
  * value: a table edit wins until the encounter changes that field.
+ *
+ * A key whose projector can `readBack` table edits (Stat Bubbles) and that has
+ * a baseline is decided per edit field instead; its other fields keep the
+ * rule above. The agreed value is the settled one, else the baseline's:
+ * - in flight (`fields.inflight`): the table's value stays;
+ * - else the store's value wins if the field `moved`, or if the reconcile
+ *   follows a `snapshot`, the store differs from the agreed value and the
+ *   field is not settled; a snapshot that so writes over a different token
+ *   value is reported in `overrides`;
+ * - else the table's value stays, and is planned as an edit to write back when
+ *   it differs from the agreed value and from the one in flight. Values that
+ *   cannot be read are planned as rejected and left on the table.
+ * The key is pushed only when the result differs from the token, and b
+ * records the agreed values (settled ones at their settled value), so a
+ * clamped value is not sent again. Without `fields` or `snapshot`, a store
+ * change of an edit field is not pushed.
  * An undefined r means no key: it is never written or baselined, and its
  * baseline is dropped (the token's value is left alone).
  * The token name follows the same rule, with its baseline under
@@ -267,10 +353,10 @@ export function planSync(
     placed: ReadonlySet<string>;
     /** Monster key -> the art its new tokens are created with. */
     art: Readonly<Record<string, TokenArt>>;
-    /** Instances as the store answered a write-back of their edit. */
-    answered?: ReadonlyMap<string, EncounterInstance>;
-    /** Edits already sent for what is on the table. */
-    sent?: Readonly<EditMemory>;
+    /** True when the reconcile follows a snapshot (connect, reconnect or gap). */
+    snapshot?: boolean;
+    /** Per instance id: what the events and commands since the last reconcile say about its edit fields. */
+    fields?: ReadonlyMap<string, FieldContext>;
   },
 ): SyncPlan {
   const plan: SyncPlan = {
@@ -282,8 +368,7 @@ export function planSync(
     needsArt: [],
     edits: [],
     rejected: [],
-    sent: {},
-    differs: [],
+    overrides: [],
   };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const tokens = new Map<string, SceneItem>();
@@ -301,73 +386,41 @@ export function planSync(
     const instance = wanted.get(id)!;
     const baseline = asRecord(token.metadata[SYNCED_METADATA_KEY]);
     const next = { ...baseline };
-    const answer = context.answered?.get(id);
-    for (const { key, project, readBack } of owned) {
+    for (const projector of owned) {
+      const { key, project, readBack } = projector;
       const raw = project(instance);
       const o = token.metadata[key];
-      // The store's answer to a write-back is the baseline unless the store
-      // moved a field since we last wrote it (an MCP change or a clamp): then
-      // the table differs from the answer in a field that still holds the old
-      // baseline value, and the normal rule pushes the answer. Any other
-      // difference is the table's own: a value we sent (it stays, only a later
-      // encounter change is pushed) or one typed since (adopted, then sent).
-      const sentFields: Record<string, unknown> =
-        context.sent?.[id]?.[key] ?? {};
-      const answerRaw =
-        answer !== undefined && readBack !== undefined
-          ? project(answer)
-          : undefined;
-      // A field the projector applies its own rule to (Stat Bubbles `hide`)
-      // that the answer moved also blocks adoption: it is pushed.
-      const adopted =
-        answer !== undefined &&
-        readBack !== undefined &&
-        deepEqual(
-          project(answer, o, baseline[key]),
-          project(answer, o, answerRaw),
-        ) &&
-        Object.entries(readBack(o, answer).edit).every(
-          ([field, value]) =>
-            sentFields[field] === value ||
-            (readBack(baseline[key], answer).edit as Record<string, unknown>)[
-              field
-            ] !== value,
-        );
-      const b = adopted ? answerRaw : baseline[key];
-      // Stryker disable next-line ConditionalExpression: equivalent, without an answer b is the stored baseline, which next already holds
-      if (adopted) next[key] = b;
-      const d = project(instance, o, b);
-      const hasBaseline = adopted || Object.hasOwn(baseline, key);
+      const d = project(instance, o, baseline[key]);
+      const hasBaseline = Object.hasOwn(baseline, key);
       if (raw === undefined) {
         delete next[key];
+      } else if (readBack !== undefined && hasBaseline) {
+        const fields = planEditFields(
+          { ...projector, readBack },
+          instance,
+          o,
+          baseline[key],
+          context.snapshot === true,
+          context.fields?.get(id) ?? {},
+        );
+        if (fields.push !== undefined)
+          plan.update.push({ id: token.id, key, value: fields.push });
+        next[key] = fields.baseline;
+        if (Object.keys(fields.edit).length > 0)
+          plan.edits.push({ instanceId: id, ...fields.edit });
+        if (fields.invalid.length > 0)
+          plan.rejected.push({
+            instanceId: id,
+            message: `${fields.invalid.join(" and ")} on ${instance.displayName} is not a whole number`,
+          });
+        for (const message of fields.overrides)
+          plan.overrides.push({ instanceId: id, message });
       } else if (deepEqual(d, o)) {
         next[key] = raw;
       } else if (hasBaseline) {
-        if (!deepEqual(raw, b)) {
+        if (!deepEqual(raw, baseline[key])) {
           plan.update.push({ id: token.id, key, value: d });
           next[key] = raw;
-        } else if (readBack) {
-          // The table was edited: write the change back unless it was
-          // already sent. The baseline stays; the store's answer never
-          // writes to the table.
-          const { edit, invalid } = readBack(o, instance);
-          const already = context.sent?.[id]?.[key] ?? {};
-          const fresh = Object.fromEntries(
-            Object.entries(edit).filter(
-              ([field, value]) =>
-                !Object.hasOwn(already, field) ||
-                (already as Record<string, unknown>)[field] !== value,
-            ),
-          );
-          if (Object.keys(fresh).length > 0)
-            plan.edits.push({ instanceId: id, ...fresh });
-          // Stryker disable next-line EqualityOperator,ConditionalExpression: equivalent, an empty remembered edit is the same as none
-          if (Object.keys(edit).length > 0) (plan.sent[id] ??= {})[key] = edit;
-          if (invalid.length > 0)
-            plan.rejected.push({
-              instanceId: id,
-              message: `${invalid.join(" and ")} on ${instance.displayName} is not a whole number`,
-            });
         }
       } else {
         if (o === undefined) plan.update.push({ id: token.id, key, value: d });
@@ -387,15 +440,6 @@ export function planSync(
     }
     if (!deepEqual(next, baseline))
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
-
-    if (answer !== undefined) {
-      // A key the plan pushes to is no longer the table's value to keep.
-      const kept = owned.filter(
-        (p) => !plan.update.some((u) => u.id === token.id && u.key === p.key),
-      );
-      const message = differsMessage(kept, token, answer);
-      if (message !== undefined) plan.differs.push({ instanceId: id, message });
-    }
   }
 
   for (const instance of desired)

@@ -1,0 +1,154 @@
+import { describe, expect, it } from "vitest";
+import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { createOutbox } from "./outbox.js";
+
+const command = (id: string): BridgeMessage => ({
+  v: 1,
+  type: "token-deleted",
+  id,
+  payload: { instanceId: "i1" },
+});
+
+/** A `send` that goes through only while `open`, recording what went out. */
+function fakeSend() {
+  const state = { open: false, accepted: [] as string[] };
+  const send = (message: BridgeMessage): boolean => {
+    if (!state.open) return false;
+    state.accepted.push(message.id ?? "");
+    return true;
+  };
+  return { state, send };
+}
+
+describe("createOutbox", () => {
+  it("a command whose send fails is sent after the next hello-ack", () => {
+    const { state, send } = fakeSend();
+    const outbox = createOutbox(send);
+
+    outbox.submit(command("a"));
+    expect(state.accepted).toEqual([]);
+    expect(outbox.waiting()).toBe(1);
+
+    state.open = true;
+    outbox.helloAck();
+
+    expect(state.accepted).toEqual(["a"]);
+    expect(outbox.waiting()).toBe(0);
+    // Sent, not settled: the command is still pending until the store answers.
+    expect(outbox.pending().map((c) => c.id)).toEqual(["a"]);
+  });
+
+  it("queued commands are sent in submit order, stopping at the first that does not go out", () => {
+    const accepted: string[] = [];
+    let refuse: string | undefined;
+    const outbox = createOutbox((message) => {
+      if (message.id === refuse || refuse === "*") return false;
+      accepted.push(message.id ?? "");
+      return true;
+    });
+    refuse = "*";
+    outbox.submit(command("a"));
+    outbox.submit(command("b"));
+    outbox.submit(command("c"));
+    expect(accepted).toEqual([]);
+
+    // The socket takes "a" and then drops "b": "c" must not jump ahead.
+    refuse = "b";
+    outbox.helloAck();
+    expect(accepted).toEqual(["a"]);
+    expect(outbox.waiting()).toBe(2);
+
+    refuse = undefined;
+    outbox.helloAck();
+    expect(accepted).toEqual(["a", "b", "c"]);
+    expect(outbox.waiting()).toBe(0);
+  });
+
+  it("the waiting count follows the queue and reaches zero after the flush", () => {
+    const { state, send } = fakeSend();
+    const changes: number[] = [];
+    const outbox = createOutbox(send, (waiting) => changes.push(waiting));
+
+    outbox.submit(command("a"));
+    outbox.submit(command("b"));
+    expect(outbox.waiting()).toBe(2);
+    expect(changes).toEqual([1, 2]);
+
+    state.open = true;
+    outbox.helloAck();
+
+    expect(outbox.waiting()).toBe(0);
+    expect(changes.at(-1)).toBe(0);
+  });
+
+  it("a command sent before a reconnect is forgotten at the next snapshot, one sent after the hello-ack is kept", () => {
+    const { state, send } = fakeSend();
+    state.open = true;
+    const outbox = createOutbox(send);
+    outbox.submit(command("before"));
+    expect(state.accepted).toEqual(["before"]);
+
+    // The connection dropped and came back: "before" may never have arrived.
+    outbox.helloAck();
+    outbox.submit(command("after"));
+    expect(state.accepted).toEqual(["before", "after"]);
+    outbox.snapshot();
+
+    expect(outbox.pending().map((c) => c.id)).toEqual(["after"]);
+    expect(outbox.settle("after")?.message).toEqual(command("after"));
+    expect(outbox.pending()).toEqual([]);
+  });
+});
+
+describe("createOutbox order and settling", () => {
+  it("a command submitted while older ones wait is queued behind them", () => {
+    const accepted: string[] = [];
+    let refuse: string | undefined = "*";
+    const outbox = createOutbox((message) => {
+      if (refuse === "*" || message.id === refuse) return false;
+      accepted.push(message.id ?? "");
+      return true;
+    });
+    outbox.submit(command("a"));
+    outbox.submit(command("b"));
+    refuse = "b";
+    outbox.helloAck();
+    expect(accepted).toEqual(["a"]);
+
+    // The socket would take it now, but "b" is still waiting.
+    refuse = undefined;
+    outbox.submit(command("c"));
+    expect(accepted).toEqual(["a"]);
+    expect(outbox.waiting()).toBe(2);
+
+    outbox.helloAck();
+    expect(accepted).toEqual(["a", "b", "c"]);
+  });
+
+  it("settle forgets only the named command, queued or sent, and the waiting count is reported only when it changes", () => {
+    let open = false;
+    const changes: number[] = [];
+    const outbox = createOutbox(
+      () => open,
+      (waiting) => changes.push(waiting),
+    );
+    outbox.submit(command("a"));
+    outbox.submit(command("b"));
+
+    expect(outbox.settle("unknown")).toBeUndefined();
+    expect(outbox.settle("b")).toEqual({
+      id: "b",
+      message: command("b"),
+      queued: true,
+    });
+    expect(outbox.pending().map((c) => c.id)).toEqual(["a"]);
+    expect(changes).toEqual([1, 2, 1]);
+
+    open = true;
+    outbox.helloAck();
+    expect(outbox.settle("a")).toMatchObject({ id: "a", queued: false });
+    expect(outbox.pending()).toEqual([]);
+    // Settling a sent command leaves the waiting count at 0: no new report.
+    expect(changes).toEqual([1, 2, 1, 0]);
+  });
+});

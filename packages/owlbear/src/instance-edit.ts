@@ -5,28 +5,31 @@ export const INSTANCE_EDIT_ID_PREFIX = "instance-edit:";
 
 /**
  * The `instance-edit` request for HP, max HP or armor class edited on the
- * table. Its envelope id is `instance-edit:<instanceId>`, so the bridge's
- * error reply can be matched back to it.
+ * table. Its envelope id is unique per call and names the instance, so the
+ * bridge's error reply and the store's event can be matched back to it.
  */
 export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
   return {
     v: 1,
     type: "instance-edit",
-    id: `${INSTANCE_EDIT_ID_PREFIX}${edit.instanceId}`,
+    id: `${INSTANCE_EDIT_ID_PREFIX}${edit.instanceId}:${crypto.randomUUID()}`,
     payload: edit,
   };
 }
 
 /**
- * The instance id an `instance-edit` snapshot answers, read from the
- * snapshot's cause; `undefined` for any other cause or none.
+ * An edit as single-field edits, one per field it sets, in the order the
+ * store applies them: max HP, then HP, then armor class.
  */
-export function instanceIdOfEditCause(
-  cause: string | undefined,
-): string | undefined {
-  return cause?.startsWith(INSTANCE_EDIT_ID_PREFIX)
-    ? cause.slice(INSTANCE_EDIT_ID_PREFIX.length)
-    : undefined;
+export function splitEdit(edit: InstanceEdit): InstanceEdit[] {
+  const { instanceId } = edit;
+  const parts: InstanceEdit[] = [];
+  if (edit.maxHp !== undefined) parts.push({ instanceId, maxHp: edit.maxHp });
+  if (edit.currentHp !== undefined)
+    parts.push({ instanceId, currentHp: edit.currentHp });
+  if (edit.armorClass !== undefined)
+    parts.push({ instanceId, armorClass: edit.armorClass });
+  return parts;
 }
 
 /**
@@ -42,6 +45,8 @@ export function instanceEditErrorText(
     !message.id?.startsWith(INSTANCE_EDIT_ID_PREFIX)
   )
     return undefined;
-  const instanceId = message.id.slice(INSTANCE_EDIT_ID_PREFIX.length);
+  // The id is `instance-edit:<instanceId>:<unique suffix>`.
+  const rest = message.id.slice(INSTANCE_EDIT_ID_PREFIX.length);
+  const instanceId = rest.slice(0, rest.lastIndexOf(":"));
   return `Could not apply the edit to ${instanceId}: ${message.payload.message}`;
 }
