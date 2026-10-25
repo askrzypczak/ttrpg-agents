@@ -9,6 +9,7 @@ import {
   SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
@@ -196,6 +197,30 @@ describe("token-art-set over the bridge", () => {
     const client = await authed(server);
 
     expect(client.snapshots()[0]?.art).toEqual({ shadow: shadowArt });
+  });
+
+  it("the snapshot sent on connect carries the image hash of art that has a stored image", async () => {
+    const png = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const sha256 = new SqliteTokenImageRepository(db).saveTokenImage({
+      mime: "image/png",
+      width: 1,
+      height: 1,
+      bytes: png,
+    });
+    artRepo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    const server = await startServer();
+
+    const client = await authed(server);
+
+    expect(client.snapshots()[0]?.art?.shadow?.sha256).toBe(sha256);
+    expect(client.snapshots()[0]?.art).toEqual({
+      shadow: { ...shadowArt, sha256 },
+    });
   });
 
   it("token-art-set stores the art", async () => {

@@ -1,9 +1,11 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { storeTokenImage } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
@@ -43,6 +45,7 @@ const agentToken = await loadOrCreateToken(agentTokenPath);
 const db = openDatabase();
 const repo = new SqliteEncounterRepository(db);
 const artRepo = new SqliteTokenArtRepository(db);
+const imageRepo = new SqliteTokenImageRepository(db);
 const log = new SqliteEncounterLog(db);
 const server = await startBridgeServer({
   port,
@@ -53,6 +56,7 @@ const server = await startBridgeServer({
   removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
   editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
+  storeTokenImage: (bytes) => storeTokenImage(imageRepo, bytes),
 });
 const stopPolling = broadcastLogEvents(log, server, {
   onUnreadable: ({ seq, error }) =>

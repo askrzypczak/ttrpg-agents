@@ -1,8 +1,25 @@
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
+import type { ChangeOrigin } from "@ttrpg-agents/engine";
+import {
+  SHADOW_IDS,
+  e2eDbPath,
+  readE2eTokenArt,
+  readE2eTokenImage,
+} from "./db.js";
+import { e2eDir } from "./env.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems, whileExtensionAway } from "./helpers.js";
 
 const PLACED_KEY = "com.ttrpg-agents/placed";
+const INSTANCE_KEY = "com.ttrpg-agents/instance";
+const STAT_BUBBLES_KEY = "com.owlbear-rodeo-bubbles-extension/metadata";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 /** What the Owlbear asset picker returns for one picked image (SDK `ImageDownload`, without its text label). */
 const shadowDownload = {
@@ -22,11 +39,33 @@ const shadowDownload = {
   type: "CHARACTER",
 };
 
+/** The bytes served for the picked image: a 1x1 PNG. */
+const SHADOW_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** This worker's bridge dir (same layout as the `bridge` fixture). */
+const workerDir = () => join(e2eDir(), `worker-${test.info().workerIndex}`);
+
+const storedShadowArt = () => readE2eTokenArt(workerDir()).shadow;
+
 const pickerOpens = (page: Page) =>
   page.evaluate(() => window.__host!.imageRequests.length);
 
 const syncError = (page: Page) =>
   page.frameLocator("#extension").locator("#sync-error");
+
+/** The Stat Bubbles health on the token of the instance with this id. */
+async function healthOf(page: Page, instanceId: string): Promise<number> {
+  const token = (await readItems(page)).find(
+    (i) =>
+      (i.metadata[INSTANCE_KEY] as { instanceId?: string } | undefined)
+        ?.instanceId === instanceId,
+  );
+  if (!token) throw new Error(`no token for ${instanceId}`);
+  return (token.metadata[STAT_BUBBLES_KEY] as { health: number }).health;
+}
 
 async function expectShadowArtTokens(page: Page): Promise<void> {
   await expect.poll(async () => (await readItems(page)).length).toBe(5);
@@ -41,6 +80,18 @@ async function expectShadowArtTokens(page: Page): Promise<void> {
 }
 
 test.describe("token art from the Owlbear asset library", () => {
+  // The picked image's url answers with real PNG bytes, as the Owlbear CDN would.
+  test.beforeEach(async ({ page }) => {
+    await page.route(shadowDownload.image.url, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: SHADOW_PNG,
+      }),
+    );
+  });
+
   test("the picker opens once and the token shows the art", async ({
     page,
   }) => {
@@ -87,5 +138,62 @@ test.describe("token art from the Owlbear asset library", () => {
     await page.waitForTimeout(500);
     expect(await pickerOpens(page)).toBe(1);
     await expect(syncError(page)).toHaveText("");
+  });
+
+  test("after a pick the image bytes are stored and the art row refers to them", async ({
+    page,
+  }) => {
+    await openHarness(page, { role: "gm", pickedImages: [shadowDownload] });
+    await expectShadowArtTokens(page);
+
+    await expect
+      .poll(() => storedShadowArt()?.sha256, { timeout: 10_000 })
+      .toMatch(/^[0-9a-f]{64}$/);
+    const art = storedShadowArt()!;
+    expect(art).toMatchObject({ url: shadowDownload.image.url });
+    const image = readE2eTokenImage(workerDir(), art.sha256!);
+    expect(image?.mime).toBe("image/png");
+    expect(Buffer.from(image?.bytes ?? [])).toEqual(SHADOW_PNG);
+    await expect(syncError(page)).toHaveText("");
+  });
+
+  test("a failed image fetch keeps the art as a link and shows the failure in the panel", async ({
+    page,
+  }) => {
+    await page.unroute(shadowDownload.image.url);
+    await page.route(shadowDownload.image.url, (route) =>
+      route.fulfill({
+        status: 404,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: "not found",
+      }),
+    );
+    await openHarness(page, { role: "gm", pickedImages: [shadowDownload] });
+
+    await expectShadowArtTokens(page);
+    const failure =
+      "Could not store the image of the token art for shadow; it is kept as a link";
+    await expect(syncError(page)).toContainText(failure);
+    await expect(syncError(page)).toContainText("HTTP 404");
+    await expect
+      .poll(() => storedShadowArt()?.url)
+      .toBe(shadowDownload.image.url);
+    await page.waitForTimeout(500);
+    expect(storedShadowArt()?.sha256).toBeUndefined();
+
+    // A store change reaches the table and leaves the failure shown.
+    const db = openDatabase(e2eDbPath(workerDir()));
+    try {
+      new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 7, origin);
+      await expect.poll(() => healthOf(page, SHADOW_IDS[0]!)).toBe(7);
+      await expect(syncError(page)).toContainText(failure);
+    } finally {
+      try {
+        // The worker's DB outlives the test, and the seed keeps HP as is.
+        new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 16, origin);
+      } finally {
+        db.close();
+      }
+    }
   });
 });

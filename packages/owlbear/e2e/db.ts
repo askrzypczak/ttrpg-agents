@@ -2,9 +2,11 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   SqliteEncounterRepository,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
-import type { ChangeOrigin } from "@ttrpg-agents/engine";
+import type { ChangeOrigin, TokenArt, TokenImage } from "@ttrpg-agents/engine";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -64,6 +66,36 @@ function clearTokenArt(dir: string): void {
       )
       .get();
     if (table) db.exec("DELETE FROM token_art");
+    // After token_art, whose rows refer to the images.
+    const images = db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'token_art_image'",
+      )
+      .get();
+    if (images) db.exec("DELETE FROM token_art_image");
+  } finally {
+    db.close();
+  }
+}
+
+/** The token art stored in the e2e DB, by monster key. */
+export function readE2eTokenArt(dir: string): Record<string, TokenArt> {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    return new SqliteTokenArtRepository(db).listTokenArt();
+  } finally {
+    db.close();
+  }
+}
+
+/** The token image stored in the e2e DB under that hash, or undefined. */
+export function readE2eTokenImage(
+  dir: string,
+  sha256: string,
+): TokenImage | undefined {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    return new SqliteTokenImageRepository(db).getTokenImage(sha256);
   } finally {
     db.close();
   }

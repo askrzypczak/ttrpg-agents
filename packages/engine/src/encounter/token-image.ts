@@ -92,3 +92,19 @@ export interface TokenImageRepository {
   /** The stored image with that hash, or undefined. */
   getTokenImage(sha256: string): TokenImage | undefined;
 }
+
+export type TokenImageStoreResult =
+  | { ok: true; sha256: string; image: TokenImageInfo }
+  | { ok: false; code: TokenImageErrorCode; message: string };
+
+/** Validates the bytes and stores them when they pass; stores nothing otherwise. */
+export function storeTokenImage(
+  repo: TokenImageRepository,
+  bytes: Uint8Array,
+): TokenImageStoreResult {
+  const validation = validateTokenImage(bytes);
+  if (!validation.ok) return validation;
+  const { image } = validation;
+  const sha256 = repo.saveTokenImage({ ...image, bytes });
+  return { ok: true, sha256, image };
+}

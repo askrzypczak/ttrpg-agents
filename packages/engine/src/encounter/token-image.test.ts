@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { TOKEN_IMAGE_MAX_BYTES, validateTokenImage } from "./token-image.js";
+import {
+  TOKEN_IMAGE_MAX_BYTES,
+  storeTokenImage,
+  validateTokenImage,
+  type NewTokenImage,
+  type TokenImage,
+  type TokenImageRepository,
+} from "./token-image.js";
 
 const fromBase64 = (b64: string): Uint8Array =>
   new Uint8Array(Buffer.from(b64, "base64"));
@@ -153,5 +160,59 @@ describe("validateTokenImage", () => {
     expect(validateTokenImage(buffer.subarray(0, PNG_1X1.length)).ok).toBe(
       true,
     );
+  });
+});
+
+/** An in-memory repository that records every save and answers a fixed hash. */
+function fakeRepo(sha256: string) {
+  const saved: NewTokenImage[] = [];
+  const repo: TokenImageRepository = {
+    saveTokenImage(image: NewTokenImage): string {
+      saved.push(image);
+      return sha256;
+    },
+    getTokenImage(): TokenImage | undefined {
+      return undefined;
+    },
+  };
+  return { repo, saved };
+}
+
+describe("storeTokenImage", () => {
+  it("storeTokenImage stores valid bytes and answers their hash, mime and dimensions", () => {
+    const { repo, saved } = fakeRepo("b".repeat(64));
+    expect(storeTokenImage(repo, PNG_1X1)).toEqual({
+      ok: true,
+      sha256: "b".repeat(64),
+      image: { mime: "image/png", width: 1, height: 1 },
+    });
+    expect(saved).toEqual([
+      { mime: "image/png", width: 1, height: 1, bytes: PNG_1X1 },
+    ]);
+  });
+
+  it("storeTokenImage stores nothing for bytes that fail validation and answers the validation error", () => {
+    const { repo, saved } = fakeRepo("c".repeat(64));
+    const svg = text(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
+    );
+    const unknown = new Uint8Array(64).map((_, i) => (i * 7 + 3) % 251);
+    expect(storeTokenImage(repo, svg)).toEqual({
+      ok: false,
+      code: "svg",
+      message: rejectionOf(svg).message,
+    });
+    expect(storeTokenImage(repo, unknown)).toEqual({
+      ok: false,
+      code: "unsupported_type",
+      message: rejectionOf(unknown).message,
+    });
+    const truncated = PNG_1X1.slice(0, 20);
+    expect(storeTokenImage(repo, truncated)).toEqual({
+      ok: false,
+      code: "unreadable",
+      message: rejectionOf(truncated).message,
+    });
+    expect(saved).toEqual([]);
   });
 });

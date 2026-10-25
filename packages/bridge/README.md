@@ -75,3 +75,19 @@ extension keeps its own pick, and the snapshot on every connect carries the
 `art` map (monster key -> image reference `{ url, mime, width, height }`) from
 the same store. A failed write is a non-fatal `token-art-failed` `error`.
 Without the option the type is `unexpected-type`.
+
+## Token images
+
+`POST /token-images` (`Authorization: Bearer <extension token>`, body the raw
+image bytes) stores the image the GM picked, sent by the extension after the
+pick. The token is checked before the body is read, and the agent token is
+refused. The body is at most 1 MiB; its Content-Type is ignored, nothing in it
+is read as a URL, and the bridge makes no outbound request. The server's
+optional `storeTokenImage` option validates and stores it (`cli.ts` wires the
+engine's `storeTokenImage` over `SqliteTokenImageRepository`). The answer is
+`{ ok: true, image: { sha256, mime, width, height } }` (200), or
+`{ ok: false, error: { code, message } }`: 401 `unauthorized`, 413
+`too_large`, 422 `svg`, `unsupported_type`, `unreadable` or
+`dimensions_too_large`, 500 `store_failed`. A wrong Host gets the plain 403 of
+every route. Without the option the route does not exist (405). See "Token and
+auth" in [`docs/architecture.md`](../../docs/architecture.md).

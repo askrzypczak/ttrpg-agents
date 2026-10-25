@@ -11,6 +11,7 @@ import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
 import { describeError, panelView } from "./panel-state.js";
 import { tokenDeletedErrorText } from "./token-deleted.js";
+import { uploadTokenImage } from "./token-art.js";
 
 const EXTENSION_VERSION = "0.0.0";
 
@@ -35,6 +36,9 @@ obr.onReady(async () => {
   let removeError: string | undefined;
   let editError: string | undefined;
   let editNote: string | undefined;
+  // The latest failure to store a picked image's bytes. Kept until the panel
+  // reloads (no store change clears it); a later failure replaces it.
+  let artError: string | undefined;
   let waitingCommands = 0;
   // Store values a snapshot wrote over the table's, until the DM dismisses
   // them. In memory only: a reload starts with its own.
@@ -50,6 +54,7 @@ obr.onReady(async () => {
       syncError,
       ...(removeError !== undefined ? { removeError } : {}),
       ...(editError !== undefined ? { editError } : {}),
+      ...(artError !== undefined ? { artError } : {}),
       ...(editNote !== undefined ? { editNote } : {}),
       waitingCommands,
       overrides,
@@ -113,6 +118,11 @@ obr.onReady(async () => {
       },
       onEditDiffers: (text) => {
         editNote = text;
+        render();
+      },
+      storeImage: (bytes) => uploadTokenImage(bytes, token),
+      onArtStoreFailed: (text) => {
+        artError = text;
         render();
       },
       // The override list stays: only the DM dismisses it.

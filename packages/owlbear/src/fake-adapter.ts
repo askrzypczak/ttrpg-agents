@@ -8,6 +8,10 @@ export type FakePick =
   | undefined
   | (() => TokenArt | undefined | Promise<TokenArt | undefined>);
 
+/** What the fake's image fetch answers: fixed bytes, or a function deciding per url (it may throw or reject). */
+export type FakeFetch =
+  Uint8Array | ((url: string) => Uint8Array | Promise<Uint8Array>);
+
 /** In-memory ObrAdapter over a SceneModel, for browser-free unit tests. */
 export function createFakeObr(
   scene: SceneModel = new SceneModel(),
@@ -15,6 +19,8 @@ export function createFakeObr(
   options: {
     /** The image picker's answer. Default: the GM cancels. */
     pickImage?: FakePick;
+    /** The image fetch's answer. Default: the fetch rejects. */
+    fetchImage?: FakeFetch;
   } = {},
 ): {
   obr: ObrAdapter;
@@ -55,6 +61,12 @@ export function createFakeObr(
       picks++;
       const pick = options.pickImage;
       return typeof pick === "function" ? await pick() : structuredClone(pick);
+    },
+    fetchImage: async (url) => {
+      const answer = options.fetchImage;
+      if (answer === undefined)
+        throw new Error(`fake fetch: no image configured for ${url}`);
+      return typeof answer === "function" ? await answer(url) : answer.slice();
     },
   };
   return { obr, scene, pickImageCalls: () => picks };

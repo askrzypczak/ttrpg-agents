@@ -24,6 +24,7 @@ export {
   type TokenArtRepository,
 } from "./token-art.js";
 export {
+  storeTokenImage,
   validateTokenImage,
   TOKEN_IMAGE_MAX_BYTES,
   type NewTokenImage,
@@ -32,5 +33,6 @@ export {
   type TokenImageInfo,
   type TokenImageMime,
   type TokenImageRepository,
+  type TokenImageStoreResult,
   type TokenImageValidation,
 } from "./token-image.js";

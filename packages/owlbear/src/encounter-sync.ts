@@ -3,13 +3,17 @@ import {
   type InstanceEdit,
   type TokenArt,
 } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import type {
+  BridgeMessage,
+  TokenImageUploadResponse,
+} from "@ttrpg-agents/protocol";
 import { instanceEditMessage, splitEdit } from "./instance-edit.js";
 import { tokenDeletedMessage } from "./token-deleted.js";
 import { tokenArtMessage } from "./token-art.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import { createOutbox } from "./outbox.js";
+import { describeError } from "./panel-state.js";
 import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem } from "./scene-model.js";
 import {
@@ -83,6 +87,16 @@ function fold(
   }
 }
 
+/** Whether two token arts show the same image, whatever their stored hash. */
+function samePicture(a: TokenArt, b: TokenArt): boolean {
+  return (
+    a.url === b.url &&
+    a.mime === b.mime &&
+    a.width === b.width &&
+    a.height === b.height
+  );
+}
+
 const EDIT_FIELDS: readonly EditField[] = [
   "currentHp",
   "maxHp",
@@ -151,9 +165,18 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * go through an outbox over `options.send`: one that cannot go out waits for
  * the next `hello-ack`, and each is remembered until the store settles it. An
  * art pick gets no answer, so it is remembered until the snapshot after the
- * next `hello-ack` and is never sent again. A `table`
- * event with the id of a sent edit acknowledges it: the token keeps the typed
- * value (a clamp shows a note through `onEditDiffers`), and a field the edit
+ * next `hello-ack` and is never sent again.
+ *
+ * A picked image is sent as a link at once and its tokens are created without
+ * waiting for its bytes. With `options.storeImage`, the bytes are then fetched
+ * and stored on the bridge, outside the reconcile chain; once stored, the art
+ * of that type takes the returned hash (if it is still the picked image) and
+ * is sent again with it. One attempt per pick: a failed fetch or a refused or
+ * failed upload is reported once through `onArtStoreFailed`, and the art
+ * stays a link.
+ *
+ * A `table` event with the id of a sent edit acknowledges it: the token keeps
+ * the typed value (a clamp shows a note through `onEditDiffers`), and a field the edit
  * did not set that the store changed is pushed. A `table` event with an id the
  * extension does not know settles its fields at the store's value. A refused
  * edit is settled at its sent value, so it is not sent again. An `mcp` event
@@ -189,6 +212,10 @@ export function createEncounterSync(
     onStoreChange?: () => void;
     /** Called once when an event arrives with a gap in `seq`: the caller should reconnect for a snapshot. */
     onGap?: () => void;
+    /** Stores the bytes of a picked image on the bridge; answers its hash or a refusal. */
+    storeImage?: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>;
+    /** Called once per pick whose image bytes could not be fetched or stored, with the text to show. */
+    onArtStoreFailed?: (text: string) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
@@ -451,6 +478,46 @@ export function createEncounterSync(
     return undefined;
   }
 
+  /**
+   * Fetches the picked image and stores its bytes through `storeImage`, once.
+   * Stored: the art of that type takes the hash and is sent again with it.
+   * Otherwise the failure is reported and the art stays a link. Never rejects.
+   */
+  async function storePicked(
+    monsterKey: string,
+    picked: TokenArt,
+    storeImage: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>,
+  ): Promise<void> {
+    let reason: string;
+    try {
+      const answer = await storeImage(await obr.fetchImage(picked.url));
+      if (answer.ok) {
+        const { sha256 } = answer.image;
+        void enqueue(() => {
+          const current = art[monsterKey];
+          // A snapshot may have brought the same art as a new object since.
+          if (current !== undefined && samePicture(current, picked)) {
+            const stored = { ...picked, sha256 };
+            art = { ...art, [monsterKey]: stored };
+            outbox?.submit(tokenArtMessage(monsterKey, stored));
+          }
+          return Promise.resolve();
+        });
+        return;
+      }
+      reason = answer.error.message;
+    } catch (error) {
+      reason = describeError(error);
+    }
+    try {
+      options.onArtStoreFailed?.(
+        `Could not store the image of the token art for ${monsterKey}; it is kept as a link: ${reason}`,
+      );
+    } catch {
+      // A throwing handler must not leave an unhandled rejection.
+    }
+  }
+
   async function apply(
     wanted: EncounterInstance[],
     taken: Facts,
@@ -484,6 +551,9 @@ export function createEncounterSync(
       }
       art = { ...art, [monsterKey]: chosen };
       outbox?.submit(tokenArtMessage(monsterKey, chosen));
+      // Not awaited: the tokens do not wait for the bytes.
+      if (options.storeImage !== undefined)
+        void storePicked(monsterKey, chosen, options.storeImage);
     }
     const plan = planSync(wanted, items, defaultSyncConfig, {
       ...context,
