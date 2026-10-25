@@ -92,6 +92,7 @@ beforeEach(() => {
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("table not stubbed")),
+      sceneMap: () => Promise.reject(new Error("not stubbed")),
     },
     repo: recordingRepo(inner, writes),
     monsters: loadSrdMonsters(),

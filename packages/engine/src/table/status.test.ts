@@ -29,7 +29,10 @@ function repoWith(count: number) {
 
 /** Fake port answering every call with `status`. */
 function tableAnswering(status: TableSceneStatus): TablePort {
-  return { sceneStatus: () => Promise.resolve(status) };
+  return {
+    sceneStatus: () => Promise.resolve(status),
+    sceneMap: () => Promise.reject(new Error("not stubbed")),
+  };
 }
 
 const scene = (
@@ -115,7 +118,10 @@ describe("getTableStatus", () => {
     const error = new TableUnavailableError(
       "no Owlbear GM tab is connected to the bridge",
     );
-    const table: TablePort = { sceneStatus: () => Promise.reject(error) };
+    const table: TablePort = {
+      sceneStatus: () => Promise.reject(error),
+      sceneMap: () => Promise.reject(new Error("not stubbed")),
+    };
     let caught: unknown;
     try {
       await getTableStatus(repoWith(1), table);

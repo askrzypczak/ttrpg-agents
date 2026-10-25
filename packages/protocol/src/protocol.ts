@@ -3,6 +3,7 @@ import {
   monsterInstanceSchema,
   publishedTokenArtSchema,
   tokenArtSchema,
+  type TableSceneMap,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
@@ -74,6 +75,7 @@ const tokenArtSetPayload = z.object({
  */
 export const querySchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status") }),
+  z.object({ name: z.literal("scene-map") }),
 ]);
 
 export const sceneStatusSchema = z.object({
@@ -82,8 +84,36 @@ export const sceneStatusSchema = z.object({
   appliedInstanceCount: z.number().int().min(0),
 });
 
+const vec2 = z.object({ x: z.number(), y: z.number() });
+
+/**
+ * The scene grid and, for each map image, its image size, image grid and
+ * transform. The grid type is a string, not an enum, so a type the table adds
+ * later still decodes.
+ */
+export const sceneMapSchema = z.object({
+  grid: z.object({
+    dpi: z.number().positive(),
+    type: z.string().min(1),
+  }),
+  maps: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      imageWidth: z.number().positive(),
+      imageHeight: z.number().positive(),
+      imageDpi: z.number().positive(),
+      imageOffset: vec2,
+      position: vec2,
+      rotation: z.number(),
+      scale: vec2,
+    }),
+  ),
+}) satisfies z.ZodType<TableSceneMap>;
+
 export const queryResultSchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
+  z.object({ name: z.literal("scene-map"), result: sceneMapSchema }),
 ]);
 
 export const agentErrorCodeSchema = z.enum([
@@ -105,6 +135,7 @@ export const agentQueryResponseSchema = z.discriminatedUnion("ok", [
 
 export type Query = z.infer<typeof querySchema>;
 export type SceneStatus = z.infer<typeof sceneStatusSchema>;
+export type SceneMap = z.infer<typeof sceneMapSchema>;
 export type QueryResult = z.infer<typeof queryResultSchema>;
 export type AgentQueryResponse = z.infer<typeof agentQueryResponseSchema>;
 

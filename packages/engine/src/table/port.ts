@@ -1,3 +1,5 @@
+import type { Point } from "../map/types.js";
+
 /** What the table reports about its scene. */
 export interface TableSceneStatus {
   sceneReady: boolean;
@@ -5,7 +7,28 @@ export interface TableSceneStatus {
   appliedInstanceCount: number;
 }
 
+/** One map image on the table, with its image grid and transform. */
+export interface TableMapItem {
+  id: string;
+  name: string;
+  imageWidth: number;
+  imageHeight: number;
+  imageDpi: number;
+  imageOffset: Point;
+  position: Point;
+  rotation: number;
+  scale: Point;
+}
+
+/** The table's scene grid and the map images on it. */
+export interface TableSceneMap {
+  grid: { dpi: number; type: string };
+  maps: TableMapItem[];
+}
+
 /** Driven port: ask the table (the VTT). Fails with `TableUnavailableError`. */
 export interface TablePort {
   sceneStatus(): Promise<TableSceneStatus>;
+  /** The scene grid and map images. Fails with `TableUnavailableError`. */
+  sceneMap(): Promise<TableSceneMap>;
 }
