@@ -5,7 +5,7 @@ Agentic tooling for D&D and TTRPGs in general: assistance for the DM during play
 ## Status
 npm workspaces monorepo under `packages/*` (see Architecture).
 - Stack: Node 24 (`.node-version`), npm, ESM, strict TypeScript (NodeNext), vitest, ESLint (flat config, typescript-eslint) + Prettier.
-- `npm run check` = build, typecheck, lint, format:check, test (fail-fast). It is the definition of done; CI (`.github/workflows/ci.yml`) runs it on PRs and pushes to main.
+- `npm run check` = build, typecheck, lint, format:check, test (fail-fast). It is the definition of done. CI (`.github/workflows/ci.yml`) runs the same steps on PRs and pushes to main, with the tests run once under coverage (see Test classification and coverage).
 
 ## Architecture
 Hexagonal architecture (ports and adapters) around a domain core: Claude handles language, the core handles every number.
@@ -42,7 +42,7 @@ Runtime view (processes, ports, auth, data flow): [`docs/architecture.md`](docs/
 ## Test classification and coverage
 - unit: `*.test.ts` (default). integration: `*.integration.test.ts`, for tests that open SQLite (including `:memory:`), sockets, child processes or temp dirs, or write files. Unit tests may read files committed to the repo (fixtures, data, source). e2e: Playwright `*.e2e.ts`.
 - `npm test` runs unit + integration (vitest projects in `vitest.config.ts`; `test:unit`, `test:integration` run one). A new test file must fit exactly one project.
-- `npm run coverage` prints lines/branches/functions for unit, integration, e2e and combined; reports in `reports/coverage/<kind>`. Informational only (CI `coverage` job uploads it; a separate `comment` job holds the only `pull-requests: write`); not part of `check`. CI runs e2e once: the `e2e` job uploads raw coverage, `coverage` reuses it via `COVERAGE_E2E_RAW_DIR`; `coverage-summary.json` is written only when all three kinds were collected. The PR comment headlines combined line coverage with delta vs main plus patch coverage (changed lines), per-kind table collapsed. Baseline = `coverage-summary` artifact from the latest green main run (`COVERAGE_BASELINE`); patch uses `COVERAGE_BASE_REF`.
+- `npm run coverage` prints lines/branches/functions for unit, integration, e2e and combined; reports in `reports/coverage/<kind>`. Informational only (no thresholds; CI `coverage` job uploads it; a separate `comment` job holds the only `pull-requests: write`); not part of `npm run check`; a failing test makes it exit 1. CI runs each suite once: the `check` job runs `check:static` then `npm run coverage -- unit integration` (30s test timeout under coverage) and uploads the vitest data, the `e2e` job uploads raw e2e coverage, and `coverage` runs no tests, merging both via `COVERAGE_VITEST_DIR` and `COVERAGE_E2E_RAW_DIR`; `coverage-summary.json` is written only when all three kinds were collected. The PR comment headlines combined line coverage with delta vs main plus patch coverage (changed lines), per-kind table collapsed. Baseline = `coverage-summary` artifact from the latest green main run (`COVERAGE_BASELINE`); patch uses `COVERAGE_BASE_REF`.
 
 ## Ticketing workflow
 GitHub Issues is the source of truth; use `gh` (at `/opt/homebrew/bin/gh` if not on PATH).
@@ -68,7 +68,7 @@ Dispatch, label setup (`setup-labels.sh`) and close-time label cleanup now live 
 - Tests are mandatory. The contract tests are written first and shown red, then green after implementation. Evidence goes in the PR body.
 - "Complex" = branching logic, new abstractions, shared code, security/data handling; complexity decides whether the reviewer runs.
 - Agents may push their own `issue-N-*` branch. Humans merge; nobody pushes to `main`, force-pushes, or runs `gh pr merge`. Enforced locally by the `ticket-workflow` plugin's git guard (claude-workflow `plugins/ticket-workflow/hooks/guard-git.sh`; change it there, not here) plus the deny rules in `.claude/settings.json`. Also enforced server-side by the `protect-main` ruleset (no bypass actors): `main` cannot be deleted or force-pushed, changes need a PR (0 required approvals), and the `check` and `e2e` CI jobs must pass. `coverage` is informational and not required. The ruleset lives in GitHub settings, not in the repo.
-- PRs are opened as active (not draft): this is a team of one human, so draft would only signal "review needed", which the `needs-review` label already does. `npm run check` is the single definition of done and what CI runs.
+- PRs are opened as active (not draft): this is a team of one human, so draft would only signal "review needed", which the `needs-review` label already does. `npm run check` is the single definition of done; CI runs the same steps, with the tests under coverage.
 
 ## PRs and reviews
 - Every PR body has a review map (reading list, criteria table, decision tests). Full guide: [`docs/reviewing.md`](docs/reviewing.md).

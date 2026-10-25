@@ -1,5 +1,8 @@
 // `npm run coverage`: unit, integration and e2e coverage plus a merged total.
-// Informational only (no thresholds). Reports land in reports/coverage/<kind>.
+// Informational only (no thresholds). A failing test run makes it exit 1 after
+// the reports are written. Reports land in reports/coverage/<kind>.
+// CI: the check job runs `npm run coverage -- unit integration` as its test
+// step, and the coverage job reuses that data via COVERAGE_VITEST_DIR.
 // Pure summary/merge logic lives in coverage-lib.ts.
 import { spawnSync } from "node:child_process";
 import {
@@ -19,6 +22,7 @@ import libReport from "istanbul-lib-report";
 import reports from "istanbul-reports";
 import { CoverageReport } from "monocart-coverage-reports";
 import {
+  exitCode,
   formatComment,
   formatDelta,
   formatMarkdown,
@@ -70,7 +74,26 @@ function writeReports(map: CoverageMapData, dir: string): void {
   }
 }
 
-function vitestKind(kind: "unit" | "integration"): CoverageMapData | null {
+/** A kind's map (null if none was written) and whether its test run passed. */
+type KindRun = { map: CoverageMapData | null; ok: boolean };
+
+// Coverage instrumentation slows tests (the eslint-policy cold type-aware lint
+// took ~6s on CI against vitest's 5s default). This run gates CI, so it gets a
+// generous timeout instead of per-test tuning; local `npm run check` keeps
+// vitest's defaults.
+const COVERAGE_TIMEOUT_MS = 30_000;
+
+function vitestKind(kind: "unit" | "integration"): KindRun {
+  // COVERAGE_VITEST_DIR: unit/integration data already collected (the CI check
+  // job); do not re-run vitest.
+  const given = process.env.COVERAGE_VITEST_DIR;
+  if (given) {
+    const rawDir = join(resolve(root, given), kind);
+    const map = readMap(join(rawDir, "coverage-final.json"));
+    if (map) writeReports(map, join(out, kind));
+    else console.error(`coverage: no ${kind} coverage data in ${rawDir}`);
+    return { map, ok: true };
+  }
   const dir = join(out, kind);
   const ok = run("npx", [
     "vitest",
@@ -82,19 +105,21 @@ function vitestKind(kind: "unit" | "integration"): CoverageMapData | null {
     "--coverage.reporter=html",
     "--coverage.reporter=lcovonly",
     `--coverage.reportsDirectory=${dir}`,
+    `--testTimeout=${COVERAGE_TIMEOUT_MS}`,
   ]);
   if (!ok) console.error(`coverage: ${kind} tests failed`);
-  return readMap(join(dir, "coverage-final.json"));
+  return { map: readMap(join(dir, "coverage-final.json")), ok };
 }
 
-async function e2eKind(): Promise<CoverageMapData | null> {
+async function e2eKind(): Promise<KindRun> {
   const dir = join(out, "e2e");
   // COVERAGE_E2E_RAW_DIR: raw data already collected (the CI e2e job); do not
   // re-run the e2e suite.
   const given = process.env.COVERAGE_E2E_RAW_DIR;
   const rawDir = given ? resolve(root, given) : join(out, "e2e-raw");
+  let ok = true;
   if (!given) {
-    const ok = run("npm", ["run", "test:e2e"], { E2E_COVERAGE: "1" });
+    ok = run("npm", ["run", "test:e2e"], { E2E_COVERAGE: "1" });
     if (!ok) console.error("coverage: e2e tests failed");
   }
   const files = existsSync(rawDir)
@@ -102,7 +127,7 @@ async function e2eKind(): Promise<CoverageMapData | null> {
     : [];
   if (files.length === 0) {
     console.error("coverage: no e2e coverage data collected");
-    return null;
+    return { map: null, ok };
   }
   const mcr = new CoverageReport({
     name: "e2e coverage",
@@ -123,7 +148,7 @@ async function e2eKind(): Promise<CoverageMapData | null> {
     await mcr.add(JSON.parse(readFileSync(join(rawDir, f), "utf8")));
   }
   await mcr.generate();
-  return readMap(join(dir, "coverage-final.json"));
+  return { map: readMap(join(dir, "coverage-final.json")), ok };
 }
 
 /** Baseline line pct from COVERAGE_BASELINE; null on any problem. */
@@ -174,11 +199,20 @@ async function main(): Promise<void> {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
 
-  const maps: Record<string, CoverageMapData | null> = {
+  const runs = {
     unit: want("unit") ? vitestKind("unit") : null,
     integration: want("integration") ? vitestKind("integration") : null,
     e2e: want("e2e") ? await e2eKind() : null,
   };
+  const maps: Record<string, CoverageMapData | null> = {
+    unit: runs.unit?.map ?? null,
+    integration: runs.integration?.map ?? null,
+    e2e: runs.e2e?.map ?? null,
+  };
+  // Kinds that were not wanted never ran, so they cannot fail.
+  const failed = Object.entries(runs)
+    .filter(([, r]) => r?.ok === false)
+    .map(([kind]) => kind);
 
   const present = Object.values(maps).filter(
     (m): m is CoverageMapData => m !== null,
@@ -224,6 +258,11 @@ async function main(): Promise<void> {
         }
       : undefined;
   writeFileSync(join(out, "summary.md"), formatComment(rows, headline));
+  // Last, so the reports and summary.md are written even when a run failed.
+  if (failed.length > 0) {
+    console.error(`coverage: test runs failed: ${failed.join(", ")}`);
+  }
+  process.exitCode = exitCode(failed);
 }
 
 await main();
