@@ -72,9 +72,7 @@ export function pickFreeCells(input: {
   const minDistance = free.map((c) => distance(c.position, seed.position));
   while (picked.length < Math.min(input.count, free.length)) {
     let best = -1;
-    // Stryker disable next-line EqualityOperator: free[free.length] is undefined and never wins
     for (let i = 0; i < free.length; i++) {
-      // Stryker disable next-line ConditionalExpression: a picked cell has distance 0, so an unpicked cell always beats it
       if (picked.includes(free[i] as CellPick)) continue;
       if (
         best === -1 ||

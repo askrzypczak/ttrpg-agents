@@ -12,7 +12,6 @@ function onSegment(p: Point, a: Point, b: Point): boolean {
           0,
           Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / lengthSquared),
         );
-  // Stryker disable next-line EqualityOperator: a distance exactly equal to the tolerance cannot be observed
   return Math.hypot(p.x - (a.x + t * abx), p.y - (a.y + t * aby)) <= tolerance;
 }
 
@@ -24,7 +23,6 @@ export function pointInPolygon(p: Point, polygon: Polygon): boolean {
     const b = polygon[j] as Point;
     if (onSegment(p, a, b)) return true;
     const straddles = a.y > p.y !== b.y > p.y;
-    // Stryker disable next-line EqualityOperator: counting crossings left of the point gives the same parity as counting those to its right
     const crossesRight = p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x;
     if (straddles && crossesRight) {
       inside = !inside;
