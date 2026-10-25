@@ -17,20 +17,25 @@ const helloPayload = z.object({
 const helloAckPayload = z.object({ serverVersion: z.string() });
 // Extension -> bridge: the GM deleted this instance's token on the table.
 const tokenDeletedPayload = z.object({ instanceId: z.string() });
-// Extension -> bridge: HP, max HP or armor class edited on the table.
+// Extension -> bridge: HP, max HP, armor class or initiative edited on the table.
 const instanceEditPayload = z
   .object({
     instanceId: z.string(),
     currentHp: z.number().int().optional(),
     maxHp: z.number().int().optional(),
     armorClass: z.number().int().optional(),
+    initiative: z.number().int().nullable().optional(),
   })
   .refine(
     (edit) =>
       edit.currentHp !== undefined ||
       edit.maxHp !== undefined ||
-      edit.armorClass !== undefined,
-    { message: "an edit needs at least one of currentHp, maxHp, armorClass" },
+      edit.armorClass !== undefined ||
+      edit.initiative !== undefined,
+    {
+      message:
+        "an edit needs at least one of currentHp, maxHp, armorClass, initiative",
+    },
   );
 const emptyPayload = z.object({});
 const errorPayload = z.object({

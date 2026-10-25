@@ -79,4 +79,19 @@ describe("instance-edit", () => {
       { instanceId: "i7", armorClass: 14 },
     ]);
   });
+
+  it("splitEdit puts initiative in its own edit", () => {
+    expect(splitEdit({ instanceId: "i7", initiative: 14 })).toEqual([
+      { instanceId: "i7", initiative: 14 },
+    ]);
+    expect(splitEdit({ instanceId: "i7", initiative: null })).toEqual([
+      { instanceId: "i7", initiative: null },
+    ]);
+    expect(
+      splitEdit({ instanceId: "i7", currentHp: 5, initiative: 14 }),
+    ).toEqual([
+      { instanceId: "i7", currentHp: 5 },
+      { instanceId: "i7", initiative: 14 },
+    ]);
+  });
 });

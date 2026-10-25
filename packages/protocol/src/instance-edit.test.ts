@@ -63,4 +63,32 @@ describe("instance-edit", () => {
       );
     }
   });
+
+  it("an initiative-only instance-edit payload is accepted", () => {
+    expect(decodeMessage(raw({ instanceId: "i1", initiative: 14 }))).toEqual({
+      ok: true,
+      message: {
+        v: 1,
+        type: "instance-edit",
+        id: "instance-edit:i1",
+        payload: { instanceId: "i1", initiative: 14 },
+      },
+    });
+  });
+
+  it("a null initiative is accepted and a decimal initiative is rejected", () => {
+    expect(decodeMessage(raw({ instanceId: "i1", initiative: null }))).toEqual({
+      ok: true,
+      message: {
+        v: 1,
+        type: "instance-edit",
+        id: "instance-edit:i1",
+        payload: { instanceId: "i1", initiative: null },
+      },
+    });
+
+    const decimal = decodeMessage(raw({ instanceId: "i1", initiative: 1.5 }));
+    expect(decimal.ok).toBe(false);
+    if (!decimal.ok) expect(decimal.reason).toBe("invalid-payload");
+  });
 });

@@ -4,7 +4,7 @@ import type { BridgeMessage } from "@ttrpg-agents/protocol";
 export const INSTANCE_EDIT_ID_PREFIX = "instance-edit:";
 
 /**
- * The `instance-edit` request for HP, max HP or armor class edited on the
+ * The `instance-edit` request for HP, max HP, armor class or initiative edited on the
  * table. Its envelope id is unique per call and names the instance, so the
  * bridge's error reply and the store's event can be matched back to it.
  */
@@ -19,7 +19,7 @@ export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
 
 /**
  * An edit as single-field edits, one per field it sets, in the order the
- * store applies them: max HP, then HP, then armor class.
+ * store applies them: max HP, then HP, then armor class, then initiative.
  */
 export function splitEdit(edit: InstanceEdit): InstanceEdit[] {
   const { instanceId } = edit;
@@ -29,6 +29,8 @@ export function splitEdit(edit: InstanceEdit): InstanceEdit[] {
     parts.push({ instanceId, currentHp: edit.currentHp });
   if (edit.armorClass !== undefined)
     parts.push({ instanceId, armorClass: edit.armorClass });
+  if (edit.initiative !== undefined)
+    parts.push({ instanceId, initiative: edit.initiative });
   return parts;
 }
 

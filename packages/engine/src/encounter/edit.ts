@@ -9,10 +9,12 @@ export type InstanceEdit = {
   currentHp?: number;
   maxHp?: number;
   armorClass?: number;
+  /** `null` clears the initiative. */
+  initiative?: number | null;
 };
 
 /**
- * Applies an edit made at the table: max HP, then HP, then armor class,
+ * Applies an edit made at the table: max HP, then HP, then armor class, then initiative,
  * through the repository's setters (so values are clamped like DM commands).
  * Returns the instance after the edit.
  */
@@ -29,5 +31,7 @@ export function applyInstanceEdit(
     repo.setHp(edit.instanceId, edit.currentHp, origin);
   if (edit.armorClass !== undefined)
     repo.setArmorClass(edit.instanceId, edit.armorClass, origin);
+  if (edit.initiative !== undefined)
+    repo.setInitiative(edit.instanceId, edit.initiative, origin);
   return repo.listInstances().find((i) => i.id === edit.instanceId)!;
 }

@@ -48,13 +48,13 @@ export interface EncounterRepository {
   ): MonsterInstance;
   /**
    * Sets the absolute initiative of an instance of the active encounter in one
-   * transaction and returns it updated. Throws InvalidInitiativeError for a
-   * non-integer value, UnknownInstanceError for an id not in the active
+   * transaction and returns it updated; `null` clears it. Throws
+   * InvalidInitiativeError for a non-integer number, UnknownInstanceError for an id not in the active
    * encounter; nothing changes on a throw.
    */
   setInitiative(
     id: string,
-    initiative: number,
+    initiative: number | null,
     origin: ChangeOrigin,
   ): MonsterInstance;
   /**

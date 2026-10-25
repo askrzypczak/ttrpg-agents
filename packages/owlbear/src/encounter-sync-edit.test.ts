@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChangeOrigin, InstanceEdit } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
-import { createEncounterSync } from "./encounter-sync.js";
+import { EDIT_SETTLE_MS, createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
@@ -84,6 +84,41 @@ const foreign: SceneItem = {
 /** Lets fire-and-forget reconciles (item changes) finish. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
+/** Injected timers that fire only when a test advances them. */
+class FakeTimers implements Timers {
+  private now = 0;
+  private next = 1;
+  private pending = new Map<number, { fn: () => void; due: number }>();
+  setTimeout(fn: () => void, ms: number) {
+    const id = this.next++;
+    this.pending.set(id, { fn, due: this.now + ms });
+    return id;
+  }
+  clearTimeout(handle: unknown) {
+    this.pending.delete(handle as number);
+  }
+  advance(ms: number) {
+    this.now += ms;
+    const due = [...this.pending.entries()]
+      .filter(([, t]) => t.due <= this.now)
+      .sort((a, b) => a[1].due - b[1].due);
+    for (const [id, t] of due) {
+      this.pending.delete(id);
+      t.fn();
+    }
+  }
+}
+
+// The timers of the sync under test (reset by each setup).
+let timers = new FakeTimers();
+
+/** Lets the reconcile after a table change plan its edits, waits out the settle delay, then lets the send happen. */
+const elapse = async () => {
+  await settle();
+  timers.advance(EDIT_SETTLE_MS);
+  await settle();
+};
+
 /** Our token for instance i1. */
 const token = (scene: SceneModel): SceneItem =>
   scene
@@ -136,7 +171,9 @@ async function setup(options: { withSend?: boolean } = {}) {
     overrides: [] as string[],
     waiting: [] as number[],
   };
+  timers = new FakeTimers();
   const sync = createEncounterSync(obr, undefined, undefined, {
+    timers,
     ...(options.withSend === false
       ? {}
       : {
@@ -181,7 +218,7 @@ describe("createEncounterSync table edit write-back", () => {
     expect(edits()).toEqual([]);
 
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
     expect(edits().map((e) => e.edit)).toEqual([
       { instanceId: "i1", currentHp: 5 },
     ]);
@@ -201,7 +238,7 @@ describe("createEncounterSync table edit write-back", () => {
 
     // A second table edit is sent once too.
     editAtTable(scene, { "max health": 20 });
-    await settle();
+    await elapse();
     expect(edits().map((e) => e.edit)).toEqual([
       { instanceId: "i1", currentHp: 5 },
       { instanceId: "i1", maxHp: 20 },
@@ -212,7 +249,7 @@ describe("createEncounterSync table edit write-back", () => {
     const { feed, sync, scene, edits, heard } = await setup();
 
     editAtTable(scene, { health: "lots" });
-    await settle();
+    await elapse();
     expect(heard.rejected).toHaveLength(1);
 
     // More reconciles without a new snapshot report nothing new.
@@ -222,7 +259,7 @@ describe("createEncounterSync table edit write-back", () => {
 
     // A new snapshot reports it again; the value stays on the table.
     await sync.handleMessage(snapshot(feed, inst()));
-    await settle();
+    await elapse();
     expect(heard.rejected).toHaveLength(2);
     expect(bubbles(scene).health).toBe("lots");
     expect(edits()).toEqual([]);
@@ -231,7 +268,7 @@ describe("createEncounterSync table edit write-back", () => {
   it("an mcp event that changes HP is pushed to a token whose HP edit was acknowledged since the last write", async () => {
     const { feed, sync, scene, edits } = await setup();
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
     await sync.handleMessage(
       hpChanged(feed, 1, 5, 16, tableOf(edits()[0]!.id)),
     );
@@ -247,7 +284,7 @@ describe("createEncounterSync table edit write-back", () => {
   it("a table event for a sent command pushes nothing and records the store value as the baseline", async () => {
     const { feed, sync, scene, edits, bubbleWrites } = await setup();
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
 
     await sync.handleMessage(
       hpChanged(feed, 1, 5, 16, tableOf(edits()[0]!.id)),
@@ -263,7 +300,7 @@ describe("createEncounterSync table edit write-back", () => {
   it("a table event whose value differs from the sent one shows the clamp note and the token keeps the typed value", async () => {
     const { feed, sync, scene, edits, heard } = await setup();
     editAtTable(scene, { health: 99 });
-    await settle();
+    await elapse();
 
     // The store clamps HP to the max HP of 16.
     await sync.handleMessage(
@@ -280,7 +317,7 @@ describe("createEncounterSync table edit write-back", () => {
   it("a clamped field is not sent again, and the next snapshot shows the store's value", async () => {
     const { feed, sync, scene, edits } = await setup();
     editAtTable(scene, { health: 99 });
-    await settle();
+    await elapse();
     await sync.handleMessage(
       hpChanged(feed, 1, 16, 16, tableOf(edits()[0]!.id)),
     );
@@ -304,7 +341,7 @@ describe("createEncounterSync table edit write-back", () => {
       withSend: false,
     });
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
 
     await sync.handleMessage(
       hpChanged(feed, 1, 5, 16, tableOf("from-before-reload")),
@@ -319,9 +356,9 @@ describe("createEncounterSync table edit write-back", () => {
   it("two edits of one instance sent before either is acknowledged get two command ids and both typed values stay after both acknowledgements", async () => {
     const { feed, sync, scene, edits } = await setup();
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
     editAtTable(scene, { health: 3 });
-    await settle();
+    await elapse();
     const [first, second] = edits();
     expect(edits().map((e) => e.edit)).toEqual([
       { instanceId: "i1", currentHp: 5 },
@@ -343,7 +380,7 @@ describe("createEncounterSync table edit write-back", () => {
   it("an MCP change to another field between an edit and its acknowledgement is pushed and the typed value stays", async () => {
     const { feed, sync, scene, edits } = await setup();
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
 
     await sync.handleMessage(armorClassChanged(feed, 1, 15, mcp));
     await settle();
@@ -364,7 +401,7 @@ describe("createEncounterSync table edit write-back", () => {
     socket.open = false;
 
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
     expect(edits()).toEqual([]);
     expect(heard.waiting.at(-1)).toBe(1);
 
@@ -385,7 +422,7 @@ describe("createEncounterSync table edit write-back", () => {
   it("a refused edit is not sent again and the token keeps the typed value", async () => {
     const { sync, scene, edits } = await setup();
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
     expect(edits()).toHaveLength(1);
 
     await sync.handleMessage(refusal(edits()[0]!.id));
@@ -400,7 +437,7 @@ describe("createEncounterSync table edit write-back", () => {
   it("a max HP edit that lowers HP in the store pushes the lowered HP", async () => {
     const { feed, sync, scene, edits, heard } = await setup();
     editAtTable(scene, { "max health": 8 });
-    await settle();
+    await elapse();
     expect(edits().map((e) => e.edit)).toEqual([
       { instanceId: "i1", maxHp: 8 },
     ]);
@@ -495,9 +532,16 @@ async function setupWithControls() {
       return Promise.reject(new Error("metadata write failed"));
     },
   };
-  const timers: Timers = {
-    setTimeout: (fn) => retries.push(fn),
-    clearTimeout: () => {},
+  // The settle delay of held edits is advanced by `elapse`; any other timer is a retry.
+  const held = new FakeTimers();
+  timers = held;
+  const syncTimers: Timers = {
+    setTimeout: (fn, ms) => {
+      if (ms === EDIT_SETTLE_MS) return held.setTimeout(fn, ms);
+      retries.push(fn);
+      return "retry";
+    },
+    clearTimeout: (handle) => held.clearTimeout(handle),
   };
   const sent: BridgeMessage[] = [];
   const heard = {
@@ -510,7 +554,7 @@ async function setupWithControls() {
     (e) => heard.errors.push(e),
     undefined,
     {
-      timers,
+      timers: syncTimers,
       send: (message) => {
         sent.push(message);
         return true;
@@ -621,7 +665,7 @@ describe("createEncounterSync token deletions alongside edits", () => {
   it("a token deleted while an edit of it waits for its answer is still reported", async () => {
     const { scene, edits, deletions } = await setupWithControls();
     editAtTable(scene, { health: 5 });
-    await settle();
+    await elapse();
     expect(edits()).toHaveLength(1);
 
     scene.deleteItems([token(scene).id]);
@@ -675,7 +719,7 @@ describe("createEncounterSync answers to edits", () => {
   it("the clamp note names the instance whose edit was clamped", async () => {
     const { feed, sync, scene, heard, edits } = await setupWithControls();
     editAtTable(scene, { health: 99 });
-    await settle();
+    await elapse();
 
     await sync.handleMessage(
       hpChanged(feed, 1, 16, 16, tableOf(edits()[0]!.id!)),
@@ -691,7 +735,7 @@ describe("createEncounterSync answers to edits", () => {
     const { feed, sync, scene, edits } = await setup();
     // Max HP is not a number: it is reported and only HP is sent.
     editAtTable(scene, { health: 5, "max health": "x" });
-    await settle();
+    await elapse();
     expect(edits().map((e) => e.edit)).toEqual([
       { instanceId: "i1", currentHp: 5 },
     ]);
@@ -723,7 +767,7 @@ describe("createEncounterSync answers to edits", () => {
     const { scene, heard, edits } = await setup({ withSend: false });
 
     editAtTable(scene, { health: 5, "max health": "x" });
-    await settle();
+    await elapse();
 
     expect(edits()).toEqual([]);
     expect(heard.rejected).toHaveLength(1);
@@ -748,7 +792,7 @@ describe("createEncounterSync answers to edits", () => {
     async (_name, message) => {
       const { feed, sync, scene, edits } = await setup();
       editAtTable(scene, { health: 5 });
-      await settle();
+      await elapse();
 
       await sync.handleMessage(message(edits()[0]!.id));
       // In flight, the typed value stays although the agent moves HP.
@@ -769,7 +813,7 @@ describe("createEncounterSync snapshots on the same connection", () => {
     await ctx.sync.handleMessage(snapshot(ctx.feed, inst()));
     await settle();
     editAtTable(ctx.scene, { health: 5 });
-    await settle();
+    await elapse();
     expect(ctx.edits()).toHaveLength(1);
     return ctx;
   }
@@ -792,7 +836,7 @@ describe("createEncounterSync snapshots on the same connection", () => {
     const { feed, sync, scene, edits } = await connectedWithEdit();
 
     await sync.handleMessage(snapshot(feed, inst(), 2));
-    await settle();
+    await elapse();
 
     expect(edits().map((e) => e.edit)).toEqual([
       { instanceId: "i1", currentHp: 5 },

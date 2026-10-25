@@ -1,4 +1,8 @@
-import { tokenArtSchema, type TokenArt } from "@ttrpg-agents/engine";
+import {
+  tokenArtSchema,
+  type InstanceEdit,
+  type TokenArt,
+} from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { instanceEditMessage, splitEdit } from "./instance-edit.js";
 import { tokenDeletedMessage } from "./token-deleted.js";
@@ -28,6 +32,9 @@ export type EncounterEventPayload = Extract<
 /** Whether a scene item is one of our instance tokens. */
 export const isOurs = (item: SceneItem): boolean =>
   instanceIdOf(item) !== undefined;
+
+/** How long a table edit must stay unchanged before it is written back to the store. */
+export const EDIT_SETTLE_MS = 1500;
 
 export interface EncounterSync {
   /** Resolves once the message is applied, or deferred until the scene is ready. */
@@ -77,13 +84,26 @@ function fold(
   }
 }
 
+const EDIT_FIELDS: readonly EditField[] = [
+  "currentHp",
+  "maxHp",
+  "armorClass",
+  "initiative",
+];
+
+/** The edit field a single-field edit sets, with its value. */
+function fieldOf(part: InstanceEdit): [EditField, number | null] {
+  const field = EDIT_FIELDS.find((f) => part[f] !== undefined)!;
+  return [field, part[field] as number | null];
+}
+
 /**
  * The instance and the edit fields an event carries, with the store's values;
  * `undefined` for an event that carries none.
  */
 function editFieldsOf(
   event: EncounterEventPayload,
-): { id: string; fields: [EditField, number][] } | undefined {
+): { id: string; fields: [EditField, number | null][] } | undefined {
   if (event.type === "hp-changed")
     return {
       id: event.id,
@@ -92,12 +112,14 @@ function editFieldsOf(
         ["maxHp", event.maxHp],
       ],
     };
-  if (
-    event.type === "instance-changed" &&
-    event.changes.armorClass !== undefined
-  )
-    return { id: event.id, fields: [["armorClass", event.changes.armorClass]] };
-  return undefined;
+  if (event.type !== "instance-changed") return undefined;
+  const { armorClass, initiative } = event.changes;
+  // Stryker disable next-line ArrayDeclaration: equivalent, a made-up entry names no edit field that any plan reads
+  const fields: [EditField, number | null][] = [];
+  if (armorClass !== undefined) fields.push(["armorClass", armorClass]);
+  if (initiative !== undefined) fields.push(["initiative", initiative]);
+  // Stryker disable next-line ConditionalExpression: equivalent, an event with no edit fields loops over nothing
+  return fields.length === 0 ? undefined : { id: event.id, fields };
 }
 
 /**
@@ -105,7 +127,7 @@ function editFieldsOf(
  * last successful reconcile say: the store `moved` it, or it settled at a
  * value. A later fact replaces an earlier one.
  */
-type Facts = Map<string, Map<EditField, "moved" | number>>;
+type Facts = Map<string, Map<EditField, "moved" | number | null>>;
 
 /**
  * Holds the desired encounter (the latest snapshot folded with later events,
@@ -120,6 +142,13 @@ type Facts = Map<string, Map<EditField, "moved" | number>>;
  * on connect). After it, an event whose `seq` is not past the last one seen is
  * a duplicate and ignored; one that skips ahead is a gap: nothing is applied,
  * `onGap` is called once, and events are ignored until the next snapshot.
+ *
+ * A planned table edit is held for `EDIT_SETTLE_MS` before it is sent: a
+ * different planned value restarts the delay, the same value planned again
+ * keeps it, and an edit the plan no longer contains is dropped. An unreadable
+ * table value is reported through `onEditRejected` only if still planned when
+ * the delay ends, and `onEditRejectedCleared` hears when a reported one stops
+ * being planned.
  *
  * Commands (table edits, one field each, token deletions and token art picks)
  * go through an outbox over `options.send`: one that cannot go out waits for
@@ -157,6 +186,8 @@ export function createEncounterSync(
     onEditRejected?: (text: string) => void;
     /** Called once per acknowledged edit whose store value differs from the sent one, with the note to show. */
     onEditDiffers?: (text: string) => void;
+    /** Called when a reported unreadable table value is no longer planned as unreadable, with the text it was reported with. */
+    onEditRejectedCleared?: (text: string) => void;
     /** Called when a snapshot or an applied `mcp` event changes what the store says. */
     onStoreChange?: () => void;
     /** Called once when an event arrives with a gap in `seq`: the caller should reconnect for a snapshot. */
@@ -180,6 +211,15 @@ export function createEncounterSync(
   const reported = new Set<string>();
   // Unreadable table values already reported since the last store change.
   const rejectedReported = new Set<string>();
+  // Unreadable table values the panel shows now, until they read again.
+  const rejectedShown = new Set<string>();
+  // Table edits waiting out the settle delay, per instance and field.
+  const heldEdits = new Map<
+    string,
+    { part: InstanceEdit; value: number | null; handle: unknown }
+  >();
+  // Unreadable table values waiting out the settle delay.
+  const heldRejections = new Map<string, unknown>();
   // Item changes coalesce: at most one quiet reconcile is `queued`. Changes
   // raised synchronously by our own write calls (`writing`) are ignored.
   let writing = false;
@@ -213,7 +253,7 @@ export function createEncounterSync(
   function record(
     instanceId: string,
     field: EditField,
-    fact: "moved" | number,
+    fact: "moved" | number | null,
   ): void {
     let fields = facts.get(instanceId);
     if (fields === undefined) facts.set(instanceId, (fields = new Map()));
@@ -233,8 +273,8 @@ export function createEncounterSync(
       string,
       {
         moved: Set<EditField>;
-        settled: Partial<Record<EditField, number>>;
-        inflight: Partial<Record<EditField, number>>;
+        settled: Partial<Record<EditField, number | null>>;
+        inflight: Partial<Record<EditField, number | null>>;
       }
     >();
     const of = (id: string) => {
@@ -322,6 +362,83 @@ export function createEncounterSync(
     tail = tail.then(task).catch(() => {});
     return tail;
   };
+
+  /**
+   * Holds the planned edits for the settle delay, one command per field so
+   * each has exactly one acknowledging event. A held value that the plan
+   * replaces restarts the delay, one it plans again keeps it, and one it no
+   * longer contains is dropped.
+   */
+  function holdEdits(edits: InstanceEdit[]): void {
+    const planned = new Map<
+      string,
+      { part: InstanceEdit; value: number | null }
+    >();
+    for (const edit of edits)
+      for (const part of splitEdit(edit)) {
+        const [field, value] = fieldOf(part);
+        planned.set(`${part.instanceId}\n${field}`, { part, value });
+      }
+    for (const [key, held] of heldEdits)
+      if (!planned.has(key)) {
+        // Stryker disable next-line CallExpression: equivalent, a timer that still fires finds its entry gone and sends nothing
+        timers.clearTimeout(held.handle);
+        heldEdits.delete(key);
+      }
+    for (const [key, { part, value }] of planned) {
+      const held = heldEdits.get(key);
+      if (held?.value === value) continue;
+      // Stryker disable next-line ConditionalExpression,CallExpression: equivalent, a replaced entry's timer finds a newer entry and sends nothing
+      if (held !== undefined) timers.clearTimeout(held.handle);
+      const entry = { part, value, handle: undefined as unknown };
+      entry.handle = timers.setTimeout(() => {
+        void enqueue(() => {
+          if (heldEdits.get(key) === entry) {
+            heldEdits.delete(key);
+            outbox?.submit(instanceEditMessage(part));
+          }
+          return Promise.resolve();
+        });
+      }, EDIT_SETTLE_MS);
+      heldEdits.set(key, entry);
+    }
+  }
+
+  /**
+   * Reports an unreadable table value only if the plan still holds it when the
+   * settle delay ends, and tells the caller when a reported one reads again.
+   */
+  function holdRejections(rejected: SyncPlan["rejected"]): void {
+    const planned = new Set(rejected.map(({ message }) => message));
+    for (const [message, handle] of heldRejections)
+      if (!planned.has(message)) {
+        // Stryker disable next-line CallExpression: equivalent, a timer that still fires finds its entry gone and reports nothing
+        timers.clearTimeout(handle);
+        heldRejections.delete(message);
+      }
+    for (const message of rejectedShown)
+      if (!planned.has(message)) {
+        rejectedShown.delete(message);
+        rejectedReported.delete(message);
+        options.onEditRejectedCleared?.(message);
+      }
+    for (const message of planned) {
+      if (rejectedReported.has(message) || heldRejections.has(message))
+        continue;
+      const handle = timers.setTimeout(() => {
+        void enqueue(() => {
+          if (heldRejections.get(message) === handle) {
+            heldRejections.delete(message);
+            rejectedReported.add(message);
+            rejectedShown.add(message);
+            options.onEditRejected?.(message);
+          }
+          return Promise.resolve();
+        });
+      }, EDIT_SETTLE_MS);
+      heldRejections.set(message, handle);
+    }
+  }
 
   async function write(call: () => Promise<void>): Promise<void> {
     writing = true;
@@ -447,17 +564,10 @@ export function createEncounterSync(
     attempt = 0;
     appliedCount = applying.length;
     if (!quiet || recovered) onApplied();
-    // One command per field, so each has exactly one acknowledging event.
-    for (const edit of plan.edits)
-      for (const part of splitEdit(edit))
-        outbox?.submit(instanceEditMessage(part));
+    if (outbox !== undefined) holdEdits(plan.edits);
     for (const { message } of plan.overrides)
       options.onSnapshotOverride?.(message);
-    for (const { message } of plan.rejected) {
-      if (rejectedReported.has(message)) continue;
-      rejectedReported.add(message);
-      options.onEditRejected?.(message);
-    }
+    holdRejections(plan.rejected);
     for (const id of plan.deleted) {
       if (reported.has(id) || deletionPending(id)) continue;
       reported.add(id);
@@ -544,7 +654,7 @@ export function createEncounterSync(
         const { instanceId, ...edit } = command.message.payload;
         for (const [field, value] of Object.entries(edit) as [
           EditField,
-          number | undefined,
+          number | null | undefined,
         ][])
           // Stryker disable next-line ConditionalExpression: equivalent, a sent edit carries only the fields it sets (splitEdit), and an undefined settled value counts as unsettled
           if (value !== undefined) record(instanceId, field, value);
