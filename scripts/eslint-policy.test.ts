@@ -22,8 +22,7 @@ async function lint(text: string, filePath: string) {
   return result?.messages ?? [];
 }
 
-// Cold type-aware first lint: ~6s under CI v8 coverage, over the 5s default.
-describe("inline eslint-disable policy", { timeout: 30_000 }, () => {
+describe("inline eslint-disable policy", () => {
   it("an eslint-disable of no-restricted-imports does not suppress a forbidden workspace import in production code", async () => {
     const messages = await lint(
       '// eslint-disable-next-line no-restricted-imports\nimport "@ttrpg-agents/protocol";\n',

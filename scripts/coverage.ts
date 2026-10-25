@@ -1,6 +1,8 @@
 // `npm run coverage`: unit, integration and e2e coverage plus a merged total.
 // Informational only (no thresholds). A failing test run makes it exit 1 after
 // the reports are written. Reports land in reports/coverage/<kind>.
+// CI: the check job runs `npm run coverage -- unit integration` as its test
+// step, and the coverage job reuses that data via COVERAGE_VITEST_DIR.
 // Pure summary/merge logic lives in coverage-lib.ts.
 import { spawnSync } from "node:child_process";
 import {
@@ -75,7 +77,23 @@ function writeReports(map: CoverageMapData, dir: string): void {
 /** A kind's map (null if none was written) and whether its test run passed. */
 type KindRun = { map: CoverageMapData | null; ok: boolean };
 
+// Coverage instrumentation slows tests (the eslint-policy cold type-aware lint
+// took ~6s on CI against vitest's 5s default). This run gates CI, so it gets a
+// generous timeout instead of per-test tuning; local `npm run check` keeps
+// vitest's defaults.
+const COVERAGE_TIMEOUT_MS = 30_000;
+
 function vitestKind(kind: "unit" | "integration"): KindRun {
+  // COVERAGE_VITEST_DIR: unit/integration data already collected (the CI check
+  // job); do not re-run vitest.
+  const given = process.env.COVERAGE_VITEST_DIR;
+  if (given) {
+    const rawDir = join(resolve(root, given), kind);
+    const map = readMap(join(rawDir, "coverage-final.json"));
+    if (map) writeReports(map, join(out, kind));
+    else console.error(`coverage: no ${kind} coverage data in ${rawDir}`);
+    return { map, ok: true };
+  }
   const dir = join(out, kind);
   const ok = run("npx", [
     "vitest",
@@ -87,6 +105,7 @@ function vitestKind(kind: "unit" | "integration"): KindRun {
     "--coverage.reporter=html",
     "--coverage.reporter=lcovonly",
     `--coverage.reportsDirectory=${dir}`,
+    `--testTimeout=${COVERAGE_TIMEOUT_MS}`,
   ]);
   if (!ok) console.error(`coverage: ${kind} tests failed`);
   return { map: readMap(join(dir, "coverage-final.json")), ok };
