@@ -10,7 +10,6 @@ import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
 import { describeError, panelView } from "./panel-state.js";
-import { tokenArtMessage } from "./token-art.js";
 import { tokenDeletedErrorText } from "./token-deleted.js";
 
 const EXTENSION_VERSION = "0.0.0";
@@ -110,9 +109,6 @@ obr.onReady(async () => {
       onEditDiffers: (text) => {
         editNote = text;
         render();
-      },
-      onTokenArt: (monsterKey, art) => {
-        sendToBridge(tokenArtMessage(monsterKey, art));
       },
       // The override list stays: only the DM dismisses it.
       onStoreChange: () => {

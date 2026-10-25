@@ -2,6 +2,7 @@ import { tokenArtSchema, type TokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { instanceEditMessage, splitEdit } from "./instance-edit.js";
 import { tokenDeletedMessage } from "./token-deleted.js";
+import { tokenArtMessage } from "./token-art.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import { createOutbox } from "./outbox.js";
@@ -120,9 +121,11 @@ type Facts = Map<string, Map<EditField, "moved" | number>>;
  * a duplicate and ignored; one that skips ahead is a gap: nothing is applied,
  * `onGap` is called once, and events are ignored until the next snapshot.
  *
- * Commands (table edits, one field each, and token deletions) go through an
- * outbox over `options.send`: one that cannot go out waits for the next
- * `hello-ack`, and each is remembered until the store settles it. A `table`
+ * Commands (table edits, one field each, token deletions and token art picks)
+ * go through an outbox over `options.send`: one that cannot go out waits for
+ * the next `hello-ack`, and each is remembered until the store settles it. An
+ * art pick gets no answer, so it is remembered until the snapshot after the
+ * next `hello-ack` and is never sent again. A `table`
  * event with the id of a sent edit acknowledges it: the token keeps the typed
  * value (a clamp shows a note through `onEditDiffers`), and a field the edit
  * did not set that the store changed is pushed. A `table` event with an id the
@@ -141,17 +144,15 @@ export function createEncounterSync(
     timers?: Timers;
     backoff?: BackoffOptions;
     /**
-     * Sends a command (a token deletion or a table edit) to the bridge;
-     * returns false when it did not go out. Without it commands are neither
-     * sent nor remembered.
+     * Sends a command (a token deletion, a table edit or a token art pick) to
+     * the bridge; returns false when it did not go out. Without it commands
+     * are neither sent nor remembered.
      */
     send?: (message: BridgeMessage) => boolean;
     /** Called when the number of commands waiting for the bridge changes. */
     onWaitingChange?: (waiting: number) => void;
     /** Called once per Stat Bubbles field a snapshot pushed over a different token value, with the record to show. */
     onSnapshotOverride?: (text: string) => void;
-    /** Called with the art the GM picked for a monster type, to store it. */
-    onTokenArt?: (monsterKey: string, art: TokenArt) => void;
     /** Called once per store change (a snapshot or an applied `mcp` event) for each table value that could not be read back. */
     onEditRejected?: (text: string) => void;
     /** Called once per acknowledged edit whose store value differs from the sent one, with the note to show. */
@@ -252,7 +253,7 @@ export function createEncounterSync(
       }
     // Later commands for a field replace earlier ones.
     for (const { message } of outbox?.pending() ?? []) {
-      // Stryker disable next-line ConditionalExpression: equivalent, a token deletion sets no edit field; this narrows the type
+      // Stryker disable next-line ConditionalExpression: equivalent, a token deletion or art pick sets no edit field; this narrows the type
       if (message.type !== "instance-edit") continue;
       const { instanceId, ...edit } = message.payload;
       Object.assign(of(instanceId).inflight, edit);
@@ -374,7 +375,7 @@ export function createEncounterSync(
         continue;
       }
       art = { ...art, [monsterKey]: chosen };
-      options.onTokenArt?.(monsterKey, chosen);
+      outbox?.submit(tokenArtMessage(monsterKey, chosen));
     }
     const plan = planSync(wanted, items, defaultSyncConfig, {
       ...context,
@@ -533,7 +534,7 @@ export function createEncounterSync(
       } else if (
         message.type === "error" &&
         !message.payload.fatal &&
-        // Stryker disable next-line ConditionalExpression: equivalent, every pending command has an id, so none is settled for an error without one
+        // Stryker disable next-line ConditionalExpression: equivalent, a pending command's id is never undefined (an art pick's is ""), so none is settled for an error without one
         message.id !== undefined
       ) {
         // A refused edit: the token keeps the typed value (main.ts shows the

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TokenArt } from "@ttrpg-agents/engine";
+import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr, type FakePick } from "./fake-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
@@ -67,22 +68,36 @@ const idleTimers: Timers = {
   clearTimeout: () => {},
 };
 
+const helloAck: BridgeMessage = {
+  v: 1,
+  type: "hello-ack",
+  payload: { serverVersion: "0" },
+};
+
 function setup(pickImage?: FakePick) {
   const fake = createFakeObr(undefined, undefined, { pickImage });
   const errors: unknown[] = [];
   const reported: [string, TokenArt][] = [];
+  const waiting: number[] = [];
+  const socket = { open: true };
   const sync = createEncounterSync(
     fake.obr,
     (e) => errors.push(e),
     () => {},
     {
       timers: idleTimers,
-      onTokenArt: (monsterKey, art) => reported.push([monsterKey, art]),
+      send: (message) => {
+        if (!socket.open) return false;
+        if (message.type === "token-art-set")
+          reported.push([message.payload.monsterKey, message.payload.art]);
+        return true;
+      },
+      onWaitingChange: (count) => waiting.push(count),
     },
   );
   const tokenOf = (instanceId: string) =>
     fake.scene.getItems().find((item) => instanceIdOf(item) === instanceId);
-  return { fake, sync, errors, reported, tokenOf };
+  return { fake, sync, errors, reported, waiting, socket, tokenOf };
 }
 
 const hiddenCircle = {
@@ -140,13 +155,45 @@ describe("createEncounterSync token art", () => {
     expect(errors).toEqual([]);
   });
 
-  it("reports the picked art through onTokenArt", async () => {
+  it("sends the picked art as a token-art-set", async () => {
     const feed = createMessageFeed();
     const { sync, reported } = setup(shadowArt);
 
     await sync.handleMessage(snapshot(feed, [inst(1), inst(2)]));
 
     expect(reported).toEqual([["shadow", shadowArt]]);
+  });
+
+  it("a pick made while the socket is down is sent once, after the next hello-ack", async () => {
+    const feed = createMessageFeed();
+    const { sync, reported, socket } = setup(shadowArt);
+    socket.open = false;
+
+    await sync.handleMessage(snapshot(feed, [inst(1)]));
+    expect(reported).toEqual([]);
+
+    // The socket comes back: hello-ack, then the connect snapshot.
+    socket.open = true;
+    await sync.handleMessage(helloAck);
+    expect(reported).toEqual([["shadow", shadowArt]]);
+
+    await sync.handleMessage(snapshot(feed, [inst(1)], { shadow: shadowArt }));
+    await sync.handleMessage(helloAck);
+    await sync.handleMessage(snapshot(feed, [inst(1)], { shadow: shadowArt }));
+    expect(reported).toEqual([["shadow", shadowArt]]);
+  });
+
+  it("a queued pick counts in the waiting count until it is sent", async () => {
+    const feed = createMessageFeed();
+    const { sync, waiting, socket } = setup(shadowArt);
+    socket.open = false;
+
+    await sync.handleMessage(snapshot(feed, [inst(1)]));
+    expect(waiting.at(-1)).toBe(1);
+
+    socket.open = true;
+    await sync.handleMessage(helloAck);
+    expect(waiting.at(-1)).toBe(0);
   });
 
   it("does not prompt when the snapshot already has art for the type", async () => {
