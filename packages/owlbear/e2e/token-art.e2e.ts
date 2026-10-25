@@ -312,4 +312,51 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
     expect(storedShadowArt()).toEqual({ ...storedImage, sha256 });
     await expect(syncError(page)).toHaveText("");
   });
+
+  test("stored bytes the bridge cannot serve leave the circle and show the failure in the panel", async ({
+    page,
+  }) => {
+    const sha256 = seedE2eTokenArt(
+      workerDir(),
+      "shadow",
+      storedImage,
+      SHADOW_PNG,
+    );
+    await page.route(storedImage.url, (route) =>
+      route.fulfill({
+        status: 404,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: "not found",
+      }),
+    );
+    // Registered after the page fixture's route for the bridge origin, so it
+    // answers the extension's read first.
+    let reads = 0;
+    await page.route(`**/token-images/${sha256}`, (route) => {
+      reads += 1;
+      return route.fulfill({
+        status: 404,
+        contentType: "application/json; charset=utf-8",
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: "not_found",
+            message: "no token image with that hash",
+          },
+        }),
+      });
+    });
+    await openHarness(page, { role: "gm" });
+
+    await expect(syncError(page)).toContainText(
+      "Could not republish the token art for shadow",
+    );
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({ type: "SHAPE" });
+    expect(reads).toBe(1);
+    expect(await uploads(page)).toEqual([]);
+    expect(await pickerOpens(page)).toBe(0);
+    expect(storedShadowArt()).toEqual({ ...storedImage, sha256 });
+  });
 });

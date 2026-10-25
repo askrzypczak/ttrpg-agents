@@ -620,3 +620,62 @@ describe("createEncounterSync token art republish: stored bytes that cannot be l
     expect(s.errors).toEqual([]);
   });
 });
+
+describe("createEncounterSync token art republish: snapshots after the pick", () => {
+  it("a stale snapshot after a republish keeps the republished art", async () => {
+    const feed = createMessageFeed();
+    const alive: string[] = [];
+    const fake = createFakeObr(undefined, undefined, {
+      imageAlive: (url) => {
+        alive.push(url);
+        return false;
+      },
+      pickImage: republished,
+    });
+    // The socket is down until the hello-ack, so the re-picked art waits.
+    let connected = false;
+    const reported: [string, TokenArt][] = [];
+    const errors: unknown[] = [];
+    const sync = createEncounterSync(
+      fake.obr,
+      (e) => errors.push(e),
+      () => {},
+      {
+        timers: idleTimers,
+        send: (message) => {
+          if (!connected) return false;
+          if (message.type === "token-art-set")
+            reported.push([message.payload.monsterKey, message.payload.art]);
+          return true;
+        },
+        loadImage: () =>
+          Promise.resolve({ bytes: STORED_BYTES.slice(), mime: "image/png" }),
+      },
+    );
+    const tokenOf = (instanceId: string) =>
+      fake.scene.getItems().find((item) => instanceIdOf(item) === instanceId);
+
+    await sync.handleMessage(
+      feed.snapshot([inst(1)], { art: { shadow: storedArt } }),
+    );
+    expectImages(tokenOf, ["shadow-1"], republished);
+    expect(reported).toEqual([]);
+
+    // The reconnect's snapshot was built before the queued pick reached the
+    // store: it still carries the dead art.
+    connected = true;
+    await sync.handleMessage(helloAck);
+    expect(reported).toEqual([
+      ["shadow", { ...republished, sha256: STORED_SHA }],
+    ]);
+    await sync.handleMessage(
+      feed.snapshot([inst(1), inst(2)], { art: { shadow: storedArt } }),
+    );
+
+    expectImages(tokenOf, ["shadow-1", "shadow-2"], republished);
+    expect(alive).toEqual([storedArt.url]);
+    expect(fake.uploads()).toHaveLength(1);
+    expect(fake.pickImageCalls()).toBe(1);
+    expect(errors).toEqual([]);
+  });
+});

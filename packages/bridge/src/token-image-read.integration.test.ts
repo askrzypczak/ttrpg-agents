@@ -78,8 +78,7 @@ function get(
 ): Promise<Answer> {
   return new Promise((resolve, reject) => {
     const req = request(
-      `http://127.0.0.1:${String(bridge.port)}${path}`,
-      { method: "GET", headers },
+      { host: "127.0.0.1", port: bridge.port, path, method: "GET", headers },
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (chunk: Buffer) => chunks.push(chunk));
