@@ -3,10 +3,12 @@ import {
   TargetError,
   addMonsters,
   compareByInitiative,
+  formatColumnLabel,
   getTableStatus,
   resolveTargets,
   getMonsterByKey,
   searchMonsters,
+  useMap,
   type ChangeOrigin,
   type MonsterInstance,
 } from "@ttrpg-agents/engine";
@@ -411,8 +413,12 @@ const useMapTool = defineTool({
   description:
     "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the active map. Needs the bridge running.",
   inputSchema: { name: z.string().min(1).optional() },
-  run() {
-    throw new Error("not implemented");
+  async run(ctx, { name }) {
+    const { map, cols, rows } = await useMap(ctx.table, ctx.maps, name);
+    return ok(
+      `Using ${map.name}: ${String(cols)} x ${String(rows)} cells, columns A-${formatColumnLabel(cols - 1)} left to right, rows 1-${String(rows)} top to bottom.`,
+      { itemId: map.itemId, name: map.name, cols, rows },
+    );
   },
 });
 
