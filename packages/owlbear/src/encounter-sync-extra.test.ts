@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
@@ -13,6 +14,13 @@ const inst = (n: number): EncounterInstance =>
   makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
 const snapshot = (feed: MessageFeed, ...ns: number[]) =>
   feed.snapshot(ns.map(inst));
+/** Published art for the instances' type, with no stored bytes to check. */
+const shadowArt: PublishedTokenArt = {
+  url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+  mime: "image/png",
+  width: 256,
+  height: 256,
+};
 const foreign = (id: string): SceneItem => ({
   id,
   type: "IMAGE",
@@ -125,7 +133,10 @@ describe("createEncounterSync item changes", () => {
       getItems: (f) => (reads++, fake.obr.getItems(f)),
     };
     const sync = createEncounterSync(obr);
-    await sync.handleMessage(snapshot(feed, 1, 2));
+    // The type has art, so no art dialog opens.
+    await sync.handleMessage(
+      feed.snapshot([inst(1), inst(2)], { art: { shadow: shadowArt } }),
+    );
     await settle();
     expect(reads).toBe(1);
   });
