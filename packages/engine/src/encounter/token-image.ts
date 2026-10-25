@@ -102,7 +102,9 @@ export function storeTokenImage(
   repo: TokenImageRepository,
   bytes: Uint8Array,
 ): TokenImageStoreResult {
-  void repo;
-  void bytes;
-  throw new Error("not implemented");
+  const validation = validateTokenImage(bytes);
+  if (!validation.ok) return validation;
+  const { image } = validation;
+  const sha256 = repo.saveTokenImage({ ...image, bytes });
+  return { ok: true, sha256, image };
 }
