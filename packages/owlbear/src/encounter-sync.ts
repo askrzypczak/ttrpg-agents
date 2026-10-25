@@ -43,12 +43,11 @@ export interface EncounterSync {
   appliedInstanceCount(): number;
 }
 
-// Stryker disable all: real timers are only used in the browser; tests inject Timers
+// Real timers are only used in the browser; tests inject Timers.
 const defaultTimers: Timers = {
   setTimeout: (fn, ms) => setTimeout(fn, ms),
   clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 };
-// Stryker restore all
 
 function fold(
   desired: EncounterInstance[],
@@ -114,11 +113,9 @@ function editFieldsOf(
     };
   if (event.type !== "instance-changed") return undefined;
   const { armorClass, initiative } = event.changes;
-  // Stryker disable next-line ArrayDeclaration: equivalent, a made-up entry names no edit field that any plan reads
   const fields: [EditField, number | null][] = [];
   if (armorClass !== undefined) fields.push(["armorClass", armorClass]);
   if (initiative !== undefined) fields.push(["initiative", initiative]);
-  // Stryker disable next-line ConditionalExpression: equivalent, an event with no edit fields loops over nothing
   return fields.length === 0 ? undefined : { id: event.id, fields };
 }
 
@@ -231,11 +228,9 @@ export function createEncounterSync(
   // What the next reconcile is told: the facts since the last successful one,
   // and whether a snapshot arrived since.
   let facts: Facts = new Map();
-  // Stryker disable next-line BooleanLiteral: equivalent, nothing reconciles before the first snapshot, which sets it
   let afterSnapshot = false;
   // Whether a hello-ack came since the last snapshot. A snapshot without one
   // came on the same connection (in place of an unreadable change-log row).
-  // Stryker disable next-line BooleanLiteral: equivalent, no edit is sent before the first snapshot
   let ackedSinceSnapshot = false;
 
   /**
@@ -246,7 +241,6 @@ export function createEncounterSync(
    */
   function forgetSentEdits(): void {
     for (const { id, message, queued } of outbox?.pending() ?? [])
-      // Stryker disable next-line ConditionalExpression: equivalent, a queued edit forgotten here is planned and queued again
       if (!queued && message.type === "instance-edit") outbox?.settle(id);
   }
 
@@ -293,7 +287,7 @@ export function createEncounterSync(
       }
     // Later commands for a field replace earlier ones.
     for (const { message } of outbox?.pending() ?? []) {
-      // Stryker disable next-line ConditionalExpression: equivalent, a token deletion or art pick sets no edit field; this narrows the type
+      // Deletions and art picks set no edit field; this narrows the type.
       if (message.type !== "instance-edit") continue;
       const { instanceId, ...edit } = message.payload;
       Object.assign(of(instanceId).inflight, edit);
@@ -324,7 +318,7 @@ export function createEncounterSync(
       for (const [field, value] of fields) record(id, field, value);
       return;
     }
-    // Stryker disable next-line ConditionalExpression: equivalent, only an edit's events carry edit fields; this narrows the type
+    // Only an edit's events carry edit fields; this narrows the type.
     if (command.message.type !== "instance-edit") return;
     const sent = command.message.payload;
     const before = desired?.find((i) => i.id === id);
@@ -381,14 +375,12 @@ export function createEncounterSync(
       }
     for (const [key, held] of heldEdits)
       if (!planned.has(key)) {
-        // Stryker disable next-line CallExpression: equivalent, a timer that still fires finds its entry gone and sends nothing
         timers.clearTimeout(held.handle);
         heldEdits.delete(key);
       }
     for (const [key, { part, value }] of planned) {
       const held = heldEdits.get(key);
       if (held?.value === value) continue;
-      // Stryker disable next-line ConditionalExpression,CallExpression: equivalent, a replaced entry's timer finds a newer entry and sends nothing
       if (held !== undefined) timers.clearTimeout(held.handle);
       const entry = { part, value, handle: undefined as unknown };
       entry.handle = timers.setTimeout(() => {
@@ -412,7 +404,6 @@ export function createEncounterSync(
     const planned = new Set(rejected.map(({ message }) => message));
     for (const [message, handle] of heldRejections)
       if (!planned.has(message)) {
-        // Stryker disable next-line CallExpression: equivalent, a timer that still fires finds its entry gone and reports nothing
         timers.clearTimeout(handle);
         heldRejections.delete(message);
       }
@@ -512,7 +503,6 @@ export function createEncounterSync(
     // later stays deleted; forget instances that left the encounter.
     const doomed = new Set(plan.delete);
     const present = [
-      // Stryker disable next-line all: equivalent, a deleted token's id is not wanted or is also on a kept token
       ...items.filter((item) => !doomed.has(item.id)),
       ...plan.add,
     ].map(instanceIdOf);
@@ -617,7 +607,8 @@ export function createEncounterSync(
         rejectedReported.clear();
         options.onStoreChange?.();
       } else if (message.type === "encounter-event") {
-        // Stryker disable next-line ConditionalExpression: equivalent, desired is null only before the first snapshot, when seq is null too
+        // Narrows the type: desired is null only before the first snapshot,
+        // when seq is null too.
         if (desired === null) return Promise.resolve();
         if (seq === null) return Promise.resolve();
         const { seq: eventSeq } = message.payload;
@@ -644,7 +635,8 @@ export function createEncounterSync(
       } else if (
         message.type === "error" &&
         !message.payload.fatal &&
-        // Stryker disable next-line ConditionalExpression: equivalent, a pending command's id is never undefined (an art pick's is ""), so none is settled for an error without one
+        // A pending command's id is never undefined (an art pick's is ""),
+        // so an error without one settles nothing.
         message.id !== undefined
       ) {
         // A refused edit: the token keeps the typed value (main.ts shows the
@@ -656,7 +648,8 @@ export function createEncounterSync(
           EditField,
           number | null | undefined,
         ][])
-          // Stryker disable next-line ConditionalExpression: equivalent, a sent edit carries only the fields it sets (splitEdit), and an undefined settled value counts as unsettled
+          // Narrows the type: a sent edit carries only the fields it sets
+          // (splitEdit).
           if (value !== undefined) record(instanceId, field, value);
       } else {
         return Promise.resolve();

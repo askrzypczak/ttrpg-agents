@@ -302,7 +302,7 @@ const renameMonsterTool = defineTool({
   inputSchema: { target: z.string(), name: z.string() },
   run(ctx, { target, name }) {
     const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
-    // Stryker disable next-line ConditionalExpression: equivalent, resolveTargets throws for an unknown target
+    // Defensive: resolveTargets throws for an unknown target.
     if (!instance) return fail(`Unknown target "${target}"`);
     const updated = ctx.repo.renameInstance(instance.id, name, mcpOrigin(ctx));
     return ok(`${instance.displayName} renamed to ${updated.displayName}`, {
@@ -319,7 +319,7 @@ const setInitiativeTool = defineTool({
   inputSchema: { target: z.string(), initiative: z.number().int() },
   run(ctx, { target, initiative }) {
     const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
-    // Stryker disable next-line ConditionalExpression: equivalent, resolveTargets throws for an unknown target
+    // Defensive: resolveTargets throws for an unknown target.
     if (!instance) return fail(`Unknown target "${target}"`);
     const before = instance.initiative;
     const updated = ctx.repo.setInitiative(

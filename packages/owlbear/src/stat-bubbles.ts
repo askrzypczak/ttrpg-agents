@@ -60,7 +60,6 @@ export const statBubblesProjector: Projector = {
       if (typeof stored !== "number" || !Object.hasOwn(fields, key)) return;
       const edited = fields[key];
       // A whole number the protocol accepts (`int()` rejects unsafe integers).
-      // Stryker disable next-line ConditionalExpression: equivalent, `Number.isSafeInteger` is already false for a non-number
       if (typeof edited !== "number" || !Number.isSafeInteger(edited))
         invalid.push(key);
       else if (edited !== stored) set(edited);

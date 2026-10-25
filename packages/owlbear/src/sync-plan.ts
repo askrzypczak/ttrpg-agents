@@ -249,7 +249,6 @@ function planEditFields(
   const nextBaseline = { ...raw };
   const read = projector.readBack(current, instance);
   const edit: Omit<InstanceEdit, "instanceId"> = {};
-  // Stryker disable next-line ArrayDeclaration: equivalent, a made-up entry names no field of the value
   const replaced: string[] = [];
   const overrides: string[] = [];
   let storeMoved = false;
@@ -435,7 +434,6 @@ export function planSync(
         delete next[key];
         // The instance has no value for this key: a value the table holds is
         // adopted (the tracker's count for a monster without initiative).
-        // Stryker disable next-line ConditionalExpression: equivalent, reading an absent value back on an instance without the stored value plans nothing
         if (readBack !== undefined && o !== undefined) {
           const read = readBack(o, instance);
           const known = context.fields?.get(id);
