@@ -21,7 +21,7 @@ export interface PanelInput {
   editError?: string;
   /** A note on the latest write-back answer that differs from the table, if any. */
   editNote?: string;
-  /** How many table edits and token deletions wait for the bridge (see outbox.ts). */
+  /** How many table edits, token deletions and token art picks wait for the bridge (see outbox.ts). */
   waitingCommands?: number;
   /** Records of store values a snapshot wrote over a different token value, until dismissed. */
   overrides?: readonly string[];
