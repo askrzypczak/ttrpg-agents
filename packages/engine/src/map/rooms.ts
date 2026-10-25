@@ -17,8 +17,12 @@ export interface SavedRoom extends Room {
 }
 
 /** Validates a stored room: non-empty name, a status, one or more polygons of three or more finite points. */
-export const savedRoomSchema: z.ZodType<SavedRoom> = z.custom<SavedRoom>(() => {
-  throw new Error("not implemented");
+export const savedRoomSchema: z.ZodType<SavedRoom> = z.object({
+  name: z.string().min(1),
+  status: z.enum(["confirmed", "proposed"]),
+  polygons: z
+    .array(z.array(z.object({ x: z.number(), y: z.number() })).min(3))
+    .min(1),
 });
 
 /** Whether an image-px point is inside any of the room's polygons. */
