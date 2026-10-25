@@ -22,10 +22,9 @@ const inIntegration = (f: string) => any(f, INTEGRATION_INCLUDE);
 //   .git: git metadata.
 //   .claude: agent worktrees (.claude/worktrees/<name>) are full copies of the
 //     repo whose paths match no project glob, so they would fail the check.
-//   .stryker-tmp: Stryker sandbox copies of the repo, same problem.
 // globSync passes each entry's path relative to `root`, so match the basename.
-// globSync also skips dot-directories by default, so .claude, .git and
-// .stryker-tmp are listed as belt and braces.
+// globSync also skips dot-directories by default, so .claude and .git are
+// listed as belt and braces.
 const SKIPPED_DIRS = new Set([
   "node_modules",
   "dist",
@@ -33,7 +32,6 @@ const SKIPPED_DIRS = new Set([
   ".claude",
   "reports",
   ".git",
-  ".stryker-tmp",
 ]);
 
 const testFiles = globSync("**/*.{test,spec}.ts", {
