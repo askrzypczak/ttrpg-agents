@@ -1,5 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { MapRegistration, MapRepository } from "@ttrpg-agents/engine";
+import type {
+  MapRegistration,
+  MapRepository,
+  SavedRoom,
+} from "@ttrpg-agents/engine";
 
 /** One `map_registrations` row. */
 interface MapRow {
@@ -96,6 +100,17 @@ export class SqliteMapRepository implements MapRepository {
         sceneDpi: row.scene_dpi,
       },
     };
+  }
+
+  getRooms(itemId: string): SavedRoom[] {
+    void itemId;
+    throw new Error("not implemented");
+  }
+
+  replaceRooms(itemId: string, rooms: readonly SavedRoom[]): void {
+    void itemId;
+    void rooms;
+    throw new Error("not implemented");
   }
 
   /** Runs fn in one transaction. */

@@ -422,6 +422,49 @@ const useMapTool = defineTool({
   },
 });
 
+const setRoomsTool = defineTool({
+  name: "set_rooms",
+  annotations: { destructiveHint: true },
+  description:
+    "Name rooms on the map in use by display-cell ranges such as T5:AB11; a room with several ranges (an L shape) lists each. A room named like a saved one (ignoring case) replaces it. Status is confirmed unless given as proposed. Reads where the map sits now; needs the bridge running.",
+  inputSchema: {
+    rooms: z
+      .array(
+        z.object({
+          name: z.string().min(1),
+          ranges: z.array(z.string().min(1)).min(1),
+        }),
+      )
+      .min(1),
+    status: z.enum(["confirmed", "proposed"]).optional(),
+  },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
+const listRoomsTool = defineTool({
+  name: "list_rooms",
+  annotations: { readOnlyHint: true },
+  description:
+    "List the rooms saved for the map in use, with their status and display-cell ranges where the map sits now. Needs the bridge running.",
+  inputSchema: {},
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
+const removeRoomsTool = defineTool({
+  name: "remove_rooms",
+  annotations: { destructiveHint: true },
+  description:
+    "Remove saved rooms from the map in use by name, ignoring case. Every name must match a saved room, or nothing is removed.",
+  inputSchema: { names: z.array(z.string().min(1)).min(1) },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -436,4 +479,7 @@ export const tools: readonly ToolDefinition[] = [
   clearEncounterTool,
   tableStatusTool,
   useMapTool,
+  setRoomsTool,
+  listRoomsTool,
+  removeRoomsTool,
 ];
