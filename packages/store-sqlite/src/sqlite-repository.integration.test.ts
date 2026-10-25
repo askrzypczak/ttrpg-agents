@@ -300,6 +300,31 @@ describe("setInitiative", () => {
     expect(db.isTransaction).toBe(false);
   });
 
+  it("setInitiative null clears the initiative and records instance-changed with initiative null", () => {
+    const [a, b] = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1", initiative: 12 }),
+        goblin({ displayName: "Goblin 2", initiative: 9 }),
+      ],
+      origin,
+    );
+
+    const updated = repo.setInitiative(a!.id, null, origin);
+
+    expect(updated).toEqual({ ...a, initiative: null });
+    expect(repo.listInstances()).toEqual([updated, b]);
+    const rows = db
+      .prepare("SELECT event FROM encounter_events ORDER BY seq DESC LIMIT 1")
+      .all() as { event: string }[];
+    expect(JSON.parse(rows[0]!.event)).toEqual({
+      type: "instance-changed",
+      id: a!.id,
+      changes: { initiative: null },
+      origin,
+    });
+    expect(db.isTransaction).toBe(false);
+  });
+
   it("setInitiative on an unknown id throws UnknownInstanceError and changes nothing", () => {
     const added = repo.addInstances(() => [goblin({ initiative: 12 })], origin);
     expect(() => repo.setInitiative("nope", 5, origin)).toThrow(

@@ -661,7 +661,10 @@ describe("planSync initiative tracker", () => {
       [inst(1, { initiative: 14 })],
       observed,
       defaultSyncConfig,
-      ctx(["i1"]),
+      {
+        ...ctx(["i1"]),
+        fields: new Map([["i1", { moved: new Set(["initiative" as const]) }]]),
+      },
     );
     expect(
       plan.update.filter(
@@ -685,7 +688,7 @@ describe("planSync initiative tracker", () => {
     });
   });
 
-  it("planSync leaves a tracker-side count edit alone while the encounter initiative is unchanged, even after the token became active", () => {
+  it("planSync keeps a tracker-side count edit on the token and plans it as an edit, even after the token became active", () => {
     const observed = [
       defaultToken(1, {
         [INITIATIVE_METADATA_KEY]: { count: "20", active: true },
@@ -702,6 +705,7 @@ describe("planSync initiative tracker", () => {
       ctx(["i1"]),
     );
     expect(plan.update).toEqual([]);
+    expect(plan.edits).toEqual([{ instanceId: "i1", initiative: 20 }]);
     const after = applyUpdates(observed, plan);
     expect(metadataOf(after, "token-1")[INITIATIVE_METADATA_KEY]).toEqual({
       count: "20",
