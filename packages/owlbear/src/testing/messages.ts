@@ -28,6 +28,29 @@ export interface MessageFeed {
   ): Extract<BridgeMessage, { type: "encounter-event" }>;
 }
 
+const DEFAULT_ORIGIN: ChangeOrigin = { source: "mcp", commandId: "test" };
+
 export function createMessageFeed(): MessageFeed {
-  throw new Error("not implemented");
+  let position = 0;
+  return {
+    snapshot(instances, options = {}) {
+      const { art, seq = position } = options;
+      position = seq;
+      return {
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances, ...(art === undefined ? {} : { art }), seq },
+      };
+    },
+    event(event, options = {}) {
+      const seq = options.seq ?? position + 1;
+      position = seq;
+      const payload = {
+        ...event,
+        origin: event.origin ?? DEFAULT_ORIGIN,
+        seq,
+      } as Extract<BridgeMessage, { type: "encounter-event" }>["payload"];
+      return { v: 1, type: "encounter-event", payload };
+    },
+  };
 }
