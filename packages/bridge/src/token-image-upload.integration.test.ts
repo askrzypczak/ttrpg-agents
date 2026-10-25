@@ -185,6 +185,15 @@ describe("POST /token-images", () => {
     expect(storedImageCount()).toBe(0);
   });
 
+  it("POST /token-images without a token is refused with 401 before reading a body over 1 MiB", async () => {
+    const bridge = await start();
+    const over = pngDeclaring(1, 1, TOKEN_IMAGE_MAX_BYTES + 1);
+    const answer = await upload(bridge, over);
+    expect(answer.status).toBe(401);
+    expect(refusalCode(answer)).toBe("unauthorized");
+    expect(storedImageCount()).toBe(0);
+  });
+
   it("POST /token-images with the agent token is refused with 401 and stores nothing", async () => {
     const bridge = await start();
     const answer = await upload(bridge, PNG_1X1, AGENT_TOKEN);

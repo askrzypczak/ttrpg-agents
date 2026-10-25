@@ -1,11 +1,25 @@
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { readE2eTokenArt, readE2eTokenImage } from "./db.js";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
+import type { ChangeOrigin } from "@ttrpg-agents/engine";
+import {
+  SHADOW_IDS,
+  e2eDbPath,
+  readE2eTokenArt,
+  readE2eTokenImage,
+} from "./db.js";
 import { e2eDir } from "./env.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems, whileExtensionAway } from "./helpers.js";
 
 const PLACED_KEY = "com.ttrpg-agents/placed";
+const INSTANCE_KEY = "com.ttrpg-agents/instance";
+const STAT_BUBBLES_KEY = "com.owlbear-rodeo-bubbles-extension/metadata";
+
+const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 /** What the Owlbear asset picker returns for one picked image (SDK `ImageDownload`, without its text label). */
 const shadowDownload = {
@@ -41,6 +55,17 @@ const pickerOpens = (page: Page) =>
 
 const syncError = (page: Page) =>
   page.frameLocator("#extension").locator("#sync-error");
+
+/** The Stat Bubbles health on the token of the instance with this id. */
+async function healthOf(page: Page, instanceId: string): Promise<number> {
+  const token = (await readItems(page)).find(
+    (i) =>
+      (i.metadata[INSTANCE_KEY] as { instanceId?: string } | undefined)
+        ?.instanceId === instanceId,
+  );
+  if (!token) throw new Error(`no token for ${instanceId}`);
+  return (token.metadata[STAT_BUBBLES_KEY] as { health: number }).health;
+}
 
 async function expectShadowArtTokens(page: Page): Promise<void> {
   await expect.poll(async () => (await readItems(page)).length).toBe(5);
@@ -146,13 +171,29 @@ test.describe("token art from the Owlbear asset library", () => {
     await openHarness(page, { role: "gm", pickedImages: [shadowDownload] });
 
     await expectShadowArtTokens(page);
-    await expect(syncError(page)).toContainText(
-      "Could not store the image of the token art for shadow; it is kept as a link",
-    );
+    const failure =
+      "Could not store the image of the token art for shadow; it is kept as a link";
+    await expect(syncError(page)).toContainText(failure);
+    await expect(syncError(page)).toContainText("HTTP 404");
     await expect
       .poll(() => storedShadowArt()?.url)
       .toBe(shadowDownload.image.url);
     await page.waitForTimeout(500);
     expect(storedShadowArt()?.sha256).toBeUndefined();
+
+    // A store change reaches the table and leaves the failure shown.
+    const db = openDatabase(e2eDbPath(workerDir()));
+    try {
+      new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 7, origin);
+      await expect.poll(() => healthOf(page, SHADOW_IDS[0]!)).toBe(7);
+      await expect(syncError(page)).toContainText(failure);
+    } finally {
+      try {
+        // The worker's DB outlives the test, and the seed keeps HP as is.
+        new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 16, origin);
+      } finally {
+        db.close();
+      }
+    }
   });
 });
