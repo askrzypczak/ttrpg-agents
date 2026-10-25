@@ -11,7 +11,7 @@ import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
 import { describeError, panelView } from "./panel-state.js";
 import { tokenDeletedErrorText } from "./token-deleted.js";
-import { uploadTokenImage } from "./token-art.js";
+import { downloadTokenImage, uploadTokenImage } from "./token-art.js";
 
 const EXTENSION_VERSION = "0.0.0";
 
@@ -36,9 +36,12 @@ obr.onReady(async () => {
   let removeError: string | undefined;
   let editError: string | undefined;
   let editNote: string | undefined;
-  // The latest failure to store a picked image's bytes. Kept until the panel
-  // reloads (no store change clears it); a later failure replaces it.
+  // The latest failure to store a picked image's bytes or to load stored
+  // bytes for a republish. Kept until the panel reloads (no store change
+  // clears it); a later failure replaces it.
   let artError: string | undefined;
+  // What the GM must do while a token art republish waits on them.
+  let artPrompt: string | undefined;
   let waitingCommands = 0;
   // Store values a snapshot wrote over the table's, until the DM dismisses
   // them. In memory only: a reload starts with its own.
@@ -55,6 +58,7 @@ obr.onReady(async () => {
       ...(removeError !== undefined ? { removeError } : {}),
       ...(editError !== undefined ? { editError } : {}),
       ...(artError !== undefined ? { artError } : {}),
+      ...(artPrompt !== undefined ? { artPrompt } : {}),
       ...(editNote !== undefined ? { editNote } : {}),
       waitingCommands,
       overrides,
@@ -64,6 +68,8 @@ obr.onReady(async () => {
     status.textContent = view.message;
     status.dataset.kind = view.kind;
     el("hint").textContent = view.hint ?? "";
+    el("art-prompt").textContent = view.prompt ?? "";
+    el("pick-art").hidden = view.prompt === undefined;
     el("use-this-tab").hidden = view.action !== "use-this-tab";
     el("sync-error").textContent = view.error ?? "";
     el("edit-note").textContent = view.note ?? "";
@@ -81,6 +87,25 @@ obr.onReady(async () => {
     render();
     return;
   }
+
+  // Shows the republish prompt with its button and opens the panel; resolves
+  // when the GM presses the button, which clears the prompt. The sync waits
+  // on one prompt at a time.
+  const awaitUploadConfirmed = (prompt: string): Promise<void> =>
+    new Promise((resolve) => {
+      el("pick-art").addEventListener(
+        "click",
+        () => {
+          artPrompt = undefined;
+          render();
+          resolve();
+        },
+        { once: true },
+      );
+      artPrompt = prompt;
+      render();
+      void obr.openPanel();
+    });
 
   // The socket is created after the sync, which reports deletions and gaps through it.
   let sendToBridge: (message: BridgeMessage) => boolean = () => false;
@@ -122,6 +147,12 @@ obr.onReady(async () => {
       },
       storeImage: (bytes) => uploadTokenImage(bytes, token),
       onArtStoreFailed: (text) => {
+        artError = text;
+        render();
+      },
+      loadImage: (sha256) => downloadTokenImage(sha256, token),
+      awaitUploadConfirmed,
+      onArtRepublishFailed: (text) => {
         artError = text;
         render();
       },

@@ -1,7 +1,12 @@
 // The ONLY module allowed to import @owlbear-rodeo/sdk (enforced by ESLint).
 // Everything else depends on the narrow ObrAdapter interface so it can be
 // unit-tested against the fake in fake-adapter.ts.
-import OBR, { buildImage, buildShape, type Item } from "@owlbear-rodeo/sdk";
+import OBR, {
+  buildImage,
+  buildImageUpload,
+  buildShape,
+  type Item,
+} from "@owlbear-rodeo/sdk";
 import type { TokenArt } from "@ttrpg-agents/engine";
 import type {
   ItemPatch,
@@ -173,8 +178,10 @@ export function createObrAdapter(): ObrAdapter {
         y: height / 2,
       });
     },
-    pickImage: async () => {
-      const [picked] = await OBR.assets.downloadImages(false);
+    pickImage: async (defaultSearch) => {
+      const [picked] = await (defaultSearch === undefined
+        ? OBR.assets.downloadImages(false)
+        : OBR.assets.downloadImages(false, defaultSearch, "CHARACTER"));
       if (!picked) return undefined;
       const { image } = picked;
       return {
@@ -192,8 +199,24 @@ export function createObrAdapter(): ObrAdapter {
         );
       return new Uint8Array(await response.arrayBuffer());
     },
-    isImageAlive: () => Promise.reject(new Error("not implemented")),
-    uploadImage: () => Promise.reject(new Error("not implemented")),
-    openPanel: () => Promise.reject(new Error("not implemented")),
+    isImageAlive: async (url) => {
+      const response = await fetch(url, { cache: "no-cache" });
+      // Only the status matters: do not download the whole image.
+      void response.body?.cancel();
+      const { status } = response;
+      if (status >= 200 && status <= 299) return true;
+      if (status >= 400 && status <= 499) return false;
+      throw new Error(`checking the image url answered HTTP ${String(status)}`);
+    },
+    uploadImage: ({ bytes, mime, name }) =>
+      OBR.assets.uploadImages(
+        [
+          buildImageUpload(new Blob([new Uint8Array(bytes)], { type: mime }))
+            .name(name)
+            .build(),
+        ],
+        "CHARACTER",
+      ),
+    openPanel: () => OBR.action.open(),
   };
 }

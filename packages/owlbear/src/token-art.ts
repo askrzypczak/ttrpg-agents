@@ -1,6 +1,8 @@
 import type { TokenArt } from "@ttrpg-agents/engine";
 import {
   TOKEN_IMAGE_UPLOAD_PATH,
+  tokenImagePath,
+  tokenImageReadErrorSchema,
   tokenImageUploadResponseSchema,
   type BridgeMessage,
   type TokenImageUploadResponse,
@@ -51,13 +53,20 @@ export async function downloadTokenImage(
   sha256: string,
   token: string,
 ): Promise<StoredTokenImage> {
-  void sha256;
-  void token;
-  throw new Error("not implemented");
+  // Relative: the panel is served by the bridge, so this stays same-origin.
+  const response = await fetch(tokenImagePath(sha256), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.ok)
+    return {
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      mime: response.headers.get("Content-Type") ?? "",
+    };
+  const refusal = tokenImageReadErrorSchema.parse(await response.json());
+  throw new Error(refusal.error.message);
 }
 
 /** The Owlbear asset name a stored token image is uploaded again under. */
 export function republishName(sha256: string): string {
-  void sha256;
-  throw new Error("not implemented");
+  return `ttrpg-art-${sha256.slice(0, 16)}`;
 }

@@ -104,6 +104,7 @@ export function panelView(input: PanelInput): PanelView {
     ...(input.overrides && input.overrides.length > 0
       ? { overrides: [...input.overrides] }
       : {}),
+    ...(input.artPrompt ? { prompt: input.artPrompt } : {}),
   };
 }
 
