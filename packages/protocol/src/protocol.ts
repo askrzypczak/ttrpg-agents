@@ -143,8 +143,7 @@ export type TokenImageUploadResponse = z.infer<
 
 /** The bridge route that answers the stored bytes of one token image: GET, extension token as bearer. */
 export function tokenImagePath(sha256: string): string {
-  void sha256;
-  throw new Error("not implemented");
+  return `${TOKEN_IMAGE_UPLOAD_PATH}/${sha256}`;
 }
 
 /** The bridge's refusal of a token image read. */

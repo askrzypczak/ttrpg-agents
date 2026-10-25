@@ -26,6 +26,7 @@ import {
   decodeMessage,
   encodeMessage,
   querySchema,
+  type tokenImageReadErrorSchema,
   type AgentQueryResponse,
   type BridgeMessage,
   type Query,
@@ -379,6 +380,7 @@ export async function startBridgeServer(
     setTokenArt,
     editInstance,
     storeTokenImage,
+    getTokenImage,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
@@ -461,6 +463,19 @@ export async function startBridgeServer(
       handleTokenImageUpload(req, res, token, storeTokenImage).catch(() => {
         res.destroy();
       });
+      return;
+    }
+    if (
+      getTokenImage &&
+      req.method === "GET" &&
+      req.url?.startsWith(`${TOKEN_IMAGE_UPLOAD_PATH}/`) === true
+    ) {
+      try {
+        handleTokenImageRead(req, res, token, getTokenImage);
+      } catch {
+        // The store could not be read: the reader sees a dropped connection.
+        res.destroy();
+      }
       return;
     }
     res.setHeader(
@@ -586,10 +601,13 @@ const STATUS_FOR_CODE: Record<string, number> = {
   "query-failed": 502,
 };
 
+/** A refusal of `GET /token-images/<sha256>`. */
+type TokenImageReadError = ReturnType<typeof tokenImageReadErrorSchema.parse>;
+
 function respondJson(
   res: ServerResponse,
   status: number,
-  body: AgentQueryResponse | TokenImageUploadResponse,
+  body: AgentQueryResponse | TokenImageUploadResponse | TokenImageReadError,
 ): void {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
@@ -719,6 +737,49 @@ async function handleTokenImageUpload(
   }
   const { sha256, image } = result;
   respondJson(res, 200, { ok: true, image: { sha256, ...image } });
+}
+
+/** A token image hash as the read route takes it: SHA-256, lowercase hex. */
+const TOKEN_IMAGE_HASH = /^[0-9a-f]{64}$/;
+
+function refuseRead(
+  res: ServerResponse,
+  status: number,
+  code: TokenImageReadError["error"]["code"],
+  message: string,
+): void {
+  respondJson(res, status, { ok: false, error: { code, message } });
+}
+
+/**
+ * `GET /token-images/<sha256>`: answers the stored bytes of one token image,
+ * with its stored mime as Content-Type. Only the extension token is accepted,
+ * checked before the hash is looked up. The rest of the path must be exactly
+ * the hash (64 lowercase hex characters, no query string); anything else is
+ * not found. No CORS headers: the extension page is served by the bridge, so
+ * its read is same-origin.
+ */
+function handleTokenImageRead(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  getTokenImage: (sha256: string) => TokenImage | undefined,
+): void {
+  if (!tokenMatches(token, bearerOf(req))) {
+    refuseRead(res, 401, "unauthorized", "missing or invalid extension token");
+    return;
+  }
+  const hash = (req.url ?? "").slice(`${TOKEN_IMAGE_UPLOAD_PATH}/`.length);
+  const image = TOKEN_IMAGE_HASH.test(hash) ? getTokenImage(hash) : undefined;
+  if (image === undefined) {
+    refuseRead(res, 404, "not_found", "no token image with that hash");
+    return;
+  }
+  res.writeHead(200, {
+    "Content-Type": image.mime,
+    "X-Content-Type-Options": "nosniff",
+  });
+  res.end(image.bytes);
 }
 
 function withTokenPopover(manifestJson: string, token: string): string {
