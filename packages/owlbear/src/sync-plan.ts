@@ -269,7 +269,7 @@ function planEditFields(
         // Only a snapshot cannot tell an MCP change from an overridden clamp.
         if (!moved)
           overrides.push(
-            `The store set ${instance.displayName} ${EDIT_FIELD_NAMES[field]} to ${String(stored)}; the table showed ${String(table[name])}.`,
+            `After a snapshot, the store set ${instance.displayName} ${EDIT_FIELD_NAMES[field]} to ${String(stored)}; the table showed ${String(table[name])}.`,
           );
       }
       continue;

@@ -742,3 +742,44 @@ describe("createEncounterSync answers to edits", () => {
     },
   );
 });
+
+describe("createEncounterSync snapshots on the same connection", () => {
+  /** A sync that connected (hello-ack, then its snapshot) and sent an HP edit of 5. */
+  async function connectedWithEdit() {
+    const ctx = await setup();
+    await ctx.sync.handleMessage(helloAck);
+    await ctx.sync.handleMessage(snapshot(inst()));
+    await settle();
+    editAtTable(ctx.scene, { health: 5 });
+    await settle();
+    expect(ctx.edits()).toHaveLength(1);
+    return ctx;
+  }
+
+  it("an edit whose answer a same-connection snapshot covers no longer blocks an agent's HP change", async () => {
+    const { sync, scene, edits } = await connectedWithEdit();
+
+    // In place of an unreadable row: the edit is in the store, and its
+    // answer is at or before the snapshot's seq, so it never arrives.
+    await sync.handleMessage(snapshot(inst({ currentHp: 5 }), 2));
+    await settle();
+    await sync.handleMessage(hpChanged(3, 7, 16, mcp));
+    await settle();
+
+    expect(bubbles(scene).health).toBe(7);
+    expect(edits()).toHaveLength(1);
+  });
+
+  it("an edit a same-connection snapshot does not hold yet is sent again", async () => {
+    const { sync, scene, edits } = await connectedWithEdit();
+
+    await sync.handleMessage(snapshot(inst(), 2));
+    await settle();
+
+    expect(edits().map((e) => e.edit)).toEqual([
+      { instanceId: "i1", currentHp: 5 },
+      { instanceId: "i1", currentHp: 5 },
+    ]);
+    expect(bubbles(scene).health).toBe(5);
+  });
+});

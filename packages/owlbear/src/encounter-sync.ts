@@ -128,7 +128,10 @@ type Facts = Map<string, Map<EditField, "moved" | number>>;
  * did not set that the store changed is pushed. A `table` event with an id the
  * extension does not know settles its fields at the store's value. A refused
  * edit is settled at its sent value, so it is not sent again. An `mcp` event
- * pushes the fields it changes, unless an edit of the field is in flight.
+ * pushes the fields it changes, unless an edit of the field is in flight. A
+ * snapshot with no `hello-ack` since the last one (sent on the same
+ * connection, in place of an unreadable change-log row) forgets the sent
+ * edits, whose answers its `seq` may cover.
  */
 export function createEncounterSync(
   obr: ObrAdapter,
@@ -189,6 +192,22 @@ export function createEncounterSync(
   let facts: Facts = new Map();
   // Stryker disable next-line BooleanLiteral: equivalent, nothing reconciles before the first snapshot, which sets it
   let afterSnapshot = false;
+  // Whether a hello-ack came since the last snapshot. A snapshot without one
+  // came on the same connection (in place of an unreadable change-log row).
+  // Stryker disable next-line BooleanLiteral: equivalent, no edit is sent before the first snapshot
+  let ackedSinceSnapshot = false;
+
+  /**
+   * A snapshot on the same connection is current as of a `seq` that may cover
+   * the answers of edits already sent, and those answers never arrive. Forget
+   * those edits so that they block nothing: one the store has not applied yet
+   * is planned and sent again, which is harmless (edits are absolute).
+   */
+  function forgetSentEdits(): void {
+    for (const { id, message, queued } of outbox?.pending() ?? [])
+      // Stryker disable next-line ConditionalExpression: equivalent, a queued edit forgotten here is planned and queued again
+      if (!queued && message.type === "instance-edit") outbox?.settle(id);
+  }
 
   function record(
     instanceId: string,
@@ -470,11 +489,14 @@ export function createEncounterSync(
   return {
     handleMessage(message) {
       if (message.type === "hello-ack") {
+        ackedSinceSnapshot = true;
         // Before the snapshot that follows is applied.
         outbox?.helloAck();
         return Promise.resolve();
       }
       if (message.type === "encounter-snapshot") {
+        if (!ackedSinceSnapshot) forgetSentEdits();
+        ackedSinceSnapshot = false;
         outbox?.snapshot();
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };

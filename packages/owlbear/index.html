@@ -35,9 +35,9 @@
     <p id="edit-note"></p>
     <div id="overrides" hidden>
       <p>
-        After connecting, the store set these over the table's values. A
-        snapshot cannot tell an MCP change made while the extension was away
-        from a clamped value.
+        Store values written over the table by a snapshot (connect, reconnect or
+        a skipped change); a snapshot cannot tell an MCP change made meanwhile
+        from a clamped value:
       </p>
       <ul id="overrides-list"></ul>
       <button id="dismiss-overrides">Dismiss</button>
