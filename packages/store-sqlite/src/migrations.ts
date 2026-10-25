@@ -96,6 +96,31 @@ export const migrations: Migration[] = [
       ALTER TABLE token_art_new RENAME TO token_art;
     `,
   },
+  {
+    // A map item's registration: its name and how it sits on the scene grid.
+    // Rows are updated in place when the same item is registered again; one
+    // row is the active map.
+    version: 9,
+    sql: `
+      CREATE TABLE map_registrations (
+        item_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        position_x REAL NOT NULL,
+        position_y REAL NOT NULL,
+        rotation REAL NOT NULL,
+        scale_x REAL NOT NULL,
+        scale_y REAL NOT NULL,
+        image_offset_x REAL NOT NULL,
+        image_offset_y REAL NOT NULL,
+        image_width REAL NOT NULL CHECK (image_width > 0),
+        image_height REAL NOT NULL CHECK (image_height > 0),
+        image_dpi REAL NOT NULL CHECK (image_dpi > 0),
+        scene_dpi REAL NOT NULL CHECK (scene_dpi > 0),
+        active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1))
+      );
+      CREATE UNIQUE INDEX map_registrations_one_active ON map_registrations (active) WHERE active = 1;
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

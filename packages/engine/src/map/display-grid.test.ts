@@ -5,6 +5,7 @@ import {
   displayGrid,
   formatCellLabel,
   formatCellRange,
+  formatColumnLabel,
   parseCellLabel,
   parseCellRange,
   polygonToCellRange,
@@ -109,6 +110,13 @@ describe("displayGrid", () => {
 });
 
 describe("cell labels", () => {
+  it("formatColumnLabel gives A for column 0, Z for 25, AA for 26 and AF for 31", () => {
+    expect(formatColumnLabel(0)).toBe("A");
+    expect(formatColumnLabel(25)).toBe("Z");
+    expect(formatColumnLabel(26)).toBe("AA");
+    expect(formatColumnLabel(31)).toBe("AF");
+  });
+
   it("formats single-letter, Z, AA and later columns as labels", () => {
     expect(formatCellLabel({ col: 0, row: 0 })).toBe("A1");
     expect(formatCellLabel({ col: 19, row: 4 })).toBe("T5");

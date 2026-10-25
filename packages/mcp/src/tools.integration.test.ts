@@ -11,6 +11,7 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
+  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -49,6 +50,7 @@ beforeEach(() => {
     repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
       now: () => tick++,
     }),
+    maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters,
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -126,7 +128,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the twelve tools", () => {
+  it("exposes the thirteen tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -140,6 +142,7 @@ describe("tool registry", () => {
       "set_initiative",
       "set_stats_visibility",
       "table_status",
+      "use_map",
     ]);
   });
 });

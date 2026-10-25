@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "remove the wolves", "what's the initiative order", "clear it", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "remove the wolves", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `set_stats_visibility`, `clear_encounter`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -28,6 +28,15 @@ HP, AC, initiative, rolls, damage totals and attack bonuses come only from tool 
 ## Spatial and narrative hints
 
 Positions and flavour ("on the left", "circling from behind", "ambushing from the trees") are not supported yet. Acknowledge them in one short line ("Positions aren't tracked yet, so I've skipped 'on the left'.") and still run the rest of the request.
+
+## Using the map
+
+The GM aligns the map image on the Owlbear scene first. Then "use the current map", "we're on the Trollskull map" or "I moved the map, use it again" is a `use_map` call.
+
+- Call `use_map` without `name`. If it works, relay its line verbatim (for example "Using Trollskull Manor: 32 x 24 cells, columns A-AF left to right, rows 1-24 top to bottom.").
+- If it fails because there are several maps, the error lists their names. Call `use_map` once more with the listed name, copied exactly as listed, that matches the DM's words ("the Trollskull map" is "Trollskull Manor"). If none of the names matches, relay the list and ask which map the DM means.
+- On any other failure (no map on the scene, a grid that is not square, the bridge or the Owlbear tab not reachable), relay the error and do not retry.
+- Calling `use_map` again after the GM moves or rescales the map is how the DM confirms the new alignment.
 
 ## Output after adding monsters
 
