@@ -54,6 +54,82 @@ describe("handleQuery scene-status", () => {
   });
 });
 
+describe("handleQuery scene-map", () => {
+  it("`scene-map` answers the scene grid and, for each image on the map layer, its id, name, image size, image grid and transform", async () => {
+    const { obr, scene } = createFakeObr(new SceneModel(), undefined, {
+      grid: { dpi: 140, type: "HEX_VERTICAL" },
+    });
+    const map: SceneItem = {
+      id: "map-1",
+      type: "IMAGE",
+      name: "Trollskull Manor",
+      visible: true,
+      position: { x: 300, y: -150 },
+      metadata: {},
+      layer: "MAP",
+      rotation: 270,
+      scale: { x: 1.5, y: 1.5 },
+      image: {
+        url: "https://example.test/map.png",
+        mime: "image/png",
+        width: 3000,
+        height: 4000,
+      },
+      grid: { dpi: 125, offset: { x: 40, y: 60 } },
+    };
+    const token: SceneItem = {
+      id: "token-1",
+      type: "IMAGE",
+      name: "Goblin",
+      visible: true,
+      position: { x: 10, y: 20 },
+      metadata: {},
+      layer: "CHARACTER",
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+      image: {
+        url: "https://example.test/goblin.png",
+        mime: "image/png",
+        width: 300,
+        height: 300,
+      },
+      grid: { dpi: 300, offset: { x: 150, y: 150 } },
+    };
+    const shape: SceneItem = {
+      id: "shape-1",
+      type: "SHAPE",
+      name: "Area",
+      visible: true,
+      position: { x: 0, y: 0 },
+      metadata: {},
+      layer: "MAP",
+      shape: { shapeType: "RECTANGLE", width: 100, height: 100 },
+    };
+    scene.addItems([map, token, shape]);
+    const sync = createEncounterSync(obr);
+
+    expect(await handleQuery(obr, sync, { name: "scene-map" })).toEqual({
+      name: "scene-map",
+      result: {
+        grid: { dpi: 140, type: "HEX_VERTICAL" },
+        maps: [
+          {
+            id: "map-1",
+            name: "Trollskull Manor",
+            imageWidth: 3000,
+            imageHeight: 4000,
+            imageDpi: 125,
+            imageOffset: { x: 40, y: 60 },
+            position: { x: 300, y: -150 },
+            rotation: 270,
+            scale: { x: 1.5, y: 1.5 },
+          },
+        ],
+      },
+    });
+  });
+});
+
 describe("handleQuery read-only guard", () => {
   it("handleQuery makes no write call on the adapter", async () => {
     const { obr: base } = createFakeObr();
@@ -71,9 +147,11 @@ describe("handleQuery read-only guard", () => {
 
     const sync = createEncounterSync(obr);
 
-    const result = await handleQuery(obr, sync, { name: "scene-status" });
+    const status = await handleQuery(obr, sync, { name: "scene-status" });
+    const map = await handleQuery(obr, sync, { name: "scene-map" });
 
-    expect(result.name).toBe("scene-status");
+    expect(status.name).toBe("scene-status");
+    expect(map.name).toBe("scene-map");
     expect(write).not.toHaveBeenCalled();
   });
 });

@@ -44,6 +44,7 @@ beforeEach(() => {
     table: {
       sceneStatus: () =>
         Promise.reject(new Error("table not stubbed in this test")),
+      sceneMap: () => Promise.reject(new Error("not stubbed")),
     },
     repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
       now: () => tick++,
@@ -64,7 +65,10 @@ async function call(name: string, args: unknown = {}): Promise<ToolResult> {
 
 /** A table port stub that answers every call with `status`. */
 function tableAnswering(status: TableSceneStatus): TablePort {
-  return { sceneStatus: () => Promise.resolve(status) };
+  return {
+    sceneStatus: () => Promise.resolve(status),
+    sceneMap: () => Promise.reject(new Error("not stubbed")),
+  };
 }
 
 function text(r: ToolResult): string {
@@ -675,6 +679,7 @@ describe("table_status", () => {
     const message = "no Owlbear GM tab is connected to the bridge";
     ctx.table = {
       sceneStatus: () => Promise.reject(new TableUnavailableError(message)),
+      sceneMap: () => Promise.reject(new Error("not stubbed")),
     };
     const r = await call("table_status");
     expect(r.isError).toBe(true);

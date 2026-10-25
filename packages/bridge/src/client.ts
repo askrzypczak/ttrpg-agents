@@ -96,9 +96,14 @@ export function createBridgeTable(
     async sceneStatus() {
       const res = await client.query({ name: "scene-status" });
       if (!res.ok) throw new TableUnavailableError(res.error.message);
+      if (res.result.name !== "scene-status")
+        throw new Error("not implemented");
       const { sceneReady, tokenCount, appliedInstanceCount } =
         res.result.result;
       return { sceneReady, tokenCount, appliedInstanceCount };
+    },
+    sceneMap() {
+      throw new Error("not implemented");
     },
   };
 }

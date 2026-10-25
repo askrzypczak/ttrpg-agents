@@ -16,7 +16,10 @@ let ctx: ToolContext;
 
 beforeEach(() => {
   ctx = {
-    table: { sceneStatus: () => Promise.reject(new Error("not stubbed")) },
+    table: {
+      sceneStatus: () => Promise.reject(new Error("not stubbed")),
+      sceneMap: () => Promise.reject(new Error("not stubbed")),
+    },
     repo: new SqliteEncounterRepository(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },

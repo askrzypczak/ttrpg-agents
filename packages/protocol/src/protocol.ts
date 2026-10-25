@@ -3,6 +3,7 @@ import {
   monsterInstanceSchema,
   publishedTokenArtSchema,
   tokenArtSchema,
+  type TableSceneMap,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
@@ -74,6 +75,7 @@ const tokenArtSetPayload = z.object({
  */
 export const querySchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status") }),
+  z.object({ name: z.literal("scene-map") }),
 ]);
 
 export const sceneStatusSchema = z.object({
@@ -82,8 +84,16 @@ export const sceneStatusSchema = z.object({
   appliedInstanceCount: z.number().int().min(0),
 });
 
+/**
+ * The scene grid and, for each map image, its image size, image grid and
+ * transform.
+ */
+// Placeholder: rejects every value until implemented.
+export const sceneMapSchema = z.never() as unknown as z.ZodType<TableSceneMap>;
+
 export const queryResultSchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
+  z.object({ name: z.literal("scene-map"), result: sceneMapSchema }),
 ]);
 
 export const agentErrorCodeSchema = z.enum([
@@ -105,6 +115,7 @@ export const agentQueryResponseSchema = z.discriminatedUnion("ok", [
 
 export type Query = z.infer<typeof querySchema>;
 export type SceneStatus = z.infer<typeof sceneStatusSchema>;
+export type SceneMap = z.infer<typeof sceneMapSchema>;
 export type QueryResult = z.infer<typeof queryResultSchema>;
 export type AgentQueryResponse = z.infer<typeof agentQueryResponseSchema>;
 

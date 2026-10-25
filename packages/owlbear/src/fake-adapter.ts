@@ -1,6 +1,11 @@
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type { ImageUpload, ObrAdapter } from "./obr-adapter.js";
-import { MissingSceneError, SceneModel, type Vec2 } from "./scene-model.js";
+import {
+  MissingSceneError,
+  SceneModel,
+  type SceneGrid,
+  type Vec2,
+} from "./scene-model.js";
 
 /**
  * What the fake's image picker answers: art, a cancel (`undefined`), or a
@@ -32,6 +37,8 @@ export function createFakeObr(
     imageAlive?: boolean | ((url: string) => boolean | Promise<boolean>);
     /** The asset upload's outcome (it may throw or reject). Default: resolves. */
     uploadImage?: (image: ImageUpload) => void | Promise<void>;
+    /** The scene grid the fake reports. Default: { dpi: 150, type: "SQUARE" }. */
+    grid?: SceneGrid;
   } = {},
 ): {
   obr: ObrAdapter;
@@ -71,6 +78,9 @@ export function createFakeObr(
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
+    getGrid: () => {
+      throw new Error("not implemented");
+    },
     pickImage: async (defaultSearch) => {
       picks++;
       const pick = options.pickImage;

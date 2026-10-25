@@ -3,14 +3,36 @@ import {
   agentQueryResponseSchema,
   queryResultSchema,
   querySchema,
+  sceneMapSchema,
   sceneStatusSchema,
 } from "./protocol.js";
 
 const status = { sceneReady: true, tokenCount: 2, appliedInstanceCount: 2 };
 
+const mapItem = {
+  id: "map-1",
+  name: "Trollskull Manor",
+  imageWidth: 3000,
+  imageHeight: 4000,
+  imageDpi: 125,
+  imageOffset: { x: 40, y: 60 },
+  position: { x: 300, y: -150 },
+  rotation: 270,
+  scale: { x: 1.5, y: 1.5 },
+};
+
+const sceneMap = { grid: { dpi: 150, type: "SQUARE" }, maps: [mapItem] };
+
+function without<T extends object>(value: T, key: keyof T): Partial<T> {
+  const copy: Partial<T> = { ...value };
+  delete copy[key];
+  return copy;
+}
+
 describe("query schemas", () => {
-  it("accepts only the known query", () => {
+  it("accepts only the known queries", () => {
     expect(querySchema.safeParse({ name: "scene-status" }).success).toBe(true);
+    expect(querySchema.safeParse({ name: "scene-map" }).success).toBe(true);
     for (const bad of [{ name: "nope" }, {}, [], null, "scene-status"]) {
       expect(querySchema.safeParse(bad).success, JSON.stringify(bad)).toBe(
         false,
@@ -35,6 +57,54 @@ describe("query schemas", () => {
     ]) {
       expect(
         sceneStatusSchema.safeParse(bad).success,
+        JSON.stringify(bad),
+      ).toBe(false);
+    }
+  });
+
+  it("a scene map needs a grid with a positive dpi and a type, and map items with every transform field", () => {
+    expect(sceneMapSchema.safeParse(sceneMap).success).toBe(true);
+    expect(sceneMapSchema.safeParse({ ...sceneMap, maps: [] }).success).toBe(
+      true,
+    );
+    const itemMissing = (Object.keys(mapItem) as (keyof typeof mapItem)[]).map(
+      (key) => ({ ...sceneMap, maps: [without(mapItem, key)] }),
+    );
+    for (const bad of [
+      { ...sceneMap, grid: { dpi: 0, type: "SQUARE" } },
+      { ...sceneMap, grid: { dpi: -150, type: "SQUARE" } },
+      { ...sceneMap, grid: { dpi: 150, type: "" } },
+      { ...sceneMap, grid: { dpi: 150 } },
+      { maps: [mapItem] },
+      { grid: sceneMap.grid },
+      ...itemMissing,
+      { ...sceneMap, maps: [{ ...mapItem, imageWidth: 0 }] },
+      { ...sceneMap, maps: [{ ...mapItem, imageHeight: 0 }] },
+      { ...sceneMap, maps: [{ ...mapItem, imageDpi: 0 }] },
+      { ...sceneMap, maps: [{ ...mapItem, rotation: "270" }] },
+      { ...sceneMap, maps: [{ ...mapItem, scale: { x: 1.5 } }] },
+    ]) {
+      expect(sceneMapSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(
+        false,
+      );
+    }
+  });
+
+  it("a query result carries `scene-map` with a valid scene map", () => {
+    expect(
+      queryResultSchema.safeParse({ name: "scene-map", result: sceneMap })
+        .success,
+    ).toBe(true);
+    for (const bad of [
+      {
+        name: "scene-map",
+        result: { ...sceneMap, grid: { dpi: 0, type: "SQUARE" } },
+      },
+      { name: "scene-map" },
+      { name: "scene-status", result: sceneMap },
+    ]) {
+      expect(
+        queryResultSchema.safeParse(bad).success,
         JSON.stringify(bad),
       ).toBe(false);
     }

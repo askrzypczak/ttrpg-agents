@@ -35,6 +35,12 @@ export interface GridSpec {
   offset: Vec2;
 }
 
+/** The scene grid: its dpi and type (for example "SQUARE"). */
+export interface SceneGrid {
+  dpi: number;
+  type: string;
+}
+
 /** Geometry of a SHAPE item (what the SDK's buildShape needs). */
 export interface ShapeSpec {
   shapeType: "RECTANGLE" | "CIRCLE" | "TRIANGLE" | "HEXAGON";
@@ -49,16 +55,18 @@ export interface SceneItem {
   visible: boolean;
   position: Vec2;
   metadata: Metadata;
-  /** Required by the real adapter when adding an IMAGE item. */
+  /** Required by the real adapter when adding an IMAGE item; filled on read by the real adapter. */
   image?: ImageSpec;
-  /** Required by the real adapter when adding an IMAGE item. */
+  /** Required by the real adapter when adding an IMAGE item; filled on read by the real adapter. */
   grid?: GridSpec;
   /** Required by the real adapter when adding a SHAPE item. */
   shape?: ShapeSpec;
-  /** Layer when adding. Default: "CHARACTER". */
+  /** Layer when adding. Default: "CHARACTER". Filled on read by the real adapter. */
   layer?: Layer;
-  /** Scale when adding. Default: { x: 1, y: 1 }. */
+  /** Scale when adding. Default: { x: 1, y: 1 }. Filled on read by the real adapter. */
   scale?: Vec2;
+  /** Rotation in degrees. Filled on read by the real adapter. */
+  rotation?: number;
 }
 
 export type ItemPatch = Partial<

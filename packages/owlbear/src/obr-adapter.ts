@@ -12,6 +12,7 @@ import type {
   ItemPatch,
   Metadata,
   PlayerRole,
+  SceneGrid,
   SceneItem,
   Vec2,
 } from "./scene-model.js";
@@ -40,6 +41,8 @@ export interface ObrAdapter {
   setSceneMetadata(update: Metadata): Promise<void>;
   /** Scene coordinates of the middle of the GM's current view. */
   getViewportCenter(): Promise<Vec2>;
+  /** The scene grid's dpi and type. */
+  getGrid(): Promise<SceneGrid>;
   /**
    * Asks the GM to pick one image from their Owlbear asset library, with
    * `defaultSearch` filled into its search box when given; resolves with its
@@ -75,7 +78,11 @@ export type ImageUpload = { bytes: Uint8Array; mime: string; name: string };
  */
 export type ObrReader = Pick<
   ObrAdapter,
-  "isSceneReady" | "getItems" | "getSceneMetadata" | "getViewportCenter"
+  | "isSceneReady"
+  | "getItems"
+  | "getSceneMetadata"
+  | "getViewportCenter"
+  | "getGrid"
 >;
 
 function toItem(item: SceneItem): Item {
@@ -177,6 +184,9 @@ export function createObrAdapter(): ObrAdapter {
         x: width / 2,
         y: height / 2,
       });
+    },
+    getGrid: () => {
+      throw new Error("not implemented");
     },
     pickImage: async (defaultSearch) => {
       const [picked] = await (defaultSearch === undefined

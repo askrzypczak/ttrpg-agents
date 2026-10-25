@@ -27,6 +27,9 @@ export async function handleQuery(
         },
       };
     }
+    case "scene-map": {
+      throw new Error("not implemented");
+    }
   }
 }
 
