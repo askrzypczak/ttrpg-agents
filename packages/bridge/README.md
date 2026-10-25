@@ -59,17 +59,19 @@ in its place.
 An authenticated client can send `token-deleted` (`{ instanceId }`, sent by the
 extension when the GM deletes one of our tokens). The server's optional
 `removeInstance` option performs the removal (`cli.ts` wires
-`removeInstance(repo, id)` from `encounter-bridge.ts`) and the bridge replies
-with a fresh snapshot (the extension ignores the `table` event the poll sends
-for the same removal). A
-refusal (`unknown-instance`) or a failed write (`remove-failed`) is a non-fatal
-`error` that echoes the request id. Without the option the type is
-`unexpected-type`. The client's `role` is never read.
+`removeInstance(repo, id)` from `encounter-bridge.ts`). An accepted request gets
+no reply of its own: the poll's `table` event for the removal carries the
+request id as its command id, and the extension takes it as the
+acknowledgement. An accepted `instance-edit` is answered the same way, by its
+`table` events. A refusal (`unknown-instance`) or a failed write
+(`remove-failed`) is a non-fatal `error` that echoes the request id. Without
+the option the type is `unexpected-type`. The client's `role` is never read.
 
 An authenticated client can also send `token-art-set` (`{ monsterKey, art }`,
 sent by the extension after the GM picks an image for a monster type). The
 server's optional `setTokenArt` option stores it (`cli.ts` wires
-`SqliteTokenArtRepository.setTokenArt`) and the bridge replies with a fresh
-snapshot, whose `art` map (monster key -> image reference `{ url, mime, width, height }`) it sends from the
-same store. A failed write is a non-fatal `token-art-failed` `error` and no
-snapshot. Without the option the type is `unexpected-type`.
+`SqliteTokenArtRepository.setTokenArt`). An accepted request gets no reply: the
+extension keeps its own pick, and the snapshot on every connect carries the
+`art` map (monster key -> image reference `{ url, mime, width, height }`) from
+the same store. A failed write is a non-fatal `token-art-failed` `error`.
+Without the option the type is `unexpected-type`.
