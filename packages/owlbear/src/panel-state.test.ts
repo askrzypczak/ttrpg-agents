@@ -197,6 +197,38 @@ describe("panelView art error", () => {
   });
 });
 
+describe("panelView art prompt", () => {
+  it("panelView shows the art prompt while a republish waits on the GM", () => {
+    const artPrompt =
+      'Confirm the folder for the shadow token art in Owlbear, then press "Pick the uploaded image" and pick ttrpg-art-c3c3c3c3c3c3c3c3.';
+    for (const socketState of ["open", "connecting"] as const) {
+      const v = panelView({
+        role: "gm",
+        socketState,
+        disconnectedMs: 0,
+        artPrompt,
+      });
+      expect(v.prompt).toBe(artPrompt);
+    }
+
+    const none = panelView({
+      role: "gm",
+      socketState: "open",
+      disconnectedMs: 0,
+    });
+    expect(none.prompt).toBeUndefined();
+
+    const player = panelView({
+      role: "player",
+      socketState: "open",
+      disconnectedMs: 0,
+      artPrompt,
+    });
+    expect(player.kind).toBe("gm-only");
+    expect(player.prompt).toBeUndefined();
+  });
+});
+
 describe("describeError", () => {
   it("handles Errors, SDK-style objects, strings and anything else", () => {
     expect(describeError(new Error("bad"))).toBe("bad");

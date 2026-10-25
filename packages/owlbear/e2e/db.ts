@@ -6,7 +6,12 @@ import {
   SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
-import type { ChangeOrigin, TokenArt, TokenImage } from "@ttrpg-agents/engine";
+import {
+  storeTokenImage,
+  type ChangeOrigin,
+  type TokenArt,
+  type TokenImage,
+} from "@ttrpg-agents/engine";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -83,6 +88,32 @@ export function readE2eTokenArt(dir: string): Record<string, TokenArt> {
   const db = openDatabase(e2eDbPath(dir));
   try {
     return new SqliteTokenArtRepository(db).listTokenArt();
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Stores `bytes` as a token image in the e2e DB and sets the art of
+ * `monsterKey` to `art` with their hash; returns the hash. Call it after the
+ * auto `seed` fixture, which forgets all art.
+ */
+export function seedE2eTokenArt(
+  dir: string,
+  monsterKey: string,
+  art: TokenArt,
+  bytes: Uint8Array,
+): string {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    const stored = storeTokenImage(new SqliteTokenImageRepository(db), bytes);
+    if (!stored.ok)
+      throw new Error(`seeding token image failed: ${stored.message}`);
+    new SqliteTokenArtRepository(db).setTokenArt(monsterKey, {
+      ...art,
+      sha256: stored.sha256,
+    });
+    return stored.sha256;
   } finally {
     db.close();
   }

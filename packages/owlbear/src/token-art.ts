@@ -39,3 +39,25 @@ export async function uploadTokenImage(
   // A refusal is a typed answer too, whatever its status.
   return tokenImageUploadResponseSchema.parse(await response.json());
 }
+
+/** The bytes of a token image stored on the bridge, with their mime type. */
+export type StoredTokenImage = { bytes: Uint8Array; mime: string };
+
+/**
+ * Gets the stored bytes of a token image from the bridge with the extension
+ * token as a bearer. Rejects with the bridge's message when it refuses.
+ */
+export async function downloadTokenImage(
+  sha256: string,
+  token: string,
+): Promise<StoredTokenImage> {
+  void sha256;
+  void token;
+  throw new Error("not implemented");
+}
+
+/** The Owlbear asset name a stored token image is uploaded again under. */
+export function republishName(sha256: string): string {
+  void sha256;
+  throw new Error("not implemented");
+}

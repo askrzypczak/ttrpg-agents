@@ -57,6 +57,7 @@ const server = await startBridgeServer({
   editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
   storeTokenImage: (bytes) => storeTokenImage(imageRepo, bytes),
+  getTokenImage: (sha256) => imageRepo.getTokenImage(sha256),
 });
 const stopPolling = broadcastLogEvents(log, server, {
   onUnreadable: ({ seq, error }) =>

@@ -141,6 +141,21 @@ export type TokenImageUploadResponse = z.infer<
   typeof tokenImageUploadResponseSchema
 >;
 
+/** The bridge route that answers the stored bytes of one token image: GET, extension token as bearer. */
+export function tokenImagePath(sha256: string): string {
+  void sha256;
+  throw new Error("not implemented");
+}
+
+/** The bridge's refusal of a token image read. */
+export const tokenImageReadErrorSchema = z.object({
+  ok: z.literal(false),
+  error: z.object({
+    code: z.enum(["unauthorized", "not_found"]),
+    message: z.string(),
+  }),
+});
+
 function envelope<T extends string, P extends z.ZodType>(type: T, payload: P) {
   return z.object({
     v: z.literal(PROTOCOL_VERSION),

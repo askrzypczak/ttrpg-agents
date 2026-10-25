@@ -35,6 +35,7 @@ import {
   TOKEN_IMAGE_MAX_BYTES,
   type InstanceEdit,
   type TokenArt,
+  type TokenImage,
   type TokenImageStoreResult,
 } from "@ttrpg-agents/engine";
 
@@ -81,6 +82,8 @@ export interface BridgeServerOptions {
   editInstance?: (edit: InstanceEdit, commandId: string) => WriteBackResult;
   /** Validates and stores the bytes posted to `POST /token-images`. */
   storeTokenImage?: (bytes: Uint8Array) => TokenImageStoreResult;
+  /** Answers the stored token image with that hash, for `GET /token-images/<sha256>`. */
+  getTokenImage?: (sha256: string) => TokenImage | undefined;
 }
 
 /** Outcome of a write the table asked for; a refusal changes nothing. */

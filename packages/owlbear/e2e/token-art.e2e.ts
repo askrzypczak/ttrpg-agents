@@ -10,6 +10,7 @@ import {
   e2eDbPath,
   readE2eTokenArt,
   readE2eTokenImage,
+  seedE2eTokenArt,
 } from "./db.js";
 import { e2eDir } from "./env.js";
 import { test, expect, openHarness } from "./fixtures.js";
@@ -195,5 +196,120 @@ test.describe("token art from the Owlbear asset library", () => {
         db.close();
       }
     }
+  });
+});
+
+test.describe("stored token art whose Owlbear asset may be gone", () => {
+  /** The stored art's url; each test decides whether it still answers. */
+  const storedImage = {
+    url: "https://cdn.owlbear.rodeo/e2e/shadow-old.png",
+    mime: "image/png",
+    width: 1,
+    height: 1,
+  };
+
+  const uploads = (page: Page) => page.evaluate(() => window.__host!.uploads);
+
+  const imageRequests = (page: Page) =>
+    page.evaluate(() => window.__host!.imageRequests);
+
+  test("stored art whose Owlbear asset is gone is uploaded again, picked with its name as the search, and the art row takes the new url with the same hash", async ({
+    page,
+  }) => {
+    const sha256 = seedE2eTokenArt(
+      workerDir(),
+      "shadow",
+      storedImage,
+      SHADOW_PNG,
+    );
+    const name = `ttrpg-art-${sha256.slice(0, 16)}`;
+    await page.route(storedImage.url, (route) =>
+      route.fulfill({
+        status: 404,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: "not found",
+      }),
+    );
+    // What the GM picks once the upload is in their library.
+    const republishedDownload = {
+      ...shadowDownload,
+      name,
+      image: {
+        url: "https://cdn.owlbear.rodeo/e2e/republished.png",
+        mime: "image/png",
+        width: 1,
+        height: 1,
+      },
+    };
+    await openHarness(page, {
+      role: "gm",
+      pickedImages: [republishedDownload],
+    });
+
+    await expect.poll(() => uploads(page)).toHaveLength(1);
+    expect((await uploads(page))[0]).toEqual({
+      name,
+      typeHint: "CHARACTER",
+      type: "image/png",
+      size: SHADOW_PNG.length,
+    });
+    // The picker waits for the GM's go-ahead in the panel, which names the asset.
+    const panel = page.frameLocator("#extension");
+    await expect(panel.locator("body")).toContainText(name);
+    expect(await pickerOpens(page)).toBe(0);
+
+    await panel.locator("#pick-art").click();
+
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({
+        type: "IMAGE",
+        image: republishedDownload.image,
+      });
+    await expect
+      .poll(() => storedShadowArt()?.url)
+      .toBe(republishedDownload.image.url);
+    expect(storedShadowArt()).toEqual({
+      ...republishedDownload.image,
+      sha256,
+    });
+    const requests = await imageRequests(page);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ defaultSearch: name });
+    expect(await uploads(page)).toHaveLength(1);
+    await expect(syncError(page)).toHaveText("");
+  });
+
+  test("stored art whose url is alive creates image tokens with no upload and no picker", async ({
+    page,
+  }) => {
+    const sha256 = seedE2eTokenArt(
+      workerDir(),
+      "shadow",
+      storedImage,
+      SHADOW_PNG,
+    );
+    let checks = 0;
+    await page.route(storedImage.url, (route) => {
+      checks += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: SHADOW_PNG,
+      });
+    });
+    await openHarness(page, { role: "gm" });
+
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({ type: "IMAGE", image: storedImage });
+    // The extension asked whether the stored url still answers.
+    await expect.poll(() => checks).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    expect(await uploads(page)).toEqual([]);
+    expect(await pickerOpens(page)).toBe(0);
+    expect(storedShadowArt()).toEqual({ ...storedImage, sha256 });
+    await expect(syncError(page)).toHaveText("");
   });
 });

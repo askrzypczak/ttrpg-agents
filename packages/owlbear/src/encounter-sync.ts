@@ -9,7 +9,7 @@ import type {
 } from "@ttrpg-agents/protocol";
 import { instanceEditMessage, splitEdit } from "./instance-edit.js";
 import { tokenDeletedMessage } from "./token-deleted.js";
-import { tokenArtMessage } from "./token-art.js";
+import { tokenArtMessage, type StoredTokenImage } from "./token-art.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import { createOutbox } from "./outbox.js";
@@ -216,6 +216,15 @@ export function createEncounterSync(
     storeImage?: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>;
     /** Called once per pick whose image bytes could not be fetched or stored, with the text to show. */
     onArtStoreFailed?: (text: string) => void;
+    /**
+     * Loads the stored bytes of a token image from the bridge. With it, art
+     * that has a hash and whose url is dead is uploaded to Owlbear again.
+     */
+    loadImage?: (sha256: string) => Promise<StoredTokenImage>;
+    /** Shows the GM `prompt` and resolves when they confirm the upload. Default: resolves at once. */
+    awaitUploadConfirmed?: (prompt: string) => Promise<void>;
+    /** Called once per type whose stored bytes could not be loaded, with the text to show. */
+    onArtRepublishFailed?: (text: string) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;

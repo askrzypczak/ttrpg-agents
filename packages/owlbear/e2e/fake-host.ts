@@ -50,6 +50,13 @@ export class FakeHost {
   readonly errors: string[] = [];
   /** The data of each asset picker request, in order. */
   readonly imageRequests: unknown[] = [];
+  /** Each image handed to the asset upload, in order: its name, the call's type hint, and its file's type and size. */
+  readonly uploads: {
+    name: string;
+    typeHint: unknown;
+    type: string;
+    size: number;
+  }[] = [];
   readonly scene: SceneModel;
   private readonly iframe: HTMLIFrameElement;
   private readonly ref = "e2e-ref";
@@ -182,6 +189,19 @@ export class FakeHost {
       case "OBR_ASSETS_DOWNLOAD_IMAGES":
         this.imageRequests.push(message.data);
         return { images: structuredClone(this.pickedImages) };
+      // The upload resolves at once; the real one then asks the GM for a
+      // folder, which this fake skips.
+      case "OBR_ASSETS_UPLOAD_IMAGES":
+        for (const image of data.images as { name: string; file: Blob }[])
+          this.uploads.push({
+            name: image.name,
+            typeHint: data.typeHint,
+            type: image.file.type,
+            size: image.file.size,
+          });
+        return {};
+      case "OBR_ACTION_OPEN":
+        return {};
       default:
         throw new UnhandledMessageError(
           `Unhandled Owlbear message "${message.id}": the fake host does not implement it. Add it to e2e/fake-host.ts (and the ObrAdapter and its fake) deliberately.`,

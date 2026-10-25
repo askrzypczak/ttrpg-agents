@@ -5,7 +5,11 @@ import {
   encodeMessage,
   type TokenImageUploadResponse,
 } from "@ttrpg-agents/protocol";
-import { tokenArtMessage, uploadTokenImage } from "./token-art.js";
+import {
+  downloadTokenImage,
+  tokenArtMessage,
+  uploadTokenImage,
+} from "./token-art.js";
 
 const art = {
   url: "https://cdn.owlbear.rodeo/assets/shadow.png",
@@ -119,5 +123,77 @@ describe("uploadTokenImage", () => {
     // Control: a well-formed answer from the same request resolves.
     stubFetch(200, stored);
     await expect(uploadTokenImage(BYTES, TOKEN)).resolves.toEqual(stored);
+  });
+});
+
+/** Replaces the global fetch with one that answers `status` with `body` and `contentType`, recording each request. */
+function stubFetchBody(
+  status: number,
+  body: Uint8Array | string,
+  contentType: string,
+): Captured[] {
+  const calls: Captured[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: input instanceof Request ? input.url : String(input),
+        method: init?.method,
+        authorization: new Headers(init?.headers).get("authorization"),
+        body: new Uint8Array(),
+      });
+      return Promise.resolve(
+        new Response(typeof body === "string" ? body : new Uint8Array(body), {
+          status,
+          headers: { "Content-Type": contentType },
+        }),
+      );
+    }),
+  );
+  return calls;
+}
+
+describe("downloadTokenImage", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const SHA256 = "c3".repeat(32);
+
+  it("downloadTokenImage gets /token-images/<sha256> with the extension token as a bearer and resolves with the bytes and the answered mime", async () => {
+    const calls = stubFetchBody(200, BYTES, "image/webp");
+
+    const image = await downloadTokenImage(SHA256, TOKEN);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url.endsWith(`/token-images/${SHA256}`)).toBe(true);
+    expect(calls[0]?.method ?? "GET").toBe("GET");
+    expect(calls[0]?.authorization).toBe(`Bearer ${TOKEN}`);
+    expect(image.mime).toBe("image/webp");
+    expect(image.bytes).toBeInstanceOf(Uint8Array);
+    expect([...image.bytes]).toEqual([...BYTES]);
+  });
+
+  it("downloadTokenImage rejects with the bridge's message when the route refuses", async () => {
+    const json = (code: string, message: string) =>
+      JSON.stringify({ ok: false, error: { code, message } });
+
+    stubFetchBody(
+      401,
+      json("unauthorized", "missing or invalid extension token"),
+      "application/json; charset=utf-8",
+    );
+    await expect(downloadTokenImage(SHA256, TOKEN)).rejects.toThrow(
+      "missing or invalid extension token",
+    );
+
+    stubFetchBody(
+      404,
+      json("not_found", "no token image with that hash"),
+      "application/json; charset=utf-8",
+    );
+    await expect(downloadTokenImage(SHA256, TOKEN)).rejects.toThrow(
+      "no token image with that hash",
+    );
   });
 });
