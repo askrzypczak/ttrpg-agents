@@ -28,8 +28,7 @@ export const encounterEventSchema = z.discriminatedUnion("type", [
     changes: z
       .object({
         name: z.string(),
-        // Stub: typed as nullable, still rejects null at runtime.
-        initiative: z.number() as unknown as z.ZodNullable<z.ZodNumber>,
+        initiative: z.number().nullable(),
         armorClass: z.number(),
         statsVisible: z.boolean(),
       })
