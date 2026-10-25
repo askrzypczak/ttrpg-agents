@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CoverageMapData } from "istanbul-lib-coverage";
 import {
+  exitCode,
   formatComment,
   formatDelta,
   formatHeadline,
@@ -360,5 +361,17 @@ describe("isCompleteRun", () => {
       false,
     );
     expect(isCompleteRun({ unit: map, integration: map })).toBe(false);
+  });
+});
+
+describe("exitCode", () => {
+  it("exitCode is 1 when any test run failed", () => {
+    expect(exitCode(["unit"])).toBe(1);
+    expect(exitCode(["integration"])).toBe(1);
+    expect(exitCode(["e2e"])).toBe(1);
+    expect(exitCode(["unit", "integration", "e2e"])).toBe(1);
+  });
+  it("exitCode is 0 when no test run failed", () => {
+    expect(exitCode([])).toBe(0);
   });
 });
