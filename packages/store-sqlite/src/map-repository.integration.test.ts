@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { MapRegistration } from "@ttrpg-agents/engine";
+import type { MapRegistration, SavedRoom } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
 import { SqliteMapRepository } from "./map-repository.js";
 
@@ -54,6 +54,51 @@ const sewers: MapRegistration = {
   },
 };
 
+/** An L-shaped room: two rectangles, with fractional image-px vertices. */
+const taproom: SavedRoom = {
+  name: "Taproom",
+  status: "confirmed",
+  polygons: [
+    [
+      { x: 500, y: 1250.5 },
+      { x: 1100, y: 1250.5 },
+      { x: 1100, y: 2000 },
+      { x: 500, y: 2000 },
+    ],
+    [
+      { x: 1100, y: 1250.5 },
+      { x: 1400.25, y: 1250.5 },
+      { x: 1400.25, y: 1500 },
+      { x: 1100, y: 1500 },
+    ],
+  ],
+};
+
+const kitchen: SavedRoom = {
+  name: "kitchen",
+  status: "proposed",
+  polygons: [
+    [
+      { x: 0, y: 0 },
+      { x: 360, y: 0 },
+      { x: 360, y: 360 },
+    ],
+  ],
+};
+
+const cellar: SavedRoom = {
+  name: "Cellar",
+  status: "confirmed",
+  polygons: [
+    [
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+      { x: 200, y: 300 },
+      { x: 0, y: 300 },
+    ],
+  ],
+};
+
 describe("SqliteMapRepository", () => {
   it("a new store has no active map", () => {
     const repo = new SqliteMapRepository(openDatabase(":memory:"));
@@ -97,5 +142,50 @@ describe("SqliteMapRepository", () => {
     expect(before).toBeDefined();
     repo.registerMap(trollskullRealigned);
     expect(rowid()).toBe(before);
+  });
+
+  it("a map item without saved rooms has no rooms", () => {
+    const repo = new SqliteMapRepository(openDatabase(":memory:"));
+    repo.registerMap(trollskull);
+    expect(repo.getRooms("map-1")).toEqual([]);
+  });
+
+  it("replaceRooms stores each room's name, status and image-px polygons, and getRooms returns them in the order saved", () => {
+    const repo = new SqliteMapRepository(openDatabase(":memory:"));
+    repo.registerMap(trollskull);
+    repo.replaceRooms("map-1", [taproom, kitchen, cellar]);
+    expect(repo.getRooms("map-1")).toEqual([taproom, kitchen, cellar]);
+    repo.replaceRooms("map-1", [cellar, taproom]);
+    expect(repo.getRooms("map-1")).toEqual([cellar, taproom]);
+  });
+
+  it("replaceRooms replaces only that map item's rooms; another map's rooms are untouched", () => {
+    const repo = new SqliteMapRepository(openDatabase(":memory:"));
+    repo.registerMap(trollskull);
+    repo.registerMap(sewers);
+    repo.replaceRooms("map-1", [taproom, kitchen]);
+    repo.replaceRooms("map-2", [cellar]);
+    repo.replaceRooms("map-1", [kitchen]);
+    expect(repo.getRooms("map-1")).toEqual([kitchen]);
+    expect(repo.getRooms("map-2")).toEqual([cellar]);
+  });
+
+  it("rooms survive reopening the store and re-registering the same map item", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ttrpg-map-"));
+    dirs.push(dir);
+    const path = join(dir, "enc.db");
+    const first = openDatabase(path);
+    const before = new SqliteMapRepository(first);
+    before.registerMap(trollskull);
+    before.replaceRooms("map-1", [taproom, kitchen]);
+    first.close();
+
+    const second = openDatabase(path);
+    const after = new SqliteMapRepository(second);
+    expect(after.getRooms("map-1")).toEqual([taproom, kitchen]);
+    after.registerMap(sewers);
+    after.registerMap(trollskullRealigned);
+    expect(after.getRooms("map-1")).toEqual([taproom, kitchen]);
+    second.close();
   });
 });

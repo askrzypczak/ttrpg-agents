@@ -1,8 +1,8 @@
 import type { TableMapItem, TablePort, TableSceneMap } from "../table/port.js";
 import { displayGrid } from "./display-grid.js";
-import { MapSelectionError, UnsupportedGridError } from "./errors.js";
+import { MapSelectionError } from "./errors.js";
+import { requireSquareGrid, scenePlacement } from "./live-map.js";
 import type { MapRegistration, MapRepository } from "./repository.js";
-import type { MapPlacement } from "./types.js";
 
 /** The map just made active and its display grid size. */
 export interface UsedMap {
@@ -22,22 +22,9 @@ export async function useMap(
   name?: string,
 ): Promise<UsedMap> {
   const scene = await table.sceneMap();
-  if (scene.grid.type !== "SQUARE") {
-    throw new UnsupportedGridError(
-      `Only square grids are supported; this scene's grid is ${scene.grid.type}.`,
-    );
-  }
+  requireSquareGrid(scene);
   const item = chooseMap(scene, name);
-  const placement: MapPlacement = {
-    position: { x: item.position.x, y: item.position.y },
-    rotation: item.rotation,
-    scale: { x: item.scale.x, y: item.scale.y },
-    imageOffset: { x: item.imageOffset.x, y: item.imageOffset.y },
-    imageWidth: item.imageWidth,
-    imageHeight: item.imageHeight,
-    imageDpi: item.imageDpi,
-    sceneDpi: scene.grid.dpi,
-  };
+  const placement = scenePlacement(scene, item);
   const { cols, rows } = displayGrid(placement);
   if (cols < 1 || rows < 1) {
     throw new MapSelectionError(

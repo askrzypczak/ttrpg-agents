@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "remove the wolves", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "remove the wolves", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -37,6 +37,18 @@ The GM aligns the map image on the Owlbear scene first. Then "use the current ma
 - If it fails because there are several maps, the error lists their names. Call `use_map` once more with the listed name, copied exactly as listed, that matches the DM's words ("the Trollskull map" is "Trollskull Manor"). If none of the names matches, relay the list and ask which map the DM means.
 - On any other failure (no map on the scene, a grid that is not square, the bridge or the Owlbear tab not reachable), relay the error and do not retry.
 - Calling `use_map` again after the GM moves or rescales the map is how the DM confirms the new alignment.
+
+## Naming rooms
+
+Rooms are named on the map in use by its display cells (columns A, B, ... left to right, rows 1, 2, ... top to bottom).
+
+- "The taproom is T5 to AB11" is one `set_rooms` call with one room: `name` "Taproom", `ranges` ["T5:AB11"]. Several rooms in one sentence are one call with several `rooms`. An L-shaped room is one room with two ranges, such as "A1:C3" and "D1:D2". Rooms the DM names are confirmed, so omit `status`.
+- "What rooms are there" is a `list_rooms` call; relay its table.
+- "Remove the attic" is one `remove_rooms` call with every room the DM names in `names`.
+- Relay each tool's line verbatim (for example "Saved 1 room on Trollskull Manor (confirmed): Taproom T5:AB11.").
+- If a tool fails because no map is in use, relay the error and do not call `use_map` on your own: the GM confirms the alignment by asking to use the map.
+- If the reply says the map moved since it was registered, relay that line too.
+- On an unknown room or a bad range, relay the error and do not retry.
 
 ## Output after adding monsters
 

@@ -1,5 +1,17 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { MapRegistration, MapRepository } from "@ttrpg-agents/engine";
+import {
+  savedRoomSchema,
+  type MapRegistration,
+  type MapRepository,
+  type SavedRoom,
+} from "@ttrpg-agents/engine";
+
+/** One `map_rooms` row, as read. */
+interface RoomRow {
+  name: string;
+  status: string;
+  polygons: string;
+}
 
 /** One `map_registrations` row. */
 interface MapRow {
@@ -96,6 +108,43 @@ export class SqliteMapRepository implements MapRepository {
         sceneDpi: row.scene_dpi,
       },
     };
+  }
+
+  getRooms(itemId: string): SavedRoom[] {
+    const rows = this.db
+      .prepare(
+        `SELECT name, status, polygons FROM map_rooms
+          WHERE map_item_id = ? ORDER BY position`,
+      )
+      .all(itemId) as unknown as RoomRow[];
+    return rows.map(({ name, status, polygons }) =>
+      savedRoomSchema.parse({
+        name,
+        status,
+        polygons: JSON.parse(polygons) as unknown,
+      }),
+    );
+  }
+
+  replaceRooms(itemId: string, rooms: readonly SavedRoom[]): void {
+    this.transaction(() => {
+      this.db
+        .prepare("DELETE FROM map_rooms WHERE map_item_id = ?")
+        .run(itemId);
+      const insert = this.db.prepare(
+        `INSERT INTO map_rooms (map_item_id, name, status, polygons, position)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      rooms.forEach((room, position) => {
+        insert.run(
+          itemId,
+          room.name,
+          room.status,
+          JSON.stringify(room.polygons),
+          position,
+        );
+      });
+    });
   }
 
   /** Runs fn in one transaction. */

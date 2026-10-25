@@ -6,6 +6,7 @@ import {
   useMap,
   type MapRegistration,
   type MapRepository,
+  type SavedRoom,
   type TableMapItem,
   type TablePort,
   type TableSceneMap,
@@ -45,6 +46,14 @@ class RecordingMaps implements MapRepository {
 
   getActiveMap(): MapRegistration | undefined {
     return this.registered.at(-1);
+  }
+
+  getRooms(): SavedRoom[] {
+    return [];
+  }
+
+  replaceRooms(): void {
+    throw new Error("useMap does not store rooms");
   }
 }
 
