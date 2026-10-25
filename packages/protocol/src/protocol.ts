@@ -84,12 +84,32 @@ export const sceneStatusSchema = z.object({
   appliedInstanceCount: z.number().int().min(0),
 });
 
+const vec2 = z.object({ x: z.number(), y: z.number() });
+
 /**
  * The scene grid and, for each map image, its image size, image grid and
- * transform.
+ * transform. The grid type is a string, not an enum, so a type the table adds
+ * later still decodes.
  */
-// Placeholder: rejects every value until implemented.
-export const sceneMapSchema = z.never() as unknown as z.ZodType<TableSceneMap>;
+export const sceneMapSchema = z.object({
+  grid: z.object({
+    dpi: z.number().positive(),
+    type: z.string().min(1),
+  }),
+  maps: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      imageWidth: z.number().positive(),
+      imageHeight: z.number().positive(),
+      imageDpi: z.number().positive(),
+      imageOffset: vec2,
+      position: vec2,
+      rotation: z.number(),
+      scale: vec2,
+    }),
+  ),
+}) satisfies z.ZodType<TableSceneMap>;
 
 export const queryResultSchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
