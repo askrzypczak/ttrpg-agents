@@ -130,6 +130,7 @@ function instanceView(i: MonsterInstance): Record<string, unknown> {
     hp: i.currentHp,
     maxHp: i.maxHp,
     initiative: i.initiative,
+    armorClass: i.armorClass,
   };
 }
 
@@ -293,7 +294,8 @@ const moveMonstersTool = defineTool({
 const listEncounterTool = defineTool({
   name: "list_encounter",
   annotations: { readOnlyHint: true },
-  description: "List the encounter in initiative order (highest first).",
+  description:
+    "List the encounter in initiative order (highest first), with each monster's AC, HP and initiative.",
   inputSchema: {},
   run(ctx) {
     const instances = ctx.repo.listInstances().sort(compareByInitiative);
@@ -302,10 +304,11 @@ const listEncounterTool = defineTool({
       instances.length === 0
         ? "The encounter is empty."
         : table(
-            ["id", "name", "HP", "initiative"],
+            ["id", "name", "AC", "HP", "initiative"],
             instances.map((i) => [
               i.id,
               i.displayName,
+              i.armorClass,
               `${String(i.currentHp)}/${String(i.maxHp)}`,
               i.initiative,
             ]),

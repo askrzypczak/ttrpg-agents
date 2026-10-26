@@ -109,6 +109,7 @@ describe("restore_monsters", () => {
           hp: 5,
           maxHp: 11,
           initiative: 9,
+          armorClass: null,
           renamedFrom: null,
         },
         {
@@ -118,6 +119,7 @@ describe("restore_monsters", () => {
           hp: 7,
           maxHp: 7,
           initiative: 15,
+          armorClass: null,
           renamedFrom: "Goblin Warrior 1",
         },
       ],
@@ -177,6 +179,7 @@ describe("list_encounter with removed monsters", () => {
         hp: 7,
         maxHp: 7,
         initiative: 15,
+        armorClass: null,
       },
       {
         id: wolf2?.id,
@@ -185,6 +188,7 @@ describe("list_encounter with removed monsters", () => {
         hp: 11,
         maxHp: 11,
         initiative: 9,
+        armorClass: null,
       },
     ]);
     expect(
