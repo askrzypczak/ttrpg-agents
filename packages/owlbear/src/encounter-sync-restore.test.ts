@@ -242,4 +242,33 @@ describe("createEncounterSync restore after deletion", () => {
     expect(instanceIds(s.scene)).toEqual(["i1", "i2"]);
     expect(s.reported()).toEqual(["i1"]);
   });
+
+  it("a removal and a restore folded into a reconcile whose art step runs create the token and do not report it deleted again", async () => {
+    const s = setup();
+    await start(s);
+    const commandId = await gmDeletes(s, "i1");
+    await fold(
+      s,
+      s.feed.event({
+        type: "removed",
+        id: "i1",
+        origin: { source: "table", commandId },
+      }),
+      s.feed.event({ type: "added", instances: [inst(1)] }),
+      s.feed.event({
+        type: "added",
+        instances: [
+          makeTestInstance({
+            id: "i3",
+            displayName: "Owlbear 1",
+            monsterKey: "owlbear",
+            createdAt: 3,
+          }),
+        ],
+      }),
+    );
+
+    expect(tokenOf(s.scene, "i1")).toBeDefined();
+    expect(s.reported()).toEqual(["i1"]);
+  });
 });

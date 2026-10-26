@@ -262,6 +262,11 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * was not where it was last placed, or has no recorded position, is reported
  * through `onOverride`, as is a snapshot that pushes a Stat Bubbles field over
  * a different token value.
+ *
+ * An instance that leaves the encounter (a `removed` or `cleared` event) is
+ * dropped from the placed record before the next reconcile plans, so one that
+ * comes back before then (a restore) gets a new token instead of being reported
+ * deleted; a reconcile that fails keeps it for the retry.
  */
 export function createEncounterSync(
   obr: ObrAdapter,
@@ -365,6 +370,11 @@ export function createEncounterSync(
   // Instances whose spawn position an `mcp` event set since the last
   // successful reconcile: their tokens are moved there.
   let moves = new Set<string>();
+  // Instances that left the encounter (a `removed` or `cleared` event, either
+  // origin) since the last successful reconcile: they are dropped from the
+  // placed record before planning, so one that came back gets a new token
+  // instead of being reported deleted.
+  let left = new Set<string>();
   let afterSnapshot = false;
   // Whether a hello-ack came since the last snapshot. A snapshot without one
   // came on the same connection (in place of an unreadable change-log row).
@@ -391,15 +401,20 @@ export function createEncounterSync(
     fields.set(field, fact);
   }
 
-  /** The facts of a reconcile that did not go through, under the newer ones. */
+  /**
+   * The facts, moves and departures of a reconcile that did not go through,
+   * under the newer ones.
+   */
   function restore(
     taken: Facts,
     takenMoves: ReadonlySet<string>,
+    takenLeft: ReadonlySet<string>,
     snapshot: boolean,
   ): void {
     for (const [id, earlier] of taken)
       facts.set(id, new Map([...earlier, ...(facts.get(id) ?? [])]));
     for (const id of takenMoves) moves.add(id);
+    for (const id of takenLeft) left.add(id);
     afterSnapshot ||= snapshot;
   }
 
@@ -780,10 +795,15 @@ export function createEncounterSync(
     wanted: EncounterInstance[],
     taken: Facts,
     takenMoves: ReadonlySet<string>,
+    takenLeft: ReadonlySet<string>,
     snapshot: boolean,
   ): Promise<SyncPlan> {
     artStepRan = false;
-    let { items, placed } = await readScene();
+    // The record without the instances that left: they are planned as new.
+    const withoutLeft = (record: ReadonlySet<string>): Set<string> =>
+      new Set([...record].filter((id) => !takenLeft.has(id)));
+    let { items, placed: stored } = await readScene();
+    let placed = withoutLeft(stored);
     const context = {
       viewportCenter: await obr.getViewportCenter(),
       snapshot,
@@ -831,7 +851,8 @@ export function createEncounterSync(
       // changed meanwhile: plan from what is there now.
       const fresh = await readScene();
       items = fresh.items;
-      placed = fresh.placed;
+      stored = fresh.placed;
+      placed = withoutLeft(stored);
     }
     const plan = planSync(wanted, items, defaultSyncConfig, {
       ...context,
@@ -873,7 +894,7 @@ export function createEncounterSync(
         (id): id is string => id !== undefined && wantedIds.has(id),
       ),
     );
-    if (next.size !== placed.size || [...next].some((id) => !placed.has(id)))
+    if (next.size !== stored.size || [...next].some((id) => !stored.has(id)))
       await obr.setSceneMetadata({ [PLACED_METADATA_KEY]: [...next] });
     return plan;
   }
@@ -888,15 +909,17 @@ export function createEncounterSync(
     // Facts that arrive while this reconcile applies are for the next one.
     const taken = facts;
     const takenMoves = moves;
+    const takenLeft = left;
     const snapshot = afterSnapshot;
     facts = new Map();
     moves = new Set();
+    left = new Set();
     afterSnapshot = false;
     let plan: SyncPlan;
     try {
-      plan = await apply(applying, taken, takenMoves, snapshot);
+      plan = await apply(applying, taken, takenMoves, takenLeft, snapshot);
     } catch (error) {
-      restore(taken, takenMoves, snapshot);
+      restore(taken, takenMoves, takenLeft, snapshot);
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
       try {
@@ -999,6 +1022,8 @@ export function createEncounterSync(
         }
         seq = eventSeq;
         const event = message.payload;
+        if (event.type === "removed") left.add(event.id);
+        if (event.type === "cleared") for (const i of desired) left.add(i.id);
         if (event.origin.source === "table") {
           // The table already shows its own change: no store change to
           // report, so a clamp note it brings stays.
