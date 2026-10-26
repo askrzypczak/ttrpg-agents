@@ -96,6 +96,14 @@ test.describe("map image query -> bridge -> extension", () => {
     const bytes = Buffer.from(data, "base64");
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("RIFF");
     expect(bytes.subarray(8, 12).toString("latin1")).toBe("WEBP");
+    const size = await page.evaluate(async (b64) => {
+      const decoded = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const bitmap = await createImageBitmap(
+        new Blob([decoded], { type: "image/webp" }),
+      );
+      return { width: bitmap.width, height: bitmap.height };
+    }, data);
+    expect(size).toEqual({ width: 1598, height: 1222 });
 
     test
       .info()

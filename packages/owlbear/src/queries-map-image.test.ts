@@ -9,7 +9,7 @@ import {
   type MapImageLayout,
 } from "./map-image.js";
 import { handleQuery, replyToQuery } from "./queries.js";
-import { SceneModel, type SceneItem } from "./scene-model.js";
+import { SceneModel, type SceneGrid, type SceneItem } from "./scene-model.js";
 
 const MAP_URL = "https://images.owlbear.rodeo/test/trollskull.png";
 
@@ -39,10 +39,11 @@ const SOURCE = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
 const ENCODED = new Uint8Array([82, 73, 70, 70, 9, 8, 7, 6, 5]);
 
 /** A scene holding `items`, an image fetch that records its urls, and a recording fake drawing. */
-function setup(...items: SceneItem[]) {
+function setup(grid: SceneGrid, ...items: SceneItem[]) {
   const fetched: string[] = [];
   const drawn: Parameters<DrawMapImage>[] = [];
   const { obr, scene } = createFakeObr(new SceneModel(), undefined, {
+    grid,
     fetchImage: (url) => {
       fetched.push(url);
       return SOURCE.slice();
@@ -60,7 +61,10 @@ function setup(...items: SceneItem[]) {
 
 describe("handleQuery map-image", () => {
   it("a `map-image` query answers the encoding's mime type, its bytes as base64, and the planned layout's width and height", async () => {
-    const { obr, sync, draw } = setup(unscaledItem);
+    const { obr, sync, draw } = setup(
+      { dpi: 150, type: "SQUARE" },
+      unscaledItem,
+    );
 
     expect(
       await replyToQuery(
@@ -87,7 +91,10 @@ describe("handleQuery map-image", () => {
   });
 
   it("the drawing gets the bytes fetched from the item's image url, its mime type, and the layout planned from the item's live placement on the scene grid", async () => {
-    const { obr, sync, draw, fetched, drawn } = setup(mapItem);
+    const { obr, sync, draw, fetched, drawn } = setup(
+      { dpi: 100, type: "SQUARE" },
+      mapItem,
+    );
     const live: MapPlacement = {
       position: { x: 300, y: -150 },
       rotation: 270,
@@ -96,7 +103,7 @@ describe("handleQuery map-image", () => {
       imageWidth: 3000,
       imageHeight: 4000,
       imageDpi: 125,
-      sceneDpi: 150,
+      sceneDpi: 100,
     };
 
     const result = await handleQuery(
@@ -130,7 +137,12 @@ describe("handleQuery map-image", () => {
       metadata: {},
       layer: "MAP",
     };
-    const { obr, sync, draw, fetched, drawn } = setup(mapItem, token, shape);
+    const { obr, sync, draw, fetched, drawn } = setup(
+      { dpi: 150, type: "SQUARE" },
+      mapItem,
+      token,
+      shape,
+    );
 
     for (const itemId of ["missing-1", "token-1", "shape-1"]) {
       expect(
