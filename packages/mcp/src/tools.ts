@@ -298,6 +298,73 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
   });
 }
 
+const setHpTool = defineTool({
+  name: "set_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's current HP to an exact value (clamped to 0..max HP). Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), hp: z.number().int() },
+  run(ctx, { target, hp }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Defensive: resolveTargets throws for an unknown target.
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const { before, after } = ctx.repo.setHp(instance.id, hp, mcpOrigin(ctx));
+    return ok(
+      `${after.displayName}: HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+      { instance: instanceView(after), before: instanceView(before) },
+    );
+  },
+});
+
+const setMaxHpTool = defineTool({
+  name: "set_max_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's max HP to an exact value (at least 1); current HP is lowered if above the new max, never raised. Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), maxHp: z.number().int() },
+  run(ctx, { target, maxHp }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Defensive: resolveTargets throws for an unknown target.
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const { before, after } = ctx.repo.setMaxHp(
+      instance.id,
+      maxHp,
+      mcpOrigin(ctx),
+    );
+    return ok(
+      `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+      { instance: instanceView(after), before: instanceView(before) },
+    );
+  },
+});
+
+const setArmorClassTool = defineTool({
+  name: "set_armor_class",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's armor class to an exact value (at least 0). Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), armorClass: z.number().int() },
+  run(ctx, { target, armorClass }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Defensive: resolveTargets throws for an unknown target.
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const before = instance.armorClass;
+    const updated = ctx.repo.setArmorClass(
+      instance.id,
+      armorClass,
+      mcpOrigin(ctx),
+    );
+    return ok(
+      `${updated.displayName}: AC ${String(before ?? "unset")} -> ${String(updated.armorClass)}`,
+      {
+        instance: instanceView(updated),
+        armorClass: updated.armorClass,
+        before,
+      },
+    );
+  },
+});
+
 const removeMonstersTool = defineTool({
   name: "remove_monsters",
   annotations: { destructiveHint: true },
@@ -631,6 +698,9 @@ export const tools: readonly ToolDefinition[] = [
   listEncounterTool,
   hpTool("damage"),
   hpTool("heal"),
+  setHpTool,
+  setMaxHpTool,
+  setArmorClassTool,
   removeMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
