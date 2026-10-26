@@ -4,8 +4,10 @@ import {
   addMonstersInRooms,
   compareByInitiative,
   formatColumnLabel,
+  getMapImage,
   getTableStatus,
   listRooms,
+  proposeRooms,
   removeRooms,
   resolveTargets,
   setRooms,
@@ -517,11 +519,32 @@ const getMapImageTool = defineTool({
   name: "get_map_image",
   annotations: { readOnlyHint: true },
   description:
-    "Look at the map in use as the GM sees it: the image with the display grid drawn over it and its columns and rows labelled on the edges, plus the grid size. Needs the bridge running.",
+    "Get an image of the map in use as the DM sees it, with the column letters and row numbers of its display cells drawn on its edges, plus its grid size. Read room interiors from it to propose rooms. Needs the bridge running.",
   inputSchema: {},
-  run(ctx) {
-    void ctx;
-    return Promise.reject(new Error("not implemented"));
+  async run(ctx) {
+    const { map, cols, rows, moved, image } = await getMapImage(
+      ctx.table,
+      ctx.maps,
+    );
+    const text = withMovedLine(
+      `${map.name}: ${String(cols)} x ${String(rows)} cells, columns A-${formatColumnLabel(cols - 1)} left to right, rows 1-${String(rows)} top to bottom, labelled on the image's edges.`,
+      moved,
+    );
+    return {
+      content: [
+        { type: "image", data: image.data, mimeType: image.mimeType },
+        { type: "text", text },
+      ],
+      structuredContent: {
+        itemId: map.itemId,
+        name: map.name,
+        cols,
+        rows,
+        moved,
+        width: image.width,
+        height: image.height,
+      },
+    };
   },
 });
 
@@ -529,7 +552,7 @@ const proposeRoomsTool = defineTool({
   name: "propose_rooms",
   annotations: { readOnlyHint: true },
   description:
-    "Turn rooms read off the map image into proposed ranges: each range is shrunk by one cell on every side where the room is at least three cells wide. Saves nothing; show the result to the GM, then save it with set_rooms.",
+    "Turn room interiors read on the map image (display-cell ranges such as T5:AB11) into proposals: each range is shrunk by one cell on every side where the room is at least three cells wide. Saves nothing; save the proposals with set_rooms.",
   inputSchema: {
     rooms: z
       .array(
@@ -540,10 +563,12 @@ const proposeRoomsTool = defineTool({
       )
       .min(1),
   },
-  run(ctx, { rooms }) {
-    void ctx;
-    void rooms;
-    throw new Error("not implemented");
+  run(_ctx, { rooms }) {
+    const proposals = proposeRooms(rooms);
+    const text = `Proposed ${roomCount(proposals.length)} (not saved): ${proposals
+      .map((r) => `${r.name} ${r.ranges.join(", ")}`)
+      .join("; ")}.`;
+    return ok(text, { rooms: proposals });
   },
 });
 
