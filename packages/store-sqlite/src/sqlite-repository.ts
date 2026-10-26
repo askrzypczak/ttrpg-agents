@@ -6,6 +6,8 @@ import {
   UnknownInstanceError,
   clampArmorClass,
   clampHp,
+  encounterEventSchema,
+  monsterInstanceSchema,
   resizeMaxHp,
   validateInstanceName,
 } from "@ttrpg-agents/engine";
@@ -179,6 +181,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
         );
         created.push(instance);
       }
+      this.recordBefore(
+        origin,
+        created.map((i) => ({ id: i.id, before: null })),
+      );
       this.record({ type: "added", instances: created, origin });
       return created;
     });
@@ -207,6 +213,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
         `UPDATE monster_instances
          SET removed_seq = ?, removed_source = ?, removed_command_id = ?
          WHERE id = ?`,
+      );
+      this.recordBefore(
+        origin,
+        removed.map((i) => ({ id: i.id, before: i })),
       );
       for (const instance of removed) {
         const seq = this.record({ type: "removed", id: instance.id, origin });
@@ -251,6 +261,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           )
           .get(id) as InstanceRow | undefined;
         if (!row) throw new UnknownInstanceError(unknownMessage(id));
+        this.recordBefore(origin, [{ id, before: toInstance(row) }]);
         const displayName = validateInstanceName(
           name(toInstance(row), namesInUse),
           namesInUse,
@@ -283,6 +294,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const others = this.listInstances()
         .filter((i) => i.id !== id)
         .map((i) => i.displayName);
@@ -318,6 +330,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       this.db
         .prepare("UPDATE monster_instances SET initiative = ? WHERE id = ?")
         .run(initiative, id);
@@ -344,6 +357,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       this.db
         .prepare("UPDATE monster_instances SET group_id = ? WHERE id = ?")
         .run(groupId, id);
@@ -366,6 +380,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const currentHp = clampHp(hp, row.max_hp);
       this.db
         .prepare("UPDATE monster_instances SET current_hp = ? WHERE id = ?")
@@ -388,6 +403,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const resized = resizeMaxHp(row.current_hp, maxHp);
       this.db
         .prepare(
@@ -420,6 +436,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const value = clampArmorClass(armorClass);
       this.db
         .prepare("UPDATE monster_instances SET armor_class = ? WHERE id = ?")
@@ -447,6 +464,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const value = visible ? 1 : 0;
       this.db
         .prepare("UPDATE monster_instances SET stats_visible = ? WHERE id = ?")
@@ -475,6 +493,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const update = this.db.prepare(
         `UPDATE monster_instances SET spawn_x = ?, spawn_y = ?
          WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      );
+      this.recordBefore(
+        origin,
+        targets.map(({ instance }) => ({ id: instance.id, before: instance })),
       );
       return targets.map(({ instance, spawnPosition }) => {
         update.run(spawnPosition.x, spawnPosition.y, instance.id);
@@ -519,6 +541,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
              armor_class = ?, initiative = ?, footprint = ?
          WHERE id = ? AND ${ACTIVE_SCOPE}`,
       );
+      this.recordBefore(
+        origin,
+        targets.map(({ instance }) => ({ id: instance.id, before: instance })),
+      );
       return targets.map(({ instance, change }) => {
         update.run(
           change.monsterKey,
@@ -561,6 +587,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const cleared = this.listInstances();
       const seq = this.record({ type: "cleared", origin });
       if (cleared.length === 0) return [];
+      // Undo does not reach past a clear: the removals its records could
+      // restore are purged below.
+      this.deleteUndoRecords(
+        "encounter_id IN (SELECT id FROM encounters WHERE active = 1)",
+        [],
+      );
       // Earlier removals, an earlier clear's set included, cannot be restored any more.
       this.db
         .prepare(
@@ -614,6 +646,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const hp = Math.min(
         row.max_hp,
         Math.max(0, row.current_hp + sign * amount),
@@ -630,11 +663,16 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  /** Appends an event to the change log and returns its seq; call it inside the mutation's transaction. */
+  /**
+   * Appends an event to the change log and returns its seq; call it inside the
+   * mutation's transaction. The origin is logged without its command name.
+   */
   private record(event: EncounterEvent): number {
+    const { source, commandId } = event.origin;
+    const logged = { ...event, origin: { source, commandId } };
     const { lastInsertRowid } = this.db
       .prepare("INSERT INTO encounter_events (event) VALUES (?)")
-      .run(JSON.stringify(event));
+      .run(JSON.stringify(logged));
     return Number(lastInsertRowid);
   }
 
@@ -649,18 +687,121 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
+  /**
+   * Keeps, for an `mcp` origin, the command's undo record (its name and the
+   * change-log seq before its first write) and each given instance's state
+   * before the command's first write to it (null: the command adds it).
+   * Insert-if-absent, so a later write in the same command keeps the first
+   * state. Call it inside the mutation's transaction, before its event.
+   */
+  private recordBefore(
+    origin: ChangeOrigin,
+    instances: readonly { id: string; before: MonsterInstance | null }[],
+  ): void {
+    if (origin.source !== "mcp") return;
+    const encounter = this.getOrCreateActiveEncounter();
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO undo_commands (command_id, encounter_id, command, base_seq)
+         VALUES (?, ?, ?, (SELECT COALESCE(MAX(seq), 0) FROM encounter_events))`,
+      )
+      .run(origin.commandId, encounter.id, origin.command ?? null);
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO undo_instances (command_id, instance_id, before)
+       VALUES (?, ?, ?)`,
+    );
+    for (const { id, before } of instances) {
+      insert.run(
+        origin.commandId,
+        id,
+        before === null ? null : JSON.stringify(before),
+      );
+    }
+  }
+
+  /** Deletes the undo records of the commands matching `where` (on undo_commands). */
+  private deleteUndoRecords(where: string, params: readonly string[]): void {
+    this.db
+      .prepare(
+        `DELETE FROM undo_instances WHERE command_id IN
+           (SELECT command_id FROM undo_commands WHERE ${where})`,
+      )
+      .run(...params);
+    this.db.prepare(`DELETE FROM undo_commands WHERE ${where}`).run(...params);
+  }
+
   noteCommand(origin: ChangeOrigin): void {
-    void origin;
-    throw new Error("not implemented");
+    this.transaction(() => {
+      this.recordBefore(origin, []);
+    });
   }
 
   latestUndoRecord(): UndoRecord | undefined {
-    throw new Error("not implemented");
+    const command = this.db
+      .prepare(
+        `SELECT c.command_id, c.command, c.base_seq FROM undo_commands c
+         JOIN encounters e ON e.id = c.encounter_id
+         WHERE e.active = 1
+         ORDER BY c.rowid DESC LIMIT 1`,
+      )
+      .get() as
+      | { command_id: string; command: string | null; base_seq: number }
+      | undefined;
+    if (!command) return undefined;
+    const instanceRows = this.db
+      .prepare(
+        `SELECT instance_id, before FROM undo_instances
+         WHERE command_id = ? ORDER BY rowid`,
+      )
+      .all(command.command_id) as unknown as {
+      instance_id: string;
+      before: string | null;
+    }[];
+    const instances: UndoRecord["instances"] = [];
+    for (const row of instanceRows) {
+      if (row.before === null) {
+        instances.push({ instanceId: row.instance_id, before: null });
+        continue;
+      }
+      const parsed = monsterInstanceSchema.safeParse(JSON.parse(row.before));
+      if (parsed.success) {
+        instances.push({ instanceId: row.instance_id, before: parsed.data });
+      }
+    }
+    // CASE guards json_extract from rows that are not valid JSON.
+    const eventRows = this.db
+      .prepare(
+        `SELECT event FROM (
+           SELECT seq, event,
+             CASE WHEN json_valid(event) THEN json_extract(event, '$.origin.source') END AS source,
+             CASE WHEN json_valid(event) THEN json_extract(event, '$.origin.commandId') END AS command_id
+           FROM encounter_events WHERE seq > ?
+         )
+         WHERE source = 'table' OR (source = 'mcp' AND command_id = ?)
+         ORDER BY seq`,
+      )
+      .all(command.base_seq, command.command_id) as unknown as {
+      event: string;
+    }[];
+    const events: EncounterEvent[] = [];
+    for (const row of eventRows) {
+      const parsed = encounterEventSchema.safeParse(JSON.parse(row.event));
+      if (parsed.success) events.push(parsed.data);
+    }
+    return {
+      commandId: command.command_id,
+      command: command.command,
+      instances,
+      events,
+    };
   }
 
   forgetCommands(commandIds: readonly string[]): void {
-    void commandIds;
-    throw new Error("not implemented");
+    this.transaction(() => {
+      for (const id of commandIds) {
+        this.deleteUndoRecords("command_id = ?", [id]);
+      }
+    });
   }
 
   /** Runs fn in a transaction; nests by joining an already-open one. */
