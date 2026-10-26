@@ -6,6 +6,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   get_statblock: { readOnlyHint: true },
   list_encounter: { readOnlyHint: true },
   add_monsters: { destructiveHint: false },
+  move_monsters: { destructiveHint: true },
   remove_monsters: { destructiveHint: true },
   restore_monsters: { destructiveHint: false },
   rename_monster: { destructiveHint: true },

@@ -105,6 +105,8 @@ function wrapRepo(
     setArmorClass: (id, ac) => inner.setArmorClass(id, ac, origin),
     setStatsVisible: (id, visible) =>
       inner.setStatsVisible(id, visible, origin),
+    setSpawnPositions: (positions) =>
+      inner.setSpawnPositions(positions, origin),
     clearEncounter: () => inner.clearEncounter(origin),
     listInstances: () => inner.listInstances(),
     ...over,
@@ -134,7 +136,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the twenty-four tools", () => {
+  it("exposes the twenty-five tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -144,6 +146,7 @@ describe("tool registry", () => {
       "heal",
       "list_encounter",
       "list_rooms",
+      "move_monsters",
       "propose_rooms",
       "remove_monsters",
       "remove_rooms",

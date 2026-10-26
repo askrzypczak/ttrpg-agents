@@ -194,6 +194,9 @@ class MemoryEncounter implements EncounterRepository {
   setStatsVisible(): MonsterInstance {
     throw new Error("unused");
   }
+  setSpawnPositions(): MonsterInstance[] {
+    throw new Error("unused");
+  }
   clearEncounter(): void {
     throw new Error("unused");
   }
