@@ -134,7 +134,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the nineteen tools", () => {
+  it("exposes the twenty-three tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -149,8 +149,12 @@ describe("tool registry", () => {
       "remove_rooms",
       "rename_monster",
       "restore_monsters",
+      "roll_initiative",
       "search_monsters",
+      "set_armor_class",
+      "set_hp",
       "set_initiative",
+      "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
       "table_status",
@@ -574,6 +578,172 @@ describe("set_initiative", () => {
     expect(r.isError).toBe(true);
     expect(text(r)).toContain("Nobody");
     expect(initiatives()).toEqual([5, 3]);
+  });
+});
+
+describe("roll_initiative", () => {
+  const OGRE = "srd-2024_ogre";
+  const initiatives = () =>
+    ctx.repo.listInstances().map((i) => [i.displayName, i.initiative]);
+  const listedOrder = async () =>
+    (
+      (await call("list_encounter")).structuredContent?.["instances"] as {
+        name: string;
+      }[]
+    ).map((i) => i.name);
+  const grouped = (
+    displayName: string,
+    initiative: number | null,
+  ): NewMonsterInstance => ({
+    ...item(displayName, initiative),
+    groupId: "g1",
+  });
+
+  it("roll_initiative by id and by exact name writes the rolled values and reports roll, modifier, before and after for each", async () => {
+    seed(item("Shadow 1", 5), {
+      monsterKey: OGRE,
+      displayName: "Ogre 1",
+      maxHp: 68,
+      initiative: 4,
+    });
+    const shadowId = ctx.repo.listInstances()[0]?.id ?? "";
+    const ogreId = ctx.repo.listInstances()[1]?.id ?? "";
+    ctx.rng = cycleRng(12, 6);
+
+    const r = await call("roll_initiative", {
+      targets: [shadowId, "Ogre 1"],
+    });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain(
+      "Shadow 1: initiative 5 -> 15 (d20 13, modifier +2)",
+    );
+    expect(text(r)).toContain("Ogre 1: initiative 4 -> 6 (d20 7, modifier -1)");
+    expect(r.structuredContent?.["instances"]).toEqual([
+      {
+        id: shadowId,
+        name: "Shadow 1",
+        monsterKey: SHADOW,
+        hp: 10,
+        maxHp: 10,
+        initiative: 15,
+        before: 5,
+        roll: 13,
+        modifier: 2,
+      },
+      {
+        id: ogreId,
+        name: "Ogre 1",
+        monsterKey: OGRE,
+        hp: 68,
+        maxHp: 68,
+        initiative: 6,
+        before: 4,
+        roll: 7,
+        modifier: -1,
+      },
+    ]);
+    expect(r.structuredContent?.["rolls"]).toHaveLength(2);
+    expect(initiatives()).toEqual([
+      ["Shadow 1", 15],
+      ["Ogre 1", 6],
+    ]);
+  });
+
+  it("roll_initiative reports unset as the before value for a monster with no initiative", async () => {
+    seed(item("Shadow 1", null));
+    ctx.rng = cycleRng(9);
+
+    const r = await call("roll_initiative", { targets: ["Shadow 1"] });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain(
+      "Shadow 1: initiative unset -> 12 (d20 10, modifier +2)",
+    );
+    expect(r.structuredContent?.["instances"]).toEqual([
+      expect.objectContaining({
+        name: "Shadow 1",
+        before: null,
+        initiative: 12,
+      }),
+    ]);
+    expect(initiatives()).toEqual([["Shadow 1", 12]]);
+  });
+
+  it("roll_initiative shares one roll within a group by default and rolls each monster with mode each", async () => {
+    seed(
+      grouped("Shadow 1", 1),
+      grouped("Shadow 2", 2),
+      grouped("Shadow 3", 3),
+    );
+    const targets = ["Shadow 1", "Shadow 2", "Shadow 3"];
+    ctx.rng = cycleRng(10, 4, 16);
+
+    const shared = await call("roll_initiative", { targets });
+    expect(shared.isError).toBeUndefined();
+    expect(text(shared)).toContain(
+      "Shadow 1: initiative 1 -> 13 (d20 11, modifier +2)",
+    );
+    expect(text(shared)).toContain(
+      "Shadow 2: initiative 2 -> 13 (d20 11, modifier +2)",
+    );
+    expect(text(shared)).toContain(
+      "Shadow 3: initiative 3 -> 13 (d20 11, modifier +2)",
+    );
+    expect(shared.structuredContent?.["rolls"]).toHaveLength(1);
+    expect(initiatives()).toEqual([
+      ["Shadow 1", 13],
+      ["Shadow 2", 13],
+      ["Shadow 3", 13],
+    ]);
+
+    ctx.rng = cycleRng(10, 4, 16);
+    const each = await call("roll_initiative", { targets, mode: "each" });
+    expect(each.isError).toBeUndefined();
+    expect(text(each)).toContain(
+      "Shadow 1: initiative 13 -> 13 (d20 11, modifier +2)",
+    );
+    expect(text(each)).toContain(
+      "Shadow 2: initiative 13 -> 7 (d20 5, modifier +2)",
+    );
+    expect(text(each)).toContain(
+      "Shadow 3: initiative 13 -> 19 (d20 17, modifier +2)",
+    );
+    expect(each.structuredContent?.["rolls"]).toHaveLength(3);
+    expect(initiatives()).toEqual([
+      ["Shadow 1", 13],
+      ["Shadow 2", 7],
+      ["Shadow 3", 19],
+    ]);
+  });
+
+  it("roll_initiative fails and changes nothing when a target is unknown or ambiguous", async () => {
+    seed(item("A", 1), item("Twin", 2), item("Twin", 3));
+    const before = initiatives();
+
+    const unknown = await call("roll_initiative", { targets: ["A", "Ghost"] });
+    expect(unknown.isError).toBe(true);
+    expect(text(unknown)).toContain('Unknown target "Ghost"');
+    expect(text(unknown)).toContain("Nothing was changed.");
+    expect(initiatives()).toEqual(before);
+
+    const ambiguous = await call("roll_initiative", { targets: ["A", "Twin"] });
+    expect(ambiguous.isError).toBe(true);
+    expect(text(ambiguous)).toContain("Ambiguous");
+    expect(text(ambiguous)).toContain("Nothing was changed.");
+    expect(initiatives()).toEqual(before);
+  });
+
+  it("roll_initiative changes the list_encounter order to the rolled values", async () => {
+    seed(item("Shadow 1", 15), item("Shadow 2", 8));
+    expect(await listedOrder()).toEqual(["Shadow 1", "Shadow 2"]);
+    ctx.rng = cycleRng(19);
+
+    const r = await call("roll_initiative", { targets: ["Shadow 2"] });
+    expect(r.isError).toBeUndefined();
+    expect(initiatives()).toEqual([
+      ["Shadow 1", 15],
+      ["Shadow 2", 22],
+    ]);
+    expect(await listedOrder()).toEqual(["Shadow 2", "Shadow 1"]);
   });
 });
 

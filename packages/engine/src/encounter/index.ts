@@ -16,6 +16,7 @@ export * from "./edit.js";
 export * from "./events.js";
 export * from "./errors.js";
 export * from "./hp.js";
+export * from "./initiative.js";
 export * from "./log.js";
 export * from "./origin.js";
 export * from "./queries.js";
