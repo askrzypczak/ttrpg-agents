@@ -6,4 +6,10 @@ export const changeOriginSchema = z.object({
   commandId: z.string().min(1),
 });
 
-export type ChangeOrigin = z.infer<typeof changeOriginSchema>;
+/**
+ * `command`: the command's name (the MCP tool), set by the MCP server; absent
+ * for table changes; not written to the change log.
+ */
+export type ChangeOrigin = z.infer<typeof changeOriginSchema> & {
+  command?: string;
+};

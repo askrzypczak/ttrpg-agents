@@ -84,6 +84,10 @@ function staleRepo(
     setSpawnPositions: (positions, o) => inner.setSpawnPositions(positions, o),
     changeMonsters: (changes, o) => inner.changeMonsters(changes, o),
     clearEncounter: (o) => inner.clearEncounter(o),
+    noteCommand: (o) => inner.noteCommand(o),
+    transaction: (fn) => inner.transaction(fn),
+    latestUndoRecord: () => inner.latestUndoRecord(),
+    forgetCommands: (ids) => inner.forgetCommands(ids),
   };
 }
 

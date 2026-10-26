@@ -23,6 +23,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   set_stats_visibility: { destructiveHint: false },
   clear_encounter: { destructiveHint: true },
   restore_encounter: { destructiveHint: false },
+  undo: { destructiveHint: true },
   apply_damage: undefined,
   heal: undefined,
   table_status: { readOnlyHint: true },

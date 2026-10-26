@@ -152,6 +152,10 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
       });
     },
     listInstances: () => [...byId.values()].map((i) => ({ ...i })),
+    noteCommand: unexpected,
+    transaction: (fn) => fn(),
+    latestUndoRecord: unexpected,
+    forgetCommands: unexpected,
   };
 }
 

@@ -11,6 +11,7 @@ export type {
   MonsterChange,
   RemovedInstance,
   RestoreNamer,
+  UndoRecord,
 } from "./repository.js";
 export * from "./add-monsters.js";
 export * from "./change-monster.js";
@@ -30,6 +31,7 @@ export * from "./origin.js";
 export * from "./queries.js";
 export * from "./rename.js";
 export * from "./restore.js";
+export * from "./undo.js";
 export {
   publishedTokenArtSchema,
   tokenArtSchema,

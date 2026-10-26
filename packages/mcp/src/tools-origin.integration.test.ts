@@ -96,6 +96,13 @@ function recordingRepo(
       record("clearEncounter", origin),
       inner.clearEncounter(origin)
     ),
+    noteCommand: (origin) => (
+      record("noteCommand", origin),
+      inner.noteCommand(origin)
+    ),
+    transaction: (fn) => inner.transaction(fn),
+    latestUndoRecord: () => inner.latestUndoRecord(),
+    forgetCommands: (ids) => inner.forgetCommands(ids),
   };
 }
 
@@ -156,7 +163,11 @@ describe("tool write origin", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0]).toEqual({
       method: "addInstances",
-      origin: { source: "mcp", commandId: issuedCommandIds[0] },
+      origin: {
+        source: "mcp",
+        commandId: issuedCommandIds[0],
+        command: "add_monsters",
+      },
     });
     expect(issuedCommandIds).toHaveLength(1);
   });
@@ -215,7 +226,11 @@ describe("tool write origin", () => {
     expect(writes).toEqual([
       {
         method: "restoreInstances",
-        origin: { source: "mcp", commandId: issuedCommandIds[0] },
+        origin: {
+          source: "mcp",
+          commandId: issuedCommandIds[0],
+          command: "restore_monsters",
+        },
       },
     ]);
     expect(issuedCommandIds).toHaveLength(1);
@@ -234,7 +249,11 @@ describe("tool write origin", () => {
     expect(writes).toEqual([
       {
         method: "restoreInstances",
-        origin: { source: "mcp", commandId: issuedCommandIds[0] },
+        origin: {
+          source: "mcp",
+          commandId: issuedCommandIds[0],
+          command: "restore_encounter",
+        },
       },
     ]);
     expect(issuedCommandIds).toHaveLength(1);
@@ -284,6 +303,7 @@ describe("tool write origin", () => {
       expect(write.origin).toEqual({
         source: "mcp",
         commandId: issuedCommandIds[0],
+        command: "roll_initiative",
       });
     }
   });
@@ -322,6 +342,7 @@ describe("tool write origin", () => {
         expect(write.origin, name).toEqual({
           source: "mcp",
           commandId: issuedCommandIds[0],
+          command: name,
         });
       }
     }
@@ -349,7 +370,54 @@ describe("tool write origin", () => {
       expect(write.origin).toEqual({
         source: "mcp",
         commandId: issuedCommandIds[0],
+        command: "reset_max_hp",
       });
+    }
+  });
+
+  it("every mutating tool passes its own name as the origin's command", async () => {
+    seed("Shadow 1", "Shadow 2", "Shadow 3");
+    const [, , third] = ctx.repo.listInstances();
+    ctx.repo.setInitiative(third?.id ?? "", 1, seedOrigin);
+
+    const calls: [string, unknown][] = [
+      ["add_monsters", { groups: [{ monster: SHADOW, count: 1 }] }],
+      ["apply_damage", { target: "Shadow 1", amount: 3 }],
+      ["heal", { target: "Shadow 1", amount: 1 }],
+      ["set_hp", { target: "Shadow 1", hp: 12 }],
+      ["set_max_hp", { target: "Shadow 1", maxHp: 15 }],
+      ["reset_max_hp", { targets: ["Shadow 1"], hp: "average" }],
+      ["set_armor_class", { target: "Shadow 1", armorClass: 14 }],
+      ["rename_monster", { target: "Shadow 1", name: "Boss" }],
+      [
+        "change_monster_type",
+        { targets: ["Shadow 4"], monster: "srd-2024_wolf" },
+      ],
+      ["set_initiative", { target: "Boss", initiative: 15 }],
+      ["roll_initiative", { targets: ["Boss"] }],
+      ["split_initiative", { targets: ["Shadow 2", "Shadow 3"] }],
+      ["merge_initiative", { targets: ["Shadow 2", "Shadow 3"] }],
+      ["set_stats_visibility", { targets: ["Boss"], visible: true }],
+      ["remove_monsters", { targets: ["Boss"] }],
+      ["restore_monsters", { targets: ["Boss"] }],
+      ["clear_encounter", {}],
+      ["restore_encounter", {}],
+    ];
+    for (const [name, args] of calls) {
+      writes.length = 0;
+      issuedCommandIds.length = 0;
+
+      const result = await call(name, args);
+
+      expect(result.isError, name).toBeUndefined();
+      expect(writes.length, name).toBeGreaterThan(0);
+      for (const write of writes) {
+        expect(write.origin, `${name} ${write.method}`).toEqual({
+          source: "mcp",
+          commandId: issuedCommandIds[0],
+          command: name,
+        });
+      }
     }
   });
 });

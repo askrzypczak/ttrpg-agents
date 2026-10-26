@@ -165,6 +165,29 @@ export const migrations: Migration[] = [
     version: 13,
     sql: "ALTER TABLE encounters ADD COLUMN cleared_seq INTEGER;",
   },
+  {
+    // Undo records: one row per MCP command that wrote the encounter, in
+    // insert order, with its tool name and the change-log seq just before its
+    // first write; per command, each instance it wrote with the instance's
+    // state (MonsterInstance JSON) before the command's first write to it,
+    // NULL when the command added it. A clear that clears monsters deletes
+    // the encounter's records.
+    version: 14,
+    sql: `
+      CREATE TABLE undo_commands (
+        command_id TEXT PRIMARY KEY,
+        encounter_id TEXT NOT NULL REFERENCES encounters (id) ON DELETE CASCADE,
+        command TEXT,
+        base_seq INTEGER NOT NULL
+      );
+      CREATE TABLE undo_instances (
+        command_id TEXT NOT NULL REFERENCES undo_commands (command_id) ON DELETE CASCADE,
+        instance_id TEXT NOT NULL,
+        before TEXT CHECK (before IS NULL OR json_valid(before)),
+        PRIMARY KEY (command_id, instance_id)
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

@@ -27,6 +27,10 @@ function recordingRepository(received: unknown[]): EncounterRepository {
     setSpawnPositions: (_positions, origin) => record(origin),
     changeMonsters: (_changes, origin) => record(origin),
     clearEncounter: (origin) => record(origin),
+    noteCommand: (origin) => record(origin),
+    transaction: (fn) => fn(),
+    latestUndoRecord: () => undefined,
+    forgetCommands: () => undefined,
   };
 }
 

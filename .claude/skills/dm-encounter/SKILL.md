@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "that should have been a goblin boss", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "that should have been a goblin boss", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "undo that", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -150,6 +150,13 @@ Removed monsters stay restorable until the next `clear_encounter` that clears mo
 - If you do not know the exact name, call `list_encounter` once: its lines name the removed monsters that can be restored. If a target errors, do the same.
 - Relay the tool's line verbatim (for example "Restored 1: Wolf 2 (5/11 HP)"). A monster whose name was taken meanwhile comes back under a new number, and the line says so ("was Wolf 2").
 - Monsters removed before the last `clear_encounter` that cleared monsters cannot be restored.
+
+## Undoing the last change
+
+- "Undo that", "take that back" or "undo the last change" is ONE `undo` call (no arguments). It reverses the agent's last encounter change; saying it again goes one change further back. Do not reverse the change yourself with `heal`, `set_hp` or another tool.
+- After a `clear_encounter`, use `restore_encounter` as above; `undo` does not reach past a clear.
+- After a map or room change (`use_map`, `set_rooms`, `remove_rooms`), `undo` says it does not cover it and changes nothing. Relay that, and call `undo` again only when the DM wants the encounter change before it.
+- Relay the tool's reply verbatim (for example "Undid apply_damage: Goblin Warrior 2 HP 0 -> 7/7"), including any value it left as set at the table.
 
 ## Correcting a monster's type
 
