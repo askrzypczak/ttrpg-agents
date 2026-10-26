@@ -91,6 +91,7 @@ function view(i: MonsterInstance): Record<string, unknown> {
     hp: i.currentHp,
     maxHp: i.maxHp,
     initiative: i.initiative,
+    armorClass: i.armorClass,
   };
 }
 
