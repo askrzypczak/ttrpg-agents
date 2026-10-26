@@ -16,6 +16,8 @@ The domain engine: dice, monster schema and search, encounter events, map geomet
 
 Each event carries the `origin` of the mutation that caused it. `instance-changed` covers rename, initiative, armor class and stats visibility, and carries only the fields that the mutation set. The store records every mutation's event in an ordered log readable through `EncounterLog` (`src/encounter/log.ts`); the bridge polls it and broadcasts each event as an `encounter-event` with its `seq`, and sends an `encounter-snapshot` carrying the `seq` it is current as of after each `hello-ack`.
 
+Each instance carries `spawnPosition`: where a new token for it is created, in scene units, or null for the extension's default row; rows, events and snapshots from before it read as null.
+
 `src/encounter/hp.ts`: the rules behind absolute HP and armor class, which the store calls: `clampHp` (current HP kept within 0..max HP), `resizeMaxHp` (max HP raised to at least 1, current HP lowered to it when above, never raised) and `clampArmorClass` (raised to at least 0). Non-integers throw `InvalidAmountError`, or `InvalidArmorClassError` for armor class.
 
 ## Test data
@@ -32,6 +34,7 @@ Each event carries the `origin` of the mutation that caused it. `instance-change
 - Polygons (`polygon.ts`, `rooms.ts`): a point on an edge or vertex is inside, with a tiny float tolerance. A `Room` is a name plus polygons in image px; `findRoom` ignores case and `UnknownRoomError` lists the known rooms.
 - Picker (`picker.ts`): `pickFreeCells` takes the cells whose centre is inside the room and not occupied, starts at the free cell nearest the mean of all the room's cell centres, then farthest-point sampling; ties go to the first cell in scene order (rows, then columns).
 - Registration (`repository.ts`, `use-map.ts`): `MapRegistration` is a map item's id, name and `MapPlacement`. The `MapRepository` port (driven) stores registrations by item id and keeps one active; registering an item again replaces its earlier registration. `useMap(table, maps, name?)` reads `sceneMap()` and registers the map: a grid that is not `SQUARE` fails with `UnsupportedGridError`; without a name the scene must have exactly one map, and with a name it takes the one map whose name matches ignoring case. Every other choice fails with `MapSelectionError`, and its message lists the maps' names; so does a map that covers less than one grid cell. Nothing is stored on failure; on success it returns the registration and the display grid's `cols` and `rows`.
+- Placement (`place-monsters.ts`): `addMonstersInRooms` checks the groups, the map in use and the room names, reads `sceneMap` and `sceneTokens`, marks the cells holding a token's centre as occupied, picks free cells per group with `pickFreeCells` (each group's picks are occupied for the next), and adds the monsters with their spawn positions; monsters that do not fit get none. The result gives each placed monster's display cell and says whether the map moved. Without a room it adds like `addMonsters` and does not ask the table.
 
 ## Table
 
