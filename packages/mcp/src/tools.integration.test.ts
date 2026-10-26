@@ -112,6 +112,10 @@ function wrapRepo(
     changeMonsters: (changes) => inner.changeMonsters(changes, origin),
     clearEncounter: () => inner.clearEncounter(origin),
     listInstances: () => inner.listInstances(),
+    noteCommand: () => inner.noteCommand(origin),
+    transaction: (fn) => inner.transaction(fn),
+    latestUndoRecord: () => inner.latestUndoRecord(),
+    forgetCommands: (ids) => inner.forgetCommands(ids),
     ...over,
   };
 }
@@ -139,7 +143,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the thirty tools", () => {
+  it("exposes the thirty-one tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -170,6 +174,7 @@ describe("tool registry", () => {
       "set_stats_visibility",
       "split_initiative",
       "table_status",
+      "undo",
       "use_map",
     ]);
   });

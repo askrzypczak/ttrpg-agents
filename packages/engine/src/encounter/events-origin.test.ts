@@ -113,7 +113,13 @@ describe("encounterEventSchema origin", () => {
 
 type MutationName = Exclude<
   keyof EncounterRepository,
-  "getOrCreateActiveEncounter" | "listInstances" | "listRemovedInstances"
+  | "getOrCreateActiveEncounter"
+  | "listInstances"
+  | "listRemovedInstances"
+  | "noteCommand"
+  | "transaction"
+  | "latestUndoRecord"
+  | "forgetCommands"
 >;
 
 /** The event type each repository mutation is reported as. */

@@ -1,4 +1,5 @@
 import type { Point } from "../map/types.js";
+import type { EncounterEvent } from "./events.js";
 import type { ChangeOrigin } from "./origin.js";
 import type {
   Encounter,
@@ -42,6 +43,26 @@ export type RestoreNamer = (
   namesInUse: readonly string[],
 ) => string;
 
+/** An MCP command still undoable, with what undo needs to reverse it. */
+export interface UndoRecord {
+  commandId: string;
+  /** The command's name (the MCP tool), or null when it had none. */
+  command: string | null;
+  /** In first-write order; `before` is null when the command added the instance. */
+  instances: { instanceId: string; before: MonsterInstance | null }[];
+  /**
+   * Change-log events after the command's first write that the command made or
+   * whose origin is `table`, oldest first.
+   */
+  events: EncounterEvent[];
+}
+
+/**
+ * Every mutation with an `mcp` origin stores, in its transaction, each written
+ * instance's state before the command's first write to it; `clearEncounter`
+ * stores none and, when it clears at least one instance, deletes the active
+ * encounter's undo records.
+ */
 export interface EncounterRepository {
   /** Returns the single active encounter, creating it if none exists. */
   getOrCreateActiveEncounter(): Encounter;
@@ -184,4 +205,19 @@ export interface EncounterRepository {
   clearEncounter(origin: ChangeOrigin): MonsterInstance[];
   /** Instances of the active encounter, ordered by creation. */
   listInstances(): MonsterInstance[];
+  /**
+   * Records a command that changed nothing undo can reverse (a map or room
+   * change) as the newest undo record, with its name and no instances;
+   * insert-if-absent.
+   */
+  noteCommand(origin: ChangeOrigin): void;
+  /**
+   * Runs `fn` in one write transaction; repository calls inside it join it; a
+   * throw rolls them all back and is rethrown.
+   */
+  transaction<T>(fn: () => T): T;
+  /** The active encounter's newest undo record. */
+  latestUndoRecord(): UndoRecord | undefined;
+  /** Deletes those commands' undo records; unknown ids are ignored. */
+  forgetCommands(commandIds: readonly string[]): void;
 }

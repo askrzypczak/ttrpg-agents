@@ -209,6 +209,18 @@ class MemoryEncounter implements EncounterRepository {
   clearEncounter(): MonsterInstance[] {
     throw new Error("unused");
   }
+  noteCommand(): void {
+    throw new Error("unused");
+  }
+  transaction<T>(fn: () => T): T {
+    return fn();
+  }
+  latestUndoRecord(): undefined {
+    throw new Error("unused");
+  }
+  forgetCommands(): void {
+    throw new Error("unused");
+  }
 }
 
 function monster(key: string, name: string, size = "medium"): Monster {

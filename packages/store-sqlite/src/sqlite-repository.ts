@@ -21,6 +21,7 @@ import type {
   Point,
   RemovedInstance,
   RestoreNamer,
+  UndoRecord,
 } from "@ttrpg-agents/engine";
 
 export interface RepositoryOptions {
@@ -648,8 +649,22 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
+  noteCommand(origin: ChangeOrigin): void {
+    void origin;
+    throw new Error("not implemented");
+  }
+
+  latestUndoRecord(): UndoRecord | undefined {
+    throw new Error("not implemented");
+  }
+
+  forgetCommands(commandIds: readonly string[]): void {
+    void commandIds;
+    throw new Error("not implemented");
+  }
+
   /** Runs fn in a transaction; nests by joining an already-open one. */
-  private transaction<T>(fn: () => T): T {
+  transaction<T>(fn: () => T): T {
     if (this.db.isTransaction) return fn();
     this.db.exec("BEGIN IMMEDIATE");
     try {

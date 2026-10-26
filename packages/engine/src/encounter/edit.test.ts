@@ -62,6 +62,10 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
       return after;
     },
     listInstances: () => [...byId.values()].map((i) => ({ ...i })),
+    noteCommand: unexpected,
+    transaction: (fn) => fn(),
+    latestUndoRecord: unexpected,
+    forgetCommands: unexpected,
     snapshot: () => [...byId.values()].map((i) => ({ ...i })),
   };
 }

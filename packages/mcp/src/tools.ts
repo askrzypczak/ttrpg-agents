@@ -898,6 +898,18 @@ const restoreEncounterTool = defineTool({
   },
 });
 
+const undoTool = defineTool({
+  name: "undo",
+  annotations: { destructiveHint: true },
+  description:
+    "Undo the agent's last encounter change; say it again to go one change further back. Does not undo clear_encounter (use restore_encounter) or map and room changes.",
+  inputSchema: {},
+  run(ctx) {
+    void ctx;
+    throw new Error("not implemented");
+  },
+});
+
 const tableStatusTool = defineTool({
   name: "table_status",
   annotations: { readOnlyHint: true },
@@ -1213,6 +1225,7 @@ export const tools: readonly ToolDefinition[] = [
   setStatsVisibilityTool,
   clearEncounterTool,
   restoreEncounterTool,
+  undoTool,
   tableStatusTool,
   useMapTool,
   setRoomsTool,
