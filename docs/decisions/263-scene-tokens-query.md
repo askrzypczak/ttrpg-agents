@@ -21,7 +21,7 @@ Issue: [#263](https://github.com/askrzypczak/ttrpg-agents/issues/263).
   - Also the item id, layer or size: fields with no consumer in #50.
 - Where: `sceneTokensSchema` (`packages/protocol/src/protocol.ts`), `TableToken` (`packages/engine/src/table/port.ts`).
 - Revisit if: a consumer needs to tell our tokens from others (for example to count spawn positions whose token is not created yet, see #50's decision log).
-- Status: active
+- Status: superseded by 189.1
 
 ## 263.3 The extension keeps every item on the CHARACTER and MOUNT layers; an item's position stands for its centre
 
@@ -33,4 +33,4 @@ Issue: [#263](https://github.com/askrzypczak/ttrpg-agents/issues/263).
   - Compute each item's centre from its image grid offset in the extension: geometry #189's bounds replace anyway.
 - Where: `handleQuery` (`packages/owlbear/src/queries.ts`).
 - Revisit if: tokens with an off-centre offset make placements overlap in practice before #189 lands.
-- Status: active
+- Status: superseded by 189.1
