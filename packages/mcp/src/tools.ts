@@ -7,6 +7,7 @@ import {
   getMapImage,
   getTableStatus,
   listRooms,
+  moveMonstersIntoRoom,
   proposeRooms,
   removeRooms,
   resolveTargets,
@@ -262,11 +263,26 @@ const moveMonstersTool = defineTool({
       .min(1)
       .describe("A saved room of the map in use, by name (any case)."),
   },
-  run(ctx, { targets, room }) {
-    void ctx;
-    void targets;
-    void room;
-    throw new Error("not implemented");
+  async run(ctx, { targets, room }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was moved.`);
+      }
+      throw e;
+    }
+    const result = await moveMonstersIntoRoom(
+      { repo: ctx.repo, table: ctx.table, maps: ctx.maps },
+      resolved.map((i) => i.id),
+      room,
+      mcpOrigin(ctx),
+    );
+    return ok(
+      withMovedLine(moveLines(result.placements).join("\n\n"), result.moved),
+      { placements: result.placements, moved: result.moved },
+    );
   },
 });
 
@@ -638,6 +654,31 @@ function placementLines(
     }
     return lines;
   });
+}
+
+/**
+ * The "Moved into" line for the placed monsters and the "No free cell left"
+ * line for the rest, each only when it names someone.
+ */
+function moveLines(placements: readonly RoomPlacement[]): string[] {
+  const room = placements[0]?.room ?? "";
+  const placed = placements.filter((p) => p.cell !== null);
+  const unplaced = placements.filter((p) => p.cell === null);
+  const lines: string[] = [];
+  if (placed.length > 0) {
+    lines.push(
+      `Moved into ${room}: ${placed.map((p) => `${p.name} at ${String(p.cell)}`).join(", ")}.`,
+    );
+  }
+  if (unplaced.length > 0) {
+    const names = unplaced.map((p) => p.name).join(", ");
+    lines.push(
+      unplaced.length === 1
+        ? `No free cell left in ${room} for ${names}: it stays where it is.`
+        : `No free cell left in ${room} for ${names}: they stay where they are.`,
+    );
+  }
+  return lines;
 }
 
 function withMovedLine(text: string, moved: boolean): string {
