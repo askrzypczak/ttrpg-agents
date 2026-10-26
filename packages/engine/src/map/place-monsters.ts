@@ -7,6 +7,7 @@ import {
   type AddMonstersResult,
 } from "../encounter/add-monsters.js";
 import type { ChangeOrigin } from "../encounter/origin.js";
+import type { EncounterRepository } from "../encounter/repository.js";
 import { validateAddMonsters } from "../encounter/validate-add-monsters.js";
 import { footprintForSize } from "../monsters/footprint.js";
 import type { TablePort, TableToken } from "../table/port.js";
@@ -141,6 +142,39 @@ export async function addMonstersInRooms(
     }
   });
   return { ...result, placements, moved: live.moved };
+}
+
+/** Where each named monster was moved, in input order, and whether the map moved on the table. */
+export interface MoveIntoRoomResult {
+  placements: RoomPlacement[];
+  moved: boolean;
+}
+
+/**
+ * Moves existing instances of the active encounter into a saved room of the
+ * map in use, with the same placement as `addMonstersInRooms` (free blocks of
+ * each footprint, cells under the table's tokens occupied, largest footprint
+ * first, ties in input order). Checks every id (UnknownInstanceError), then
+ * the map in use and the room, before asking the table; stores the placed
+ * monsters' new spawn positions in at most one `setSpawnPositions` call (none
+ * when nothing fits). Placements are in input order; `cell` is null for a
+ * monster left without a free block, which keeps its spawn position.
+ */
+export async function moveMonstersIntoRoom(
+  deps: {
+    repo: Pick<EncounterRepository, "listInstances" | "setSpawnPositions">;
+    table: Pick<TablePort, "sceneMap" | "sceneTokens">;
+    maps: Pick<MapRepository, "getActiveMap" | "getRooms">;
+  },
+  ids: readonly string[],
+  room: string,
+  origin: ChangeOrigin,
+): Promise<MoveIntoRoomResult> {
+  void deps;
+  void ids;
+  void room;
+  void origin;
+  return Promise.reject(new Error("not implemented"));
 }
 
 /** The display label of a block: "A1" for one cell, "A1:B2" for more. */

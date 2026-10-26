@@ -250,6 +250,26 @@ const addMonstersTool = defineTool({
   },
 });
 
+const moveMonstersTool = defineTool({
+  name: "move_monsters",
+  annotations: { destructiveHint: true },
+  description:
+    "Move existing monsters, by instance id or exact name, into a saved room of the map in use: each gets a free cell there and its token moves on the table, keeping its id, HP, initiative and name. All targets must resolve, otherwise nothing is moved. Monsters left without a free cell stay where they are. Needs the bridge running.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    room: z
+      .string()
+      .min(1)
+      .describe("A saved room of the map in use, by name (any case)."),
+  },
+  run(ctx, { targets, room }) {
+    void ctx;
+    void targets;
+    void room;
+    throw new Error("not implemented");
+  },
+});
+
 const listEncounterTool = defineTool({
   name: "list_encounter",
   annotations: { readOnlyHint: true },
@@ -628,6 +648,7 @@ export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
   addMonstersTool,
+  moveMonstersTool,
   listEncounterTool,
   hpTool("damage"),
   hpTool("heal"),

@@ -17,6 +17,7 @@ import type {
   HpChange,
   InstanceBuilder,
   MonsterInstance,
+  Point,
 } from "@ttrpg-agents/engine";
 
 export interface RepositoryOptions {
@@ -364,6 +365,15 @@ export class SqliteEncounterRepository implements EncounterRepository {
       });
       return toInstance({ ...row, stats_visible: value });
     });
+  }
+
+  setSpawnPositions(
+    positions: readonly { id: string; spawnPosition: Point }[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    void positions;
+    void origin;
+    throw new Error("not implemented");
   }
 
   clearEncounter(origin: ChangeOrigin): void {

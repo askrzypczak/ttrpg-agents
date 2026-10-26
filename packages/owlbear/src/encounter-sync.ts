@@ -89,6 +89,8 @@ function fold(
           ? { ...i, currentHp: event.currentHp, maxHp: event.maxHp }
           : i,
       );
+    case "position-changed":
+      return desired;
   }
 }
 
@@ -243,8 +245,12 @@ export function createEncounterSync(
     send?: (message: BridgeMessage) => boolean;
     /** Called when the number of commands waiting for the bridge changes. */
     onWaitingChange?: (waiting: number) => void;
-    /** Called once per Stat Bubbles field a snapshot pushed over a different token value, with the record to show. */
-    onSnapshotOverride?: (text: string) => void;
+    /**
+     * Called once per Stat Bubbles field a snapshot pushed over a different
+     * token value, and once per agent move over a token the GM had moved (or
+     * one with no recorded position), with the record to show.
+     */
+    onOverride?: (text: string) => void;
     /** Called once per store change (a snapshot or an applied `mcp` event) for each table value that could not be read back. */
     onEditRejected?: (text: string) => void;
     /** Called once per acknowledged edit whose store value differs from the sent one, with the note to show. */
@@ -854,8 +860,7 @@ export function createEncounterSync(
     appliedCount = applying.length;
     if (!quiet || recovered) onApplied();
     if (outbox !== undefined) holdEdits(plan.edits);
-    for (const { message } of plan.overrides)
-      options.onSnapshotOverride?.(message);
+    for (const { message } of plan.overrides) options.onOverride?.(message);
     holdRejections(plan.rejected);
     for (const id of plan.deleted) {
       if (reported.has(id) || deletionPending(id)) continue;

@@ -23,7 +23,8 @@ export const monsterInstanceSchema = z.object({
   statsVisible: z.boolean(),
   /**
    * Where a new token for the instance is created, in scene units; null = the
-   * extension's default row. Create-only: an existing token is never moved.
+   * extension's default row. Set when the token is created; afterwards only
+   * the move tool changes it, and that change moves the existing token once.
    */
   spawnPosition: z
     .object({ x: z.number(), y: z.number() })

@@ -141,7 +141,7 @@ obr.onReady(async () => {
         waitingCommands = waiting;
         render();
       },
-      onSnapshotOverride: (text) => {
+      onOverride: (text) => {
         overrides.push(text);
         render();
       },

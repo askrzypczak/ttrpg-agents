@@ -75,6 +75,10 @@ function recordingRepo(
       record("setStatsVisible", origin),
       inner.setStatsVisible(id, visible, origin)
     ),
+    setSpawnPositions: (positions, origin) => (
+      record("setSpawnPositions", origin),
+      inner.setSpawnPositions(positions, origin)
+    ),
     clearEncounter: (origin) => {
       record("clearEncounter", origin);
       inner.clearEncounter(origin);

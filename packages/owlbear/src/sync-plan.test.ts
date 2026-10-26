@@ -230,6 +230,7 @@ describe("planSync", () => {
       update: [],
       delete: [],
       rename: [],
+      move: [],
       deleted: [],
       needsArt: [],
       edits: [],
@@ -279,6 +280,7 @@ describe("planSync", () => {
       update: [],
       delete: [],
       rename: [],
+      move: [],
       deleted: [],
       needsArt: [],
       edits: [],
@@ -386,6 +388,7 @@ describe("planSync", () => {
       update: [],
       delete: [],
       rename: [],
+      move: [],
     });
   });
 
@@ -796,7 +799,7 @@ describe("planSync spawn position", () => {
     ]);
   });
 
-  it("an existing token is never moved to its instance's spawn position", () => {
+  it("an existing token is not moved to its instance's spawn position without a change", () => {
     // Token 1 sits where the GM left it; instance 2 is new in the same plan.
     const plan = planSync(
       [inst(1, { spawnPosition: spawn }), inst(2, { spawnPosition: spawn })],
@@ -805,6 +808,7 @@ describe("planSync spawn position", () => {
       ctx(["i1"]),
     );
     expect(plan.update.filter((u) => u.id === "token-1")).toEqual([]);
+    expect(plan.move).toEqual([]);
     expect(positionOf(plan, 1)).toBeUndefined();
     expect(positionOf(plan, 2)).toEqual(spawn);
   });

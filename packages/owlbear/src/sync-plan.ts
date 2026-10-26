@@ -15,6 +15,8 @@ export const INSTANCE_METADATA_KEY = "com.ttrpg-agents/instance";
 export const SYNCED_METADATA_KEY = "com.ttrpg-agents/synced";
 /** Reserved key in the synced record: the token name we last wrote. */
 export const NAME_BASELINE_KEY = "name";
+/** Reserved key in the synced record: the token position we last placed it at. */
+export const POSITION_BASELINE_KEY = "position";
 /** Scene metadata: the instance ids already placed on this scene. */
 export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 
@@ -177,6 +179,8 @@ export type SyncPlan = {
   delete: string[];
   /** Token renames (a top-level item field, not metadata). */
   rename: { id: string; name: string }[];
+  /** Existing tokens moved to their instance's new spawn position (a top-level item field). */
+  move: { id: string; position: Vec2 }[];
   /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
   deleted: string[];
   /** Monster keys, once each, of instances getting a token that have no art. */
@@ -402,6 +406,8 @@ export function planSync(
     snapshot?: boolean;
     /** Per instance id: what the events and commands since the last reconcile say about its edit fields. */
     fields?: ReadonlyMap<string, FieldContext>;
+    /** Instance ids whose spawn position an `mcp` change set since the last reconcile. */
+    moves?: ReadonlySet<string>;
   },
 ): SyncPlan {
   const plan: SyncPlan = {
@@ -409,6 +415,7 @@ export function planSync(
     update: [],
     delete: [],
     rename: [],
+    move: [],
     deleted: [],
     needsArt: [],
     edits: [],

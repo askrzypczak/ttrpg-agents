@@ -47,6 +47,22 @@ describe("encounterEventSchema origin", () => {
     });
   });
 
+  it("encounterEventSchema requires origin on position-changed", () => {
+    const event = {
+      type: "position-changed",
+      id: "i1",
+      spawnPosition: { x: 250, y: 150 },
+      origin,
+    };
+
+    const parsed = encounterEventSchema.safeParse(event);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual(event);
+    expect(
+      encounterEventSchema.safeParse({ ...event, origin: undefined }).success,
+    ).toBe(false);
+  });
+
   it("encounterEventSchema rejects instance-changed with no changes", () => {
     const event = {
       type: "instance-changed",
@@ -84,6 +100,7 @@ const eventForMutation: Record<MutationName, EncounterEvent["type"]> = {
   setMaxHp: "hp-changed",
   setArmorClass: "instance-changed",
   setStatsVisible: "instance-changed",
+  setSpawnPositions: "position-changed",
   clearEncounter: "cleared",
 };
 
@@ -93,6 +110,12 @@ const sampleEvents: Record<EncounterEvent["type"], unknown> = {
     type: "instance-changed",
     id: "i1",
     changes: { statsVisible: true },
+    origin,
+  },
+  "position-changed": {
+    type: "position-changed",
+    id: "i1",
+    spawnPosition: { x: 250, y: 150 },
     origin,
   },
 };
