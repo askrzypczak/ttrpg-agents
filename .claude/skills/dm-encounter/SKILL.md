@@ -56,7 +56,7 @@ Rooms are named on the map in use by its display cells (columns A, B, ... left t
 
 `get_map_image` returns the map in use as the DM sees it, with column letters on its top and bottom edges and row numbers on its left and right edges, and a line with its grid size. Read cells from those labels. `propose_rooms` turns the ranges you read into proposals: it shrinks each range by one cell on every side where the room is at least three cells wide, and saves nothing. Show and save its ranges exactly as it returns them; never shrink or adjust a range yourself.
 
-To propose a room, find its printed name on the image and read the cells of its interior: one range, or several for an L-shaped room.
+To propose a room, find its printed name on the image and read the cells of its interior: one range, or several for an L-shaped room. Read each arm of an L-shaped room as a full rectangle that runs to the room's outer walls, so the arms overlap where they meet (`T5:AB11` and `T5:V14`, not `T5:AB11` and `T12:V14`); the shrunk arms then still touch.
 
 Prep ("label the rooms", "find the rooms on this map"):
 

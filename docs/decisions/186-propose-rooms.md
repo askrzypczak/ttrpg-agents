@@ -64,14 +64,13 @@ Issue: [#186](https://github.com/askrzypczak/ttrpg-agents/issues/186).
 - Where: this PR's body; the epic #92 PR.
 - Status: active
 
-## 186.7 Each range of a room is shrunk on its own, including where two ranges of the room meet
+## 186.7 The agent reads each arm of an L-shaped room as a full rectangle; the engine keeps shrinking each range on its own
 
-- Decided by: epic #92 orchestrator, 2026-10-25, plan gate (the approved contract tests pin it), not human-approved; raised by the reviewer in review round 1 and left for the maintainer's reading of the rule.
-- Context: the maintainer's rule shrinks a proposed room "by one cell on every side where the room is at least three cells wide". `proposeRooms` applies it to each range of a room separately, so an L-shaped room read as `T5:AB11` and `T12:V14` becomes `U6:AA10` and `U13`: the edge where the two ranges meet is shrunk too, and the proposal has a gap (rows 11 and 12 of the arm).
+- Decided by: epic #92 orchestrator, 2026-10-25, review round 1 (raised by the reviewer), not human-approved.
+- Context: the maintainer's rule shrinks a proposed room "by one cell on every side where the room is at least three cells wide". `proposeRooms` applies it to each range of a room separately (the approved contract pins it: `proposeRooms` tests in `room-index.test.ts`, `propose_rooms` in `rooms.integration.test.ts`). An L-shaped room read as `T5:AB11` and `T12:V14` would become `U6:AA10` and `U13`: the edge where the two ranges meet is shrunk too, and the proposal has a gap (rows 11 and 12 of the arm).
 - Options:
-  - Chosen for now: per range, as the plan and its contract specify (`proposeRooms` tests in `room-index.test.ts`, `propose_rooms` in `rooms.integration.test.ts`). The DM sees the proposal before it is stored (prep) or can correct it in chat (live).
-  - Skill wording: read each arm of an L-shaped room as a full rectangle, overlapping where the arms meet (`T5:AB11` and `T5:V14`), so the shrunk proposals still touch (`U6:AA10`, `U6:U13`). Small; changes skill wording the plan approved verbatim.
+  - Chosen: the engine keeps the per-range shrink (the rule speaks of ranges, and the contract pins it), and the skill tells the agent how to read an L so the shrink does no harm: each arm is a full rectangle that runs to the room's outer walls, so the arms overlap where they meet (`T5:AB11` and `T5:V14`, not `T5:AB11` and `T12:V14`). The shrunk arms then still touch (`U6:AA10`, `U6:U13`). Skill wording only; no engine or test change.
   - Engine: skip shrinking a side a range shares with another range of the same room. Larger; changes the contract's expectations for the L-shaped case.
-- Where: `proposeRooms` (`packages/engine/src/map/room-index.ts`), "Proposing rooms" in `.claude/skills/dm-encounter/SKILL.md`.
+- Where: "Proposing rooms" in `.claude/skills/dm-encounter/SKILL.md`; `proposeRooms` (`packages/engine/src/map/room-index.ts`).
 - Revisit if: the maintainer reads "every side where the room is ..." as the room's outline, not each range's.
 - Status: active
