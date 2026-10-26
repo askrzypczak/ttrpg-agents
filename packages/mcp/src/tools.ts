@@ -9,9 +9,11 @@ import {
   listRooms,
   proposeRooms,
   removeRooms,
+  mergeInitiative,
   resolveTargets,
   rollInitiative,
   setRooms,
+  splitInitiative,
   getMonsterByKey,
   searchMonsters,
   useMap,
@@ -485,8 +487,48 @@ const splitInitiativeTool = defineTool({
     targets: z.array(z.string()).min(1),
     roll: z.boolean().optional(),
   },
-  run() {
-    throw new Error("not implemented");
+  run(ctx, { targets, roll }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = splitInitiative(
+      {
+        repo: ctx.repo,
+        monsters: ctx.monsters,
+        rng: ctx.rng,
+        now: ctx.now,
+        newGroupId: ctx.newGroupId,
+      },
+      resolved.map((i) => i.id),
+      mcpOrigin(ctx),
+      { roll: roll === true },
+    );
+    const text = result.instances
+      .map((r) => {
+        const after = String(r.instance.initiative ?? "unset");
+        if (r.rolled === undefined) {
+          return `${r.instance.displayName}: own initiative group, initiative ${after}`;
+        }
+        const before = String(r.before ?? "unset");
+        return `${r.instance.displayName}: own initiative group, initiative ${before} -> ${after} (d20 ${String(r.rolled.roll)}, modifier ${signed(r.rolled.modifier)})`;
+      })
+      .join("\n");
+    return ok(text, {
+      instances: result.instances.map((r) => ({
+        ...instanceView(r.instance),
+        before: r.before,
+        ...(r.rolled === undefined
+          ? {}
+          : { roll: r.rolled.roll, modifier: r.rolled.modifier }),
+      })),
+      rolls: result.rolls,
+    });
   },
 });
 
@@ -496,8 +538,37 @@ const mergeInitiativeTool = defineTool({
   description:
     "Put the named monsters into one initiative group, so they act together. Targets are instance ids or exact names; each takes the initiative of the first named monster that has one, without a roll. All targets must resolve, otherwise nothing changes.",
   inputSchema: { targets: z.array(z.string()).min(1) },
-  run() {
-    throw new Error("not implemented");
+  run(ctx, { targets }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = mergeInitiative(
+      { repo: ctx.repo, newGroupId: ctx.newGroupId },
+      resolved.map((i) => i.id),
+      mcpOrigin(ctx),
+    );
+    const names = result.instances.map((r) => r.instance.displayName);
+    const shared = String(result.initiative ?? "unset");
+    const lines = [
+      `One initiative group: ${names.join(", ")}; shared initiative ${shared}.`,
+      ...result.instances.map(
+        (r) =>
+          `${r.instance.displayName}: initiative ${String(r.before ?? "unset")} -> ${String(r.instance.initiative ?? "unset")}`,
+      ),
+    ];
+    return ok(lines.join("\n"), {
+      instances: result.instances.map((r) => ({
+        ...instanceView(r.instance),
+        before: r.before,
+      })),
+      initiative: result.initiative,
+    });
   },
 });
 

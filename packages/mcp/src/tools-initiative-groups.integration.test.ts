@@ -217,6 +217,32 @@ describe("merge_initiative", () => {
       initiative: 12,
     });
   });
+
+  it("merge_initiative reports unset as the shared initiative when no named monster has one", async () => {
+    seed(item(WOLF, "Wolf 1", null, "pack"), item(WOLF, "Wolf 2", null, null));
+
+    const r = await call("merge_initiative", {
+      targets: ["Wolf 1", "Wolf 2"],
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      [
+        "One initiative group: Wolf 1, Wolf 2; shared initiative unset.",
+        "Wolf 1: initiative unset -> unset",
+        "Wolf 2: initiative unset -> unset",
+      ].join("\n"),
+    );
+    expect(r.structuredContent?.["initiative"]).toBeNull();
+    expect(
+      ctx.repo
+        .listInstances()
+        .map((i) => [i.displayName, i.initiative, i.groupId]),
+    ).toEqual([
+      ["Wolf 1", null, "group-1"],
+      ["Wolf 2", null, "group-1"],
+    ]);
+  });
 });
 
 describe("regrouping failures", () => {
