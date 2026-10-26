@@ -564,6 +564,23 @@ const renameMonsterTool = defineTool({
   },
 });
 
+const changeMonsterTypeTool = defineTool({
+  name: "change_monster_type",
+  annotations: { destructiveHint: true },
+  description:
+    "Change monsters to another monster type, keeping their tokens' places. Targets are instance ids or exact names; monster is a monster key.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    monster: z.string(),
+    hp: z.enum(["rolled", "average"]).optional(),
+  },
+  run(ctx, args) {
+    void ctx;
+    void args;
+    throw new Error("not implemented");
+  },
+});
+
 const setInitiativeTool = defineTool({
   name: "set_initiative",
   annotations: { destructiveHint: true },
@@ -1062,6 +1079,7 @@ export const tools: readonly ToolDefinition[] = [
   removeMonstersTool,
   restoreMonstersTool,
   renameMonsterTool,
+  changeMonsterTypeTool,
   setInitiativeTool,
   rollInitiativeTool,
   splitInitiativeTool,

@@ -45,6 +45,18 @@ export const encounterEventSchema = z.discriminatedUnion("type", [
     spawnPosition: z.object({ x: z.number(), y: z.number() }),
     origin: changeOriginSchema,
   }),
+  z.object({
+    type: z.literal("monster-changed"),
+    id: z.string(),
+    monsterKey: z.string(),
+    displayName: z.string(),
+    maxHp: z.number(),
+    currentHp: z.number(),
+    armorClass: z.number(),
+    initiative: z.number().nullable(),
+    footprint: z.number().int().min(1),
+    origin: changeOriginSchema,
+  }),
 ]);
 
 export type EncounterEvent = z.infer<typeof encounterEventSchema>;

@@ -102,6 +102,9 @@ function fold(
             }
           : i,
       );
+    case "monster-changed":
+      // Not implemented yet: the change is ignored.
+      return desired;
   }
 }
 

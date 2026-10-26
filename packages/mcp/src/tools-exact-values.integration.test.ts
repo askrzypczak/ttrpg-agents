@@ -82,6 +82,7 @@ function staleRepo(
     setArmorClass: (id, ac, o) => inner.setArmorClass(id, ac, o),
     setStatsVisible: (id, visible, o) => inner.setStatsVisible(id, visible, o),
     setSpawnPositions: (positions, o) => inner.setSpawnPositions(positions, o),
+    changeMonsters: (changes, o) => inner.changeMonsters(changes, o),
     clearEncounter: (o) => inner.clearEncounter(o),
   };
 }

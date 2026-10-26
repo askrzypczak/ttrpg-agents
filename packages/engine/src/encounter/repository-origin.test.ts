@@ -25,6 +25,7 @@ function recordingRepository(received: unknown[]): EncounterRepository {
     setArmorClass: (_id, _armorClass, origin) => record(origin),
     setStatsVisible: (_id, _visible, origin) => record(origin),
     setSpawnPositions: (_positions, origin) => record(origin),
+    changeMonsters: (_changes, origin) => record(origin),
     clearEncounter: (origin) => record(origin),
   };
 }
@@ -35,6 +36,16 @@ describe("EncounterRepository mutations", () => {
     const repo = recordingRepository(received);
     const origin: ChangeOrigin = { source: "mcp", commandId: "c1" };
     const spawnAt = { id: "i1", spawnPosition: { x: 250, y: 150 } };
+    const change = {
+      id: "i1",
+      monsterKey: "wolf",
+      displayName: "Wolf 1",
+      maxHp: 11,
+      currentHp: 11,
+      armorClass: 13,
+      initiative: null,
+      footprint: 1,
+    };
 
     // The type half is checked by `npm run typecheck`: each call below must
     // be rejected by the compiler (an unused directive is itself an error).
@@ -66,9 +77,11 @@ describe("EncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.setSpawnPositions([spawnAt]),
       // @ts-expect-error origin is required
+      () => repo.changeMonsters([change]),
+      // @ts-expect-error origin is required
       () => repo.clearEncounter(),
     ];
-    expect(withoutOrigin).toHaveLength(14);
+    expect(withoutOrigin).toHaveLength(15);
 
     // Runtime half: with an origin, every mutation hands it on unchanged.
     repo.addInstances(() => [], origin);
@@ -84,8 +97,9 @@ describe("EncounterRepository mutations", () => {
     repo.setArmorClass("i1", 5, origin);
     repo.setStatsVisible("i1", true, origin);
     repo.setSpawnPositions([spawnAt], origin);
+    repo.changeMonsters([change], origin);
     repo.clearEncounter(origin);
-    expect(received).toEqual(Array<ChangeOrigin>(14).fill(origin));
+    expect(received).toEqual(Array<ChangeOrigin>(15).fill(origin));
     expect(changeOriginSchema.safeParse(received[0]).success).toBe(true);
   });
 });

@@ -16,6 +16,7 @@ import type {
   EncounterRepository,
   HpChange,
   InstanceBuilder,
+  MonsterChange,
   MonsterInstance,
   Point,
   RemovedInstance,
@@ -488,6 +489,15 @@ export class SqliteEncounterRepository implements EncounterRepository {
         };
       });
     });
+  }
+
+  changeMonsters(
+    changes: readonly MonsterChange[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    void changes;
+    void origin;
+    throw new Error("not implemented");
   }
 
   clearEncounter(origin: ChangeOrigin): MonsterInstance[] {

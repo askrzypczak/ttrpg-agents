@@ -1,7 +1,7 @@
 import type { InstanceEdit, PublishedTokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { initiativeProjector } from "./initiative.js";
-import type { GridSpec, SceneItem, Vec2 } from "./scene-model.js";
+import type { GridSpec, ItemPatch, SceneItem, Vec2 } from "./scene-model.js";
 import { statBubblesProjector } from "./stat-bubbles.js";
 
 export type EncounterInstance = Extract<
@@ -17,6 +17,11 @@ export const SYNCED_METADATA_KEY = "com.ttrpg-agents/synced";
 export const NAME_BASELINE_KEY = "name";
 /** Reserved key in the synced record: the token position we last placed it at. */
 export const POSITION_BASELINE_KEY = "position";
+/**
+ * Reserved key in the synced record: the look the token was last drawn with,
+ * `{ monsterKey, image }` (the picture's url, null for a circle).
+ */
+export const LOOK_BASELINE_KEY = "look";
 /** Scene metadata: the instance ids already placed on this scene. */
 export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 
@@ -184,6 +189,14 @@ export type SyncPlan = {
    * item field); only tokens not already there.
    */
   move: { id: string; position: Vec2 }[];
+  /**
+   * Existing tokens redrawn for their instance's new monster type (top-level
+   * item fields); only the fields of the target look, only tokens that differ.
+   */
+  restyle: {
+    id: string;
+    patch: Pick<ItemPatch, "image" | "grid" | "shape" | "scale">;
+  }[];
   /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
   deleted: string[];
   /** Monster keys, once each, of instances getting a token that have no art. */
@@ -240,6 +253,16 @@ export function moveOverrideNote(name: string, recorded: boolean): string {
   return recorded
     ? `${name} was moved at the agent's request; its token had been moved on the table, and that position was overwritten.`
     : `${name} was moved at the agent's request; its token may have been moved on the table, and that position was overwritten.`;
+}
+
+/**
+ * The override note for a redraw over a token whose art or size had been
+ * changed on the table (`recorded`), or that has no recorded look.
+ */
+export function restyleOverrideNote(name: string, recorded: boolean): string {
+  void name;
+  void recorded;
+  throw new Error("not implemented");
 }
 
 /** A recorded position, if the value is one. */
@@ -443,6 +466,8 @@ export function planSync(
     fields?: ReadonlyMap<string, FieldContext>;
     /** Instance ids whose spawn position an `mcp` change set since the last reconcile. */
     moves?: ReadonlySet<string>;
+    /** Instance ids an `mcp` monster-changed event named since the last reconcile. */
+    restyles?: ReadonlySet<string>;
   },
 ): SyncPlan {
   const plan: SyncPlan = {
@@ -451,6 +476,7 @@ export function planSync(
     delete: [],
     rename: [],
     move: [],
+    restyle: [],
     deleted: [],
     needsArt: [],
     edits: [],

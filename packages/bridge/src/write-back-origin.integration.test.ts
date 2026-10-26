@@ -63,6 +63,7 @@ function recordingRepo(inner: SqliteEncounterRepository): EncounterRepository {
       inner.setStatsVisible(id, visible, origin),
     setSpawnPositions: (positions, origin) =>
       inner.setSpawnPositions(positions, origin),
+    changeMonsters: (changes, origin) => inner.changeMonsters(changes, origin),
     clearEncounter: (origin) => inner.clearEncounter(origin),
   };
 }
