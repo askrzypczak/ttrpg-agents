@@ -10,6 +10,7 @@ import {
   proposeRooms,
   removeRooms,
   resolveTargets,
+  rollInitiative,
   setRooms,
   getMonsterByKey,
   searchMonsters,
@@ -20,7 +21,7 @@ import {
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolContext } from "./context.js";
-import { formatStatblock } from "./statblock.js";
+import { formatStatblock, signed } from "./statblock.js";
 
 export type ToolContent =
   | { type: "text"; text: string }
@@ -365,6 +366,49 @@ const setInitiativeTool = defineTool({
   },
 });
 
+const rollInitiativeTool = defineTool({
+  name: "roll_initiative",
+  annotations: { destructiveHint: true },
+  description:
+    "Roll initiative (1d20 plus the monster's initiative modifier) for monsters already in the encounter, replacing any value they have. Targets are instance ids or exact names. mode group (default): named monsters of one group share one roll; each: one roll per monster. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    mode: z.enum(["group", "each"]).optional(),
+  },
+  run(ctx, { targets, mode }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = rollInitiative(
+      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+      resolved.map((i) => i.id),
+      mcpOrigin(ctx),
+      mode,
+    );
+    const text = result.instances
+      .map(
+        (r) =>
+          `${r.instance.displayName}: initiative ${String(r.before ?? "unset")} -> ${String(r.instance.initiative)} (d20 ${String(r.roll)}, modifier ${signed(r.modifier)})`,
+      )
+      .join("\n");
+    return ok(text, {
+      instances: result.instances.map((r) => ({
+        ...instanceView(r.instance),
+        before: r.before,
+        roll: r.roll,
+        modifier: r.modifier,
+      })),
+      rolls: result.rolls,
+    });
+  },
+});
+
 const setStatsVisibilityTool = defineTool({
   name: "set_stats_visibility",
   annotations: { destructiveHint: false },
@@ -634,6 +678,7 @@ export const tools: readonly ToolDefinition[] = [
   removeMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
+  rollInitiativeTool,
   setStatsVisibilityTool,
   clearEncounterTool,
   tableStatusTool,
