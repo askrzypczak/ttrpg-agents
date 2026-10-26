@@ -1,7 +1,10 @@
-import type { RollLogEntry } from "../dice/log.js";
+import { createLogEntry, type RollLogEntry } from "../dice/log.js";
 import type { Rng } from "../dice/rng.js";
+import { roll } from "../dice/roll.js";
+import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import type { InitiativeMode } from "./add-monsters.js";
+import { UnknownInstanceError, UnknownMonsterError } from "./errors.js";
 import type { ChangeOrigin } from "./origin.js";
 import type { EncounterRepository } from "./repository.js";
 import type { MonsterInstance } from "./types.js";
@@ -37,15 +40,58 @@ export interface InitiativeRollResult {
   rolls: RollLogEntry[];
 }
 
+/**
+ * Rolls initiative (1d20 plus the monster's initiative modifier) for each
+ * item with the injected rng. Every item's monster is looked up before the
+ * first roll, so an unknown monster throws UnknownMonsterError without
+ * consuming randomness.
+ *
+ * `group`: items with the same non-null groupId share one roll, labelled with
+ * the monster's name; an item without a groupId rolls alone. `each`: every item
+ * rolls alone. A group whose items name different monsters uses its first
+ * item's monster for the shared modifier and label; this is provisional until
+ * merged groups define their shared value.
+ */
 export function rollInitiativeValues(
   deps: InitiativeRollDeps,
   instances: readonly InitiativeRollInput[],
   mode: InitiativeMode,
 ): InitiativeRollResult {
-  void deps;
-  void instances;
-  void mode;
-  throw new Error("not implemented");
+  const { monsters, rng, now } = deps;
+  const resolved = instances.map((item) => {
+    const monster = monsters.byKey.get(item.monsterKey);
+    if (monster === undefined) {
+      throw new UnknownMonsterError(
+        `${item.displayName}: unknown monster "${item.monsterKey}"`,
+      );
+    }
+    return { item, monster };
+  });
+
+  const rolls: RollLogEntry[] = [];
+  const rollOnce = (monster: Monster, label: string): InitiativeRollOutcome => {
+    const result = roll("1d20", rng);
+    rolls.push(createLogEntry(result, now(), label));
+    return {
+      roll: result.total,
+      modifier: monster.initiativeModifier,
+      initiative: result.total + monster.initiativeModifier,
+    };
+  };
+
+  const sharedByGroup = new Map<string, InitiativeRollOutcome>();
+  const outcomes = resolved.map(({ item, monster }): InitiativeRollOutcome => {
+    const groupId = mode === "group" ? item.groupId : null;
+    if (groupId == null) {
+      return rollOnce(monster, `${item.displayName} initiative`);
+    }
+    const shared = sharedByGroup.get(groupId);
+    if (shared !== undefined) return shared;
+    const outcome = rollOnce(monster, `${monster.name} initiative (group)`);
+    sharedByGroup.set(groupId, outcome);
+    return outcome;
+  });
+  return { outcomes, rolls };
 }
 
 export interface RollInitiativeDeps {
@@ -70,15 +116,40 @@ export interface RollInitiativeResult {
   rolls: RollLogEntry[];
 }
 
+/**
+ * Rolls initiative for existing instances of the active encounter and writes
+ * each value through `setInitiative` with the one origin. Every id is checked
+ * before the first roll, and every monster before the first roll or write, so
+ * a failure changes nothing.
+ */
 export function rollInitiative(
   deps: RollInitiativeDeps,
   instanceIds: readonly string[],
   origin: ChangeOrigin,
   mode: InitiativeMode = "group",
 ): RollInitiativeResult {
-  void deps;
-  void instanceIds;
-  void origin;
-  void mode;
-  throw new Error("not implemented");
+  const { repo, monsters, rng, now } = deps;
+  const byId = new Map(repo.listInstances().map((i) => [i.id, i] as const));
+  const targets = instanceIds.map((id) => {
+    const instance = byId.get(id);
+    if (instance === undefined) {
+      throw new UnknownInstanceError(`no instance ${id}`);
+    }
+    return instance;
+  });
+  const rolled = rollInitiativeValues({ monsters, rng, now }, targets, mode);
+  const instances = targets.map((target, i): RolledInitiative => {
+    const outcome = rolled.outcomes[i];
+    if (outcome === undefined) {
+      throw new Error(`Missing roll for instance ${target.id}`);
+    }
+    const updated = repo.setInitiative(target.id, outcome.initiative, origin);
+    return {
+      instance: updated,
+      before: target.initiative,
+      roll: outcome.roll,
+      modifier: outcome.modifier,
+    };
+  });
+  return { instances, rolls: rolled.rolls };
 }

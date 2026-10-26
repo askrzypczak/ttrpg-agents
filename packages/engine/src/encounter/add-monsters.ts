@@ -5,6 +5,7 @@ import type { Point } from "../map/types.js";
 import { footprintForSize } from "../monsters/footprint.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
+import { rollInitiativeValues } from "./initiative.js";
 import type { ChangeOrigin } from "./origin.js";
 import type { EncounterRepository } from "./repository.js";
 import type { NewMonsterInstance } from "./types.js";
@@ -157,24 +158,17 @@ export function addMonsters(
         acs.push(monster.ac);
       }
 
-      const rollInitiative = (label: string): number => {
-        const result = roll("1d20", rng);
-        rolls.push(createLogEntry(result, now(), label));
-        return result.total + monster.initiativeModifier;
-      };
-      if (initiativeMode === "group") {
-        const initiative = rollInitiative(`${monster.name} initiative (group)`);
-        for (let i = groupStart; i < items.length; i++) {
-          const item = items[i];
-          if (item) item.initiative = initiative;
-        }
-      } else {
-        for (let i = groupStart; i < items.length; i++) {
-          const item = items[i];
-          if (item)
-            item.initiative = rollInitiative(`${item.displayName} initiative`);
-        }
-      }
+      const groupItems = items.slice(groupStart);
+      const initiative = rollInitiativeValues(
+        { monsters, rng, now },
+        groupItems,
+        initiativeMode,
+      );
+      rolls.push(...initiative.rolls);
+      initiative.outcomes.forEach((outcome, k) => {
+        const item = items[groupStart + k];
+        if (item) item.initiative = outcome.initiative;
+      });
     }
     return items;
   }, origin);
