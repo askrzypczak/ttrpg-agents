@@ -10,6 +10,7 @@ import {
   moveMonstersIntoRoom,
   proposeRooms,
   removeRooms,
+  resetMaxHp,
   resolveTargets,
   restoreMonsters,
   rollInitiative,
@@ -385,6 +386,51 @@ const setMaxHpTool = defineTool({
       `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
       { instance: instanceView(after), before: instanceView(before) },
     );
+  },
+});
+
+const resetMaxHpTool = defineTool({
+  name: "reset_max_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set monsters' max HP to their statblock average (hp average) or a new roll of their HP dice (hp rolled). A monster at full HP stays at full HP; a damaged one keeps its current HP, lowered to the new max if above it. Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    hp: z.enum(["average", "rolled"]),
+  },
+  run(ctx, { targets, hp }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = resetMaxHp(
+      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+      resolved.map((i) => i.id),
+      hp,
+      mcpOrigin(ctx),
+    );
+    const lines = result.instances.map(
+      ({ before, after }) =>
+        `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+    );
+    const rollLines = result.rolls.map(
+      (r) =>
+        `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
+    );
+    const text = [
+      ...lines,
+      ...(rollLines.length > 0 ? ["", "Rolls:", ...rollLines] : []),
+    ].join("\n");
+    return ok(text, {
+      instances: result.instances.map((c) => instanceView(c.after)),
+      before: result.instances.map((c) => instanceView(c.before)),
+      rolls: result.rolls,
+    });
   },
 });
 
@@ -853,6 +899,7 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("heal"),
   setHpTool,
   setMaxHpTool,
+  resetMaxHpTool,
   setArmorClassTool,
   removeMonstersTool,
   restoreMonstersTool,

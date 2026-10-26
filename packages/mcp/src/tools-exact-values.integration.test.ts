@@ -164,6 +164,119 @@ describe("set_max_hp", () => {
   });
 });
 
+describe("reset_max_hp", () => {
+  it("reset_max_hp with hp average by id and by exact name sets each monster's max HP to its average and reports max HP and HP before and after, one line per monster", async () => {
+    // The Shadow's statblock average is 27.
+    const [full, damaged] = seed(item("Shadow 1", 20), item("Shadow 2", 30));
+    if (!full || !damaged) throw new Error("seed failed");
+    ctx.repo.applyDamage(damaged.id, 10, origin);
+
+    const r = await call("reset_max_hp", {
+      targets: [full.id, "Shadow 2"],
+      hp: "average",
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      [
+        "Shadow 1: max HP 20 -> 27, HP 20 -> 27/27",
+        "Shadow 2: max HP 30 -> 27, HP 20 -> 20/27",
+      ].join("\n"),
+    );
+    expect(stored()).toEqual([
+      ["Shadow 1", 27, 27, null],
+      ["Shadow 2", 20, 27, null],
+    ]);
+  });
+
+  it("reset_max_hp with hp rolled reports each monster's line and a Rolls line per HP roll", async () => {
+    // Each call yields the next counter value; each die shows it plus one.
+    let n = 0;
+    ctx.rng = { nextInt: (max) => n++ % max };
+    // Shadow HP is 5d8 + 5: 1+2+3+4+5+5 = 20, then 6+7+8+1+2+5 = 29.
+    const [full, damaged] = seed(item("Shadow 1", 12), item("Shadow 2", 30));
+    if (!full || !damaged) throw new Error("seed failed");
+    ctx.repo.applyDamage(damaged.id, 10, origin);
+
+    const r = await call("reset_max_hp", {
+      targets: ["Shadow 1", "Shadow 2"],
+      hp: "rolled",
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      [
+        "Shadow 1: max HP 12 -> 20, HP 12 -> 20/20",
+        "Shadow 2: max HP 30 -> 29, HP 20 -> 20/29",
+        "",
+        "Rolls:",
+        "- Shadow 1 HP: 5d8 + 5 = 20",
+        "- Shadow 2 HP: 5d8 + 5 = 29",
+      ].join("\n"),
+    );
+    expect(stored()).toEqual([
+      ["Shadow 1", 20, 20, null],
+      ["Shadow 2", 20, 29, null],
+    ]);
+  });
+
+  it("reset_max_hp fails and changes nothing when a target is unknown or ambiguous", async () => {
+    seed(item("Shadow 1", 20), item("Twin", 10), item("Twin", 10));
+    const before = stored();
+
+    const unknown = await call("reset_max_hp", {
+      targets: ["Shadow 1", "Ghost"],
+      hp: "average",
+    });
+    expect(unknown.isError).toBe(true);
+    expect(text(unknown)).toContain('Unknown target "Ghost"');
+    expect(text(unknown)).toMatch(/Nothing was changed\.$/);
+
+    const ambiguous = await call("reset_max_hp", {
+      targets: ["Shadow 1", "Twin"],
+      hp: "rolled",
+    });
+    expect(ambiguous.isError).toBe(true);
+    expect(text(ambiguous)).toContain("Ambiguous");
+    expect(text(ambiguous)).toMatch(/Nothing was changed\.$/);
+
+    expect(stored()).toEqual(before);
+  });
+
+  it("reset_max_hp returns each monster after and before the reset and the roll log as structured content", async () => {
+    // The Shadow's statblock average is 27.
+    const [full, damaged] = seed(item("Shadow 1", 20), item("Shadow 2", 30));
+    if (!full || !damaged) throw new Error("seed failed");
+    ctx.repo.applyDamage(damaged.id, 10, origin);
+
+    const average = await call("reset_max_hp", {
+      targets: [full.id, damaged.id],
+      hp: "average",
+    });
+
+    expect(average.structuredContent).toEqual({
+      instances: [
+        { ...view(full), hp: 27, maxHp: 27 },
+        { ...view(damaged), hp: 20, maxHp: 27 },
+      ],
+      before: [
+        { ...view(full), hp: 20, maxHp: 20 },
+        { ...view(damaged), hp: 20, maxHp: 30 },
+      ],
+      rolls: [],
+    });
+
+    const rolled = await call("reset_max_hp", {
+      targets: [full.id, damaged.id],
+      hp: "rolled",
+    });
+
+    expect(rolled.structuredContent).toMatchObject({
+      rolls: [{ label: "Shadow 1 HP" }, { label: "Shadow 2 HP" }],
+    });
+  });
+});
+
 describe("set_armor_class", () => {
   it("set_armor_class by id sets the exact armor class and reports AC before and after", async () => {
     const [shadow] = seed(item("Shadow 1", 10, 12));

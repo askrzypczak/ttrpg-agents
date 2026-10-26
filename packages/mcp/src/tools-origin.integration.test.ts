@@ -260,4 +260,30 @@ describe("tool write origin", () => {
       });
     }
   });
+
+  it("reset_max_hp passes source mcp and one command id to every setMaxHp and setHp write", async () => {
+    // At full HP with a max below the Shadow's average, so each reset raises
+    // the max and then refills the HP.
+    seed("Shadow 1", "Shadow 2");
+
+    const result = await call("reset_max_hp", {
+      targets: ["Shadow 1", "Shadow 2"],
+      hp: "average",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes.map((w) => w.method).sort()).toEqual([
+      "setHp",
+      "setHp",
+      "setMaxHp",
+      "setMaxHp",
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+    for (const write of writes) {
+      expect(write.origin).toEqual({
+        source: "mcp",
+        commandId: issuedCommandIds[0],
+      });
+    }
+  });
 });

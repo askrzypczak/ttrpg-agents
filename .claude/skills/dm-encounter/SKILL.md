@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -98,6 +98,13 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 - When the DM gives both max HP and HP ("the wolf has 15 max HP and is at 12"), call `set_max_hp` first and `set_hp` after it, never in parallel: HP is clamped to the max HP at the time of the call.
 - `set_max_hp` lowers HP above the new max but never raises it. If the DM says the monster is at full HP, call `set_hp` after `set_max_hp`, using the max HP from its reply.
 - Do not call `list_encounter` after the calls. Relay each tool's line verbatim (for example "Goblin Warrior 2: HP 9 -> 4/9", "Wolf 1: max HP 11 -> 15, HP 11 -> 11/15", "Shadow 1: AC 12 -> 15").
+
+## Average or re-rolled max HP
+
+- "Wolf 2 should have average HP" / "change it to average HP" is one `reset_max_hp` call with `hp` "average"; "re-roll the wolf's HP" is the same call with `hp` "rolled". Several monsters ("give the wolves average HP") go in one call's `targets`. Target each monster as under Damage and healing.
+- A number from the DM ("the wolf has 15 max HP") is `set_max_hp`, not this tool.
+- The tool keeps a monster at full HP at full, and a damaged monster keeps its HP (lowered to the new max if above it). Do not call `set_hp` or `set_max_hp` after it.
+- Do not call `list_encounter` after the call. Relay the tool's lines verbatim (for example "Wolf 2: max HP 8 -> 11, HP 8 -> 11/11"), with its Rolls lines after a re-roll.
 
 ## Changing initiative
 

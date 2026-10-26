@@ -14,6 +14,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   roll_initiative: { destructiveHint: true },
   set_hp: { destructiveHint: true },
   set_max_hp: { destructiveHint: true },
+  reset_max_hp: { destructiveHint: true },
   set_armor_class: { destructiveHint: true },
   set_stats_visibility: { destructiveHint: false },
   clear_encounter: { destructiveHint: true },
