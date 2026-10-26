@@ -48,9 +48,9 @@ export interface InitiativeRollResult {
  *
  * `group`: items with the same non-null groupId share one roll, labelled with
  * the monster's name; an item without a groupId rolls alone. `each`: every item
- * rolls alone. A group whose items name different monsters uses its first
- * item's monster for the shared modifier and label; this is provisional until
- * merged groups define their shared value.
+ * rolls alone. A group whose items name different monsters (possible after a
+ * merge) uses the first item's monster, in input order, for the shared modifier
+ * and label.
  */
 export function rollInitiativeValues(
   deps: InitiativeRollDeps,

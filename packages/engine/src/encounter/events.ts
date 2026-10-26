@@ -31,6 +31,7 @@ export const encounterEventSchema = z.discriminatedUnion("type", [
         initiative: z.number().nullable(),
         armorClass: z.number(),
         statsVisible: z.boolean(),
+        groupId: z.string(),
       })
       .partial()
       .refine((changes) => Object.keys(changes).length > 0, {
