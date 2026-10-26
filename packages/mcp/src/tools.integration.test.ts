@@ -96,6 +96,8 @@ function wrapRepo(
     applyDamage: (id, amount) => inner.applyDamage(id, amount, origin),
     applyHealing: (id, amount) => inner.applyHealing(id, amount, origin),
     removeInstances: (ids) => inner.removeInstances(ids, origin),
+    listRemovedInstances: () => inner.listRemovedInstances(),
+    restoreInstances: (ids, name) => inner.restoreInstances(ids, name, origin),
     renameInstance: (id, name) => inner.renameInstance(id, name, origin),
     setInitiative: (id, n) => inner.setInitiative(id, n, origin),
     setHp: (id, hp) => inner.setHp(id, hp, origin),
@@ -132,7 +134,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the twenty-three tools", () => {
+  it("exposes the twenty-four tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -147,6 +149,7 @@ describe("tool registry", () => {
       "remove_rooms",
       "rename_monster",
       "reset_max_hp",
+      "restore_monsters",
       "roll_initiative",
       "search_monsters",
       "set_armor_class",

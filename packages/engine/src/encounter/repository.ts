@@ -14,6 +14,19 @@ export interface HpChange {
 /** Builds the items to insert from the display names already in the active encounter. */
 export type InstanceBuilder = (existingNames: string[]) => NewMonsterInstance[];
 
+/** A removed instance kept for restoring, with the change that removed it. */
+export interface RemovedInstance {
+  instance: MonsterInstance;
+  /** Who removed it, in which command. */
+  removedBy: ChangeOrigin;
+}
+
+/** Picks a restored instance's display name from the names in use. */
+export type RestoreNamer = (
+  instance: MonsterInstance,
+  namesInUse: readonly string[],
+) => string;
+
 export interface EncounterRepository {
   /** Returns the single active encounter, creating it if none exists. */
   getOrCreateActiveEncounter(): Encounter;
@@ -33,6 +46,20 @@ export interface EncounterRepository {
    */
   removeInstances(
     ids: readonly string[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[];
+  /** Removed instances of the active encounter not restored since, newest removal first; kept until the encounter is cleared. */
+  listRemovedInstances(): RemovedInstance[];
+  /**
+   * In one transaction puts removed instances of the active encounter back with the state they had when removed,
+   * each named by `name` from the names in use (the encounter's plus those restored before it in this call),
+   * records one `added` event for them and returns them in the order given. Throws UnknownInstanceError for an id
+   * that is not a removed instance of the active encounter, InvalidNameError for a picked name that is empty or in
+   * use; nothing changes on a throw.
+   */
+  restoreInstances(
+    ids: readonly string[],
+    name: RestoreNamer,
     origin: ChangeOrigin,
   ): MonsterInstance[];
   /**
