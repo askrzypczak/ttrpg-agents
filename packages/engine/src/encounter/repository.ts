@@ -1,3 +1,4 @@
+import type { Point } from "../map/types.js";
 import type { ChangeOrigin } from "./origin.js";
 import type {
   Encounter,
@@ -119,6 +120,18 @@ export interface EncounterRepository {
     visible: boolean,
     origin: ChangeOrigin,
   ): MonsterInstance;
+  /**
+   * Sets the spawn position of each given instance of the active encounter in
+   * one transaction, appending one `position-changed` event per entry, and
+   * returns the instances updated, in input order. The only way an existing
+   * instance's spawn position changes (the move tool). Throws
+   * UnknownInstanceError, changing nothing, if any id is not in the active
+   * encounter.
+   */
+  setSpawnPositions(
+    positions: readonly { id: string; spawnPosition: Point }[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[];
   /** Deletes all instances of the active encounter. */
   clearEncounter(origin: ChangeOrigin): void;
   /** Instances of the active encounter, ordered by creation. */
