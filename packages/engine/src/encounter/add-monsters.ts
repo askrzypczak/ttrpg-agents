@@ -216,3 +216,40 @@ export function addMonsters(
   });
   return { instances, rolls };
 }
+
+export interface PreviewMonstersDeps {
+  repo: Pick<EncounterRepository, "listInstances">;
+  monsters: MonsterIndex;
+  naming?: NamingStrategy;
+}
+
+/** One would-be monster of a preview. */
+export interface PreviewInstance {
+  name: string;
+  /** Index of its group in the input. */
+  group: number;
+  ac: number;
+  averageHp: number;
+  hpDice: string;
+  initiativeModifier: number;
+  /** The member a group with `join` joins; null for a new group, which would roll. */
+  joins: { name: string; initiative: number | null } | null;
+  /** Grid cells per side. */
+  footprint: number;
+}
+
+export interface MonstersPreview {
+  instances: PreviewInstance[];
+}
+
+/** Dry run of addMonsters: same checks, joins and names; reads the store, writes nothing, rolls nothing. */
+export function previewMonsters(
+  deps: PreviewMonstersDeps,
+  groups: readonly AddMonstersGroup[],
+  options?: AddMonstersOptions,
+): MonstersPreview {
+  void deps;
+  void groups;
+  void options;
+  throw new Error("not implemented");
+}

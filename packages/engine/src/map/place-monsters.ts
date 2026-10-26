@@ -5,6 +5,8 @@ import {
   type AddMonstersGroup,
   type AddMonstersOptions,
   type AddMonstersResult,
+  type MonstersPreview,
+  type PreviewMonstersDeps,
 } from "../encounter/add-monsters.js";
 import { UnknownInstanceError } from "../encounter/errors.js";
 import type { ChangeOrigin } from "../encounter/origin.js";
@@ -147,6 +149,34 @@ export async function addMonstersInRooms(
     }
   });
   return { ...result, placements, moved: live.moved };
+}
+
+/** Where a would-be monster of a group with a room would go; `cell` as in RoomPlacement, null when no free block is left. */
+export interface PreviewPlacement {
+  name: string;
+  room: string;
+  cell: string | null;
+}
+
+export interface RoomsPreview extends MonstersPreview {
+  placements: PreviewPlacement[];
+  moved: boolean;
+}
+
+/** Dry run of addMonstersInRooms: same checks in the same order, same placement; reads the store, the saved map and rooms and the table; writes nothing, rolls nothing. Without any room the table is not asked. */
+export async function previewMonstersInRooms(
+  deps: PreviewMonstersDeps & {
+    table: Pick<TablePort, "sceneMap" | "sceneTokens">;
+    maps: Pick<MapRepository, "getActiveMap" | "getRooms">;
+  },
+  groups: readonly RoomGroup[],
+  options?: AddMonstersOptions,
+): Promise<RoomsPreview> {
+  void deps;
+  void groups;
+  void options;
+  await Promise.resolve();
+  throw new Error("not implemented");
 }
 
 /** Where each named monster was moved, in input order, and whether the map moved on the table. */
