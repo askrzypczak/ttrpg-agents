@@ -211,4 +211,20 @@ describe("list_encounter with removed monsters", () => {
       ),
     ).toEqual(["Wolf 1"]);
   });
+
+  it("list_encounter leaves out the removed line when nothing can be restored", async () => {
+    expect(text(await call("list_encounter"))).toBe("The encounter is empty.");
+
+    seed(wolf("Wolf 1", 12), wolf("Wolf 2", 9));
+    expect(text(await call("list_encounter"))).not.toContain("Removed");
+
+    await remove("Wolf 2");
+    expect(text(await call("list_encounter"))).toContain(
+      "Removed, can be restored: Wolf 2.",
+    );
+
+    const restore = await call("restore_monsters", { targets: ["Wolf 2"] });
+    expect(restore.isError).toBeUndefined();
+    expect(text(await call("list_encounter"))).not.toContain("Removed");
+  });
 });
