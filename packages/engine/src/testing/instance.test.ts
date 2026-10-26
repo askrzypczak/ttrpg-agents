@@ -22,6 +22,7 @@ describe("makeTestInstance", () => {
       createdAt: 1,
       footprint: 1,
       statsVisible: false,
+      spawnPosition: null,
     });
   });
 });

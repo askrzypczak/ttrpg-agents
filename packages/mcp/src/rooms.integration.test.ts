@@ -1,9 +1,14 @@
 import {
   TableUnavailableError,
+  cellCenter,
+  displayGrid,
+  parseCellLabel,
+  type MapPlacement,
   type MapRegistration,
   type TableMapItem,
   type TablePort,
   type TableSceneMap,
+  type TableToken,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -54,6 +59,8 @@ function scene(...maps: TableMapItem[]): TableSceneMap {
 function contextWith(
   sceneMap: TablePort["sceneMap"],
   active?: MapRegistration,
+  sceneTokens: TablePort["sceneTokens"] = () =>
+    Promise.reject(new Error("not stubbed")),
 ): ToolContext {
   const maps = new SqliteMapRepository(openDatabase(":memory:"));
   if (active) maps.registerMap(active);
@@ -61,7 +68,7 @@ function contextWith(
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
       sceneMap,
-      sceneTokens: () => Promise.reject(new Error("not stubbed")),
+      sceneTokens,
     },
     repo: new SqliteEncounterRepository(openDatabase(":memory:")),
     maps,
@@ -227,5 +234,122 @@ describe("room tools", () => {
       expect(r.isError).toBe(true);
       expect(text(r)).toContain(message);
     }
+  });
+});
+
+describe("add_monsters in a room", () => {
+  const GOBLIN = "srd-2024_goblin-warrior";
+
+  /** A token on the table at the centre of a display cell of the map at `placement`. */
+  function tokenOn(label: string, placement: MapPlacement): TableToken {
+    const cell = displayGrid(placement).displayToSceneCell(
+      parseCellLabel(label),
+    );
+    return { position: cellCenter(cell, placement.sceneDpi) };
+  }
+
+  /** The reply lines in order, each found after the previous one. */
+  function expectInOrder(reply: string, lines: string[]): void {
+    let from = 0;
+    for (const line of lines) {
+      const at = reply.indexOf(line, from);
+      expect(at, `"${line}" after position ${String(from)}`).toBeGreaterThan(
+        -1,
+      );
+      from = at + line.length;
+    }
+  }
+
+  it("add_monsters with a room places the group and lists each placed monster's display cell", async () => {
+    const ctx = contextWith(
+      () => Promise.resolve(scene(trollskull)),
+      registered,
+      () => Promise.resolve({ tokens: [tokenOn("B1", registered.placement)] }),
+    );
+    await call(ctx, "set_rooms", {
+      rooms: [{ name: "Kitchen", ranges: ["A1:C1"] }],
+    });
+    const r = await call(ctx, "add_monsters", {
+      groups: [{ monster: GOBLIN, count: 2, room: "kitchen" }],
+    });
+    expect(r.isError).toBeFalsy();
+    const placements = r.structuredContent?.["placements"] as {
+      name: string;
+      room: string;
+      cell: string | null;
+    }[];
+    expect(placements.map((p) => [p.name, p.room])).toEqual([
+      ["Goblin Warrior 1", "Kitchen"],
+      ["Goblin Warrior 2", "Kitchen"],
+    ]);
+    const [first, second] = placements.map((p) => p.cell);
+    expect([first, second].sort()).toEqual(["A1", "C1"]);
+    expect(r.structuredContent?.["moved"]).toBe(false);
+    expectInOrder(text(r), [
+      "| Goblin Warrior 2 |",
+      `Placed in Kitchen: Goblin Warrior 1 at ${String(first)}, Goblin Warrior 2 at ${String(second)}.`,
+      "Rolls:",
+    ]);
+    expect(text(r)).not.toContain("No free cell left");
+    expect(text(r)).not.toContain(movedLine);
+  });
+
+  it("add_monsters lists the monsters left without a free cell and says their tokens appear in the row at the centre of the GM's view", async () => {
+    const tokens: TableToken[] = [];
+    const ctx = contextWith(
+      () => Promise.resolve(scene(trollskull)),
+      registered,
+      () => Promise.resolve({ tokens }),
+    );
+    await call(ctx, "set_rooms", {
+      rooms: [{ name: "Attic", ranges: ["A1"] }],
+    });
+
+    const several = await call(ctx, "add_monsters", {
+      groups: [{ monster: GOBLIN, count: 3, room: "Attic" }],
+    });
+    expect(several.isError).toBeFalsy();
+    expectInOrder(text(several), [
+      "Placed in Attic: Goblin Warrior 1 at A1.",
+      "No free cell left in Attic for Goblin Warrior 2, Goblin Warrior 3: their tokens appear in a row at the centre of the GM's view.",
+      "Rolls:",
+    ]);
+    expect(
+      (
+        several.structuredContent?.["placements"] as { cell: string | null }[]
+      ).map((p) => p.cell),
+    ).toEqual(["A1", null, null]);
+
+    tokens.push(tokenOn("A1", registered.placement));
+    const one = await call(ctx, "add_monsters", {
+      groups: [{ monster: GOBLIN, count: 1, room: "Attic" }],
+    });
+    expect(one.isError).toBeFalsy();
+    expect(text(one)).toContain(
+      "No free cell left in Attic for Goblin Warrior 4: its token appears in a row at the centre of the GM's view.",
+    );
+    expect(text(one)).not.toContain("Placed in Attic");
+  });
+
+  it("add_monsters with a room on a moved map adds the moved line", async () => {
+    const moved = { ...trollskull, scale: { x: 2, y: 2 } };
+    const ctx = contextWith(
+      () => Promise.resolve(scene(moved)),
+      registered,
+      () => Promise.resolve({ tokens: [] }),
+    );
+    await call(ctx, "set_rooms", {
+      rooms: [{ name: "Attic", ranges: ["A1"] }],
+    });
+    const r = await call(ctx, "add_monsters", {
+      groups: [{ monster: GOBLIN, count: 1, room: "Attic" }],
+    });
+    expect(r.isError).toBeFalsy();
+    expectInOrder(text(r), [
+      "Placed in Attic: Goblin Warrior 1 at A1.",
+      movedLine,
+      "Rolls:",
+    ]);
+    expect(r.structuredContent?.["moved"]).toBe(true);
   });
 });

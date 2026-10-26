@@ -377,4 +377,20 @@ describe("protocol", () => {
       },
     });
   });
+
+  it("an encounter-snapshot whose instances have no spawnPosition decodes them with none", () => {
+    const withoutSpawn: Record<string, unknown> = { ...instance };
+    delete withoutSpawn.spawnPosition;
+    const decoded = decodeMessage(
+      JSON.stringify({
+        v: 1,
+        type: "encounter-snapshot",
+        payload: { instances: [withoutSpawn], seq: 0 },
+      }),
+    );
+    if (!decoded.ok || decoded.message.type !== "encounter-snapshot") {
+      throw new Error("expected a decoded encounter-snapshot");
+    }
+    expect(decoded.message.payload.instances[0]?.spawnPosition).toBeNull();
+  });
 });

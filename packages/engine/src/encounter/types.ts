@@ -21,6 +21,11 @@ export const monsterInstanceSchema = z.object({
   footprint: z.number().int().min(1).default(1),
   /** Whether players see the instance's stats on the table; false = GM-only. */
   statsVisible: z.boolean(),
+  /** Where the token is created on the scene (a cell centre, scene units); null = the default row. */
+  spawnPosition: z
+    .object({ x: z.number(), y: z.number() })
+    .nullable()
+    .optional(),
 });
 
 export type MonsterInstance = z.infer<typeof monsterInstanceSchema>;
@@ -37,4 +42,6 @@ export interface NewMonsterInstance {
   footprint?: number;
   /** Defaults to false (GM-only). */
   statsVisible?: boolean;
+  /** Where the token is created (scene units); defaults to null (the default row). */
+  spawnPosition?: { x: number; y: number } | null;
 }

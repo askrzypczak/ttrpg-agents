@@ -748,3 +748,64 @@ describe("planSync row layout", () => {
     ]);
   });
 });
+
+describe("planSync spawn position", () => {
+  const spawn = { x: 225, y: 375 };
+  const positionOf = (plan: SyncPlan, n: number) =>
+    plan.add.find(
+      (i) =>
+        (i.metadata[INSTANCE_METADATA_KEY] as { instanceId: string })
+          .instanceId === `i${n}`,
+    )?.position;
+
+  it("a new token is created at its instance's spawn position", () => {
+    const plan = planSync(
+      [inst(1, { spawnPosition: spawn })],
+      [],
+      defaultSyncConfig,
+      ctx(),
+    );
+    expect(positionOf(plan, 1)).toEqual(spawn);
+  });
+
+  it("a new token without a spawn position goes in the default row at the viewport centre", () => {
+    const plan = planSync(
+      [inst(1, { spawnPosition: spawn }), inst(2, { spawnPosition: null })],
+      [],
+      defaultSyncConfig,
+      ctx(),
+    );
+    expect(positionOf(plan, 2)).toEqual(center);
+  });
+
+  it("the default row holds only the new tokens without a spawn position", () => {
+    const plan = planSync(
+      [
+        inst(1, { spawnPosition: null }),
+        inst(2, { spawnPosition: spawn }),
+        inst(3, { spawnPosition: null }),
+      ],
+      [],
+      defaultSyncConfig,
+      ctx(),
+    );
+    expect([1, 2, 3].map((n) => positionOf(plan, n))).toEqual([
+      { x: 925, y: 500 },
+      spawn,
+      { x: 1075, y: 500 },
+    ]);
+  });
+
+  it("an existing token is never moved to its instance's spawn position", () => {
+    // Token 1 sits where the GM left it; instance 2 is new in the same plan.
+    const plan = planSync(
+      [inst(1, { spawnPosition: spawn }), inst(2, { spawnPosition: spawn })],
+      [defaultToken(1, {}, { position: { x: 7, y: 9 } })],
+      defaultSyncConfig,
+      ctx(["i1"]),
+    );
+    expect(plan.update.filter((u) => u.id === "token-1")).toEqual([]);
+    expect(positionOf(plan, 1)).toBeUndefined();
+    expect(positionOf(plan, 2)).toEqual(spawn);
+  });
+});

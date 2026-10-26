@@ -1,6 +1,7 @@
 import { createLogEntry, type RollLogEntry } from "../dice/log.js";
 import { roll } from "../dice/roll.js";
 import type { Rng } from "../dice/rng.js";
+import type { Point } from "../map/types.js";
 import { footprintForSize } from "../monsters/footprint.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
@@ -22,6 +23,8 @@ export interface AddMonstersGroup {
   hp?: HpMode;
   /** Reveal the group's stats to players; defaults to false (GM-only). */
   statsVisible?: boolean;
+  /** Spawn positions (scene units) for the group's instances, in order; instances past the last get none. */
+  spawnPositions?: readonly Point[];
 }
 
 export interface AddMonstersOptions {
