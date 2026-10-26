@@ -199,7 +199,7 @@ export type SyncPlan = {
   }[];
   /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
   deleted: string[];
-  /** Monster keys, once each, of instances getting a token that have no art. */
+  /** Monster keys, once each, of instances getting a token, or an image token redrawn, that have no art. */
   needsArt: string[];
   /** Table edits of owned keys to write back to the store. */
   edits: InstanceEdit[];
@@ -207,8 +207,10 @@ export type SyncPlan = {
   rejected: { instanceId: string; message: string }[];
   /**
    * Writes over table values for the DM to audit: Stat Bubbles fields a
-   * snapshot pushed over a different token value, and moves of a token that
-   * was not where it was last placed (or has no recorded position).
+   * snapshot pushed over a different token value, moves of a token that
+   * was not where it was last placed (or has no recorded position), and
+   * redraws of a token whose art or size the table had changed (or that has
+   * no recorded look).
    */
   overrides: { instanceId: string; message: string }[];
 };
@@ -260,9 +262,91 @@ export function moveOverrideNote(name: string, recorded: boolean): string {
  * changed on the table (`recorded`), or that has no recorded look.
  */
 export function restyleOverrideNote(name: string, recorded: boolean): string {
-  void name;
-  void recorded;
-  throw new Error("not implemented");
+  return recorded
+    ? `${name}'s token was redrawn for its new monster type at the agent's request; its art or size had been changed on the table, and was overwritten.`
+    : `${name}'s token was redrawn for its new monster type at the agent's request; its art or size may have been changed on the table, and was overwritten.`;
+}
+
+/** A token's look as recorded under LOOK_BASELINE_KEY. */
+type Look = { monsterKey: string; image: string | null };
+
+/** A recorded look, if the value is one. */
+function asLook(value: unknown): Look | undefined {
+  const { monsterKey, image } = asRecord(value);
+  return typeof monsterKey === "string" &&
+    (typeof image === "string" || image === null)
+    ? { monsterKey, image }
+    : undefined;
+}
+
+type Restyle = SyncPlan["restyle"][number]["patch"];
+
+const UNIT_SCALE: Vec2 = { x: 1, y: 1 };
+
+/**
+ * The look an existing token is redrawn with for its instance's monster type,
+ * from the look a new token of that type gets (`config.tokenKind`), keeping
+ * the token's kind: an IMAGE takes the image and grid drawn from the type's
+ * art, or keeps its own picture with a grid spanning the footprint when the
+ * type has no art (`needsArt`); a SHAPE takes the shape of a new token without
+ * art. Both at scale 1. `image` is the picture's url (null for a SHAPE).
+ * Undefined for any other item, an IMAGE without a picture, or a SHAPE when a
+ * new token gets no shape.
+ */
+function redrawnLook(
+  token: SceneItem,
+  instance: EncounterInstance,
+  art: Readonly<Record<string, PublishedTokenArt>>,
+  config: SyncConfig,
+): { patch: Restyle; image: string | null; needsArt: boolean } | undefined {
+  if (token.type === "IMAGE") {
+    const typeArt = Object.hasOwn(art, instance.monsterKey)
+      ? art[instance.monsterKey]
+      : undefined;
+    const drawn =
+      typeArt === undefined ? undefined : config.tokenKind(instance, typeArt);
+    if (drawn?.image !== undefined && drawn.grid !== undefined)
+      return {
+        patch: {
+          image: { ...drawn.image },
+          grid: drawn.grid,
+          scale: { ...UNIT_SCALE },
+        },
+        image: drawn.image.url,
+        needsArt: false,
+      };
+    if (token.image === undefined) return undefined;
+    return {
+      patch: {
+        image: { ...token.image },
+        grid: cellsGrid(token.image, instance.footprint),
+        scale: { ...UNIT_SCALE },
+      },
+      image: token.image.url,
+      needsArt: true,
+    };
+  }
+  if (token.type === "SHAPE") {
+    const { shape } = config.tokenKind(instance, undefined);
+    if (shape === undefined) return undefined;
+    return {
+      patch: { shape: { ...shape }, scale: { ...UNIT_SCALE } },
+      image: null,
+      needsArt: false,
+    };
+  }
+  return undefined;
+}
+
+/** Whether the token already shows every field of the patch (no scale counts as 1). */
+function drawnAs(token: SceneItem, patch: Restyle): boolean {
+  return (
+    (patch.image === undefined || deepEqual(token.image, patch.image)) &&
+    (patch.grid === undefined || deepEqual(token.grid, patch.grid)) &&
+    (patch.shape === undefined || deepEqual(token.shape, patch.shape)) &&
+    (patch.scale === undefined ||
+      deepEqual(token.scale ?? UNIT_SCALE, patch.scale))
+  );
 }
 
 /** A recorded position, if the value is one. */
@@ -448,6 +532,20 @@ function movesEditField(
  * created before positions were recorded), is reported in `overrides`. No
  * position is ever recorded for an older token without a move, and otherwise
  * an existing token is never moved.
+ * A new token records the look it is created with under LOOK_BASELINE_KEY:
+ * its instance's monster key and its picture's url (null for a circle). An
+ * existing token is redrawn when its instance is in `context.restyles` (an
+ * `mcp` change set a new monster type) or its recorded look names another
+ * monster key (a change seen only in a snapshot). The redraw keeps the token's
+ * kind: an IMAGE takes the type's art, or keeps its own picture when the type
+ * has none (the type then goes to `needsArt`), with a grid spanning the
+ * footprint; a SHAPE becomes a circle as wide as the footprint; both at scale
+ * 1 (no scale counts as 1). It is planned in `restyle` only when the token
+ * differs from that look, and the recorded look becomes the drawn one either
+ * way. A planned redraw of a token whose picture differs from its recorded
+ * one, whose scale is not 1, or that has no recorded look is reported in
+ * `overrides`. A token with no recorded look and no `restyles` entry is never
+ * redrawn and gets no record; other item types are left alone.
  * An instance in `context.placed` whose token is missing was deleted by the
  * GM and is not recreated.
  */
@@ -604,6 +702,40 @@ export function planSync(
         next[POSITION_BASELINE_KEY] = target;
       }
     }
+    const look = asLook(baseline[LOOK_BASELINE_KEY]);
+    if (
+      context.restyles?.has(id) === true ||
+      (look !== undefined && look.monsterKey !== instance.monsterKey)
+    ) {
+      const redrawn = redrawnLook(token, instance, context.art, config);
+      if (redrawn !== undefined) {
+        if (redrawn.needsArt && !plan.needsArt.includes(instance.monsterKey))
+          plan.needsArt.push(instance.monsterKey);
+        if (!drawnAs(token, redrawn.patch)) {
+          plan.restyle.push({ id: token.id, patch: redrawn.patch });
+          const picture =
+            token.type === "IMAGE" ? (token.image?.url ?? null) : null;
+          const scale = token.scale ?? UNIT_SCALE;
+          if (
+            look === undefined ||
+            picture !== look.image ||
+            scale.x !== 1 ||
+            scale.y !== 1
+          )
+            plan.overrides.push({
+              instanceId: id,
+              message: restyleOverrideNote(
+                instance.displayName,
+                look !== undefined,
+              ),
+            });
+        }
+        next[LOOK_BASELINE_KEY] = {
+          monsterKey: instance.monsterKey,
+          image: redrawn.image,
+        };
+      }
+    }
     if (!deepEqual(next, baseline))
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
   }
@@ -634,10 +766,14 @@ export function planSync(
     }
     synced[NAME_BASELINE_KEY] = instance.displayName;
     synced[POSITION_BASELINE_KEY] = { x: position.x, y: position.y };
-    metadata[SYNCED_METADATA_KEY] = synced;
     const art = Object.hasOwn(context.art, instance.monsterKey)
       ? context.art[instance.monsterKey]
       : undefined;
+    synced[LOOK_BASELINE_KEY] = {
+      monsterKey: instance.monsterKey,
+      image: art?.url ?? null,
+    };
+    metadata[SYNCED_METADATA_KEY] = synced;
     if (!art && !plan.needsArt.includes(instance.monsterKey))
       plan.needsArt.push(instance.monsterKey);
     plan.add.push({

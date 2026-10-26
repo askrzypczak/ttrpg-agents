@@ -28,6 +28,7 @@ import {
   instanceIdOf,
   moveOverrideNote,
   planSync,
+  restyleOverrideNote,
   type EditField,
   type EncounterInstance,
   type FieldContext,
@@ -103,22 +104,44 @@ function fold(
           : i,
       );
     case "monster-changed":
-      // Not implemented yet: the change is ignored.
-      return desired;
+      return desired.map((i) =>
+        i.id === event.id
+          ? {
+              ...i,
+              monsterKey: event.monsterKey,
+              displayName: event.displayName,
+              maxHp: event.maxHp,
+              currentHp: event.currentHp,
+              armorClass: event.armorClass,
+              initiative: event.initiative,
+              footprint: event.footprint,
+            }
+          : i,
+      );
   }
 }
 
-/** Whether an override is the note of a move of its instance's token. */
-function isMoveNote(
+/**
+ * Which token write an override is the note of: a move or a redraw of its
+ * instance's token; undefined for any other note.
+ */
+function writeNoteKind(
   wanted: readonly EncounterInstance[],
   override: SyncPlan["overrides"][number],
-): boolean {
+): "move" | "restyle" | undefined {
   const name = wanted.find((i) => i.id === override.instanceId)?.displayName;
-  return (
-    name !== undefined &&
-    (override.message === moveOverrideNote(name, true) ||
-      override.message === moveOverrideNote(name, false))
-  );
+  if (name === undefined) return undefined;
+  if (
+    override.message === moveOverrideNote(name, true) ||
+    override.message === moveOverrideNote(name, false)
+  )
+    return "move";
+  if (
+    override.message === restyleOverrideNote(name, true) ||
+    override.message === restyleOverrideNote(name, false)
+  )
+    return "restyle";
+  return undefined;
 }
 
 /** What the GM is told to do while a token image uploaded again waits for them. */
@@ -165,6 +188,16 @@ function editFieldsOf(
       fields: [
         ["currentHp", event.currentHp],
         ["maxHp", event.maxHp],
+      ],
+    };
+  if (event.type === "monster-changed")
+    return {
+      id: event.id,
+      fields: [
+        ["currentHp", event.currentHp],
+        ["maxHp", event.maxHp],
+        ["armorClass", event.armorClass],
+        ["initiative", event.initiative],
       ],
     };
   if (event.type !== "instance-changed") return undefined;
@@ -266,6 +299,17 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * through `onOverride`, as is a snapshot that pushes a Stat Bubbles field over
  * a different token value.
  *
+ * An `mcp` `monster-changed` event redraws its instance's token for the new
+ * monster type in the next reconcile, once, after the renames and moves: an
+ * image token takes the type's art (the picker opens for a type with no art,
+ * as for a new token; without a pick it keeps its own picture), a circle stays
+ * a circle, both at the new footprint and scale 1, in place and with their
+ * visibility; a reconcile that fails keeps the redraw for the retry. A
+ * snapshot whose monster type differs from the one a token was last drawn for
+ * redraws it the same way (see planSync). A redraw over a token whose art or
+ * size had been changed on the table, or that has no recorded look, is
+ * reported through `onOverride` once its write succeeds.
+ *
  * An instance that leaves the encounter (a `removed` or `cleared` event) is
  * dropped from the placed record before the next reconcile plans, so one that
  * comes back before then (a restore) gets a new token instead of being reported
@@ -288,9 +332,10 @@ export function createEncounterSync(
     onWaitingChange?: (waiting: number) => void;
     /**
      * Called once per Stat Bubbles field a snapshot pushed over a different
-     * token value, and once per agent move, in any reconcile, of a token the
-     * GM had moved (or one with no recorded position), with the record to
-     * show.
+     * token value, once per agent move, in any reconcile, of a token the GM
+     * had moved (or one with no recorded position), and once per redraw for a
+     * new monster type of a token whose art or size the table had changed (or
+     * one with no recorded look), with the record to show.
      */
     onOverride?: (text: string) => void;
     /** Called once per store change (a snapshot or an applied `mcp` event) for each table value that could not be read back. */
@@ -373,6 +418,9 @@ export function createEncounterSync(
   // Instances whose spawn position an `mcp` event set since the last
   // successful reconcile: their tokens are moved there.
   let moves = new Set<string>();
+  // Instances an `mcp` event changed to another monster type since the last
+  // successful reconcile: their tokens are redrawn for it.
+  let restyles = new Set<string>();
   // Instances that left the encounter (a `removed` or `cleared` event, either
   // origin) since the last successful reconcile: they are dropped from the
   // placed record before planning, so one that came back gets a new token
@@ -405,18 +453,20 @@ export function createEncounterSync(
   }
 
   /**
-   * The facts, moves and departures of a reconcile that did not go through,
-   * under the newer ones.
+   * The facts, moves, redraws and departures of a reconcile that did not go
+   * through, under the newer ones.
    */
   function restore(
     taken: Facts,
     takenMoves: ReadonlySet<string>,
+    takenRestyles: ReadonlySet<string>,
     takenLeft: ReadonlySet<string>,
     snapshot: boolean,
   ): void {
     for (const [id, earlier] of taken)
       facts.set(id, new Map([...earlier, ...(facts.get(id) ?? [])]));
     for (const id of takenMoves) moves.add(id);
+    for (const id of takenRestyles) restyles.add(id);
     for (const id of takenLeft) left.add(id);
     afterSnapshot ||= snapshot;
   }
@@ -798,6 +848,7 @@ export function createEncounterSync(
     wanted: EncounterInstance[],
     taken: Facts,
     takenMoves: ReadonlySet<string>,
+    takenRestyles: ReadonlySet<string>,
     takenLeft: ReadonlySet<string>,
     snapshot: boolean,
   ): Promise<SyncPlan> {
@@ -817,9 +868,10 @@ export function createEncounterSync(
       art: usableArt(),
       fields: fieldContexts(taken),
       moves: takenMoves,
+      restyles: takenRestyles,
     });
     // Ask once per new monster type, before anything is written, so its
-    // tokens are created once with the right look.
+    // tokens are created (or redrawn) once with the right look.
     for (const monsterKey of first.needsArt) {
       // A type that needs art yet has stored art has art without a url (art
       // with one is usable unless declined). It is published below from its
@@ -839,7 +891,7 @@ export function createEncounterSync(
         void storePicked(monsterKey, chosen, options.storeImage);
     }
     // Likewise, stored art whose Owlbear asset is gone, or that has no url,
-    // is published before its tokens are created.
+    // is published before its tokens are created or its image tokens redrawn.
     if (options.loadImage !== undefined) {
       const monsterKeyOf = new Map(wanted.map((i) => [i.id, i.monsterKey]));
       const gettingTokens = new Set<string>();
@@ -847,6 +899,16 @@ export function createEncounterSync(
         const monsterKey = monsterKeyOf.get(instanceIdOf(item) ?? "");
         if (monsterKey !== undefined) gettingTokens.add(monsterKey);
       }
+      for (const { id } of first.restyle) {
+        const token = items.find((item) => item.id === id);
+        if (token?.type !== "IMAGE") continue;
+        const monsterKey = monsterKeyOf.get(instanceIdOf(token) ?? "");
+        if (monsterKey !== undefined) gettingTokens.add(monsterKey);
+      }
+      // A redrawn image token whose type has no drawable art keeps its own
+      // picture, so it may need no write; its type's stored art is still
+      // published.
+      for (const monsterKey of first.needsArt) gettingTokens.add(monsterKey);
       await checkStoredArt(gettingTokens, options.loadImage);
     }
     if (artStepRan) {
@@ -863,7 +925,22 @@ export function createEncounterSync(
       art: usableArt(),
       fields: fieldContexts(taken),
       moves: takenMoves,
+      restyles: takenRestyles,
     });
+    /** Reports the notes of a token write of this kind once it is written. */
+    const reportWriteNotes = (
+      tokenId: string,
+      kind: "move" | "restyle",
+    ): void => {
+      const token = items.find((item) => item.id === tokenId);
+      const instanceId = token === undefined ? undefined : instanceIdOf(token);
+      for (const override of plan.overrides)
+        if (
+          override.instanceId === instanceId &&
+          writeNoteKind(wanted, override) === kind
+        )
+          options.onOverride?.(override.message);
+    };
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
     // Before the metadata write, so a failed rename leaves the baseline
@@ -875,11 +952,13 @@ export function createEncounterSync(
     // a reconcile that fails later finds the token moved and plans no note.
     for (const m of plan.move) {
       await write(() => obr.updateItems([m.id], { position: m.position }));
-      const token = items.find((item) => item.id === m.id);
-      const instanceId = token === undefined ? undefined : instanceIdOf(token);
-      for (const override of plan.overrides)
-        if (override.instanceId === instanceId && isMoveNote(wanted, override))
-          options.onOverride?.(override.message);
+      reportWriteNotes(m.id, "move");
+    }
+    // Likewise for a redraw: a failed one leaves the look record unwritten,
+    // and its note is reported once its write succeeds.
+    for (const r of plan.restyle) {
+      await write(() => obr.updateItems([r.id], r.patch));
+      reportWriteNotes(r.id, "restyle");
     }
     if (plan.update.length > 0)
       await write(() => obr.setItemMetadata(plan.update));
@@ -912,17 +991,26 @@ export function createEncounterSync(
     // Facts that arrive while this reconcile applies are for the next one.
     const taken = facts;
     const takenMoves = moves;
+    const takenRestyles = restyles;
     const takenLeft = left;
     const snapshot = afterSnapshot;
     facts = new Map();
     moves = new Set();
+    restyles = new Set();
     left = new Set();
     afterSnapshot = false;
     let plan: SyncPlan;
     try {
-      plan = await apply(applying, taken, takenMoves, takenLeft, snapshot);
+      plan = await apply(
+        applying,
+        taken,
+        takenMoves,
+        takenRestyles,
+        takenLeft,
+        snapshot,
+      );
     } catch (error) {
-      restore(taken, takenMoves, takenLeft, snapshot);
+      restore(taken, takenMoves, takenRestyles, takenLeft, snapshot);
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
       try {
@@ -944,9 +1032,10 @@ export function createEncounterSync(
     appliedCount = applying.length;
     if (!quiet || recovered) onApplied();
     if (outbox !== undefined) holdEdits(plan.edits);
-    // Move notes were reported as their moves were written (see apply).
+    // Move and redraw notes were reported as their writes were made (see
+    // apply).
     for (const override of plan.overrides)
-      if (!isMoveNote(applying, override))
+      if (writeNoteKind(applying, override) === undefined)
         options.onOverride?.(override.message);
     holdRejections(plan.rejected);
     for (const id of plan.deleted) {
@@ -1035,6 +1124,7 @@ export function createEncounterSync(
         } else {
           noteMoved(event);
           if (event.type === "position-changed") moves.add(event.id);
+          if (event.type === "monster-changed") restyles.add(event.id);
           desired = fold(desired, event);
           reported.clear();
           rejectedReported.clear();
