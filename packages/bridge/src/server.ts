@@ -21,6 +21,7 @@ import {
 import type { AddressInfo } from "node:net";
 import { WebSocketServer, type WebSocket } from "ws";
 import {
+  MAX_MESSAGE_BYTES,
   PROTOCOL_VERSION,
   TOKEN_IMAGE_UPLOAD_PATH,
   decodeMessage,
@@ -55,6 +56,7 @@ const CONTENT_TYPES: Record<string, string> = {
 
 const MAX_QUERY_BODY_BYTES = 1024 * 1024;
 const DEFAULT_QUERY_TIMEOUT_MS = 5000;
+const DEFAULT_MAP_IMAGE_TIMEOUT_MS = 30000;
 
 const ALLOWED_ORIGINS = new Set([
   "https://www.owlbear.rodeo",
@@ -71,10 +73,23 @@ export interface BridgeServerOptions {
   token?: string;
   /** Message sent to a client right after each `hello-ack`, so it converges on current state. */
   snapshot?: () => BridgeMessage;
+  /**
+   * Message sent right after the snapshot that follows each `hello-ack`; a
+   * throw is logged with `console.error` and nothing is sent.
+   */
+  mapRooms?: () => BridgeMessage;
   /** Bearer secret for `POST /agent/query`. Defaults to a random one. */
   agentToken?: string;
-  /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
+  /**
+   * How long `POST /agent/query` waits for the client's reply to every query
+   * but `map-image`. Default 5000.
+   */
   queryTimeoutMs?: number;
+  /**
+   * How long `POST /agent/query` waits for a `map-image` reply, which fetches
+   * and encodes an image. Default 30000.
+   */
+  mapImageTimeoutMs?: number;
   /** Removes an instance from the store when the GM deletes its token on the table. */
   removeInstance?: (instanceId: string, commandId: string) => WriteBackResult;
   /** Stores the art the GM picked for a monster type. */
@@ -149,6 +164,7 @@ interface Hooks {
   token: string;
   pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
+  mapRooms: (() => BridgeMessage) | undefined;
   removeInstance:
     ((instanceId: string, commandId: string) => WriteBackResult) | undefined;
   setTokenArt: ((monsterKey: string, art: TokenArt) => void) | undefined;
@@ -171,6 +187,19 @@ function sendSnapshot(ws: WebSocket, hooks: Hooks): void {
       ),
     );
   }
+}
+
+/** Sends the active map's rooms, if configured; a failing read is logged and nothing is sent. */
+function sendMapRooms(ws: WebSocket, hooks: Hooks): void {
+  if (!hooks.mapRooms) return;
+  let message: BridgeMessage;
+  try {
+    message = hooks.mapRooms();
+  } catch (e) {
+    console.error("map-rooms could not be read after hello-ack", e);
+    return;
+  }
+  send(ws, message);
 }
 
 /**
@@ -225,6 +254,7 @@ function handleMessage(
         payload: { serverVersion: SERVER_VERSION },
       });
       sendSnapshot(ws, hooks);
+      sendMapRooms(ws, hooks);
       break;
     case "token-deleted": {
       if (!hooks.removeInstance) {
@@ -374,8 +404,10 @@ export async function startBridgeServer(
     host = "127.0.0.1",
     token = randomBytes(32).toString("hex"),
     snapshot,
+    mapRooms,
     agentToken = randomBytes(32).toString("hex"),
     queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS,
+    mapImageTimeoutMs = DEFAULT_MAP_IMAGE_TIMEOUT_MS,
     removeInstance,
     setTokenArt,
     editInstance,
@@ -403,6 +435,8 @@ export async function startBridgeServer(
       });
     }
     const id = randomUUID();
+    const timeoutMs =
+      query.name === "map-image" ? mapImageTimeoutMs : queryTimeoutMs;
     return new Promise((resolve) => {
       const finish = (response: AgentQueryResponse): void => {
         // A leftover timer would only re-run this idempotent cleanup, but it
@@ -417,10 +451,10 @@ export async function startBridgeServer(
             ok: false,
             error: {
               code: "timeout",
-              message: `the Owlbear tab did not reply within ${String(queryTimeoutMs)} ms`,
+              message: `the Owlbear tab did not reply within ${String(timeoutMs)} ms`,
             },
           }),
-        queryTimeoutMs,
+        timeoutMs,
       );
       pending.set(id, { resolve: finish });
       send(target, {
@@ -507,7 +541,7 @@ export async function startBridgeServer(
 
   const wss = new WebSocketServer({
     noServer: true,
-    maxPayload: 1024 * 1024,
+    maxPayload: MAX_MESSAGE_BYTES,
   });
   http.on("upgrade", (req, socket, head) => {
     if (!hostAllowed(req.headers.host)) {
@@ -536,6 +570,7 @@ export async function startBridgeServer(
         token,
         pending,
         snapshot,
+        mapRooms,
         removeInstance,
         setTokenArt,
         editInstance,

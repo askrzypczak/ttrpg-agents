@@ -2,16 +2,22 @@
 // Everything else depends on the narrow ObrAdapter interface so it can be
 // unit-tested against the fake in fake-adapter.ts.
 import OBR, {
+  buildCurve,
   buildImage,
   buildImageUpload,
+  buildLine,
   buildShape,
+  buildText,
+  isImage,
   type Item,
 } from "@owlbear-rodeo/sdk";
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type {
+  ItemBounds,
   ItemPatch,
   Metadata,
   PlayerRole,
+  SceneGrid,
   SceneItem,
   Vec2,
 } from "./scene-model.js";
@@ -35,11 +41,21 @@ export interface ObrAdapter {
     updates: { id: string; key: string; value: unknown }[],
   ): Promise<void>;
   deleteItems(ids: string[]): Promise<void>;
+  /** Adds items only this tab sees (`OBR.scene.local`); nothing reaches the scene. */
+  addLocalItems(items: SceneItem[]): Promise<void>;
+  /** The local items of this tab, optionally filtered. */
+  getLocalItems(filter?: (item: SceneItem) => boolean): Promise<SceneItem[]>;
+  /** Deletes local items of this tab by id. */
+  deleteLocalItems(ids: string[]): Promise<void>;
   getSceneMetadata(): Promise<Metadata>;
   /** Shallow-merges into existing scene metadata. */
   setSceneMetadata(update: Metadata): Promise<void>;
   /** Scene coordinates of the middle of the GM's current view. */
   getViewportCenter(): Promise<Vec2>;
+  /** The scene grid's dpi and type. */
+  getGrid(): Promise<SceneGrid>;
+  /** The axis-aligned bounds of item `id`, in scene units. */
+  getItemBounds(id: string): Promise<ItemBounds>;
   /**
    * Asks the GM to pick one image from their Owlbear asset library, with
    * `defaultSearch` filled into its search box when given; resolves with its
@@ -75,50 +91,121 @@ export type ImageUpload = { bytes: Uint8Array; mime: string; name: string };
  */
 export type ObrReader = Pick<
   ObrAdapter,
-  "isSceneReady" | "getItems" | "getSceneMetadata" | "getViewportCenter"
+  | "isSceneReady"
+  | "getItems"
+  | "getSceneMetadata"
+  | "getViewportCenter"
+  | "getGrid"
+  | "getItemBounds"
+  | "fetchImage"
 >;
 
 function toItem(item: SceneItem): Item {
-  if (item.type === "SHAPE") {
-    if (!item.shape)
-      throw new Error(`SHAPE item ${item.id} needs a shape spec`);
-    return buildShape()
+  const common = <
+    B extends {
+      id(id: string): B;
+      name(name: string): B;
+      visible(visible: boolean): B;
+      position(position: Vec2): B;
+      metadata(metadata: Metadata): B;
+      layer(layer: NonNullable<SceneItem["layer"]>): B;
+      locked(locked: boolean): B;
+      disableHit(disableHit: boolean): B;
+    },
+  >(
+    builder: B,
+  ): B =>
+    builder
       .id(item.id)
       .name(item.name)
       .visible(item.visible)
       .position(item.position)
       .metadata(item.metadata)
       .layer(item.layer ?? "CHARACTER")
-      .scale(item.scale ?? { x: 1, y: 1 })
-      .shapeType(item.shape.shapeType)
-      .width(item.shape.width)
-      .height(item.shape.height)
-      .build();
+      .locked(item.locked ?? false)
+      .disableHit(item.disableHit ?? false);
+  switch (item.type) {
+    case "SHAPE": {
+      if (!item.shape)
+        throw new Error(`SHAPE item ${item.id} needs a shape spec`);
+      return common(buildShape())
+        .scale(item.scale ?? { x: 1, y: 1 })
+        .shapeType(item.shape.shapeType)
+        .width(item.shape.width)
+        .height(item.shape.height)
+        .build();
+    }
+    case "IMAGE": {
+      if (!item.image || !item.grid)
+        throw new Error(`IMAGE item ${item.id} needs image and grid specs`);
+      return common(buildImage(item.image, item.grid))
+        .scale(item.scale ?? { x: 1, y: 1 })
+        .build();
+    }
+    case "TEXT": {
+      const { text } = item;
+      if (!text) throw new Error(`TEXT item ${item.id} needs a text spec`);
+      return common(buildText())
+        .textType("PLAIN")
+        .plainText(text.plainText)
+        .width(text.width)
+        .height(text.height)
+        .textAlign(text.align)
+        .textAlignVertical(text.alignVertical)
+        .fontSize(text.fontSize)
+        .fillColor(text.fillColor)
+        .strokeColor(text.strokeColor)
+        .strokeWidth(text.strokeWidth)
+        .build();
+    }
+    case "LINE": {
+      const { line } = item;
+      if (!line) throw new Error(`LINE item ${item.id} needs a line spec`);
+      return common(buildLine())
+        .startPosition(line.start)
+        .endPosition(line.end)
+        .strokeColor(line.stroke.color)
+        .strokeWidth(line.stroke.width)
+        .strokeDash(line.stroke.dash)
+        .build();
+    }
+    case "CURVE": {
+      const { curve } = item;
+      if (!curve) throw new Error(`CURVE item ${item.id} needs a curve spec`);
+      return common(buildCurve())
+        .points(curve.points)
+        .tension(0)
+        .closed(true)
+        .fillOpacity(0)
+        .strokeColor(curve.stroke.color)
+        .strokeWidth(curve.stroke.width)
+        .strokeDash(curve.stroke.dash)
+        .build();
+    }
+    default:
+      throw new Error(`adding ${item.type} items is not supported yet`);
   }
-  if (item.type !== "IMAGE")
-    throw new Error(`adding ${item.type} items is not supported yet`);
-  if (!item.image || !item.grid)
-    throw new Error(`IMAGE item ${item.id} needs image and grid specs`);
-  return buildImage(item.image, item.grid)
-    .id(item.id)
-    .name(item.name)
-    .visible(item.visible)
-    .position(item.position)
-    .metadata(item.metadata)
-    .layer(item.layer ?? "CHARACTER")
-    .scale(item.scale ?? { x: 1, y: 1 })
-    .build();
 }
 
+// Read-side fields are copied as given, without reading into them: the e2e fake
+// host serves items that may lack them, and copying an absent field is harmless.
 function fromItem(item: Item): SceneItem {
-  return {
+  const read: SceneItem = {
     id: item.id,
     type: item.type,
     name: item.name,
     visible: item.visible,
     position: { x: item.position.x, y: item.position.y },
     metadata: item.metadata,
+    layer: item.layer,
+    rotation: item.rotation,
+    scale: item.scale,
   };
+  if (isImage(item)) {
+    read.image = item.image;
+    read.grid = item.grid;
+  }
+  return read;
 }
 
 export function createObrAdapter(): ObrAdapter {
@@ -166,6 +253,12 @@ export function createObrAdapter(): ObrAdapter {
       );
     },
     deleteItems: (ids) => OBR.scene.items.deleteItems(ids),
+    addLocalItems: (items) => OBR.scene.local.addItems(items.map(toItem)),
+    getLocalItems: async (filter) => {
+      const items = (await OBR.scene.local.getItems()).map(fromItem);
+      return filter ? items.filter(filter) : items;
+    },
+    deleteLocalItems: (ids) => OBR.scene.local.deleteItems(ids),
     getSceneMetadata: () => OBR.scene.getMetadata(),
     setSceneMetadata: (update) => OBR.scene.setMetadata(update),
     getViewportCenter: async () => {
@@ -177,6 +270,17 @@ export function createObrAdapter(): ObrAdapter {
         x: width / 2,
         y: height / 2,
       });
+    },
+    getGrid: async () => {
+      const [dpi, type] = await Promise.all([
+        OBR.scene.grid.getDpi(),
+        OBR.scene.grid.getType(),
+      ]);
+      return { dpi, type };
+    },
+    getItemBounds: async (id) => {
+      const { min, max } = await OBR.scene.items.getItemBounds([id]);
+      return { min: { x: min.x, y: min.y }, max: { x: max.x, y: max.y } };
     },
     pickImage: async (defaultSearch) => {
       const [picked] = await (defaultSearch === undefined

@@ -1,6 +1,12 @@
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type { ImageUpload, ObrAdapter } from "./obr-adapter.js";
-import { MissingSceneError, SceneModel, type Vec2 } from "./scene-model.js";
+import {
+  MissingSceneError,
+  SceneModel,
+  type ItemBounds,
+  type SceneGrid,
+  type Vec2,
+} from "./scene-model.js";
 
 /**
  * What the fake's image picker answers: art, a cancel (`undefined`), or a
@@ -32,10 +38,18 @@ export function createFakeObr(
     imageAlive?: boolean | ((url: string) => boolean | Promise<boolean>);
     /** The asset upload's outcome (it may throw or reject). Default: resolves. */
     uploadImage?: (image: ImageUpload) => void | Promise<void>;
+    /** The scene grid the fake reports. Default: { dpi: 150, type: "SQUARE" }. */
+    grid?: SceneGrid;
+    /** The local items of this tab (`OBR.scene.local`). Default: a new, empty model. */
+    local?: SceneModel;
+    /** The bounds `getItemBounds` answers, per item id; an id without bounds rejects. */
+    itemBounds?: Record<string, ItemBounds>;
   } = {},
 ): {
   obr: ObrAdapter;
   scene: SceneModel;
+  /** The local items of this tab, apart from the scene's items. */
+  local: SceneModel;
   /** How many times the image picker was opened. */
   pickImageCalls(): number;
   /** The images handed to the asset upload, in order (failed ones too). */
@@ -48,6 +62,8 @@ export function createFakeObr(
     scene.isReady()
       ? Promise.resolve(call())
       : Promise.reject(new MissingSceneError());
+  const grid: SceneGrid = options.grid ?? { dpi: 150, type: "SQUARE" };
+  const local = options.local ?? new SceneModel();
   const obr: ObrAdapter = {
     onReady: (callback) => {
       void Promise.resolve().then(callback);
@@ -68,9 +84,23 @@ export function createFakeObr(
     setItemMetadata: (updates) =>
       whenReady(() => scene.setItemMetadata(updates)),
     deleteItems: (ids) => whenReady(() => scene.deleteItems(ids)),
+    addLocalItems: (items) => whenReady(() => local.addItems(items)),
+    getLocalItems: (filter) => whenReady(() => local.getItems(filter)),
+    deleteLocalItems: (ids) => whenReady(() => local.deleteItems(ids)),
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
+    getGrid: () => whenReady(() => ({ ...grid })),
+    getItemBounds: (id) =>
+      whenReady(() => options.itemBounds?.[id]).then((bounds) => {
+        if (bounds === undefined) {
+          throw new Error(`No bounds for item ${id}`);
+        }
+        return {
+          min: { ...bounds.min },
+          max: { ...bounds.max },
+        };
+      }),
     pickImage: async (defaultSearch) => {
       picks++;
       const pick = options.pickImage;
@@ -97,6 +127,7 @@ export function createFakeObr(
   return {
     obr,
     scene,
+    local,
     pickImageCalls: () => picks,
     uploads: () => [...uploaded],
   };

@@ -2,11 +2,21 @@ import {
   encounterEventSchema,
   monsterInstanceSchema,
   publishedTokenArtSchema,
+  savedRoomSchema,
   tokenArtSchema,
+  type TableMapImage,
+  type TableSceneMap,
+  type TableSceneTokens,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
 export const PROTOCOL_VERSION = 1;
+
+/**
+ * The largest bridge WebSocket message, in bytes: the bridge's `maxPayload`,
+ * and the budget a `map-image` reply is encoded to fit.
+ */
+export const MAX_MESSAGE_BYTES = 1024 * 1024;
 
 // `role` is self-reported by the client and must never be used for
 // authorization; it only drives UI. The `token` is what authenticates a client.
@@ -65,6 +75,13 @@ const tokenArtSetPayload = z.object({
   art: publishedTokenArtSchema,
 });
 
+// Bridge -> extension: the active map's item and its saved rooms, for the
+// overlay; a null item id when no map is in use.
+const mapRoomsPayload = z.object({
+  itemId: z.string().min(1).nullable(),
+  rooms: z.array(savedRoomSchema),
+});
+
 /**
  * A request the agent can make of the table; also the `/agent/query` body.
  *
@@ -74,6 +91,10 @@ const tokenArtSetPayload = z.object({
  */
 export const querySchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status") }),
+  z.object({ name: z.literal("scene-map") }),
+  z.object({ name: z.literal("scene-tokens") }),
+  /** The map image with this item id, drawn with the display grid. */
+  z.object({ name: z.literal("map-image"), itemId: z.string().min(1) }),
 ]);
 
 export const sceneStatusSchema = z.object({
@@ -82,8 +103,58 @@ export const sceneStatusSchema = z.object({
   appliedInstanceCount: z.number().int().min(0),
 });
 
+const vec2 = z.object({ x: z.number(), y: z.number() });
+
+/**
+ * The scene grid and, for each map image, its image size, image grid and
+ * transform. The grid type is a string, not an enum, so a type the table adds
+ * later still decodes.
+ */
+export const sceneMapSchema = z.object({
+  grid: z.object({
+    dpi: z.number().positive(),
+    type: z.string().min(1),
+  }),
+  maps: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      imageWidth: z.number().positive(),
+      imageHeight: z.number().positive(),
+      imageDpi: z.number().positive(),
+      imageOffset: vec2,
+      position: vec2,
+      rotation: z.number(),
+      scale: vec2,
+    }),
+  ),
+}) satisfies z.ZodType<TableSceneMap>;
+
+/**
+ * The axis-aligned bounds, in scene units, of each item on the CHARACTER and
+ * MOUNT layers. A token without numeric min and max corners is rejected; an
+ * empty list is fine.
+ */
+export const sceneTokensSchema = z.object({
+  tokens: z.array(z.object({ bounds: z.object({ min: vec2, max: vec2 }) })),
+}) satisfies z.ZodType<TableSceneTokens>;
+
+/**
+ * One map image drawn as the DM sees it, with the display grid and its
+ * labels: the encoded bytes as base64 and the picture's size in px.
+ */
+export const mapImageSchema = z.object({
+  mimeType: z.enum(["image/webp", "image/jpeg"]),
+  data: z.base64().min(1),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+}) satisfies z.ZodType<TableMapImage>;
+
 export const queryResultSchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
+  z.object({ name: z.literal("scene-map"), result: sceneMapSchema }),
+  z.object({ name: z.literal("scene-tokens"), result: sceneTokensSchema }),
+  z.object({ name: z.literal("map-image"), result: mapImageSchema }),
 ]);
 
 export const agentErrorCodeSchema = z.enum([
@@ -105,6 +176,7 @@ export const agentQueryResponseSchema = z.discriminatedUnion("ok", [
 
 export type Query = z.infer<typeof querySchema>;
 export type SceneStatus = z.infer<typeof sceneStatusSchema>;
+export type SceneMap = z.infer<typeof sceneMapSchema>;
 export type QueryResult = z.infer<typeof queryResultSchema>;
 export type AgentQueryResponse = z.infer<typeof agentQueryResponseSchema>;
 
@@ -178,10 +250,12 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("token-deleted", tokenDeletedPayload),
   envelope("token-art-set", tokenArtSetPayload),
   envelope("instance-edit", instanceEditPayload),
+  envelope("map-rooms", mapRoomsPayload),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
 export type BridgeMessageType = BridgeMessage["type"];
+export type MapRooms = z.infer<typeof mapRoomsPayload>;
 
 const MESSAGE_TYPES: readonly string[] = bridgeMessageSchema.options.map(
   (o) => o.shape.type.value,

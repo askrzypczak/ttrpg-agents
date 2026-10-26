@@ -1,3 +1,11 @@
-export type { TablePort, TableSceneStatus } from "./port.js";
+export type {
+  TableMapImage,
+  TableMapItem,
+  TablePort,
+  TableSceneMap,
+  TableSceneStatus,
+  TableSceneTokens,
+  TableToken,
+} from "./port.js";
 export * from "./errors.js";
 export * from "./status.js";

@@ -1,5 +1,6 @@
 import type {
   EncounterRepository,
+  MapRepository,
   MonsterIndex,
   Rng,
   TablePort,
@@ -10,6 +11,8 @@ export interface ToolContext {
   /** Asks the table (in production the Owlbear GM tab, via the bridge). */
   table: TablePort;
   repo: EncounterRepository;
+  /** Registered maps and the active one. */
+  maps: MapRepository;
   monsters: MonsterIndex;
   rng: Rng;
   now: () => Date;

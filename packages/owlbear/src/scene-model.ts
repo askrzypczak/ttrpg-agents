@@ -4,6 +4,12 @@ export type Metadata = Record<string, unknown>;
 
 export type Vec2 = { x: number; y: number };
 
+/** An item's axis-aligned bounds in scene units. */
+export interface ItemBounds {
+  min: Vec2;
+  max: Vec2;
+}
+
 export type Layer =
   | "MAP"
   | "GRID"
@@ -35,11 +41,50 @@ export interface GridSpec {
   offset: Vec2;
 }
 
+/** The scene grid: its dpi and type (for example "SQUARE"). */
+export interface SceneGrid {
+  dpi: number;
+  type: string;
+}
+
 /** Geometry of a SHAPE item (what the SDK's buildShape needs). */
 export interface ShapeSpec {
   shapeType: "RECTANGLE" | "CIRCLE" | "TRIANGLE" | "HEXAGON";
   width: number;
   height: number;
+}
+
+/** Text of a TEXT item (plain text in a box); the item position is the box's top-left. */
+export interface TextSpec {
+  plainText: string;
+  width: number;
+  height: number;
+  align: "LEFT" | "CENTER" | "RIGHT";
+  alignVertical: "TOP" | "MIDDLE" | "BOTTOM";
+  fontSize: number;
+  fillColor: string;
+  strokeColor: string;
+  strokeWidth: number;
+}
+
+/** How a LINE or CURVE item is stroked; an empty dash is solid. */
+export interface StrokeSpec {
+  color: string;
+  width: number;
+  dash: number[];
+}
+
+/** A LINE item; points are relative to the item position. */
+export interface LineSpec {
+  start: Vec2;
+  end: Vec2;
+  stroke: StrokeSpec;
+}
+
+/** A closed CURVE item with straight edges and no fill; points are relative to the item position. */
+export interface CurveSpec {
+  points: Vec2[];
+  stroke: StrokeSpec;
 }
 
 export interface SceneItem {
@@ -49,16 +94,28 @@ export interface SceneItem {
   visible: boolean;
   position: Vec2;
   metadata: Metadata;
-  /** Required by the real adapter when adding an IMAGE item. */
+  /** Required by the real adapter when adding an IMAGE item; filled on read by the real adapter. */
   image?: ImageSpec;
-  /** Required by the real adapter when adding an IMAGE item. */
+  /** Required by the real adapter when adding an IMAGE item; filled on read by the real adapter. */
   grid?: GridSpec;
   /** Required by the real adapter when adding a SHAPE item. */
   shape?: ShapeSpec;
-  /** Layer when adding. Default: "CHARACTER". */
+  /** Layer when adding. Default: "CHARACTER". Filled on read by the real adapter. */
   layer?: Layer;
-  /** Scale when adding. Default: { x: 1, y: 1 }. */
+  /** Scale when adding. Default: { x: 1, y: 1 }. Filled on read by the real adapter. */
   scale?: Vec2;
+  /** Rotation in degrees. Filled on read by the real adapter. */
+  rotation?: number;
+  /** Required by the real adapter when adding a TEXT item. */
+  text?: TextSpec;
+  /** Required by the real adapter when adding a LINE item. */
+  line?: LineSpec;
+  /** Required by the real adapter when adding a CURVE item. */
+  curve?: CurveSpec;
+  /** Whether the item is locked, when adding. */
+  locked?: boolean;
+  /** Whether the item ignores pointer hits, when adding. */
+  disableHit?: boolean;
 }
 
 export type ItemPatch = Partial<

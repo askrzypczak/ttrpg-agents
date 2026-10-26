@@ -2,6 +2,7 @@ import type { NewMonsterInstance, ChangeOrigin } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
+  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -16,8 +17,14 @@ let ctx: ToolContext;
 
 beforeEach(() => {
   ctx = {
-    table: { sceneStatus: () => Promise.reject(new Error("not stubbed")) },
+    table: {
+      sceneStatus: () => Promise.reject(new Error("not stubbed")),
+      sceneMap: () => Promise.reject(new Error("not stubbed")),
+      sceneTokens: () => Promise.reject(new Error("not stubbed")),
+      mapImage: () => Promise.reject(new Error("not stubbed")),
+    },
     repo: new SqliteEncounterRepository(openDatabase(":memory:")),
+    maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -36,7 +43,7 @@ async function setVisibility(
 }
 
 function text(r: ToolResult): string {
-  return r.content.map((c) => c.text).join("\n");
+  return r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
 }
 
 function seed(...items: NewMonsterInstance[]): void {

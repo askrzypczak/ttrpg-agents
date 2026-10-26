@@ -7,6 +7,7 @@ import type {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
+  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -92,8 +93,12 @@ beforeEach(() => {
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("table not stubbed")),
+      sceneMap: () => Promise.reject(new Error("not stubbed")),
+      sceneTokens: () => Promise.reject(new Error("not stubbed")),
+      mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     repo: recordingRepo(inner, writes),
+    maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),

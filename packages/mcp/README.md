@@ -21,24 +21,32 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 
 ## Tools
 
-| Tool              | Purpose                                                                        |
-| ----------------- | ------------------------------------------------------------------------------ |
-| `search_monsters` | Name search (top 10) with keys                                                 |
-| `get_statblock`   | Markdown statblock by key                                                      |
-| `add_monsters`    | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init               |
-| `list_encounter`  | Encounter in initiative order with HP                                          |
-| `apply_damage`    | Damage by instance id or exact name (clamped at 0)                             |
-| `heal`            | Heal by instance id or exact name (clamped at max)                             |
-| `remove_monsters` | Remove several targets, all-or-nothing                                         |
-| `rename_monster`  | Rename by instance id or exact name; unique, non-empty                         |
-| `set_initiative`  | Set an exact initiative by instance id or exact name; reports before and after |
-| `clear_encounter` | Remove every monster                                                           |
-| `table_status`    | Ask the Owlbear tab for its scene status; reports in sync or not               |
+| Tool                   | Purpose                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `search_monsters`      | Name search (top 10) with keys                                                                                                             |
+| `get_statblock`        | Markdown statblock by key                                                                                                                  |
+| `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init                                                                           |
+| `list_encounter`       | Encounter in initiative order with HP                                                                                                      |
+| `apply_damage`         | Damage by instance id or exact name (clamped at 0)                                                                                         |
+| `heal`                 | Heal by instance id or exact name (clamped at max)                                                                                         |
+| `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                     |
+| `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                     |
+| `set_initiative`       | Set an exact initiative by instance id or exact name; reports before and after                                                             |
+| `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                     |
+| `clear_encounter`      | Remove every monster                                                                                                                       |
+| `table_status`         | Ask the Owlbear tab for its scene status; reports in sync or not                                                                           |
+| `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                            |
+| `set_rooms`            | Name rooms on the map in use by display-cell ranges (confirmed, or proposed); a room named like a saved one replaces it                    |
+| `list_rooms`           | The saved rooms of the map in use with their status and ranges where the map sits now                                                      |
+| `remove_rooms`         | Remove saved rooms by name, all-or-nothing                                                                                                 |
+| `get_map_image`        | Gridded image of the map in use as the DM sees it (an image block) and its grid size; needs the bridge                                     |
+| `propose_rooms`        | Room proposals from ranges read on the map image: each range shrunk by one cell where the room is at least three cells wide; saves nothing |
 
-`table_status` needs the bridge running (`npm run bridge`) and a GM tab open: it
-asks the table through the engine's `TablePort` (wired to the bridge client in
-`src/stdio.ts`), and a stopped bridge, no
-tab or a slow tab come back as `isError` results.
+`table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`, and
+`add_monsters` with a `room` need the bridge running (`npm run bridge`) and a GM
+tab open: they ask the table through the engine's `TablePort` (wired to the bridge
+client in `src/stdio.ts`), and a stopped bridge, no tab or a slow tab come back as
+`isError` results. `remove_rooms` and `propose_rooms` do not ask the table.
 
 Domain errors (unknown monster, ambiguous target, bad amount) come back as
 `isError` results rather than protocol errors.

@@ -14,6 +14,7 @@ const instance = {
   createdAt: 5,
   footprint: 1,
   statsVisible: false,
+  spawnPosition: null,
 };
 
 const art = {

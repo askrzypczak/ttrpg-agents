@@ -30,6 +30,7 @@ const inst = (
   createdAt: n,
   footprint,
   statsVisible: false,
+  spawnPosition: null,
 });
 
 const shadowArt: PublishedTokenArt = {

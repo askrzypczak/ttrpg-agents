@@ -429,6 +429,73 @@ describe("migrations", () => {
     ).toEqual([["i2", 2]]);
     db.close();
   });
+
+  it("a row stored before migration 11 reads with no spawn position", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 10)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 10");
+    db.exec(
+      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+    );
+    db.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, initiative, armor_class, group_id, created_at, footprint, stats_visible)
+       VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200, 1, 0)`,
+    );
+
+    migrate(db);
+
+    const instances = new SqliteEncounterRepository(db).listInstances();
+    expect(instances[0]?.spawnPosition).toBeNull();
+    expect(instances).toEqual([
+      makeTestInstance({
+        currentHp: 9,
+        initiative: 12,
+        armorClass: 13,
+        groupId: "g1",
+        createdAt: 200,
+        spawnPosition: null,
+      }),
+    ]);
+    db.close();
+  });
+
+  it("the spawn columns refuse a row with only one of x and y", () => {
+    const db = openDatabase(":memory:");
+    db.exec(
+      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+    );
+    const insert = (id: string, x: number | null, y: number | null) =>
+      db
+        .prepare(
+          `INSERT INTO monster_instances
+            (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at, spawn_x, spawn_y)
+           VALUES (?, 'e1', 'ogre', ?, 59, 59, 200, ?, ?)`,
+        )
+        .run(id, `Ogre ${id}`, x, y);
+
+    for (const [id, x, y] of [
+      ["i1", 225, null],
+      ["i2", null, 375],
+    ] as const) {
+      let error: unknown;
+      try {
+        insert(id, x, y);
+      } catch (e) {
+        error = e;
+      }
+      // SQLITE_CONSTRAINT_CHECK
+      expect(error).toMatchObject({ errcode: 275 });
+    }
+    insert("i3", 225, 375);
+    expect(
+      new SqliteEncounterRepository(db)
+        .listInstances()
+        .map((i) => [i.id, i.spawnPosition]),
+    ).toEqual([["i3", { x: 225, y: 375 }]]);
+    db.close();
+  });
 });
 
 describe("defaultDbPath", () => {

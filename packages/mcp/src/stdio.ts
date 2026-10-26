@@ -7,6 +7,7 @@ import type { Rng } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
+  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { createServer } from "./server.js";
@@ -14,9 +15,11 @@ import { createServer } from "./server.js";
 const rng: Rng = { nextInt: (maxExclusive) => randomInt(maxExclusive) };
 
 async function main(): Promise<void> {
+  const db = openDatabase();
   const server = createServer({
     table: createBridgeTable(),
-    repo: new SqliteEncounterRepository(openDatabase()),
+    repo: new SqliteEncounterRepository(db),
+    maps: new SqliteMapRepository(db),
     monsters: loadSrdMonsters(),
     rng,
     now: () => new Date(),

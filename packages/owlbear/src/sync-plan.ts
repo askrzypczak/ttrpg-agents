@@ -38,6 +38,7 @@ function cellsGrid(
 /**
  * One position per token, side by side: each token is centred in a slot as
  * wide as its footprint in cells, and the whole row is centred on `center`.
+ * Only new tokens without a spawn position go in the row.
  */
 function rowPositions(footprints: readonly number[], center: Vec2): Vec2[] {
   const total = footprints.reduce((sum, cells) => sum + cells * TOKEN_SIZE, 0);
@@ -382,6 +383,9 @@ function movesEditField(
  * The token name follows the same rule, with its baseline under
  * NAME_BASELINE_KEY in the synced record.
  * `create-only` keys, position and visibility are set at creation only.
+ * A new token is created at its instance's spawn position when it has one;
+ * the others of the batch sit in a row at the viewport centre. An existing
+ * token is never moved.
  * An instance in `context.placed` whose token is missing was deleted by the
  * GM and is not recreated.
  */
@@ -521,11 +525,15 @@ export function planSync(
   const missing = desired.filter(
     (i) => !tokens.has(i.id) && !context.placed.has(i.id),
   );
-  const positions = rowPositions(
-    missing.map((i) => i.footprint),
+  const row = rowPositions(
+    missing.filter((i) => i.spawnPosition == null).map((i) => i.footprint),
     context.viewportCenter,
   );
-  missing.forEach((instance, n) => {
+  let slot = 0;
+  missing.forEach((instance) => {
+    const position = instance.spawnPosition
+      ? { x: instance.spawnPosition.x, y: instance.spawnPosition.y }
+      : row[slot++]!;
     const metadata: Record<string, unknown> = {};
     const synced: Record<string, unknown> = {};
     for (const p of config.projectors) {
@@ -546,7 +554,7 @@ export function planSync(
       id: `ttrpg-instance-${instance.id}`,
       name: instance.displayName,
       visible: false,
-      position: positions[n]!,
+      position,
       metadata,
     });
   });

@@ -84,10 +84,14 @@ export function createBridgeClient(options?: {
 }
 
 /**
- * Driven adapter for the engine's `TablePort`: sends `scene-status` through
- * `client` (default `createBridgeClient()`) and returns the scene counts;
- * any `{ ok: false }` becomes a `TableUnavailableError` with the bridge's
- * message.
+ * Driven adapter for the engine's `TablePort`, over `client` (default
+ * `createBridgeClient()`). `sceneStatus` sends `scene-status` and returns the
+ * scene counts; `sceneMap` sends `scene-map` and returns the scene grid and
+ * map items; `sceneTokens` sends `scene-tokens` and returns each token's
+ * bounds; `mapImage` sends `map-image` with the item id and returns the
+ * gridded map image. For any of them, a `{ ok: false }` becomes a
+ * `TableUnavailableError` with the bridge's message, and so does a result for
+ * another query.
  */
 export function createBridgeTable(
   client: BridgeClient = createBridgeClient(),
@@ -96,9 +100,43 @@ export function createBridgeTable(
     async sceneStatus() {
       const res = await client.query({ name: "scene-status" });
       if (!res.ok) throw new TableUnavailableError(res.error.message);
+      if (res.result.name !== "scene-status")
+        throw new TableUnavailableError(
+          `the table answered "${res.result.name}" to a "scene-status" query`,
+        );
       const { sceneReady, tokenCount, appliedInstanceCount } =
         res.result.result;
       return { sceneReady, tokenCount, appliedInstanceCount };
+    },
+    async sceneMap() {
+      const res = await client.query({ name: "scene-map" });
+      if (!res.ok) throw new TableUnavailableError(res.error.message);
+      if (res.result.name !== "scene-map")
+        throw new TableUnavailableError(
+          `the table answered "${res.result.name}" to a "scene-map" query`,
+        );
+      const { grid, maps } = res.result.result;
+      return { grid, maps };
+    },
+    async sceneTokens() {
+      const res = await client.query({ name: "scene-tokens" });
+      if (!res.ok) throw new TableUnavailableError(res.error.message);
+      if (res.result.name !== "scene-tokens")
+        throw new TableUnavailableError(
+          `the table answered "${res.result.name}" to a "scene-tokens" query`,
+        );
+      const { tokens } = res.result.result;
+      return { tokens };
+    },
+    async mapImage(itemId) {
+      const res = await client.query({ name: "map-image", itemId });
+      if (!res.ok) throw new TableUnavailableError(res.error.message);
+      if (res.result.name !== "map-image")
+        throw new TableUnavailableError(
+          `the table answered "${res.result.name}" to a "map-image" query`,
+        );
+      const { mimeType, data, width, height } = res.result.result;
+      return { mimeType, data, width, height };
     },
   };
 }

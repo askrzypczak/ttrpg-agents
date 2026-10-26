@@ -1,22 +1,34 @@
 import {
   DomainError,
   TargetError,
-  addMonsters,
+  addMonstersInRooms,
   compareByInitiative,
+  formatColumnLabel,
+  getMapImage,
   getTableStatus,
+  listRooms,
+  proposeRooms,
+  removeRooms,
   resolveTargets,
+  setRooms,
   getMonsterByKey,
   searchMonsters,
+  useMap,
   type ChangeOrigin,
   type MonsterInstance,
+  type RoomPlacement,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolContext } from "./context.js";
 import { formatStatblock } from "./statblock.js";
 
+export type ToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
 export interface ToolResult {
   [key: string]: unknown;
-  content: { type: "text"; text: string }[];
+  content: ToolContent[];
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
@@ -164,7 +176,7 @@ const addMonstersTool = defineTool({
   name: "add_monsters",
   annotations: { destructiveHint: false },
   description:
-    "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically.",
+    "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically. A group's optional room places its monsters on free cells of that saved room of the map in use (needs the bridge running).",
   inputSchema: {
     groups: z.array(
       z.object({
@@ -177,6 +189,13 @@ const addMonstersTool = defineTool({
           .describe(
             "Players can see the Stat Bubbles (HP/AC); default false, GM-only",
           ),
+        room: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "A saved room of the map in use, by name (any case); its monsters are placed on free cells in that room. Needs the bridge running.",
+          ),
       }),
     ),
     initiative: z
@@ -184,14 +203,16 @@ const addMonstersTool = defineTool({
       .optional()
       .describe("One roll per group (default) or per monster"),
   },
-  run(ctx, { groups, initiative }) {
-    const result = addMonsters(
+  async run(ctx, { groups, initiative }) {
+    const result = await addMonstersInRooms(
       {
         repo: ctx.repo,
         monsters: ctx.monsters,
         rng: ctx.rng,
         now: ctx.now,
         newGroupId: ctx.newGroupId,
+        table: ctx.table,
+        maps: ctx.maps,
       },
       groups,
       mcpOrigin(ctx),
@@ -208,6 +229,11 @@ const addMonstersTool = defineTool({
           i.initiative,
         ]),
       ),
+      ...placementLines(result.placements, result.instances).flatMap((line) => [
+        "",
+        line,
+      ]),
+      ...(result.moved ? ["", movedLine] : []),
       "",
       "Rolls:",
       ...result.rolls.map(
@@ -215,7 +241,12 @@ const addMonstersTool = defineTool({
           `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
       ),
     ].join("\n");
-    return ok(text, { instances: result.instances, rolls: result.rolls });
+    return ok(text, {
+      instances: result.instances,
+      rolls: result.rolls,
+      placements: result.placements,
+      moved: result.moved,
+    });
   },
 });
 
@@ -405,6 +436,194 @@ const tableStatusTool = defineTool({
   },
 });
 
+const useMapTool = defineTool({
+  name: "use_map",
+  annotations: { destructiveHint: false },
+  description:
+    "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the active map. Needs the bridge running.",
+  inputSchema: { name: z.string().min(1).optional() },
+  async run(ctx, { name }) {
+    const { map, cols, rows } = await useMap(ctx.table, ctx.maps, name);
+    return ok(
+      `Using ${map.name}: ${String(cols)} x ${String(rows)} cells, columns A-${formatColumnLabel(cols - 1)} left to right, rows 1-${String(rows)} top to bottom.`,
+      { itemId: map.itemId, name: map.name, cols, rows },
+    );
+  },
+});
+
+const setRoomsTool = defineTool({
+  name: "set_rooms",
+  annotations: { destructiveHint: true },
+  description:
+    "Name rooms on the map in use by display-cell ranges such as T5:AB11; a room with several ranges (an L shape) lists each. A room named like a saved one (ignoring case) replaces it. Status is confirmed unless given as proposed. Reads where the map sits now; needs the bridge running.",
+  inputSchema: {
+    rooms: z
+      .array(
+        z.object({
+          name: z.string().min(1),
+          ranges: z.array(z.string().min(1)).min(1),
+        }),
+      )
+      .min(1),
+    status: z.enum(["confirmed", "proposed"]).optional(),
+  },
+  async run(ctx, { rooms, status }) {
+    const result = await setRooms(ctx.table, ctx.maps, rooms, status);
+    const saved = result.rooms
+      .map((room) => `${room.name} ${room.ranges.join(", ")}`)
+      .join("; ");
+    const text = `Saved ${roomCount(result.rooms.length)} on ${result.map.name} (${result.rooms[0]?.status ?? ""}): ${saved}.`;
+    return ok(withMovedLine(text, result.moved), { ...result });
+  },
+});
+
+const listRoomsTool = defineTool({
+  name: "list_rooms",
+  annotations: { readOnlyHint: true },
+  description:
+    "List the rooms saved for the map in use, with their status and display-cell ranges where the map sits now. Needs the bridge running.",
+  inputSchema: {},
+  async run(ctx) {
+    const result = await listRooms(ctx.table, ctx.maps);
+    const text =
+      result.rooms.length === 0
+        ? `No rooms saved for ${result.map.name} yet.`
+        : `Rooms on ${result.map.name}:\n\n${table(
+            ["Room", "Status", "Cells"],
+            result.rooms.map((room) => [
+              room.name,
+              room.status,
+              room.ranges.length === 0 ? null : room.ranges.join(", "),
+            ]),
+          )}`;
+    return ok(withMovedLine(text, result.moved), { ...result });
+  },
+});
+
+const removeRoomsTool = defineTool({
+  name: "remove_rooms",
+  annotations: { destructiveHint: true },
+  description:
+    "Remove saved rooms from the map in use by name, ignoring case. Every name must match a saved room, or nothing is removed.",
+  inputSchema: { names: z.array(z.string().min(1)).min(1) },
+  run(ctx, { names }) {
+    const result = removeRooms(ctx.maps, names);
+    return ok(
+      `Removed ${roomCount(result.removed.length)} from ${result.map.name}: ${result.removed.join(", ")}.`,
+      { ...result },
+    );
+  },
+});
+
+const getMapImageTool = defineTool({
+  name: "get_map_image",
+  annotations: { readOnlyHint: true },
+  description:
+    "Get an image of the map in use as the DM sees it, with the column letters and row numbers of its display cells drawn on its edges, plus its grid size. Read room interiors from it to propose rooms. Needs the bridge running.",
+  inputSchema: {},
+  async run(ctx) {
+    const { map, cols, rows, moved, image } = await getMapImage(
+      ctx.table,
+      ctx.maps,
+    );
+    const text = withMovedLine(
+      `${map.name}: ${String(cols)} x ${String(rows)} cells, columns A-${formatColumnLabel(cols - 1)} left to right, rows 1-${String(rows)} top to bottom, labelled on the image's edges.`,
+      moved,
+    );
+    return {
+      content: [
+        { type: "image", data: image.data, mimeType: image.mimeType },
+        { type: "text", text },
+      ],
+      structuredContent: {
+        itemId: map.itemId,
+        name: map.name,
+        cols,
+        rows,
+        moved,
+        width: image.width,
+        height: image.height,
+      },
+    };
+  },
+});
+
+const proposeRoomsTool = defineTool({
+  name: "propose_rooms",
+  annotations: { readOnlyHint: true },
+  description:
+    "Turn room interiors read on the map image (display-cell ranges such as T5:AB11) into proposals: each range is shrunk by one cell on every side where the room is at least three cells wide. Saves nothing; save the proposals with set_rooms.",
+  inputSchema: {
+    rooms: z
+      .array(
+        z.object({
+          name: z.string().min(1),
+          ranges: z.array(z.string().min(1)).min(1),
+        }),
+      )
+      .min(1),
+  },
+  run(_ctx, { rooms }) {
+    const proposals = proposeRooms(rooms);
+    const text = `Proposed ${roomCount(proposals.length)} (not saved): ${proposals
+      .map((r) => `${r.name} ${r.ranges.join(", ")}`)
+      .join("; ")}.`;
+    return ok(text, { rooms: proposals });
+  },
+});
+
+/** "1 room" or "2 rooms". */
+function roomCount(n: number): string {
+  return `${String(n)} ${n === 1 ? "room" : "rooms"}`;
+}
+
+const movedLine =
+  "The map moved since it was registered; cells are read where it is now. Use the map again to confirm the new position.";
+
+/**
+ * One "Placed in" line and one "No free cell left" line per group with a
+ * room, in group order; a group's placements are consecutive.
+ */
+function placementLines(
+  placements: readonly RoomPlacement[],
+  instances: readonly { id: string; groupId: string }[],
+): string[] {
+  const groupOf = new Map(instances.map((i) => [i.id, i.groupId] as const));
+  const runs: RoomPlacement[][] = [];
+  let previous: string | undefined;
+  for (const placement of placements) {
+    const group = groupOf.get(placement.id);
+    const last = runs.at(-1);
+    if (last === undefined || group !== previous) runs.push([placement]);
+    else last.push(placement);
+    previous = group;
+  }
+  return runs.flatMap((run) => {
+    const room = run[0]?.room ?? "";
+    const placed = run.filter((p) => p.cell !== null);
+    const unplaced = run.filter((p) => p.cell === null);
+    const lines: string[] = [];
+    if (placed.length > 0) {
+      lines.push(
+        `Placed in ${room}: ${placed.map((p) => `${p.name} at ${String(p.cell)}`).join(", ")}.`,
+      );
+    }
+    if (unplaced.length > 0) {
+      const names = unplaced.map((p) => p.name).join(", ");
+      lines.push(
+        unplaced.length === 1
+          ? `No free cell left in ${room} for ${names}: its token appears in a row at the centre of the GM's view.`
+          : `No free cell left in ${room} for ${names}: their tokens appear in a row at the centre of the GM's view.`,
+      );
+    }
+    return lines;
+  });
+}
+
+function withMovedLine(text: string, moved: boolean): string {
+  return moved ? `${text}\n\n${movedLine}` : text;
+}
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -418,4 +637,10 @@ export const tools: readonly ToolDefinition[] = [
   setStatsVisibilityTool,
   clearEncounterTool,
   tableStatusTool,
+  useMapTool,
+  setRoomsTool,
+  listRoomsTool,
+  removeRoomsTool,
+  getMapImageTool,
+  proposeRoomsTool,
 ];
