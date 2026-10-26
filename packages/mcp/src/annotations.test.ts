@@ -9,6 +9,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   remove_monsters: { destructiveHint: true },
   rename_monster: { destructiveHint: true },
   set_initiative: { destructiveHint: true },
+  roll_initiative: { destructiveHint: true },
   set_hp: { destructiveHint: true },
   set_max_hp: { destructiveHint: true },
   set_armor_class: { destructiveHint: true },

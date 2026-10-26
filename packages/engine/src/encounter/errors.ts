@@ -19,6 +19,14 @@ export class UnknownInstanceError extends DomainError {
   }
 }
 
+/** No monster with that key in the monster index. */
+export class UnknownMonsterError extends DomainError {
+  constructor(message: string) {
+    super("unknown_monster", message);
+    this.name = "UnknownMonsterError";
+  }
+}
+
 /** A display name that is empty or already used by another instance. */
 export class InvalidNameError extends DomainError {
   constructor(message: string) {

@@ -209,4 +209,27 @@ describe("tool write origin", () => {
     expect(writes[0]?.origin.source).toBe("mcp");
     expect(new Set(writes.map((w) => w.origin.commandId)).size).toBe(1);
   });
+
+  it("roll_initiative passes source mcp and one command id to every setInitiative write", async () => {
+    seed("Shadow 1", "Shadow 2", "Shadow 3");
+
+    const result = await call("roll_initiative", {
+      targets: ["Shadow 1", "Shadow 2", "Shadow 3"],
+      mode: "each",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes.map((w) => w.method)).toEqual([
+      "setInitiative",
+      "setInitiative",
+      "setInitiative",
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+    for (const write of writes) {
+      expect(write.origin).toEqual({
+        source: "mcp",
+        commandId: issuedCommandIds[0],
+      });
+    }
+  });
 });
