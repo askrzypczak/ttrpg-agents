@@ -22,6 +22,7 @@ import {
   splitInitiative,
   getMonsterByKey,
   searchMonsters,
+  undoLastCommand,
   useMap,
   type ChangeOrigin,
   type MonsterInstance,
@@ -29,6 +30,8 @@ import {
   type PreviewPlacement,
   type RestoredMonster,
   type RoomPlacement,
+  type UndoChange,
+  type UndoField,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolContext } from "./context.js";
@@ -60,11 +63,6 @@ export interface ToolDefinition {
   handler(ctx: ToolContext, args: unknown): ToolResult | Promise<ToolResult>;
 }
 
-/** The origin of every write in one tool call: source `mcp`, one command id per call. */
-function mcpOrigin(ctx: ToolContext): ChangeOrigin {
-  return { source: "mcp", commandId: ctx.newCommandId() };
-}
-
 function ok(text: string, structured?: Record<string, unknown>): ToolResult {
   const result: ToolResult = { content: [{ type: "text", text }] };
   if (structured) result.structuredContent = structured;
@@ -80,9 +78,14 @@ function defineTool<S extends z.ZodRawShape>(def: {
   description: string;
   inputSchema: S;
   annotations?: ToolAnnotations;
+  /**
+   * `origin()` is the origin of every write in one call: source `mcp`, one
+   * command id minted on first use, and the tool's name as its command.
+   */
   run(
     ctx: ToolContext,
     args: z.infer<z.ZodObject<S>>,
+    origin: () => ChangeOrigin,
   ): ToolResult | Promise<ToolResult>;
 }): ToolDefinition {
   const schema = z.object(def.inputSchema);
@@ -105,8 +108,17 @@ function defineTool<S extends z.ZodRawShape>(def: {
         }
         throw e;
       };
+      let minted: ChangeOrigin | undefined;
+      const origin = (): ChangeOrigin => {
+        minted ??= {
+          source: "mcp",
+          commandId: ctx.newCommandId(),
+          command: def.name,
+        };
+        return minted;
+      };
       try {
-        const result = def.run(ctx, parsed.data);
+        const result = def.run(ctx, parsed.data, origin);
         return result instanceof Promise
           ? result.catch(domainErrorToResult)
           : result;
@@ -228,7 +240,7 @@ const addMonstersTool = defineTool({
   description:
     "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically. A group's optional room places its monsters on free cells of that saved room of the map in use (needs the bridge running). A group's optional join names a monster already in the encounter (id or exact name): its monsters join that monster's initiative group and take its current initiative, without a roll.",
   inputSchema: addMonstersInput,
-  async run(ctx, { groups, initiative }) {
+  async run(ctx, { groups, initiative }, origin) {
     const result = await addMonstersInRooms(
       {
         repo: ctx.repo,
@@ -240,7 +252,7 @@ const addMonstersTool = defineTool({
         maps: ctx.maps,
       },
       groups,
-      mcpOrigin(ctx),
+      origin(),
       initiative === undefined ? {} : { initiative },
     );
     const text = [
@@ -336,7 +348,7 @@ const moveMonstersTool = defineTool({
       .min(1)
       .describe("A saved room of the map in use, by name (any case)."),
   },
-  async run(ctx, { targets, room }) {
+  async run(ctx, { targets, room }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -350,7 +362,7 @@ const moveMonstersTool = defineTool({
       { repo: ctx.repo, table: ctx.table, maps: ctx.maps },
       resolved.map((i) => i.id),
       room,
-      mcpOrigin(ctx),
+      origin(),
     );
     return ok(
       withMovedLine(moveLines(result.placements).join("\n\n"), result.moved),
@@ -406,13 +418,12 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
       ? "Apply damage to a monster (HP clamped at 0). Target is an instance id or exact name."
       : "Heal a monster (HP clamped at max). Target is an instance id or exact name.",
     inputSchema: { target: z.string(), amount: z.number().int().min(0) },
-    run(ctx, { target, amount }) {
+    run(ctx, { target, amount }, origin) {
       const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
       if (!instance) return fail(`Unknown target "${target}"`);
-      const origin = mcpOrigin(ctx);
       const { before, after } = damage
-        ? ctx.repo.applyDamage(instance.id, amount, origin)
-        : ctx.repo.applyHealing(instance.id, amount, origin);
+        ? ctx.repo.applyDamage(instance.id, amount, origin())
+        : ctx.repo.applyHealing(instance.id, amount, origin());
       return ok(
         `${after.displayName}: ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)} HP`,
         { instance: instanceView(after) },
@@ -427,11 +438,11 @@ const setHpTool = defineTool({
   description:
     "Set a monster's current HP to an exact value (clamped to 0..max HP). Target is an instance id or exact name.",
   inputSchema: { target: z.string(), hp: z.number().int() },
-  run(ctx, { target, hp }) {
+  run(ctx, { target, hp }, origin) {
     const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
     // Defensive: resolveTargets throws for an unknown target.
     if (!instance) return fail(`Unknown target "${target}"`);
-    const { before, after } = ctx.repo.setHp(instance.id, hp, mcpOrigin(ctx));
+    const { before, after } = ctx.repo.setHp(instance.id, hp, origin());
     return ok(
       `${after.displayName}: HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
       { instance: instanceView(after), before: instanceView(before) },
@@ -445,15 +456,11 @@ const setMaxHpTool = defineTool({
   description:
     "Set a monster's max HP to an exact value (at least 1); current HP is lowered if above the new max, never raised. Target is an instance id or exact name.",
   inputSchema: { target: z.string(), maxHp: z.number().int() },
-  run(ctx, { target, maxHp }) {
+  run(ctx, { target, maxHp }, origin) {
     const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
     // Defensive: resolveTargets throws for an unknown target.
     if (!instance) return fail(`Unknown target "${target}"`);
-    const { before, after } = ctx.repo.setMaxHp(
-      instance.id,
-      maxHp,
-      mcpOrigin(ctx),
-    );
+    const { before, after } = ctx.repo.setMaxHp(instance.id, maxHp, origin());
     return ok(
       `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
       { instance: instanceView(after), before: instanceView(before) },
@@ -470,7 +477,7 @@ const resetMaxHpTool = defineTool({
     targets: z.array(z.string()).min(1),
     hp: z.enum(["average", "rolled"]),
   },
-  run(ctx, { targets, hp }) {
+  run(ctx, { targets, hp }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -484,7 +491,7 @@ const resetMaxHpTool = defineTool({
       { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
       resolved.map((i) => i.id),
       hp,
-      mcpOrigin(ctx),
+      origin(),
     );
     const lines = result.instances.map(
       ({ before, after }) =>
@@ -512,16 +519,12 @@ const setArmorClassTool = defineTool({
   description:
     "Set a monster's armor class to an exact value (at least 0). Target is an instance id or exact name.",
   inputSchema: { target: z.string(), armorClass: z.number().int() },
-  run(ctx, { target, armorClass }) {
+  run(ctx, { target, armorClass }, origin) {
     const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
     // Defensive: resolveTargets throws for an unknown target.
     if (!instance) return fail(`Unknown target "${target}"`);
     const before = instance.armorClass;
-    const updated = ctx.repo.setArmorClass(
-      instance.id,
-      armorClass,
-      mcpOrigin(ctx),
-    );
+    const updated = ctx.repo.setArmorClass(instance.id, armorClass, origin());
     return ok(
       `${updated.displayName}: AC ${String(before ?? "unset")} -> ${String(updated.armorClass)}`,
       {
@@ -539,7 +542,7 @@ const removeMonstersTool = defineTool({
   description:
     "Remove monsters by instance id or exact name. All targets must resolve, otherwise nothing is removed.",
   inputSchema: { targets: z.array(z.string()).min(1) },
-  run(ctx, { targets }) {
+  run(ctx, { targets }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -551,7 +554,7 @@ const removeMonstersTool = defineTool({
     }
     const removed = ctx.repo.removeInstances(
       resolved.map((i) => i.id),
-      mcpOrigin(ctx),
+      origin(),
     );
     const names = removed.map((i) => i.displayName);
     return ok(`Removed ${String(names.length)}: ${names.join(", ")}`, {
@@ -581,13 +584,13 @@ const restoreMonstersTool = defineTool({
   description:
     "Bring back monsters removed from the encounter, by instance id or exact name, with the HP, initiative and group they had. All targets must resolve, otherwise nothing is restored. list_encounter names what can be restored; a name taken meanwhile gets a new number.",
   inputSchema: { targets: z.array(z.string()).min(1) },
-  run(ctx, { targets }) {
+  run(ctx, { targets }, origin) {
     let restored: RestoredMonster[];
     try {
       restored = restoreMonsters(
         { repo: ctx.repo, monsters: ctx.monsters },
         targets,
-        mcpOrigin(ctx),
+        origin(),
       );
     } catch (e) {
       if (e instanceof DomainError) {
@@ -605,11 +608,11 @@ const renameMonsterTool = defineTool({
   description:
     "Rename a monster. Target is an instance id or exact name; the new name must be non-empty and not used by another monster.",
   inputSchema: { target: z.string(), name: z.string() },
-  run(ctx, { target, name }) {
+  run(ctx, { target, name }, origin) {
     const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
     // Defensive: resolveTargets throws for an unknown target.
     if (!instance) return fail(`Unknown target "${target}"`);
-    const updated = ctx.repo.renameInstance(instance.id, name, mcpOrigin(ctx));
+    const updated = ctx.repo.renameInstance(instance.id, name, origin());
     return ok(`${instance.displayName} renamed to ${updated.displayName}`, {
       instance: instanceView(updated),
     });
@@ -626,7 +629,7 @@ const changeMonsterTypeTool = defineTool({
     monster: z.string(),
     hp: z.enum(["rolled", "average"]).optional(),
   },
-  run(ctx, { targets, monster, hp }) {
+  run(ctx, { targets, monster, hp }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -641,12 +644,10 @@ const changeMonsterTypeTool = defineTool({
       resolved.map((i) => i.id),
       monster,
       hp ?? "rolled",
-      mcpOrigin(ctx),
+      origin(),
     );
-    const orNone = (value: number | null): string =>
-      value === null ? "none" : String(value);
     const lines = result.instances.map(({ before, after, noLongerFits }) => {
-      const line = `${before.displayName} -> ${after.displayName}: HP ${String(before.currentHp)}/${String(before.maxHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}, AC ${orNone(before.armorClass)} -> ${orNone(after.armorClass)}, initiative ${orNone(before.initiative)} -> ${orNone(after.initiative)}`;
+      const line = typeChangeLine(before, after);
       return noLongerFits
         ? `${line}; no longer fits its cell (now ${String(after.footprint)}x${String(after.footprint)} cells)`
         : line;
@@ -676,16 +677,12 @@ const setInitiativeTool = defineTool({
   description:
     "Set a monster's initiative to an exact value. Target is an instance id or exact name.",
   inputSchema: { target: z.string(), initiative: z.number().int() },
-  run(ctx, { target, initiative }) {
+  run(ctx, { target, initiative }, origin) {
     const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
     // Defensive: resolveTargets throws for an unknown target.
     if (!instance) return fail(`Unknown target "${target}"`);
     const before = instance.initiative;
-    const updated = ctx.repo.setInitiative(
-      instance.id,
-      initiative,
-      mcpOrigin(ctx),
-    );
+    const updated = ctx.repo.setInitiative(instance.id, initiative, origin());
     return ok(
       `${updated.displayName}: initiative ${String(before ?? "unset")} -> ${String(updated.initiative)}`,
       { instance: instanceView(updated), before },
@@ -702,7 +699,7 @@ const rollInitiativeTool = defineTool({
     targets: z.array(z.string()).min(1),
     mode: z.enum(["group", "each"]).optional(),
   },
-  run(ctx, { targets, mode }) {
+  run(ctx, { targets, mode }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -715,7 +712,7 @@ const rollInitiativeTool = defineTool({
     const result = rollInitiative(
       { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
       resolved.map((i) => i.id),
-      mcpOrigin(ctx),
+      origin(),
       mode,
     );
     const text = result.instances
@@ -745,7 +742,7 @@ const splitInitiativeTool = defineTool({
     targets: z.array(z.string()).min(1),
     roll: z.boolean().optional(),
   },
-  run(ctx, { targets, roll }) {
+  run(ctx, { targets, roll }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -764,7 +761,7 @@ const splitInitiativeTool = defineTool({
         newGroupId: ctx.newGroupId,
       },
       resolved.map((i) => i.id),
-      mcpOrigin(ctx),
+      origin(),
       { roll: roll === true },
     );
     const text = result.instances
@@ -796,7 +793,7 @@ const mergeInitiativeTool = defineTool({
   description:
     "Put the named monsters into one initiative group, so they act together. Targets are instance ids or exact names; each takes the initiative of the first named monster that has one, without a roll. All targets must resolve, otherwise nothing changes.",
   inputSchema: { targets: z.array(z.string()).min(1) },
-  run(ctx, { targets }) {
+  run(ctx, { targets }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -809,7 +806,7 @@ const mergeInitiativeTool = defineTool({
     const result = mergeInitiative(
       { repo: ctx.repo, newGroupId: ctx.newGroupId },
       resolved.map((i) => i.id),
-      mcpOrigin(ctx),
+      origin(),
     );
     const names = result.instances.map((r) => r.instance.displayName);
     const shared = String(result.initiative ?? "unset");
@@ -836,7 +833,7 @@ const setStatsVisibilityTool = defineTool({
   description:
     "Reveal monsters' stats to players (visible: true) or hide them again (visible: false). Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
   inputSchema: { targets: z.array(z.string()).min(1), visible: z.boolean() },
-  run(ctx, { targets, visible }) {
+  run(ctx, { targets, visible }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -846,9 +843,8 @@ const setStatsVisibilityTool = defineTool({
       }
       throw e;
     }
-    const origin = mcpOrigin(ctx);
     const updated = resolved.map((i) =>
-      ctx.repo.setStatsVisible(i.id, visible, origin),
+      ctx.repo.setStatsVisible(i.id, visible, origin()),
     );
     const names = updated.map((i) => i.displayName).join(", ");
     return ok(
@@ -864,8 +860,8 @@ const clearEncounterTool = defineTool({
   description:
     "Remove every monster from the encounter. The cleared monsters can be brought back with restore_encounter.",
   inputSchema: {},
-  run(ctx) {
-    const cleared = ctx.repo.clearEncounter(mcpOrigin(ctx));
+  run(ctx, _args, origin) {
+    const cleared = ctx.repo.clearEncounter(origin());
     if (cleared.length === 0) {
       return ok("The encounter is already empty; nothing was cleared.", {
         removed: 0,
@@ -888,12 +884,9 @@ const restoreEncounterTool = defineTool({
   description:
     "Bring back every monster the last clear_encounter removed, with the HP, initiative, group and stats visibility they had; their tokens are created again. Monsters added since stay; a name taken meanwhile gets a new number. Fails when nothing cleared is left to restore.",
   inputSchema: {},
-  run(ctx) {
+  run(ctx, _args, origin) {
     return restoredReply(
-      restoreEncounter(
-        { repo: ctx.repo, monsters: ctx.monsters },
-        mcpOrigin(ctx),
-      ),
+      restoreEncounter({ repo: ctx.repo, monsters: ctx.monsters }, origin()),
     );
   },
 });
@@ -902,11 +895,30 @@ const undoTool = defineTool({
   name: "undo",
   annotations: { destructiveHint: true },
   description:
-    "Undo the agent's last encounter change; say it again to go one change further back. Does not undo clear_encounter (use restore_encounter) or map and room changes.",
+    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms) are not undone: when one is the last change, undo says so and changes nothing, and a second undo reverses the encounter change before it.",
   inputSchema: {},
-  run(ctx) {
-    void ctx;
-    throw new Error("not implemented");
+  run(ctx, _args, origin) {
+    const result = undoLastCommand(ctx.repo, origin());
+    switch (result.kind) {
+      case "nothing":
+        return ok("Nothing to undo.", { undone: null, changes: [] });
+      case "not-covered":
+        return ok(
+          `The last change was ${result.command ?? "a map or room change"}, which undo does not cover; say undo again to reverse the encounter change before it.`,
+          { undone: null, notCovered: result.command, changes: [] },
+        );
+      case "undone": {
+        const head = `Undid ${result.command ?? "the last change"}:`;
+        const lines = result.changes.map(undoLine);
+        const text =
+          lines.length === 0
+            ? `${head} nothing had changed.`
+            : lines.length === 1
+              ? `${head} ${lines[0] ?? ""}`
+              : [head, ...lines].join("\n");
+        return ok(text, { undone: result.command, changes: result.changes });
+      }
+    }
   },
 });
 
@@ -944,8 +956,9 @@ const useMapTool = defineTool({
   description:
     "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the active map. Needs the bridge running.",
   inputSchema: { name: z.string().min(1).optional() },
-  async run(ctx, { name }) {
+  async run(ctx, { name }, origin) {
     const { map, cols, rows } = await useMap(ctx.table, ctx.maps, name);
+    ctx.repo.noteCommand(origin());
     return ok(
       `Using ${map.name}: ${String(cols)} x ${String(rows)} cells, columns A-${formatColumnLabel(cols - 1)} left to right, rows 1-${String(rows)} top to bottom.`,
       { itemId: map.itemId, name: map.name, cols, rows },
@@ -969,8 +982,9 @@ const setRoomsTool = defineTool({
       .min(1),
     status: z.enum(["confirmed", "proposed"]).optional(),
   },
-  async run(ctx, { rooms, status }) {
+  async run(ctx, { rooms, status }, origin) {
     const result = await setRooms(ctx.table, ctx.maps, rooms, status);
+    ctx.repo.noteCommand(origin());
     const saved = result.rooms
       .map((room) => `${room.name} ${room.ranges.join(", ")}`)
       .join("; ");
@@ -1008,8 +1022,9 @@ const removeRoomsTool = defineTool({
   description:
     "Remove saved rooms from the map in use by name, ignoring case. Every name must match a saved room, or nothing is removed.",
   inputSchema: { names: z.array(z.string().min(1)).min(1) },
-  run(ctx, { names }) {
+  run(ctx, { names }, origin) {
     const result = removeRooms(ctx.maps, names);
+    ctx.repo.noteCommand(origin());
     return ok(
       `Removed ${roomCount(result.removed.length)} from ${result.map.name}: ${result.removed.join(", ")}.`,
       { ...result },
@@ -1185,6 +1200,102 @@ function moveLines(placements: readonly RoomPlacement[]): string[] {
 
 function withMovedLine(text: string, moved: boolean): string {
   return moved ? `${text}\n\n${movedLine}` : text;
+}
+
+function orNone(value: number | null): string {
+  return value === null ? "none" : String(value);
+}
+
+/** One instance's change of monster type: name, HP, AC and initiative before and after. */
+function typeChangeLine(from: MonsterInstance, to: MonsterInstance): string {
+  return `${from.displayName} -> ${to.displayName}: HP ${String(from.currentHp)}/${String(from.maxHp)} -> ${String(to.currentHp)}/${String(to.maxHp)}, AC ${orNone(from.armorClass)} -> ${orNone(to.armorClass)}, initiative ${orNone(from.initiative)} -> ${orNone(to.initiative)}`;
+}
+
+/** The undo reply line for one change; names are the display names after the undo. */
+function undoLine(change: UndoChange): string {
+  switch (change.kind) {
+    case "removed":
+      return `${change.instance.displayName} removed`;
+    case "restored":
+      return `${change.instance.displayName} restored`;
+    case "reverted":
+      return revertedLine(change.field, change.from, change.to);
+    case "kept-table":
+      return keptTableLine(change.field, change.instance);
+    case "kept-no-value": {
+      const name = change.instance.displayName;
+      switch (change.field) {
+        case "position":
+          return `${name} token not moved back: it had no spawn position`;
+        case "group":
+          return `${name} initiative group not restored: it had none`;
+        case "armorClass":
+          return `${name} AC not restored: it had none`;
+      }
+    }
+  }
+}
+
+function revertedLine(
+  field: Exclude<UndoField, "existence">,
+  from: MonsterInstance,
+  to: MonsterInstance,
+): string {
+  const name = to.displayName;
+  switch (field) {
+    case "type":
+      return typeChangeLine(from, to);
+    case "name":
+      return `${from.displayName} renamed to ${to.displayName}`;
+    case "hp":
+      return from.maxHp === to.maxHp
+        ? `${name} HP ${String(from.currentHp)} -> ${String(to.currentHp)}/${String(to.maxHp)}`
+        : `${name} max HP ${String(from.maxHp)} -> ${String(to.maxHp)}, HP ${String(from.currentHp)} -> ${String(to.currentHp)}/${String(to.maxHp)}`;
+    case "armorClass":
+      return `${name} AC ${orNone(from.armorClass)} -> ${orNone(to.armorClass)}`;
+    case "initiative":
+      return `${name} initiative ${orNone(from.initiative)} -> ${orNone(to.initiative)}`;
+    case "group":
+      return `${name} back in its earlier initiative group`;
+    case "statsVisible":
+      return to.statsVisible
+        ? `${name} stats revealed to players`
+        : `${name} stats hidden from players`;
+    case "position":
+      return `${name} token moved back`;
+  }
+}
+
+function keptTableLine(field: UndoField, instance: MonsterInstance): string {
+  const name = instance.displayName;
+  return field === "existence"
+    ? `${name} was removed at the table; left removed`
+    : `${name} ${tableValue(field, instance)} left as set at the table`;
+}
+
+/** A field as the table left it, for a kept-table line. */
+function tableValue(
+  field: Exclude<UndoField, "existence">,
+  instance: MonsterInstance,
+): string {
+  switch (field) {
+    case "hp":
+      return `HP ${String(instance.currentHp)}/${String(instance.maxHp)}`;
+    case "armorClass":
+      return `AC ${orNone(instance.armorClass)}`;
+    case "initiative":
+      return `initiative ${orNone(instance.initiative)}`;
+    case "type":
+      return "monster type";
+    case "name":
+      return "name";
+    case "group":
+      return "initiative group";
+    case "statsVisible":
+      return "stats visibility";
+    case "position":
+      return "token position";
+  }
 }
 
 /** The list_encounter line for the last clear's monsters: named up to five, else counted. */
