@@ -185,7 +185,7 @@ async function setup(options: { withSend?: boolean } = {}) {
         }),
     onEditRejected: (text) => heard.rejected.push(text),
     onEditDiffers: (text) => heard.notes.push(text),
-    onSnapshotOverride: (text) => heard.overrides.push(text),
+    onOverride: (text) => heard.overrides.push(text),
     onWaitingChange: (waiting) => heard.waiting.push(waiting),
   });
   const feed = createMessageFeed();
@@ -453,7 +453,7 @@ describe("createEncounterSync table edit write-back", () => {
 });
 
 describe("createEncounterSync snapshot overrides", () => {
-  it("the sync calls onSnapshotOverride once per field a snapshot pushed", async () => {
+  it("the sync calls onOverride once per field a snapshot pushed", async () => {
     const { feed, sync, heard } = await setup();
     expect(heard.overrides).toEqual([]);
 
@@ -559,7 +559,7 @@ async function setupWithControls() {
         sent.push(message);
         return true;
       },
-      onSnapshotOverride: (text) => heard.overrides.push(text),
+      onOverride: (text) => heard.overrides.push(text),
       onEditDiffers: (text) => heard.notes.push(text),
     },
   );

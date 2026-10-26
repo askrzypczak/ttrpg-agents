@@ -37,9 +37,10 @@
     <p id="edit-note"></p>
     <div id="overrides" hidden>
       <p>
-        Store values written over the table by a snapshot (connect, reconnect or
-        a skipped change); a snapshot cannot tell an MCP change made meanwhile
-        from a clamped value:
+        Table values written over: by a snapshot (connect, reconnect or a
+        skipped change), which cannot tell an MCP change made meanwhile from a
+        clamped value, or by an agent move of a token that had been moved on the
+        table:
       </p>
       <ul id="overrides-list"></ul>
       <button id="dismiss-overrides">Dismiss</button>
