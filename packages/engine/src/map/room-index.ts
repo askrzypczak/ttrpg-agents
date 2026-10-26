@@ -102,6 +102,38 @@ export async function setRooms(
   };
 }
 
+/** A proposed room with its ranges shrunk, in display cells ("U6:AA10"). */
+export interface RoomProposal {
+  name: string;
+  ranges: string[];
+}
+
+/**
+ * Checks rooms like setRooms and shrinks each range by one cell at both ends
+ * of every axis it spans three or more cells on; reads and stores nothing.
+ */
+export function proposeRooms(rooms: readonly RoomInput[]): RoomProposal[] {
+  return parseRooms(rooms).map((room) => ({
+    name: room.name,
+    ranges: room.ranges.map((range) => formatCellRange(shrink(range))),
+  }));
+}
+
+/** The range with one cell cut from each end of every axis it spans three or more cells on. */
+function shrink(range: CellRange): CellRange {
+  const [fromCol, toCol] = shrinkAxis(range.from.col, range.to.col);
+  const [fromRow, toRow] = shrinkAxis(range.from.row, range.to.row);
+  return {
+    from: { col: fromCol, row: fromRow },
+    to: { col: toCol, row: toRow },
+  };
+}
+
+/** The first and last index left on one axis: cut by one at each end when the span is three or more cells. */
+function shrinkAxis(from: number, to: number): [number, number] {
+  return to - from + 1 >= 3 ? [from + 1, to - 1] : [from, to];
+}
+
 /** The saved rooms of the map in use, with their ranges under its live transform. */
 export async function listRooms(
   table: Pick<TablePort, "sceneMap">,

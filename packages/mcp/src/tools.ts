@@ -4,8 +4,10 @@ import {
   addMonstersInRooms,
   compareByInitiative,
   formatColumnLabel,
+  getMapImage,
   getTableStatus,
   listRooms,
+  proposeRooms,
   removeRooms,
   resolveTargets,
   setRooms,
@@ -20,9 +22,13 @@ import { z } from "zod";
 import type { ToolContext } from "./context.js";
 import { formatStatblock } from "./statblock.js";
 
+export type ToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
 export interface ToolResult {
   [key: string]: unknown;
-  content: { type: "text"; text: string }[];
+  content: ToolContent[];
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
@@ -509,6 +515,63 @@ const removeRoomsTool = defineTool({
   },
 });
 
+const getMapImageTool = defineTool({
+  name: "get_map_image",
+  annotations: { readOnlyHint: true },
+  description:
+    "Get an image of the map in use as the DM sees it, with the column letters and row numbers of its display cells drawn on its edges, plus its grid size. Read room interiors from it to propose rooms. Needs the bridge running.",
+  inputSchema: {},
+  async run(ctx) {
+    const { map, cols, rows, moved, image } = await getMapImage(
+      ctx.table,
+      ctx.maps,
+    );
+    const text = withMovedLine(
+      `${map.name}: ${String(cols)} x ${String(rows)} cells, columns A-${formatColumnLabel(cols - 1)} left to right, rows 1-${String(rows)} top to bottom, labelled on the image's edges.`,
+      moved,
+    );
+    return {
+      content: [
+        { type: "image", data: image.data, mimeType: image.mimeType },
+        { type: "text", text },
+      ],
+      structuredContent: {
+        itemId: map.itemId,
+        name: map.name,
+        cols,
+        rows,
+        moved,
+        width: image.width,
+        height: image.height,
+      },
+    };
+  },
+});
+
+const proposeRoomsTool = defineTool({
+  name: "propose_rooms",
+  annotations: { readOnlyHint: true },
+  description:
+    "Turn room interiors read on the map image (display-cell ranges such as T5:AB11) into proposals: each range is shrunk by one cell on every side where the room is at least three cells wide. Saves nothing; save the proposals with set_rooms.",
+  inputSchema: {
+    rooms: z
+      .array(
+        z.object({
+          name: z.string().min(1),
+          ranges: z.array(z.string().min(1)).min(1),
+        }),
+      )
+      .min(1),
+  },
+  run(_ctx, { rooms }) {
+    const proposals = proposeRooms(rooms);
+    const text = `Proposed ${roomCount(proposals.length)} (not saved): ${proposals
+      .map((r) => `${r.name} ${r.ranges.join(", ")}`)
+      .join("; ")}.`;
+    return ok(text, { rooms: proposals });
+  },
+});
+
 /** "1 room" or "2 rooms". */
 function roomCount(n: number): string {
   return `${String(n)} ${n === 1 ? "room" : "rooms"}`;
@@ -578,4 +641,6 @@ export const tools: readonly ToolDefinition[] = [
   setRoomsTool,
   listRoomsTool,
   removeRoomsTool,
+  getMapImageTool,
+  proposeRoomsTool,
 ];

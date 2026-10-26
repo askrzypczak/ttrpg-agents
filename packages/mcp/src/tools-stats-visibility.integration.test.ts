@@ -43,7 +43,7 @@ async function setVisibility(
 }
 
 function text(r: ToolResult): string {
-  return r.content.map((c) => c.text).join("\n");
+  return r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
 }
 
 function seed(...items: NewMonsterInstance[]): void {
