@@ -11,6 +11,7 @@ import {
   proposeRooms,
   removeRooms,
   resolveTargets,
+  rollInitiative,
   setRooms,
   getMonsterByKey,
   searchMonsters,
@@ -21,7 +22,7 @@ import {
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolContext } from "./context.js";
-import { formatStatblock } from "./statblock.js";
+import { formatStatblock, signed } from "./statblock.js";
 
 export type ToolContent =
   | { type: "text"; text: string }
@@ -334,6 +335,73 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
   });
 }
 
+const setHpTool = defineTool({
+  name: "set_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's current HP to an exact value (clamped to 0..max HP). Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), hp: z.number().int() },
+  run(ctx, { target, hp }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Defensive: resolveTargets throws for an unknown target.
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const { before, after } = ctx.repo.setHp(instance.id, hp, mcpOrigin(ctx));
+    return ok(
+      `${after.displayName}: HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+      { instance: instanceView(after), before: instanceView(before) },
+    );
+  },
+});
+
+const setMaxHpTool = defineTool({
+  name: "set_max_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's max HP to an exact value (at least 1); current HP is lowered if above the new max, never raised. Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), maxHp: z.number().int() },
+  run(ctx, { target, maxHp }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Defensive: resolveTargets throws for an unknown target.
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const { before, after } = ctx.repo.setMaxHp(
+      instance.id,
+      maxHp,
+      mcpOrigin(ctx),
+    );
+    return ok(
+      `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+      { instance: instanceView(after), before: instanceView(before) },
+    );
+  },
+});
+
+const setArmorClassTool = defineTool({
+  name: "set_armor_class",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's armor class to an exact value (at least 0). Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), armorClass: z.number().int() },
+  run(ctx, { target, armorClass }) {
+    const [instance] = resolveTargets(ctx.repo.listInstances(), [target]);
+    // Defensive: resolveTargets throws for an unknown target.
+    if (!instance) return fail(`Unknown target "${target}"`);
+    const before = instance.armorClass;
+    const updated = ctx.repo.setArmorClass(
+      instance.id,
+      armorClass,
+      mcpOrigin(ctx),
+    );
+    return ok(
+      `${updated.displayName}: AC ${String(before ?? "unset")} -> ${String(updated.armorClass)}`,
+      {
+        instance: instanceView(updated),
+        armorClass: updated.armorClass,
+        before,
+      },
+    );
+  },
+});
+
 const removeMonstersTool = defineTool({
   name: "remove_monsters",
   annotations: { destructiveHint: true },
@@ -398,6 +466,49 @@ const setInitiativeTool = defineTool({
       `${updated.displayName}: initiative ${String(before ?? "unset")} -> ${String(updated.initiative)}`,
       { instance: instanceView(updated), before },
     );
+  },
+});
+
+const rollInitiativeTool = defineTool({
+  name: "roll_initiative",
+  annotations: { destructiveHint: true },
+  description:
+    "Roll initiative (1d20 plus the monster's initiative modifier) for monsters already in the encounter, replacing any value they have. Targets are instance ids or exact names. mode group (default): named monsters of one group share one roll; each: one roll per monster. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    mode: z.enum(["group", "each"]).optional(),
+  },
+  run(ctx, { targets, mode }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = rollInitiative(
+      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+      resolved.map((i) => i.id),
+      mcpOrigin(ctx),
+      mode,
+    );
+    const text = result.instances
+      .map(
+        (r) =>
+          `${r.instance.displayName}: initiative ${String(r.before ?? "unset")} -> ${String(r.instance.initiative)} (d20 ${String(r.roll)}, modifier ${signed(r.modifier)})`,
+      )
+      .join("\n");
+    return ok(text, {
+      instances: result.instances.map((r) => ({
+        ...instanceView(r.instance),
+        before: r.before,
+        roll: r.roll,
+        modifier: r.modifier,
+      })),
+      rolls: result.rolls,
+    });
   },
 });
 
@@ -693,9 +804,13 @@ export const tools: readonly ToolDefinition[] = [
   listEncounterTool,
   hpTool("damage"),
   hpTool("heal"),
+  setHpTool,
+  setMaxHpTool,
+  setArmorClassTool,
   removeMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
+  rollInitiativeTool,
   setStatsVisibilityTool,
   clearEncounterTool,
   tableStatusTool,

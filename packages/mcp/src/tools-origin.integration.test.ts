@@ -148,12 +148,19 @@ describe("tool write origin", () => {
     expect(issuedCommandIds).toHaveLength(1);
   });
 
-  it("apply_damage, heal, remove_monsters, rename_monster, set_initiative, set_stats_visibility and clear_encounter each pass source mcp to the repository", async () => {
+  it("apply_damage, heal, set_hp, set_max_hp, set_armor_class, remove_monsters, rename_monster, set_initiative, set_stats_visibility and clear_encounter each pass source mcp to the repository", async () => {
     seed("Shadow 1", "Shadow 2");
 
     const calls: [string, unknown, string][] = [
       ["apply_damage", { target: "Shadow 1", amount: 3 }, "applyDamage"],
       ["heal", { target: "Shadow 1", amount: 1 }, "applyHealing"],
+      ["set_hp", { target: "Shadow 1", hp: 12 }, "setHp"],
+      ["set_max_hp", { target: "Shadow 1", maxHp: 25 }, "setMaxHp"],
+      [
+        "set_armor_class",
+        { target: "Shadow 1", armorClass: 14 },
+        "setArmorClass",
+      ],
       [
         "rename_monster",
         { target: "Shadow 1", name: "Boss" },
@@ -205,5 +212,28 @@ describe("tool write origin", () => {
     expect(writes).toHaveLength(3);
     expect(writes[0]?.origin.source).toBe("mcp");
     expect(new Set(writes.map((w) => w.origin.commandId)).size).toBe(1);
+  });
+
+  it("roll_initiative passes source mcp and one command id to every setInitiative write", async () => {
+    seed("Shadow 1", "Shadow 2", "Shadow 3");
+
+    const result = await call("roll_initiative", {
+      targets: ["Shadow 1", "Shadow 2", "Shadow 3"],
+      mode: "each",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes.map((w) => w.method)).toEqual([
+      "setInitiative",
+      "setInitiative",
+      "setInitiative",
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+    for (const write of writes) {
+      expect(write.origin).toEqual({
+        source: "mcp",
+        commandId: issuedCommandIds[0],
+      });
+    }
   });
 });
