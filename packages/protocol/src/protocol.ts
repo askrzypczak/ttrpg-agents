@@ -12,7 +12,10 @@ import { z } from "zod";
 
 export const PROTOCOL_VERSION = 1;
 
-/** The largest bridge message, in bytes, either side accepts. */
+/**
+ * The largest bridge WebSocket message, in bytes: the bridge's `maxPayload`,
+ * and the budget a `map-image` reply is encoded to fit.
+ */
 export const MAX_MESSAGE_BYTES = 1024 * 1024;
 
 // `role` is self-reported by the client and must never be used for
@@ -90,9 +93,8 @@ export const querySchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status") }),
   z.object({ name: z.literal("scene-map") }),
   z.object({ name: z.literal("scene-tokens") }),
-  z
-    .object({ name: z.literal("map-image"), itemId: z.string().min(1) })
-    .refine(() => false, "not implemented"),
+  /** The map image with this item id, drawn with the display grid. */
+  z.object({ name: z.literal("map-image"), itemId: z.string().min(1) }),
 ]);
 
 export const sceneStatusSchema = z.object({
@@ -140,14 +142,12 @@ export const sceneTokensSchema = z.object({
  * One map image drawn as the DM sees it, with the display grid and its
  * labels: the encoded bytes as base64 and the picture's size in px.
  */
-export const mapImageSchema = z
-  .object({
-    mimeType: z.enum(["image/webp", "image/jpeg"]),
-    data: z.base64().min(1),
-    width: z.number().int().positive(),
-    height: z.number().int().positive(),
-  })
-  .refine(() => false, "not implemented") satisfies z.ZodType<TableMapImage>;
+export const mapImageSchema = z.object({
+  mimeType: z.enum(["image/webp", "image/jpeg"]),
+  data: z.base64().min(1),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+}) satisfies z.ZodType<TableMapImage>;
 
 export const queryResultSchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
