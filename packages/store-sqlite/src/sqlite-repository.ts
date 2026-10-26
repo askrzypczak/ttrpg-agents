@@ -371,9 +371,31 @@ export class SqliteEncounterRepository implements EncounterRepository {
     positions: readonly { id: string; spawnPosition: Point }[],
     origin: ChangeOrigin,
   ): MonsterInstance[] {
-    void positions;
-    void origin;
-    throw new Error("not implemented");
+    return this.transaction(() => {
+      const existing = this.listInstances();
+      const targets = positions.map(({ id, spawnPosition }) => {
+        const instance = existing.find((i) => i.id === id);
+        if (!instance) throw new UnknownInstanceError(unknownMessage(id));
+        return { instance, spawnPosition };
+      });
+      const update = this.db.prepare(
+        `UPDATE monster_instances SET spawn_x = ?, spawn_y = ?
+         WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      );
+      return targets.map(({ instance, spawnPosition }) => {
+        update.run(spawnPosition.x, spawnPosition.y, instance.id);
+        this.record({
+          type: "position-changed",
+          id: instance.id,
+          spawnPosition: { x: spawnPosition.x, y: spawnPosition.y },
+          origin,
+        });
+        return {
+          ...instance,
+          spawnPosition: { x: spawnPosition.x, y: spawnPosition.y },
+        };
+      });
+    });
   }
 
   clearEncounter(origin: ChangeOrigin): void {
