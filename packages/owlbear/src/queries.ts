@@ -7,7 +7,13 @@ import {
 } from "@ttrpg-agents/protocol";
 import { isOurs, type EncounterSync } from "./encounter-sync.js";
 import { drawMapImageOnCanvas } from "./map-image-canvas.js";
-import type { DrawMapImage } from "./map-image.js";
+import {
+  bytesToBase64,
+  encodeWithinBudget,
+  planMapImage,
+  type DrawMapImage,
+} from "./map-image.js";
+import { mapPlacementOf } from "./overlay-plan.js";
 import { describeError } from "./panel-state.js";
 import type { ObrReader } from "./obr-adapter.js";
 import type { SceneItem } from "./scene-model.js";
@@ -84,8 +90,27 @@ export async function handleQuery(
       };
     }
     case "map-image": {
-      void draw;
-      throw new Error("not implemented");
+      const [sceneGrid, items] = await Promise.all([
+        obr.getGrid(),
+        obr.getItems(),
+      ]);
+      const item = items.find((i) => i.id === query.itemId);
+      const placement = item ? mapPlacementOf(item, sceneGrid) : undefined;
+      if (!item?.image || !placement)
+        throw new Error(`No map image with id "${query.itemId}" on the scene.`);
+      const layout = planMapImage(placement);
+      const bytes = await obr.fetchImage(item.image.url);
+      const convert = await draw({ bytes, mime: item.image.mime }, layout);
+      const encoded = await encodeWithinBudget(convert);
+      return {
+        name: "map-image",
+        result: {
+          mimeType: encoded.mimeType,
+          data: bytesToBase64(encoded.bytes),
+          width: layout.width,
+          height: layout.height,
+        },
+      };
     }
   }
 }
