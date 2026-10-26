@@ -341,6 +341,32 @@ describe("addMonstersInRooms", () => {
     ).toEqual(["C1", "C2"]);
   });
 
+  it("a cell centre within float noise of a token's bounds edge is occupied", async () => {
+    // The edge case above, with each bound nudged just inside the token.
+    const { deps } = setup({
+      rooms: [room("Bar", "A1:C2")],
+      tokens: [
+        {
+          bounds: {
+            min: { x: 250 + 1e-12, y: 150 + 1e-12 },
+            max: { x: 350 - 1e-12, y: 250 - 1e-12 },
+          },
+        },
+      ],
+    });
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "goblin", count: 6, room: "Bar" }],
+      origin,
+    );
+    expect(
+      result.placements
+        .map((p) => p.cell)
+        .filter((c) => c !== null)
+        .sort(),
+    ).toEqual(["C1", "C2"]);
+  });
+
   it("a call with one Large and two Medium monsters in a room puts the Large one on a free 2 x 2 block, at the block's centre", async () => {
     // Room A1:D2 is scene cols 2..5, rows 1..2. Its 2 x 2 blocks are B1:C2
     // centred (400, 200), A1:B2 at (300, 200) and C1:D2 at (500, 200).
