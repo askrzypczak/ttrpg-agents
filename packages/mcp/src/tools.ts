@@ -325,6 +325,17 @@ const removeMonstersTool = defineTool({
   },
 });
 
+const restoreMonstersTool = defineTool({
+  name: "restore_monsters",
+  annotations: { destructiveHint: false },
+  description:
+    "Bring back monsters removed from the encounter, by instance id or exact name, with the HP, initiative and group they had. All targets must resolve, otherwise nothing is restored.",
+  inputSchema: { targets: z.array(z.string()).min(1) },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 const renameMonsterTool = defineTool({
   name: "rename_monster",
   annotations: { destructiveHint: true },
@@ -632,6 +643,7 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("damage"),
   hpTool("heal"),
   removeMonstersTool,
+  restoreMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
   setStatsVisibilityTool,

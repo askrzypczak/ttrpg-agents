@@ -17,6 +17,8 @@ import type {
   HpChange,
   InstanceBuilder,
   MonsterInstance,
+  RemovedInstance,
+  RestoreNamer,
 } from "@ttrpg-agents/engine";
 
 export interface RepositoryOptions {
@@ -199,6 +201,21 @@ export class SqliteEncounterRepository implements EncounterRepository {
       }
       return removed;
     });
+  }
+
+  listRemovedInstances(): RemovedInstance[] {
+    throw new Error("not implemented");
+  }
+
+  restoreInstances(
+    ids: readonly string[],
+    name: RestoreNamer,
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    void ids;
+    void name;
+    void origin;
+    throw new Error("not implemented");
   }
 
   renameInstance(
