@@ -96,6 +96,7 @@ function view(i: MonsterInstance): Record<string, unknown> {
     hp: i.currentHp,
     maxHp: i.maxHp,
     initiative: i.initiative,
+    armorClass: i.armorClass,
   };
 }
 
@@ -291,7 +292,7 @@ describe("set_armor_class", () => {
     expect(text(r)).toBe("Shadow 1: AC 12 -> 15");
     expect(ctx.repo.listInstances()[0]?.armorClass).toBe(15);
     expect(r.structuredContent).toEqual({
-      instance: view(shadow),
+      instance: { ...view(shadow), armorClass: 15 },
       armorClass: 15,
       before: 12,
     });

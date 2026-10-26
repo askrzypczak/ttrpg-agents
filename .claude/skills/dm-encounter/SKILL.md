@@ -25,6 +25,8 @@ The DM is mid-session and wants speed. Turn each sentence into the fewest correc
 
 HP, AC, initiative, rolls, damage totals and attack bonuses come only from tool output. Do not roll dice yourself, do not guess, and do not explain how a total was derived. If the tools cannot produce a number, say so. For "what does X roll to hit", read the statblock with `get_statblock` and quote it; do not roll.
 
+For "what's X's AC?", call `list_encounter` and quote the AC in that monster's row, not `get_statblock`: the row includes changes made with `set_armor_class` or at the table, and the statblock has only the monster type's base AC. A `-` means the monster has no armor class; say so.
+
 ## Spatial and narrative hints
 
 - A named room ("in the taproom", "into the kitchen") goes to that group's `room` in `add_monsters`, as the DM says it (the tool matches saved rooms ignoring case). Several groups can name the same or different rooms in one call.

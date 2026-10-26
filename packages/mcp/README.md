@@ -27,7 +27,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `get_statblock`        | Markdown statblock by key                                                                                                                  |
 | `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init                                                                           |
 | `move_monsters`        | Move monsters (ids or exact names, all-or-nothing) into a saved room, keeping their state; one already in that room avoids its own cells   |
-| `list_encounter`       | Encounter in initiative order with HP, and the removed monsters that can be restored                                                       |
+| `list_encounter`       | Encounter in initiative order with AC and HP, and the removed monsters that can be restored                                                |
 | `apply_damage`         | Damage by instance id or exact name (clamped at 0)                                                                                         |
 | `heal`                 | Heal by instance id or exact name (clamped at max)                                                                                         |
 | `set_hp`               | Set an exact current HP by instance id or exact name (clamped to 0..max); reports before and after                                         |
