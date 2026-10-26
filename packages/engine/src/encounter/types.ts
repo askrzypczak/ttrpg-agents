@@ -21,11 +21,14 @@ export const monsterInstanceSchema = z.object({
   footprint: z.number().int().min(1).default(1),
   /** Whether players see the instance's stats on the table; false = GM-only. */
   statsVisible: z.boolean(),
-  /** Where the token is created on the scene (a cell centre, scene units); null = the default row. */
+  /**
+   * Where a new token for the instance is created, in scene units; null = the
+   * extension's default row. Create-only: an existing token is never moved.
+   */
   spawnPosition: z
     .object({ x: z.number(), y: z.number() })
     .nullable()
-    .optional(),
+    .default(null),
 });
 
 export type MonsterInstance = z.infer<typeof monsterInstanceSchema>;
