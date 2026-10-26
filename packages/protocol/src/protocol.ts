@@ -127,12 +127,7 @@ export const sceneMapSchema = z.object({
  * empty list is fine.
  */
 export const sceneTokensSchema = z.object({
-  tokens: z.array(
-    z.object({
-      // Not implemented: rejects every token until the schema is written.
-      bounds: z.object({ min: vec2, max: vec2 }).refine(() => false),
-    }),
-  ),
+  tokens: z.array(z.object({ bounds: z.object({ min: vec2, max: vec2 }) })),
 }) satisfies z.ZodType<TableSceneTokens>;
 
 export const queryResultSchema = z.discriminatedUnion("name", [
