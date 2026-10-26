@@ -132,7 +132,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the eighteen tools", () => {
+  it("exposes the twenty-one tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -147,7 +147,10 @@ describe("tool registry", () => {
       "remove_rooms",
       "rename_monster",
       "search_monsters",
+      "set_armor_class",
+      "set_hp",
       "set_initiative",
+      "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
       "table_status",

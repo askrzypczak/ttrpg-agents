@@ -298,6 +298,39 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
   });
 }
 
+const setHpTool = defineTool({
+  name: "set_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's current HP to an exact value (clamped to 0..max HP). Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), hp: z.number().int() },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
+const setMaxHpTool = defineTool({
+  name: "set_max_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's max HP to an exact value (at least 1); current HP is lowered if above the new max, never raised. Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), maxHp: z.number().int() },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
+const setArmorClassTool = defineTool({
+  name: "set_armor_class",
+  annotations: { destructiveHint: true },
+  description:
+    "Set a monster's armor class to an exact value (at least 0). Target is an instance id or exact name.",
+  inputSchema: { target: z.string(), armorClass: z.number().int() },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 const removeMonstersTool = defineTool({
   name: "remove_monsters",
   annotations: { destructiveHint: true },
@@ -631,6 +664,9 @@ export const tools: readonly ToolDefinition[] = [
   listEncounterTool,
   hpTool("damage"),
   hpTool("heal"),
+  setHpTool,
+  setMaxHpTool,
+  setArmorClassTool,
   removeMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
