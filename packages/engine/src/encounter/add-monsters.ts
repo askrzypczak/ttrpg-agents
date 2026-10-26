@@ -9,7 +9,10 @@ import { rollMaxHp } from "./max-hp.js";
 import type { ChangeOrigin } from "./origin.js";
 import type { EncounterRepository } from "./repository.js";
 import type { NewMonsterInstance } from "./types.js";
-import { validateAddMonsters } from "./validate-add-monsters.js";
+import {
+  findJoinTargets,
+  validateAddMonsters,
+} from "./validate-add-monsters.js";
 
 export const MAX_GROUP_COUNT = 50;
 
@@ -22,16 +25,22 @@ export interface AddMonstersGroup {
   count: number;
   /** Defaults to `rolled`. */
   hp?: HpMode;
-  /** Reveal the group's stats to players; defaults to false (GM-only). */
+  /** Reveal the group's stats to players; defaults to false (GM-only), or with `join` to the member's value. */
   statsVisible?: boolean;
   /** Spawn positions (scene units) for the group's instances, in order; instances past the last get none. */
   spawnPositions?: readonly Point[];
+  /**
+   * An instance of the active encounter, by id, else by exact display name:
+   * the group's monsters join its initiative group and take its current
+   * initiative (null included) instead of rolling. Absent: a new group.
+   */
+  join?: string;
 }
 
 export interface AddMonstersOptions {
   /** Max instances per group; positive integer. Defaults to `MAX_GROUP_COUNT`. */
   maxGroupCount?: number;
-  /** `group` (default): one initiative roll per group; `each`: one per instance. */
+  /** `group` (default): one initiative roll per group; `each`: one per instance. A group with `join` rolls none. */
   initiative?: InitiativeMode;
 }
 
@@ -57,7 +66,8 @@ export interface AddedInstance {
   ac: number;
   maxHp: number;
   hpMode: HpMode;
-  initiative: number;
+  /** Null only for a monster that joined a member with no initiative. */
+  initiative: number | null;
   groupId: string;
 }
 
@@ -100,7 +110,9 @@ export function createNumberedNaming(): NamingStrategy {
 /**
  * Adds groups of monsters to the active encounter: rolls (or averages) HP and
  * initiative, assigns numbered names, and persists everything in one
- * transaction. All input is validated before any roll or store write.
+ * transaction. A group with `join` takes its member's initiative group and
+ * current initiative instead, and rolls no initiative. All input, and every
+ * `join`, is checked before any roll or store write.
  */
 export function addMonsters(
   deps: AddMonstersDeps,
@@ -119,6 +131,7 @@ export function addMonsters(
     options.maxGroupCount ?? MAX_GROUP_COUNT,
     initiativeMode,
   );
+  const joins = findJoinTargets(repo, groups);
 
   const rolls: RollLogEntry[] = [];
   const hpModes: HpMode[] = [];
@@ -126,12 +139,13 @@ export function addMonsters(
 
   const items: NewMonsterInstance[] = [];
   const saved = repo.addInstances((names) => {
-    for (const group of groups) {
+    for (const [g, group] of groups.entries()) {
       const monster = monsters.byKey.get(group.monster);
       /* v8 ignore next -- validated above */
       if (monster === undefined) continue;
+      const join = joins[g];
       const hpMode = group.hp ?? "rolled";
-      const groupId = newGroupId();
+      const groupId = join?.groupId ?? newGroupId();
       const groupStart = items.length;
 
       for (let n = 0; n < group.count; n++) {
@@ -146,7 +160,7 @@ export function addMonsters(
           armorClass: monster.ac,
           groupId,
           footprint: footprintForSize(monster.size),
-          statsVisible: group.statsVisible ?? false,
+          statsVisible: group.statsVisible ?? join?.statsVisible ?? false,
           spawnPosition: group.spawnPositions?.[n] ?? null,
         });
         hpModes.push(hpMode);
@@ -154,16 +168,20 @@ export function addMonsters(
       }
 
       const groupItems = items.slice(groupStart);
-      const initiative = rollInitiativeValues(
-        { monsters, rng, now },
-        groupItems,
-        initiativeMode,
-      );
-      rolls.push(...initiative.rolls);
-      initiative.outcomes.forEach((outcome, k) => {
-        const item = items[groupStart + k];
-        if (item) item.initiative = outcome.initiative;
-      });
+      if (join === undefined) {
+        const initiative = rollInitiativeValues(
+          { monsters, rng, now },
+          groupItems,
+          initiativeMode,
+        );
+        rolls.push(...initiative.rolls);
+        initiative.outcomes.forEach((outcome, k) => {
+          const item = items[groupStart + k];
+          if (item) item.initiative = outcome.initiative;
+        });
+      } else {
+        for (const item of groupItems) item.initiative = join.initiative;
+      }
     }
     return items;
   }, origin);
@@ -177,7 +195,8 @@ export function addMonsters(
     const ac = acs[i];
     const hpMode = hpModes[i];
     if (
-      item?.initiative == null ||
+      item === undefined ||
+      item.initiative === undefined ||
       item.groupId == null ||
       ac === undefined ||
       hpMode === undefined

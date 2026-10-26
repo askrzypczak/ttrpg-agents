@@ -1,6 +1,6 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
@@ -84,6 +84,13 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 2. When a group had a room, the tool's "Placed in ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present; after a room was proposed live, also the one-line guess (see Proposing rooms).
 3. The statblock, once per NEW monster type: call `get_statblock` for each monster key newly added in this sentence that is not already in the encounter and has not been shown earlier in the conversation. `add_monsters` does not return a statblock. Do not fetch it again when adding more of a type that is already present.
 4. No extra commentary beyond the one-line notes above.
+
+## More or fewer of a monster
+
+- "One more goblin warrior", "2 more shadows" or "make it 3 wolves, not 2", for a monster already in the encounter, grows its group: ONE `add_monsters` call with a group whose `monster` is that monster's key, `count` the number to add, and `join` the exact name (or id) of one monster of that group (the one the DM names, else the lowest-numbered). The new monsters act on that monster's initiative without a roll, show their stats to the players only if it does (set `statsVisible` only when the DM says otherwise), and their names continue the numbering. Add `room` only when the DM names a room.
+- "Make it N" adds the difference between N and how many of that monster the encounter holds. When N is smaller, it is ONE `remove_monsters` call with the highest-numbered ones ("make it 2 wolves" with Wolf 1-3 removes Wolf 3). When N is already the count, say so and change nothing.
+- If you do not know the exact names or the count, call `list_encounter` once first.
+- Then answer as under Output after adding monsters (the type is already present, so no statblock), or relay the `remove_monsters` line verbatim.
 
 ## Damage and healing
 

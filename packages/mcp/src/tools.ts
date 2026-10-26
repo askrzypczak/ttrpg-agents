@@ -185,7 +185,7 @@ const addMonstersTool = defineTool({
   name: "add_monsters",
   annotations: { destructiveHint: false },
   description:
-    "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically. A group's optional room places its monsters on free cells of that saved room of the map in use (needs the bridge running).",
+    "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically. A group's optional room places its monsters on free cells of that saved room of the map in use (needs the bridge running). A group's optional join names a monster already in the encounter (id or exact name): its monsters join that monster's initiative group and take its current initiative, without a roll.",
   inputSchema: {
     groups: z.array(
       z.object({
@@ -205,12 +205,21 @@ const addMonstersTool = defineTool({
           .describe(
             "A saved room of the map in use, by name (any case); its monsters are placed on free cells in that room. Needs the bridge running.",
           ),
+        join: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "A monster already in the encounter, by id or exact name: this group's monsters join its initiative group and take its current initiative (no roll), and its stats visibility unless statsVisible is set",
+          ),
       }),
     ),
     initiative: z
       .enum(["group", "each"])
       .optional()
-      .describe("One roll per group (default) or per monster"),
+      .describe(
+        "One roll per group (default) or per monster; a group with join rolls none",
+      ),
   },
   async run(ctx, { groups, initiative }) {
     const result = await addMonstersInRooms(
@@ -243,12 +252,16 @@ const addMonstersTool = defineTool({
         line,
       ]),
       ...(result.moved ? ["", movedLine] : []),
-      "",
-      "Rolls:",
-      ...result.rolls.map(
-        (r) =>
-          `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
-      ),
+      ...(result.rolls.length > 0
+        ? [
+            "",
+            "Rolls:",
+            ...result.rolls.map(
+              (r) =>
+                `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
+            ),
+          ]
+        : []),
     ].join("\n");
     return ok(text, {
       instances: result.instances,

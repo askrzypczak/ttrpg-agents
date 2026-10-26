@@ -1,13 +1,15 @@
 import { DomainError } from "../errors.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import type { AddMonstersGroup } from "./add-monsters.js";
+import type { EncounterRepository } from "./repository.js";
 
 export type AddMonstersErrorCode =
   | "empty"
   | "unknown_monster"
   | "invalid_count"
   | "invalid_hp"
-  | "invalid_initiative";
+  | "invalid_initiative"
+  | "unknown_group";
 
 export class AddMonstersError extends DomainError {
   declare readonly code: AddMonstersErrorCode;
@@ -67,5 +69,62 @@ export function validateAddMonsters(
         `${where}: hp must be "rolled" or "average", got ${String(group.hp)}`,
       );
     }
+  });
+}
+
+/** What a group with `join` takes from the member it names. */
+export interface JoinTarget {
+  groupId: string;
+  initiative: number | null;
+  /** Used when the group does not set `statsVisible`. */
+  statsVisible: boolean;
+}
+
+/**
+ * Per group, the member its `join` names (instance id first, else exact
+ * display name) among the active encounter's instances, read only when some
+ * group has `join`; undefined for a group without it. Throws AddMonstersError
+ * `unknown_group` when a `join` matches no instance, several by name, or one
+ * with no group.
+ */
+export function findJoinTargets(
+  repo: Pick<EncounterRepository, "listInstances">,
+  groups: readonly AddMonstersGroup[],
+): (JoinTarget | undefined)[] {
+  if (!groups.some((group) => group.join !== undefined)) {
+    return groups.map(() => undefined);
+  }
+  const instances = repo.listInstances();
+  return groups.map((group, i) => {
+    if (group.join === undefined) return undefined;
+    const where = `Group ${String(i + 1)} (${group.monster})`;
+    const byId = instances.find((instance) => instance.id === group.join);
+    const byName = instances.filter(
+      (instance) => instance.displayName === group.join,
+    );
+    const member = byId ?? (byName.length === 1 ? byName[0] : undefined);
+    if (member === undefined) {
+      if (byName.length > 1) {
+        throw new AddMonstersError(
+          "unknown_group",
+          `${where}: several monsters are named "${group.join}"; join by id`,
+        );
+      }
+      throw new AddMonstersError(
+        "unknown_group",
+        `${where}: no monster "${group.join}" in the encounter to join`,
+      );
+    }
+    if (member.groupId === null) {
+      throw new AddMonstersError(
+        "unknown_group",
+        `${where}: "${member.displayName}" is in no initiative group to join`,
+      );
+    }
+    return {
+      groupId: member.groupId,
+      initiative: member.initiative,
+      statsVisible: member.statsVisible,
+    };
   });
 }
