@@ -97,6 +97,7 @@ export type ObrReader = Pick<
   | "getViewportCenter"
   | "getGrid"
   | "getItemBounds"
+  | "fetchImage"
 >;
 
 function toItem(item: SceneItem): Item {

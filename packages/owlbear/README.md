@@ -51,6 +51,21 @@ to `onError` (`main.ts` logs it) and the next trigger redraws from scratch.
 the panel's `#overlay-toggle` ("Show map grid and rooms", on at every load,
 not saved).
 
+## Map image
+
+`src/map-image.ts` is pure: `planMapImage(placement)` lays out the answer to
+a `map-image` query (the engine's display grid in whole-pixel cells inside a
+one-cell margin, long side at most 1600 px, cell lines, column letters and
+row numbers on all four edges, and the transform that draws the source image
+as the DM sees it, clipped to the grid); `encodeWithinBudget(convert)` tries
+WEBP at quality 0.85, 0.7 and 0.5 (JPEG at the same quality when the browser
+answers another type for WEBP) and keeps the first that fits
+`MAP_IMAGE_MAX_BYTES`, the image bytes whose base64 fits the bridge's
+`MAX_MESSAGE_BYTES`; `bytesToBase64` encodes the reply. `src/map-image-canvas.ts`
+(`drawMapImageOnCanvas`) is the only canvas code, browser-only: it draws the
+fetched bytes on an `OffscreenCanvas`. `handleQuery` and `replyToQuery` take
+it as a trailing default parameter, so unit tests pass a fake drawing.
+
 ## Testing
 
 Tests live next to the code as `src/*.test.ts` and run under the root vitest
@@ -137,6 +152,9 @@ Chromium. First time: `npx playwright install chromium`. It is NOT part of
   affected by `failItems`. `overlay.e2e.ts` seeds an active map and a room
   with `seedE2eMap` (`clearE2eMap` after), puts the map image on the fake
   scene, and checks the overlay's local items and the panel toggle.
+  `map-image.e2e.ts` puts a map on the fake scene whose image is served
+  cross-origin with CORS, posts `map-image` to the bridge, and checks that the
+  real extension answers a WEBP of the planned size.
 - Test-only workarounds (`fixtures.ts`, `playwright.config.ts`): the bridge's
   `frame-ancestors` CSP is rewritten to allow the harness origin, and
   Chromium's Local Network Access checks are disabled (a route-fulfilled

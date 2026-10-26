@@ -88,7 +88,8 @@ export function createBridgeClient(options?: {
  * `createBridgeClient()`). `sceneStatus` sends `scene-status` and returns the
  * scene counts; `sceneMap` sends `scene-map` and returns the scene grid and
  * map items; `sceneTokens` sends `scene-tokens` and returns each token's
- * bounds. For any of them, a `{ ok: false }` becomes a
+ * bounds; `mapImage` sends `map-image` with the item id and returns the
+ * gridded map image. For any of them, a `{ ok: false }` becomes a
  * `TableUnavailableError` with the bridge's message, and so does a result for
  * another query.
  */
@@ -126,6 +127,16 @@ export function createBridgeTable(
         );
       const { tokens } = res.result.result;
       return { tokens };
+    },
+    async mapImage(itemId) {
+      const res = await client.query({ name: "map-image", itemId });
+      if (!res.ok) throw new TableUnavailableError(res.error.message);
+      if (res.result.name !== "map-image")
+        throw new TableUnavailableError(
+          `the table answered "${res.result.name}" to a "map-image" query`,
+        );
+      const { mimeType, data, width, height } = res.result.result;
+      return { mimeType, data, width, height };
     },
   };
 }

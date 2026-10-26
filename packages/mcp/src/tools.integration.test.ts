@@ -47,6 +47,7 @@ beforeEach(() => {
         Promise.reject(new Error("table not stubbed in this test")),
       sceneMap: () => Promise.reject(new Error("not stubbed")),
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
+      mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
       now: () => tick++,
@@ -72,6 +73,7 @@ function tableAnswering(status: TableSceneStatus): TablePort {
     sceneStatus: () => Promise.resolve(status),
     sceneMap: () => Promise.reject(new Error("not stubbed")),
     sceneTokens: () => Promise.reject(new Error("not stubbed")),
+    mapImage: () => Promise.reject(new Error("not stubbed")),
   };
 }
 
@@ -689,6 +691,7 @@ describe("table_status", () => {
       sceneStatus: () => Promise.reject(new TableUnavailableError(message)),
       sceneMap: () => Promise.reject(new Error("not stubbed")),
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
+      mapImage: () => Promise.reject(new Error("not stubbed")),
     };
     const r = await call("table_status");
     expect(r.isError).toBe(true);
