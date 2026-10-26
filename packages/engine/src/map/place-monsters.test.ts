@@ -1035,4 +1035,21 @@ describe("previewMonstersInRooms", () => {
       expect(previewed.repo.addCalls, c.label).toBe(0);
     }
   });
+
+  it("previewMonstersInRooms with a moved map places with the live transform and flags the move", async () => {
+    // Moved three cells to the right: B1 is now scene cell (6, 1).
+    const live: MapPlacement = { ...placement, position: { x: 500, y: 100 } };
+    const groups: RoomGroup[] = [
+      { monster: "goblin", count: 1, room: "Taproom" },
+    ];
+    const s = setup({ scene: scene(mapItem(live)) });
+    const preview = await previewMonstersInRooms(previewDeps(s), groups);
+    const added = await addMonstersInRooms(s.deps, groups, origin);
+
+    expect(preview.moved).toBe(true);
+    expect(preview.placements.map((p) => p.cell)).toEqual(
+      added.placements.map((p) => p.cell),
+    );
+    expect(preview.placements.map((p) => p.cell)).toEqual(["B1"]);
+  });
 });

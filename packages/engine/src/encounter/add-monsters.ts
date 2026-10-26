@@ -12,6 +12,7 @@ import type { NewMonsterInstance } from "./types.js";
 import {
   findJoinTargets,
   validateAddMonsters,
+  type JoinTarget,
 } from "./validate-add-monsters.js";
 
 export const MAX_GROUP_COUNT = 50;
@@ -139,31 +140,30 @@ export function addMonsters(
 
   const items: NewMonsterInstance[] = [];
   const saved = repo.addInstances((names) => {
-    for (const [g, group] of groups.entries()) {
-      const monster = monsters.byKey.get(group.monster);
-      /* v8 ignore next -- validated above */
-      if (monster === undefined) continue;
-      const join = joins[g];
-      const hpMode = group.hp ?? "rolled";
+    const planned = planAddMonsters(monsters, groups, joins, names, naming);
+    for (const { monster, join, instances } of planned) {
       const groupId = join?.groupId ?? newGroupId();
       const groupStart = items.length;
 
-      for (let n = 0; n < group.count; n++) {
-        const displayName = naming({ monster, existingNames: names });
-        names.push(displayName);
-        const hpRoll = rollMaxHp({ rng, now }, monster.hp, hpMode, displayName);
+      for (const instance of instances) {
+        const hpRoll = rollMaxHp(
+          { rng, now },
+          monster.hp,
+          instance.hpMode,
+          instance.displayName,
+        );
         if (hpRoll.roll !== null) rolls.push(hpRoll.roll);
         items.push({
           monsterKey: monster.key,
-          displayName,
+          displayName: instance.displayName,
           maxHp: hpRoll.maxHp,
           armorClass: monster.ac,
           groupId,
-          footprint: footprintForSize(monster.size),
-          statsVisible: group.statsVisible ?? join?.statsVisible ?? false,
-          spawnPosition: group.spawnPositions?.[n] ?? null,
+          footprint: instance.footprint,
+          statsVisible: instance.statsVisible,
+          spawnPosition: instance.spawnPosition,
         });
-        hpModes.push(hpMode);
+        hpModes.push(instance.hpMode);
         acs.push(monster.ac);
       }
 
@@ -246,10 +246,93 @@ export interface MonstersPreview {
 export function previewMonsters(
   deps: PreviewMonstersDeps,
   groups: readonly AddMonstersGroup[],
-  options?: AddMonstersOptions,
+  options: AddMonstersOptions = {},
 ): MonstersPreview {
-  void deps;
-  void groups;
-  void options;
-  throw new Error("not implemented");
+  const { repo, monsters } = deps;
+  validateAddMonsters(
+    monsters,
+    groups,
+    options.maxGroupCount ?? MAX_GROUP_COUNT,
+    options.initiative ?? "group",
+  );
+  const joins = findJoinTargets(repo, groups);
+  const names = repo.listInstances().map((instance) => instance.displayName);
+  const planned = planAddMonsters(
+    monsters,
+    groups,
+    joins,
+    names,
+    deps.naming ?? createNumberedNaming(),
+  );
+  const instances = planned.flatMap(({ group, monster, join, instances }) =>
+    instances.map((instance): PreviewInstance => ({
+      name: instance.displayName,
+      group,
+      ac: monster.ac,
+      averageHp: monster.hp.average,
+      hpDice: monster.hp.dice,
+      initiativeModifier: monster.initiativeModifier,
+      joins:
+        join === undefined
+          ? null
+          : { name: join.name, initiative: join.initiative },
+      footprint: instance.footprint,
+    })),
+  );
+  return { instances };
+}
+
+/** A group of an add, before anything is rolled. */
+interface PlannedGroup {
+  /** Index of the group in the input. */
+  group: number;
+  monster: Monster;
+  join: JoinTarget | undefined;
+  instances: PlannedInstance[];
+}
+
+/** One would-be instance of a planned group, before anything is rolled. */
+interface PlannedInstance {
+  displayName: string;
+  hpMode: HpMode;
+  footprint: number;
+  statsVisible: boolean;
+  spawnPosition: Point | null;
+}
+
+/**
+ * The roll-free part of an add, per group in input order: its monster, the
+ * member it joins and each instance's name, HP mode, footprint, stats
+ * visibility and spawn position. Names each instance against `names` and
+ * pushes each new name onto it.
+ */
+function planAddMonsters(
+  monsters: MonsterIndex,
+  groups: readonly AddMonstersGroup[],
+  joins: readonly (JoinTarget | undefined)[],
+  names: string[],
+  naming: NamingStrategy,
+): PlannedGroup[] {
+  const planned: PlannedGroup[] = [];
+  for (const [g, group] of groups.entries()) {
+    const monster = monsters.byKey.get(group.monster);
+    /* v8 ignore next -- validated before planning */
+    if (monster === undefined) continue;
+    const join = joins[g];
+    const hpMode = group.hp ?? "rolled";
+    const instances: PlannedInstance[] = [];
+    for (let n = 0; n < group.count; n++) {
+      const displayName = naming({ monster, existingNames: names });
+      names.push(displayName);
+      instances.push({
+        displayName,
+        hpMode,
+        footprint: footprintForSize(monster.size),
+        statsVisible: group.statsVisible ?? join?.statsVisible ?? false,
+        spawnPosition: group.spawnPositions?.[n] ?? null,
+      });
+    }
+    planned.push({ group: g, monster, join, instances });
+  }
+  return planned;
 }
