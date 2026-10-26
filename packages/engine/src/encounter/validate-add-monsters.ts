@@ -1,13 +1,15 @@
 import { DomainError } from "../errors.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import type { AddMonstersGroup } from "./add-monsters.js";
+import type { EncounterRepository } from "./repository.js";
 
 export type AddMonstersErrorCode =
   | "empty"
   | "unknown_monster"
   | "invalid_count"
   | "invalid_hp"
-  | "invalid_initiative";
+  | "invalid_initiative"
+  | "unknown_group";
 
 export class AddMonstersError extends DomainError {
   declare readonly code: AddMonstersErrorCode;
@@ -68,4 +70,28 @@ export function validateAddMonsters(
       );
     }
   });
+}
+
+/** What a group with `join` takes from the member it names. */
+export interface JoinTarget {
+  groupId: string;
+  initiative: number | null;
+  /** Used when the group does not set `statsVisible`. */
+  statsVisible: boolean;
+}
+
+/**
+ * Per group, the member its `join` names (instance id first, else exact
+ * display name) among the active encounter's instances, read only when some
+ * group has `join`; undefined for a group without it. Throws AddMonstersError
+ * `unknown_group` when a `join` matches no instance, several by name, or one
+ * with no group.
+ */
+export function findJoinTargets(
+  repo: Pick<EncounterRepository, "listInstances">,
+  groups: readonly AddMonstersGroup[],
+): (JoinTarget | undefined)[] {
+  void repo;
+  void groups;
+  throw new Error("not implemented");
 }

@@ -634,6 +634,51 @@ describe("addMonstersInRooms", () => {
     expect(repo.addCalls).toBe(0);
   });
 
+  it("a joined group with a room is placed in that room and keeps the member's group and initiative", async () => {
+    const { deps, repo } = setup();
+    repo.addInstances(() => [
+      {
+        monsterKey: "goblin",
+        displayName: "Goblin 1",
+        maxHp: 7,
+        initiative: 15,
+        groupId: "pack",
+      },
+    ]);
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "goblin", count: 2, room: "Attic", join: "Goblin 1" }],
+      origin,
+    );
+    expect(
+      result.instances.map((i) => [i.name, i.groupId, i.initiative]),
+    ).toEqual([
+      ["Goblin 2", "pack", 15],
+      ["Goblin 3", "pack", 15],
+    ]);
+    expect(result.placements.map((p) => [p.name, p.room, p.cell])).toEqual([
+      ["Goblin 2", "Attic", "E5"],
+      ["Goblin 3", "Attic", null],
+    ]);
+    expect(spawnOf(repo, result.instances[0]?.id ?? "")).toEqual(
+      cellCentres["E5"],
+    );
+  });
+
+  it("a join naming no monster in the encounter, in a call with a room, fails before the table is asked", async () => {
+    const { deps, repo, table } = setup();
+    const attempt = addMonstersInRooms(
+      deps,
+      [{ monster: "goblin", count: 1, room: "Taproom", join: "Nobody" }],
+      origin,
+    );
+    await expect(attempt).rejects.toBeInstanceOf(AddMonstersError);
+    await expect(attempt).rejects.toMatchObject({ code: "unknown_group" });
+    expect(table.sceneMapCalls).toBe(0);
+    expect(table.sceneTokensCalls).toBe(0);
+    expect(repo.addCalls).toBe(0);
+  });
+
   it("a group without a room in a call with rooms gets no spawn position and no placement", async () => {
     const { deps, repo } = setup();
     const result = await addMonstersInRooms(

@@ -22,16 +22,22 @@ export interface AddMonstersGroup {
   count: number;
   /** Defaults to `rolled`. */
   hp?: HpMode;
-  /** Reveal the group's stats to players; defaults to false (GM-only). */
+  /** Reveal the group's stats to players; defaults to false (GM-only), or with `join` to the member's value. */
   statsVisible?: boolean;
   /** Spawn positions (scene units) for the group's instances, in order; instances past the last get none. */
   spawnPositions?: readonly Point[];
+  /**
+   * An instance of the active encounter, by id, else by exact display name:
+   * the group's monsters join its initiative group and take its current
+   * initiative (null included) instead of rolling. Absent: a new group.
+   */
+  join?: string;
 }
 
 export interface AddMonstersOptions {
   /** Max instances per group; positive integer. Defaults to `MAX_GROUP_COUNT`. */
   maxGroupCount?: number;
-  /** `group` (default): one initiative roll per group; `each`: one per instance. */
+  /** `group` (default): one initiative roll per group; `each`: one per instance. A group with `join` rolls none. */
   initiative?: InitiativeMode;
 }
 
@@ -57,7 +63,8 @@ export interface AddedInstance {
   ac: number;
   maxHp: number;
   hpMode: HpMode;
-  initiative: number;
+  /** Null only for a monster that joined a member with no initiative. */
+  initiative: number | null;
   groupId: string;
 }
 
