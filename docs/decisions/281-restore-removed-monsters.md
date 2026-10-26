@@ -61,7 +61,7 @@ Issue: [#281](https://github.com/askrzypczak/ttrpg-agents/issues/281). Part of E
   - Accept it with no ticket: leaves a silent removal unrecorded.
 - Where: `apply` in `packages/owlbear/src/encounter-sync.ts` (unchanged here); #291.
 - Revisit if: #291 lands, or a GM hits the race.
-- Status: active
+- Status: superseded by 291.1
 
 ## 281.6 The DM sees what can be restored in `list_encounter`
 

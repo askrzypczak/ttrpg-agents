@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -24,6 +24,8 @@ The DM is mid-session and wants speed. Turn each sentence into the fewest correc
 ## Never invent numbers
 
 HP, AC, initiative, rolls, damage totals and attack bonuses come only from tool output. Do not roll dice yourself, do not guess, and do not explain how a total was derived. If the tools cannot produce a number, say so. For "what does X roll to hit", read the statblock with `get_statblock` and quote it; do not roll.
+
+For "what's X's AC?", call `list_encounter` and quote the AC in that monster's row, not `get_statblock`: the row includes changes made with `set_armor_class` or at the table, and the statblock has only the monster type's base AC. A `-` means the monster has no armor class; say so.
 
 ## Spatial and narrative hints
 
@@ -97,6 +99,13 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 - `set_max_hp` lowers HP above the new max but never raises it. If the DM says the monster is at full HP, call `set_hp` after `set_max_hp`, using the max HP from its reply.
 - Do not call `list_encounter` after the calls. Relay each tool's line verbatim (for example "Goblin Warrior 2: HP 9 -> 4/9", "Wolf 1: max HP 11 -> 15, HP 11 -> 11/15", "Shadow 1: AC 12 -> 15").
 
+## Average or re-rolled max HP
+
+- "Wolf 2 should have average HP" / "change it to average HP" is one `reset_max_hp` call with `hp` "average"; "re-roll the wolf's HP" is the same call with `hp` "rolled". Several monsters ("give the wolves average HP") go in one call's `targets`. Target each monster as under Damage and healing.
+- A number from the DM ("the wolf has 15 max HP") is `set_max_hp`, not this tool.
+- The tool keeps a monster at full HP at full, and a damaged monster keeps its HP (lowered to the new max if above it). Do not call `set_hp` or `set_max_hp` after it.
+- Do not call `list_encounter` after the call. Relay the tool's lines verbatim (for example "Wolf 2: max HP 8 -> 11, HP 8 -> 11/11"), with its Rolls lines after a re-roll.
+
 ## Changing initiative
 
 - "The goblins act on 14" is one `set_initiative` call per goblin, each with `initiative` 14. The tool takes one target, so run the calls in parallel. Target each goblin as under Damage and healing.
@@ -104,6 +113,9 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 - Do not call `list_encounter` after the calls. Relay the tool's line verbatim (for example "Goblin Warrior 1: initiative 12 -> 14").
 - "Re-roll the goblins' initiative" and "roll initiative for the wolves" are ONE `roll_initiative` call with every matching monster in `targets`, targeted as under Damage and healing. Omit `mode`, so monsters of one group share one roll; pass `mode: "each"` only when the DM asks for separate rolls ("roll each goblin separately"). Every named monster is rolled, even one that already has initiative.
 - Do not call `list_encounter` after the call. Relay the tool's lines verbatim (for example "Goblin Warrior 1: initiative 12 -> 9 (d20 7, modifier +2)").
+- "The wolves each act on their own now" or "Goblin Warrior 3 acts alone" is ONE `split_initiative` call with every monster the DM names in `targets`, targeted as under Damage and healing. Each keeps its initiative; pass `roll: true` only when the DM asks for new rolls ("split the wolves and roll for each").
+- "The goblins act together now" or "the wolves act with the goblins" is ONE `merge_initiative` call with every monster of the new group in `targets`: list every member of each group the DM names (a group is its members). Put first the monster whose initiative the group keeps: the one the others join ("with the goblins" puts Goblin Warrior 1 first), otherwise the first the DM names. Nothing is rolled; if the DM also wants a new shared roll, call `roll_initiative` with the same targets after the merge.
+- Do not call `list_encounter` after either call. Relay the tool's lines verbatim (for example "Wolf 1: own initiative group, initiative 14" or "One initiative group: Goblin Warrior 1, Wolf 1, Wolf 2; shared initiative 12.").
 
 ## Showing stats to players
 

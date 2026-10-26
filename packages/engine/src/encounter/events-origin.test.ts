@@ -97,6 +97,7 @@ const eventForMutation: Record<MutationName, EncounterEvent["type"]> = {
   restoreInstances: "added",
   renameInstance: "instance-changed",
   setInitiative: "instance-changed",
+  setGroupId: "instance-changed",
   setHp: "hp-changed",
   setMaxHp: "hp-changed",
   setArmorClass: "instance-changed",

@@ -27,17 +27,20 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `get_statblock`        | Markdown statblock by key                                                                                                                  |
 | `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init                                                                           |
 | `move_monsters`        | Move monsters (ids or exact names, all-or-nothing) into a saved room, keeping their state; one already in that room avoids its own cells   |
-| `list_encounter`       | Encounter in initiative order with HP, and the removed monsters that can be restored                                                       |
+| `list_encounter`       | Encounter in initiative order with AC and HP, and the removed monsters that can be restored                                                |
 | `apply_damage`         | Damage by instance id or exact name (clamped at 0)                                                                                         |
 | `heal`                 | Heal by instance id or exact name (clamped at max)                                                                                         |
 | `set_hp`               | Set an exact current HP by instance id or exact name (clamped to 0..max); reports before and after                                         |
 | `set_max_hp`           | Set an exact max HP by instance id or exact name; HP is lowered if above it, never raised; reports before and after                        |
+| `reset_max_hp`         | Reset max HP (by id or exact name, all-or-nothing) to the statblock average or a new roll; full HP stays full; reports before and after    |
 | `set_armor_class`      | Set an exact armor class by instance id or exact name; reports before and after                                                            |
 | `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                     |
 | `restore_monsters`     | Bring back removed monsters by instance id or exact name, all-or-nothing, with HP and initiative; a taken name gets a new number           |
 | `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                     |
 | `set_initiative`       | Set an exact initiative by instance id or exact name; reports before and after                                                             |
 | `roll_initiative`      | Roll initiative for several monsters by id or exact name (one roll per group, or each); reports roll, modifier, before and after           |
+| `split_initiative`     | Give several monsters their own initiative group each, by id or exact name; keeps each value, or rolls each with `roll`                    |
+| `merge_initiative`     | Put several monsters in one initiative group by id or exact name; each takes the first named monster's initiative, no roll                 |
 | `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                     |
 | `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                |
 | `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number           |

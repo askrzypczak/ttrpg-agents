@@ -10,11 +10,14 @@ import {
   moveMonstersIntoRoom,
   proposeRooms,
   removeRooms,
+  mergeInitiative,
+  resetMaxHp,
   resolveTargets,
   restoreEncounter,
   restoreMonsters,
   rollInitiative,
   setRooms,
+  splitInitiative,
   getMonsterByKey,
   searchMonsters,
   useMap,
@@ -130,6 +133,7 @@ function instanceView(i: MonsterInstance): Record<string, unknown> {
     hp: i.currentHp,
     maxHp: i.maxHp,
     initiative: i.initiative,
+    armorClass: i.armorClass,
   };
 }
 
@@ -293,7 +297,8 @@ const moveMonstersTool = defineTool({
 const listEncounterTool = defineTool({
   name: "list_encounter",
   annotations: { readOnlyHint: true },
-  description: "List the encounter in initiative order (highest first).",
+  description:
+    "List the encounter in initiative order (highest first), with each monster's AC, HP and initiative.",
   inputSchema: {},
   run(ctx) {
     const instances = ctx.repo.listInstances().sort(compareByInitiative);
@@ -304,10 +309,11 @@ const listEncounterTool = defineTool({
       instances.length === 0
         ? "The encounter is empty."
         : table(
-            ["id", "name", "HP", "initiative"],
+            ["id", "name", "AC", "HP", "initiative"],
             instances.map((i) => [
               i.id,
               i.displayName,
+              i.armorClass,
               `${String(i.currentHp)}/${String(i.maxHp)}`,
               i.initiative,
             ]),
@@ -387,6 +393,51 @@ const setMaxHpTool = defineTool({
       `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
       { instance: instanceView(after), before: instanceView(before) },
     );
+  },
+});
+
+const resetMaxHpTool = defineTool({
+  name: "reset_max_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set monsters' max HP to their statblock average (hp average) or a new roll of their HP dice (hp rolled). A monster at full HP stays at full HP; a damaged one keeps its current HP, lowered to the new max if above it. Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    hp: z.enum(["average", "rolled"]),
+  },
+  run(ctx, { targets, hp }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = resetMaxHp(
+      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+      resolved.map((i) => i.id),
+      hp,
+      mcpOrigin(ctx),
+    );
+    const lines = result.instances.map(
+      ({ before, after }) =>
+        `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+    );
+    const rollLines = result.rolls.map(
+      (r) =>
+        `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
+    );
+    const text = [
+      ...lines,
+      ...(rollLines.length > 0 ? ["", "Rolls:", ...rollLines] : []),
+    ].join("\n");
+    return ok(text, {
+      instances: result.instances.map((c) => instanceView(c.after)),
+      before: result.instances.map((c) => instanceView(c.before)),
+      rolls: result.rolls,
+    });
   },
 });
 
@@ -562,6 +613,100 @@ const rollInitiativeTool = defineTool({
         modifier: r.modifier,
       })),
       rolls: result.rolls,
+    });
+  },
+});
+
+const splitInitiativeTool = defineTool({
+  name: "split_initiative",
+  annotations: { destructiveHint: true },
+  description:
+    "Give each named monster its own initiative group, so it acts on its own. Targets are instance ids or exact names. Each keeps its initiative unless roll is true, then each rolls its own. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    roll: z.boolean().optional(),
+  },
+  run(ctx, { targets, roll }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = splitInitiative(
+      {
+        repo: ctx.repo,
+        monsters: ctx.monsters,
+        rng: ctx.rng,
+        now: ctx.now,
+        newGroupId: ctx.newGroupId,
+      },
+      resolved.map((i) => i.id),
+      mcpOrigin(ctx),
+      { roll: roll === true },
+    );
+    const text = result.instances
+      .map((r) => {
+        const after = String(r.instance.initiative ?? "unset");
+        if (r.rolled === undefined) {
+          return `${r.instance.displayName}: own initiative group, initiative ${after}`;
+        }
+        const before = String(r.before ?? "unset");
+        return `${r.instance.displayName}: own initiative group, initiative ${before} -> ${after} (d20 ${String(r.rolled.roll)}, modifier ${signed(r.rolled.modifier)})`;
+      })
+      .join("\n");
+    return ok(text, {
+      instances: result.instances.map((r) => ({
+        ...instanceView(r.instance),
+        before: r.before,
+        ...(r.rolled === undefined
+          ? {}
+          : { roll: r.rolled.roll, modifier: r.rolled.modifier }),
+      })),
+      rolls: result.rolls,
+    });
+  },
+});
+
+const mergeInitiativeTool = defineTool({
+  name: "merge_initiative",
+  annotations: { destructiveHint: true },
+  description:
+    "Put the named monsters into one initiative group, so they act together. Targets are instance ids or exact names; each takes the initiative of the first named monster that has one, without a roll. All targets must resolve, otherwise nothing changes.",
+  inputSchema: { targets: z.array(z.string()).min(1) },
+  run(ctx, { targets }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = mergeInitiative(
+      { repo: ctx.repo, newGroupId: ctx.newGroupId },
+      resolved.map((i) => i.id),
+      mcpOrigin(ctx),
+    );
+    const names = result.instances.map((r) => r.instance.displayName);
+    const shared = String(result.initiative ?? "unset");
+    const lines = [
+      `One initiative group: ${names.join(", ")}; shared initiative ${shared}.`,
+      ...result.instances.map(
+        (r) =>
+          `${r.instance.displayName}: initiative ${String(r.before ?? "unset")} -> ${String(r.instance.initiative ?? "unset")}`,
+      ),
+    ];
+    return ok(lines.join("\n"), {
+      instances: result.instances.map((r) => ({
+        ...instanceView(r.instance),
+        before: r.before,
+      })),
+      initiative: result.initiative,
     });
   },
 });
@@ -899,12 +1044,15 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("heal"),
   setHpTool,
   setMaxHpTool,
+  resetMaxHpTool,
   setArmorClassTool,
   removeMonstersTool,
   restoreMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
   rollInitiativeTool,
+  splitInitiativeTool,
+  mergeInitiativeTool,
   setStatsVisibilityTool,
   clearEncounterTool,
   restoreEncounterTool,

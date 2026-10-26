@@ -1,5 +1,6 @@
 import {
   TableUnavailableError,
+  applyInstanceEdit,
   type EncounterRepository,
   type MonsterInstance,
   type NewMonsterInstance,
@@ -100,6 +101,7 @@ function wrapRepo(
     restoreInstances: (ids, name) => inner.restoreInstances(ids, name, origin),
     renameInstance: (id, name) => inner.renameInstance(id, name, origin),
     setInitiative: (id, n) => inner.setInitiative(id, n, origin),
+    setGroupId: (id, groupId) => inner.setGroupId(id, groupId, origin),
     setHp: (id, hp) => inner.setHp(id, hp, origin),
     setMaxHp: (id, maxHp) => inner.setMaxHp(id, maxHp, origin),
     setArmorClass: (id, ac) => inner.setArmorClass(id, ac, origin),
@@ -136,7 +138,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the twenty-five tools", () => {
+  it("exposes the twenty-eight tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -146,11 +148,13 @@ describe("tool registry", () => {
       "heal",
       "list_encounter",
       "list_rooms",
+      "merge_initiative",
       "move_monsters",
       "propose_rooms",
       "remove_monsters",
       "remove_rooms",
       "rename_monster",
+      "reset_max_hp",
       "restore_encounter",
       "restore_monsters",
       "roll_initiative",
@@ -161,6 +165,7 @@ describe("tool registry", () => {
       "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "split_initiative",
       "table_status",
       "use_map",
     ]);
@@ -335,6 +340,78 @@ describe("list_encounter", () => {
     ).map((i) => i.name);
     expect(order).toEqual(["High", "TieA", "TieB", "Low", "None"]);
     expect(text(r)).toContain("10/10");
+  });
+
+  it("list_encounter shows each monster's armor class in an AC column and in its structured instances, including one set by set_armor_class and one edited at the table", async () => {
+    seed(
+      { ...item("Shadow 1", 15), armorClass: 12 },
+      { ...item("Shadow 2", 8), armorClass: 12 },
+    );
+    const [first, second] = ctx.repo.listInstances();
+    const firstId = first?.id ?? "";
+    const secondId = second?.id ?? "";
+    const set = await call("set_armor_class", {
+      target: firstId,
+      armorClass: 15,
+    });
+    expect(set.isError).toBeUndefined();
+    applyInstanceEdit(
+      ctx.repo,
+      { instanceId: secondId, armorClass: 17 },
+      { source: "table", commandId: "table-edit" },
+    );
+
+    const r = await call("list_encounter");
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      [
+        "| id | name | AC | HP | initiative |",
+        "| --- | --- | --- | --- | --- |",
+        `| ${firstId} | Shadow 1 | 15 | 10/10 | 15 |`,
+        `| ${secondId} | Shadow 2 | 17 | 10/10 | 8 |`,
+      ].join("\n"),
+    );
+    expect(r.structuredContent?.["instances"]).toEqual([
+      {
+        id: firstId,
+        name: "Shadow 1",
+        monsterKey: SHADOW,
+        hp: 10,
+        maxHp: 10,
+        initiative: 15,
+        armorClass: 15,
+      },
+      {
+        id: secondId,
+        name: "Shadow 2",
+        monsterKey: SHADOW,
+        hp: 10,
+        maxHp: 10,
+        initiative: 8,
+        armorClass: 17,
+      },
+    ]);
+  });
+
+  it("list_encounter shows - in the AC column and armorClass null for a monster without an armor class", async () => {
+    seed(item("Shadow 1", 5));
+    const id = ctx.repo.listInstances()[0]?.id ?? "";
+
+    const r = await call("list_encounter");
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      [
+        "| id | name | AC | HP | initiative |",
+        "| --- | --- | --- | --- | --- |",
+        `| ${id} | Shadow 1 | - | 10/10 | 5 |`,
+      ].join("\n"),
+    );
+    const instances = r.structuredContent?.["instances"] as {
+      armorClass: unknown;
+    }[];
+    expect(instances[0]?.armorClass).toBeNull();
   });
 });
 
@@ -630,6 +707,7 @@ describe("roll_initiative", () => {
         hp: 10,
         maxHp: 10,
         initiative: 15,
+        armorClass: null,
         before: 5,
         roll: 13,
         modifier: 2,
@@ -641,6 +719,7 @@ describe("roll_initiative", () => {
         hp: 68,
         maxHp: 68,
         initiative: 6,
+        armorClass: null,
         before: 4,
         roll: 7,
         modifier: -1,

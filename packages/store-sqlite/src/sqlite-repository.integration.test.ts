@@ -369,6 +369,50 @@ describe("setInitiative", () => {
   });
 });
 
+describe("setGroupId", () => {
+  it("setGroupId stores the group, returns the updated instance and records instance-changed with groupId", () => {
+    const [a, b] = repo.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1", initiative: 12, groupId: "g-old" }),
+        goblin({ displayName: "Goblin 2", initiative: 12, groupId: "g-old" }),
+      ],
+      origin,
+    );
+
+    const updated = repo.setGroupId(a!.id, "g-new", origin);
+
+    expect(updated).toEqual({ ...a, groupId: "g-new" });
+    expect(repo.listInstances()).toEqual([updated, b]);
+    const rows = db
+      .prepare("SELECT event FROM encounter_events ORDER BY seq DESC LIMIT 1")
+      .all() as { event: string }[];
+    expect(JSON.parse(rows[0]!.event)).toEqual({
+      type: "instance-changed",
+      id: a!.id,
+      changes: { groupId: "g-new" },
+      origin,
+    });
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("setGroupId on an unknown id throws UnknownInstanceError and changes nothing", () => {
+    const added = repo.addInstances(
+      () => [goblin({ initiative: 12, groupId: "g-old" })],
+      origin,
+    );
+    const eventCount = () =>
+      db.prepare("SELECT COUNT(*) AS c FROM encounter_events").get();
+    const eventsBefore = eventCount();
+
+    expect(() => repo.setGroupId("nope", "g-new", origin)).toThrow(
+      UnknownInstanceError,
+    );
+    expect(repo.listInstances()).toEqual(added);
+    expect(eventCount()).toEqual(eventsBefore);
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
 describe("setHp", () => {
   it("setHp stores an absolute value and returns before and after", () => {
     const [a, b] = repo.addInstances(

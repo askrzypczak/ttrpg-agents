@@ -76,7 +76,7 @@ Issue: [#180](https://github.com/askrzypczak/ttrpg-agents/issues/180). Part of e
   - One shared d20 with each instance's own modifier: the members' values differ.
 - Where: `rollInitiativeValues` in `packages/engine/src/encounter/initiative.ts`.
 - Revisit if: #287 decides how a merged group's shared value is rolled.
-- Status: active
+- Status: superseded by 287.7
 
 ## 180.8 Rolls follow the input order, and `rollInitiative` does not remove duplicate ids
 
