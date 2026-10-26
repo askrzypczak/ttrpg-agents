@@ -24,7 +24,7 @@ function recordingRepository(received: unknown[]): EncounterRepository {
     setArmorClass: (_id, _armorClass, origin) => record(origin),
     setStatsVisible: (_id, _visible, origin) => record(origin),
     setSpawnPositions: (_positions, origin) => record(origin),
-    clearEncounter: (origin) => void record(origin),
+    clearEncounter: (origin) => record(origin),
   };
 }
 

@@ -227,6 +227,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         source: row.removed_source,
         commandId: row.removed_command_id,
       },
+      cleared: false,
     }));
   }
 
@@ -461,8 +462,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  clearEncounter(origin: ChangeOrigin): void {
-    this.transaction(() => {
+  clearEncounter(origin: ChangeOrigin): MonsterInstance[] {
+    return this.transaction(() => {
       this.db
         .prepare(
           `DELETE FROM monster_instances
@@ -470,6 +471,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .run();
       this.record({ type: "cleared", origin });
+      return [];
     });
   }
 

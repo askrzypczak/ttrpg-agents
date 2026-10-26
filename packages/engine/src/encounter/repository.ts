@@ -20,6 +20,8 @@ export interface RemovedInstance {
   instance: MonsterInstance;
   /** Who removed it, in which command. */
   removedBy: ChangeOrigin;
+  /** True when the last clear removed it (clearEncounter keeps only its own set). */
+  cleared: boolean;
 }
 
 /** Picks a restored instance's display name from the names in use. */
@@ -49,7 +51,11 @@ export interface EncounterRepository {
     ids: readonly string[],
     origin: ChangeOrigin,
   ): MonsterInstance[];
-  /** Removed instances of the active encounter not restored since, newest removal first; kept until the encounter is cleared. */
+  /**
+   * Removed instances of the active encounter not restored since, newest
+   * removal first, a clear's set in creation order; kept until the next clear
+   * that clears at least one instance.
+   */
   listRemovedInstances(): RemovedInstance[];
   /**
    * In one transaction puts removed instances of the active encounter back with the state they had when removed,
@@ -132,8 +138,13 @@ export interface EncounterRepository {
     positions: readonly { id: string; spawnPosition: Point }[],
     origin: ChangeOrigin,
   ): MonsterInstance[];
-  /** Deletes all instances of the active encounter. */
-  clearEncounter(origin: ChangeOrigin): void;
+  /**
+   * Marks every live instance of the active encounter removed by this clear
+   * and returns them in creation order. When it clears at least one, the
+   * instances removed before (an earlier clear's included) are deleted; with
+   * no live instance it changes nothing but the change log.
+   */
+  clearEncounter(origin: ChangeOrigin): MonsterInstance[];
   /** Instances of the active encounter, ordered by creation. */
   listInstances(): MonsterInstance[];
 }

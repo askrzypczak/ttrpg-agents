@@ -136,7 +136,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the twenty-four tools", () => {
+  it("exposes the twenty-five tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -151,6 +151,7 @@ describe("tool registry", () => {
       "remove_monsters",
       "remove_rooms",
       "rename_monster",
+      "restore_encounter",
       "restore_monsters",
       "roll_initiative",
       "search_monsters",
@@ -813,7 +814,9 @@ describe("set_stats_visibility", () => {
 describe("clear_encounter", () => {
   it("uses singular for one monster", async () => {
     seed(item("A", 1));
-    expect(text(await call("clear_encounter"))).toContain("Cleared 1 monster.");
+    expect(text(await call("clear_encounter"))).toContain(
+      "Cleared 1 monster: A.",
+    );
   });
 
   it("removes every monster", async () => {

@@ -11,6 +11,7 @@ import { readItems } from "./helpers.js";
 
 const removeOrigin: ChangeOrigin = { source: "mcp", commandId: "remove" };
 const restoreOrigin: ChangeOrigin = { source: "mcp", commandId: "restore" };
+const clearOrigin: ChangeOrigin = { source: "mcp", commandId: "clear" };
 
 const INSTANCE_KEY = "com.ttrpg-agents/instance";
 const PLACED_KEY = "com.ttrpg-agents/placed";
@@ -114,6 +115,45 @@ test.describe("restoring a removed monster", () => {
     await page.waitForTimeout(500);
     expect(await readItems(page)).toHaveLength(5);
     expect(await storedIds(bridge.dbPath)).toEqual([...SHADOW_IDS].sort());
+    await expect(
+      page.frameLocator("#extension").locator("#sync-error"),
+    ).toHaveText("");
+  });
+});
+
+test.describe("restoring a cleared encounter", () => {
+  test("a cleared encounter loses its tokens and gets them back with their names when restored", async ({
+    page,
+    bridge,
+  }) => {
+    await openHarness(page, { role: "gm" });
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+
+    await withRepo(bridge.dbPath, (repo) => repo.clearEncounter(clearOrigin));
+    await expect.poll(async () => (await readItems(page)).length).toBe(0);
+
+    const clearedIds = await withRepo(bridge.dbPath, (repo) =>
+      repo
+        .listRemovedInstances()
+        .filter((r) => r.cleared)
+        .map((r) => r.instance.id),
+    );
+    expect([...clearedIds].sort()).toEqual([...SHADOW_IDS].sort());
+    await withRepo(bridge.dbPath, (repo) =>
+      repo.restoreInstances(clearedIds, keepName, restoreOrigin),
+    );
+
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    const items = await readItems(page);
+    expect(
+      SHADOW_IDS.map((id) => tokensFor(items, id).map((i) => i.name)),
+    ).toEqual([
+      ["Shadow 1"],
+      ["Shadow 2"],
+      ["Shadow 3"],
+      ["Shadow 4"],
+      ["Shadow 5"],
+    ]);
     await expect(
       page.frameLocator("#extension").locator("#sync-error"),
     ).toHaveText("");

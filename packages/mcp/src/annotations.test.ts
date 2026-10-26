@@ -17,6 +17,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   set_armor_class: { destructiveHint: true },
   set_stats_visibility: { destructiveHint: false },
   clear_encounter: { destructiveHint: true },
+  restore_encounter: { destructiveHint: false },
   apply_damage: undefined,
   heal: undefined,
   table_status: { readOnlyHint: true },

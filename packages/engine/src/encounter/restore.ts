@@ -7,7 +7,8 @@ import { TargetError, resolveTargets } from "./queries.js";
 import type { EncounterRepository } from "./repository.js";
 import type { MonsterInstance } from "./types.js";
 
-export type RestoreMonstersErrorCode = "not_removed" | "unknown_monster";
+export type RestoreMonstersErrorCode =
+  "not_removed" | "unknown_monster" | "nothing_cleared";
 
 export class RestoreMonstersError extends DomainError {
   declare readonly code: RestoreMonstersErrorCode;
@@ -63,6 +64,20 @@ export function restoreMonsters(
         before === undefined || before === instance.displayName ? null : before,
     };
   });
+}
+
+/**
+ * Restores the last clear's instances not restored since, in creation order,
+ * all or nothing. Throws RestoreMonstersError `nothing_cleared` when there are
+ * none, `unknown_monster` as restoreMonsters does.
+ */
+export function restoreEncounter(
+  deps: RestoreMonstersDeps,
+  origin: ChangeOrigin,
+): RestoredMonster[] {
+  void deps;
+  void origin;
+  throw new Error("not implemented");
 }
 
 /**

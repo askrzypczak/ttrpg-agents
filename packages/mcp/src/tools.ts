@@ -599,6 +599,17 @@ const clearEncounterTool = defineTool({
   },
 });
 
+const restoreEncounterTool = defineTool({
+  name: "restore_encounter",
+  annotations: { destructiveHint: false },
+  description:
+    "Bring back every monster the last clear_encounter removed, with the HP, initiative and group they had.",
+  inputSchema: {},
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 const tableStatusTool = defineTool({
   name: "table_status",
   annotations: { readOnlyHint: true },
@@ -858,6 +869,7 @@ export const tools: readonly ToolDefinition[] = [
   rollInitiativeTool,
   setStatsVisibilityTool,
   clearEncounterTool,
+  restoreEncounterTool,
   tableStatusTool,
   useMapTool,
   setRoomsTool,
