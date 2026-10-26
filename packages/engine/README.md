@@ -14,7 +14,7 @@ The domain engine: dice, monster schema and search, encounter events, map geomet
 
 `src/encounter/origin.ts` (`changeOriginSchema`, `ChangeOrigin`): who made a change, `{source: "mcp" | "table", commandId}`. Every `EncounterRepository` mutation takes one as its last argument.
 
-Each event carries the `origin` of the mutation that caused it. `instance-changed` covers rename, initiative, armor class and stats visibility, and carries only the fields that the mutation set. The store records every mutation's event in an ordered log readable through `EncounterLog` (`src/encounter/log.ts`); the bridge polls it and broadcasts each event as an `encounter-event` with its `seq`, and sends an `encounter-snapshot` carrying the `seq` it is current as of after each `hello-ack`.
+Each event carries the `origin` of the mutation that caused it. `instance-changed` covers rename, initiative, initiative group (`groupId`), armor class and stats visibility, and carries only the fields that the mutation set. The store records every mutation's event in an ordered log readable through `EncounterLog` (`src/encounter/log.ts`); the bridge polls it and broadcasts each event as an `encounter-event` with its `seq`, and sends an `encounter-snapshot` carrying the `seq` it is current as of after each `hello-ack`.
 
 Each instance carries `spawnPosition`: where a new token for it is created, in scene units, or null for the extension's default row; rows, events and snapshots from before it read as null.
 

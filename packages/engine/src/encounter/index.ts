@@ -17,6 +17,7 @@ export * from "./events.js";
 export * from "./errors.js";
 export * from "./hp.js";
 export * from "./initiative.js";
+export * from "./initiative-groups.js";
 export {
   resetMaxHp,
   type ResetMaxHpDeps,

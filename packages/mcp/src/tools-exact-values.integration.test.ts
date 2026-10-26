@@ -76,6 +76,7 @@ function staleRepo(
     restoreInstances: (ids, name, o) => inner.restoreInstances(ids, name, o),
     renameInstance: (id, name, o) => inner.renameInstance(id, name, o),
     setInitiative: (id, n, o) => inner.setInitiative(id, n, o),
+    setGroupId: (id, groupId, o) => inner.setGroupId(id, groupId, o),
     setHp: (id, hp, o) => inner.setHp(id, hp, o),
     setMaxHp: (id, maxHp, o) => inner.setMaxHp(id, maxHp, o),
     setArmorClass: (id, ac, o) => inner.setArmorClass(id, ac, o),

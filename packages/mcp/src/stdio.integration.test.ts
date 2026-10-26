@@ -21,6 +21,8 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   rename_monster: { destructiveHint: true },
   set_initiative: { destructiveHint: true },
   roll_initiative: { destructiveHint: true },
+  split_initiative: { destructiveHint: true },
+  merge_initiative: { destructiveHint: true },
   set_hp: { destructiveHint: true },
   set_max_hp: { destructiveHint: true },
   reset_max_hp: { destructiveHint: true },
@@ -77,7 +79,7 @@ async function connect(): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all twenty-five tools and serves a call", async () => {
+  it("lists all twenty-seven tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
@@ -90,6 +92,7 @@ describe("stdio server", () => {
       "heal",
       "list_encounter",
       "list_rooms",
+      "merge_initiative",
       "move_monsters",
       "propose_rooms",
       "remove_monsters",
@@ -105,6 +108,7 @@ describe("stdio server", () => {
       "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "split_initiative",
       "table_status",
       "use_map",
     ]);
@@ -118,11 +122,11 @@ describe("stdio server", () => {
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
   }, 30_000);
 
-  it("stdio server (spawned via `bin/stdio.mjs`) lists twenty-five tools including `table_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
+  it("stdio server (spawned via `bin/stdio.mjs`) lists twenty-seven tools including `table_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(25);
+    expect(tools).toHaveLength(27);
     const tableStatus = tools.find((t) => t.name === "table_status");
     expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });
 

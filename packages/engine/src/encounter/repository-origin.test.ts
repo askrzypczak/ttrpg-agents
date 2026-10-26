@@ -19,6 +19,7 @@ function recordingRepository(received: unknown[]): EncounterRepository {
     restoreInstances: (_ids, _name, origin) => record(origin),
     renameInstance: (_id, _name, origin) => record(origin),
     setInitiative: (_id, _initiative, origin) => record(origin),
+    setGroupId: (_id, _groupId, origin) => record(origin),
     setHp: (_id, _hp, origin) => record(origin),
     setMaxHp: (_id, _maxHp, origin) => record(origin),
     setArmorClass: (_id, _armorClass, origin) => record(origin),
@@ -53,6 +54,8 @@ describe("EncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.setInitiative("i1", 5),
       // @ts-expect-error origin is required
+      () => repo.setGroupId("i1", "g1"),
+      // @ts-expect-error origin is required
       () => repo.setHp("i1", 5),
       // @ts-expect-error origin is required
       () => repo.setMaxHp("i1", 5),
@@ -65,7 +68,7 @@ describe("EncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.clearEncounter(),
     ];
-    expect(withoutOrigin).toHaveLength(13);
+    expect(withoutOrigin).toHaveLength(14);
 
     // Runtime half: with an origin, every mutation hands it on unchanged.
     repo.addInstances(() => [], origin);
@@ -75,13 +78,14 @@ describe("EncounterRepository mutations", () => {
     repo.restoreInstances(["i1"], (i) => i.displayName, origin);
     repo.renameInstance("i1", "Boss", origin);
     repo.setInitiative("i1", 5, origin);
+    repo.setGroupId("i1", "g1", origin);
     repo.setHp("i1", 5, origin);
     repo.setMaxHp("i1", 5, origin);
     repo.setArmorClass("i1", 5, origin);
     repo.setStatsVisible("i1", true, origin);
     repo.setSpawnPositions([spawnAt], origin);
     repo.clearEncounter(origin);
-    expect(received).toEqual(Array<ChangeOrigin>(13).fill(origin));
+    expect(received).toEqual(Array<ChangeOrigin>(14).fill(origin));
     expect(changeOriginSchema.safeParse(received[0]).success).toBe(true);
   });
 });

@@ -101,6 +101,7 @@ function wrapRepo(
     restoreInstances: (ids, name) => inner.restoreInstances(ids, name, origin),
     renameInstance: (id, name) => inner.renameInstance(id, name, origin),
     setInitiative: (id, n) => inner.setInitiative(id, n, origin),
+    setGroupId: (id, groupId) => inner.setGroupId(id, groupId, origin),
     setHp: (id, hp) => inner.setHp(id, hp, origin),
     setMaxHp: (id, maxHp) => inner.setMaxHp(id, maxHp, origin),
     setArmorClass: (id, ac) => inner.setArmorClass(id, ac, origin),
@@ -137,7 +138,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the twenty-five tools", () => {
+  it("exposes the twenty-seven tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -147,6 +148,7 @@ describe("tool registry", () => {
       "heal",
       "list_encounter",
       "list_rooms",
+      "merge_initiative",
       "move_monsters",
       "propose_rooms",
       "remove_monsters",
@@ -162,6 +164,7 @@ describe("tool registry", () => {
       "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "split_initiative",
       "table_status",
       "use_map",
     ]);

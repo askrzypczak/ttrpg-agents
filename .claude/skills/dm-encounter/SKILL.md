@@ -5,7 +5,7 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -113,6 +113,9 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 - Do not call `list_encounter` after the calls. Relay the tool's line verbatim (for example "Goblin Warrior 1: initiative 12 -> 14").
 - "Re-roll the goblins' initiative" and "roll initiative for the wolves" are ONE `roll_initiative` call with every matching monster in `targets`, targeted as under Damage and healing. Omit `mode`, so monsters of one group share one roll; pass `mode: "each"` only when the DM asks for separate rolls ("roll each goblin separately"). Every named monster is rolled, even one that already has initiative.
 - Do not call `list_encounter` after the call. Relay the tool's lines verbatim (for example "Goblin Warrior 1: initiative 12 -> 9 (d20 7, modifier +2)").
+- "The wolves each act on their own now" or "Goblin Warrior 3 acts alone" is ONE `split_initiative` call with every monster the DM names in `targets`, targeted as under Damage and healing. Each keeps its initiative; pass `roll: true` only when the DM asks for new rolls ("split the wolves and roll for each").
+- "The goblins act together now" or "the wolves act with the goblins" is ONE `merge_initiative` call with every monster of the new group in `targets`: list every member of each group the DM names (a group is its members). Put first the monster whose initiative the group keeps: the one the others join ("with the goblins" puts Goblin Warrior 1 first), otherwise the first the DM names. Nothing is rolled; if the DM also wants a new shared roll, call `roll_initiative` with the same targets after the merge.
+- Do not call `list_encounter` after either call. Relay the tool's lines verbatim (for example "Wolf 1: own initiative group, initiative 14" or "One initiative group: Goblin Warrior 1, Wolf 1, Wolf 2; shared initiative 12.").
 
 ## Showing stats to players
 
