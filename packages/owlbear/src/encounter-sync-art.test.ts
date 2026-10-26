@@ -27,6 +27,7 @@ const inst = (n: number, monsterKey = "shadow"): EncounterInstance => ({
   createdAt: n,
   footprint: 1,
   statsVisible: false,
+  spawnPosition: null,
 });
 
 const snapshot = (

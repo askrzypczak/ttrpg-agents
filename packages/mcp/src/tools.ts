@@ -1,7 +1,7 @@
 import {
   DomainError,
   TargetError,
-  addMonsters,
+  addMonstersInRooms,
   compareByInitiative,
   formatColumnLabel,
   getTableStatus,
@@ -14,6 +14,7 @@ import {
   useMap,
   type ChangeOrigin,
   type MonsterInstance,
+  type RoomPlacement,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolContext } from "./context.js";
@@ -169,7 +170,7 @@ const addMonstersTool = defineTool({
   name: "add_monsters",
   annotations: { destructiveHint: false },
   description:
-    "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically.",
+    "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically. A group's optional room places its monsters on free cells of that saved room of the map in use (needs the bridge running).",
   inputSchema: {
     groups: z.array(
       z.object({
@@ -182,6 +183,13 @@ const addMonstersTool = defineTool({
           .describe(
             "Players can see the Stat Bubbles (HP/AC); default false, GM-only",
           ),
+        room: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "A saved room of the map in use, by name (any case); its monsters are placed on free cells in that room. Needs the bridge running.",
+          ),
       }),
     ),
     initiative: z
@@ -189,14 +197,16 @@ const addMonstersTool = defineTool({
       .optional()
       .describe("One roll per group (default) or per monster"),
   },
-  run(ctx, { groups, initiative }) {
-    const result = addMonsters(
+  async run(ctx, { groups, initiative }) {
+    const result = await addMonstersInRooms(
       {
         repo: ctx.repo,
         monsters: ctx.monsters,
         rng: ctx.rng,
         now: ctx.now,
         newGroupId: ctx.newGroupId,
+        table: ctx.table,
+        maps: ctx.maps,
       },
       groups,
       mcpOrigin(ctx),
@@ -213,6 +223,11 @@ const addMonstersTool = defineTool({
           i.initiative,
         ]),
       ),
+      ...placementLines(result.placements, result.instances).flatMap((line) => [
+        "",
+        line,
+      ]),
+      ...(result.moved ? ["", movedLine] : []),
       "",
       "Rolls:",
       ...result.rolls.map(
@@ -220,7 +235,12 @@ const addMonstersTool = defineTool({
           `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
       ),
     ].join("\n");
-    return ok(text, { instances: result.instances, rolls: result.rolls });
+    return ok(text, {
+      instances: result.instances,
+      rolls: result.rolls,
+      placements: result.placements,
+      moved: result.moved,
+    });
   },
 });
 
@@ -496,6 +516,46 @@ function roomCount(n: number): string {
 
 const movedLine =
   "The map moved since it was registered; cells are read where it is now. Use the map again to confirm the new position.";
+
+/**
+ * One "Placed in" line and one "No free cell left" line per group with a
+ * room, in group order; a group's placements are consecutive.
+ */
+function placementLines(
+  placements: readonly RoomPlacement[],
+  instances: readonly { id: string; groupId: string }[],
+): string[] {
+  const groupOf = new Map(instances.map((i) => [i.id, i.groupId] as const));
+  const runs: RoomPlacement[][] = [];
+  let previous: string | undefined;
+  for (const placement of placements) {
+    const group = groupOf.get(placement.id);
+    const last = runs.at(-1);
+    if (last === undefined || group !== previous) runs.push([placement]);
+    else last.push(placement);
+    previous = group;
+  }
+  return runs.flatMap((run) => {
+    const room = run[0]?.room ?? "";
+    const placed = run.filter((p) => p.cell !== null);
+    const unplaced = run.filter((p) => p.cell === null);
+    const lines: string[] = [];
+    if (placed.length > 0) {
+      lines.push(
+        `Placed in ${room}: ${placed.map((p) => `${p.name} at ${String(p.cell)}`).join(", ")}.`,
+      );
+    }
+    if (unplaced.length > 0) {
+      const names = unplaced.map((p) => p.name).join(", ");
+      lines.push(
+        unplaced.length === 1
+          ? `No free cell left in ${room} for ${names}: its token appears in a row at the centre of the GM's view.`
+          : `No free cell left in ${room} for ${names}: their tokens appear in a row at the centre of the GM's view.`,
+      );
+    }
+    return lines;
+  });
+}
 
 function withMovedLine(text: string, moved: boolean): string {
   return moved ? `${text}\n\n${movedLine}` : text;

@@ -27,7 +27,9 @@ HP, AC, initiative, rolls, damage totals and attack bonuses come only from tool 
 
 ## Spatial and narrative hints
 
-Positions and flavour ("on the left", "circling from behind", "ambushing from the trees") are not supported yet. Acknowledge them in one short line ("Positions aren't tracked yet, so I've skipped 'on the left'.") and still run the rest of the request.
+- A named room ("in the taproom", "into the kitchen") goes to that group's `room` in `add_monsters`, as the DM says it (the tool matches saved rooms ignoring case). Several groups can name the same or different rooms in one call.
+- If a call with a room fails (no map in use, the map is no longer on the scene, an unknown room (the error lists the known rooms), a grid that is not square, or the bridge or the Owlbear tab cannot be reached), relay the error and stop: nothing was added. Do not retry without the room, and do not call `use_map` or `set_rooms` on your own.
+- Other positions and flavour ("on the left", "circling from behind", "ambushing from the trees") are not tracked. Acknowledge them in one short line ("Positions other than rooms aren't tracked, so I've skipped 'on the left'.") and still run the rest of the request.
 
 ## Using the map
 
@@ -53,8 +55,9 @@ Rooms are named on the map in use by its display cells (columns A, B, ... left t
 ## Output after adding monsters
 
 1. A compact table with columns name, AC, HP, initiative, copied from the `add_monsters` result.
-2. The statblock, once per NEW monster type: call `get_statblock` for each monster key newly added in this sentence that is not already in the encounter and has not been shown earlier in the conversation. `add_monsters` does not return a statblock. Do not fetch it again when adding more of a type that is already present.
-3. No extra commentary beyond the one-line notes above.
+2. When a group had a room, the tool's "Placed in ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present.
+3. The statblock, once per NEW monster type: call `get_statblock` for each monster key newly added in this sentence that is not already in the encounter and has not been shown earlier in the conversation. `add_monsters` does not return a statblock. Do not fetch it again when adding more of a type that is already present.
+4. No extra commentary beyond the one-line notes above.
 
 ## Damage and healing
 

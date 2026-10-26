@@ -138,6 +138,15 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    // Where a new token for an instance is created, in scene units: both
+    // coordinates or neither. Older rows read with none (the default row).
+    version: 11,
+    sql: `
+      ALTER TABLE monster_instances ADD COLUMN spawn_x REAL;
+      ALTER TABLE monster_instances ADD COLUMN spawn_y REAL CHECK ((spawn_x IS NULL) = (spawn_y IS NULL));
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

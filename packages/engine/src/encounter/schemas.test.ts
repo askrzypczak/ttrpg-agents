@@ -103,4 +103,17 @@ describe("encounterEventSchema", () => {
   ])("rejects %s", (_name, event) => {
     expect(encounterEventSchema.safeParse(event).success).toBe(false);
   });
+
+  it("an added event whose instances have no spawnPosition decodes them with none", () => {
+    const withoutSpawn: Record<string, unknown> = { ...instance };
+    delete withoutSpawn.spawnPosition;
+    const event = encounterEventSchema.parse({
+      type: "added",
+      instances: [withoutSpawn],
+      origin: { source: "mcp", commandId: "c1" },
+    });
+    if (event.type !== "added") throw new Error("expected an added event");
+    expect(event.instances[0]?.spawnPosition).toBeNull();
+    expect(event.instances).toEqual([instance]);
+  });
 });

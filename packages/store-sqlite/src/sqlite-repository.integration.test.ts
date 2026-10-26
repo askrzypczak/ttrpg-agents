@@ -81,6 +81,27 @@ describe("addInstances", () => {
     expect(repo.listInstances()).toEqual(added);
   });
 
+  it("addInstances stores a spawn position and reads it back", () => {
+    const added = repo.addInstances(
+      () => [
+        goblin({
+          displayName: "Goblin 1",
+          spawnPosition: { x: 225, y: 375 },
+        }),
+        goblin({ displayName: "Goblin 2" }),
+      ],
+      origin,
+    );
+    expect(added.map((i) => i.spawnPosition)).toEqual([
+      { x: 225, y: 375 },
+      null,
+    ]);
+    expect(repo.listInstances().map((i) => i.spawnPosition)).toEqual([
+      { x: 225, y: 375 },
+      null,
+    ]);
+  });
+
   it("rolls back the whole batch when a later item is invalid", () => {
     expect(() =>
       repo.addInstances(
