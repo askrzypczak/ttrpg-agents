@@ -172,7 +172,7 @@ const mutations: MutationCase[] = [
           id: first.id,
           changes: { groupId: "group-9" },
           origin: o,
-        } as EncounterEvent,
+        },
       ];
     },
   },

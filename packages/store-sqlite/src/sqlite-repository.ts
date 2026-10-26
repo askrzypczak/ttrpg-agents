@@ -267,10 +267,25 @@ export class SqliteEncounterRepository implements EncounterRepository {
     groupId: string,
     origin: ChangeOrigin,
   ): MonsterInstance {
-    void id;
-    void groupId;
-    void origin;
-    throw new Error("not implemented");
+    return this.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
+        .get(id) as InstanceRow | undefined;
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.db
+        .prepare("UPDATE monster_instances SET group_id = ? WHERE id = ?")
+        .run(groupId, id);
+      this.record({
+        type: "instance-changed",
+        id,
+        changes: { groupId },
+        origin,
+      });
+      return toInstance({ ...row, group_id: groupId });
+    });
   }
 
   setHp(id: string, hp: number, origin: ChangeOrigin): HpChange {
