@@ -37,11 +37,15 @@ Environment:
 
 `POST /agent/query` (`Authorization: Bearer <agent token>`, body a query
 from `@ttrpg-agents/protocol`, e.g. `{"name":"scene-status"}`,
-`{"name":"scene-map"}` or `{"name":"scene-tokens"}`) relays the query
-to the connected Owlbear tab and returns its `query-result`.
-`scene-tokens` returns the position of each item on the character and mount
-layers; the room placement for `add_monsters` (#50) reads it. Errors: 401,
-400, 503 (no tab), 504 (no reply in 5 s), 502. See "Queries to the table" in
+`{"name":"scene-map"}`, `{"name":"scene-tokens"}` or
+`{"name":"map-image","itemId":"..."}`) relays the query to the connected
+Owlbear tab and returns its `query-result`. `scene-tokens` returns the
+position of each item on the character and mount layers; the room placement
+for `add_monsters` (#50) reads it. `map-image` returns the map item's image
+as the DM sees it with the display grid and its labels, as WEBP or JPEG
+base64 with its size in px; the bridge waits 30 s for it
+(`mapImageTimeoutMs`). Errors: 401, 400, 503 (no tab), 504 (no reply in 5 s;
+30 s for `map-image`), 502. See "Queries to the table" in
 [`docs/architecture.md`](../../docs/architecture.md).
 
 `@ttrpg-agents/bridge/client` (`createBridgeClient`) is the Node-only client the
