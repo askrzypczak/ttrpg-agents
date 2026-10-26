@@ -39,10 +39,14 @@ export function createFakeObr(
     uploadImage?: (image: ImageUpload) => void | Promise<void>;
     /** The scene grid the fake reports. Default: { dpi: 150, type: "SQUARE" }. */
     grid?: SceneGrid;
+    /** The local items of this tab (`OBR.scene.local`). Default: a new, empty model. */
+    local?: SceneModel;
   } = {},
 ): {
   obr: ObrAdapter;
   scene: SceneModel;
+  /** The local items of this tab, apart from the scene's items. */
+  local: SceneModel;
   /** How many times the image picker was opened. */
   pickImageCalls(): number;
   /** The images handed to the asset upload, in order (failed ones too). */
@@ -56,6 +60,7 @@ export function createFakeObr(
       ? Promise.resolve(call())
       : Promise.reject(new MissingSceneError());
   const grid: SceneGrid = options.grid ?? { dpi: 150, type: "SQUARE" };
+  const local = options.local ?? new SceneModel();
   const obr: ObrAdapter = {
     onReady: (callback) => {
       void Promise.resolve().then(callback);
@@ -76,6 +81,9 @@ export function createFakeObr(
     setItemMetadata: (updates) =>
       whenReady(() => scene.setItemMetadata(updates)),
     deleteItems: (ids) => whenReady(() => scene.deleteItems(ids)),
+    addLocalItems: (items) => whenReady(() => local.addItems(items)),
+    getLocalItems: (filter) => whenReady(() => local.getItems(filter)),
+    deleteLocalItems: (ids) => whenReady(() => local.deleteItems(ids)),
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
@@ -106,6 +114,7 @@ export function createFakeObr(
   return {
     obr,
     scene,
+    local,
     pickImageCalls: () => picks,
     uploads: () => [...uploaded],
   };

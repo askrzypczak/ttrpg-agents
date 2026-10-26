@@ -71,6 +71,11 @@ export interface BridgeServerOptions {
   token?: string;
   /** Message sent to a client right after each `hello-ack`, so it converges on current state. */
   snapshot?: () => BridgeMessage;
+  /**
+   * Message sent right after the snapshot that follows each `hello-ack`; a
+   * throw is logged with `console.error` and nothing is sent.
+   */
+  mapRooms?: () => BridgeMessage;
   /** Bearer secret for `POST /agent/query`. Defaults to a random one. */
   agentToken?: string;
   /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
@@ -149,6 +154,7 @@ interface Hooks {
   token: string;
   pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
+  mapRooms: (() => BridgeMessage) | undefined;
   removeInstance:
     ((instanceId: string, commandId: string) => WriteBackResult) | undefined;
   setTokenArt: ((monsterKey: string, art: TokenArt) => void) | undefined;
@@ -171,6 +177,19 @@ function sendSnapshot(ws: WebSocket, hooks: Hooks): void {
       ),
     );
   }
+}
+
+/** Sends the active map's rooms, if configured; a failing read is logged and nothing is sent. */
+function sendMapRooms(ws: WebSocket, hooks: Hooks): void {
+  if (!hooks.mapRooms) return;
+  let message: BridgeMessage;
+  try {
+    message = hooks.mapRooms();
+  } catch (e) {
+    console.error("map-rooms could not be read after hello-ack", e);
+    return;
+  }
+  send(ws, message);
 }
 
 /**
@@ -225,6 +244,7 @@ function handleMessage(
         payload: { serverVersion: SERVER_VERSION },
       });
       sendSnapshot(ws, hooks);
+      sendMapRooms(ws, hooks);
       break;
     case "token-deleted": {
       if (!hooks.removeInstance) {
@@ -374,6 +394,7 @@ export async function startBridgeServer(
     host = "127.0.0.1",
     token = randomBytes(32).toString("hex"),
     snapshot,
+    mapRooms,
     agentToken = randomBytes(32).toString("hex"),
     queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS,
     removeInstance,
@@ -536,6 +557,7 @@ export async function startBridgeServer(
         token,
         pending,
         snapshot,
+        mapRooms,
         removeInstance,
         setTokenArt,
         editInstance,

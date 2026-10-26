@@ -8,4 +8,5 @@ export * from "./errors.js";
 export * from "./repository.js";
 export * from "./use-map.js";
 export * from "./room-index.js";
+export { scenePlacement } from "./live-map.js";
 export * from "./place-monsters.js";

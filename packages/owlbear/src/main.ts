@@ -9,6 +9,7 @@ import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
+import { createMapOverlay } from "./overlay.js";
 import { describeError, panelView } from "./panel-state.js";
 import { tokenDeletedErrorText } from "./token-deleted.js";
 import { downloadTokenImage, uploadTokenImage } from "./token-art.js";
@@ -88,6 +89,17 @@ obr.onReady(async () => {
     render();
     return;
   }
+
+  // The map overlay: local items for this tab only, on at every load.
+  const overlay = createMapOverlay(obr, {
+    onError: (e) => console.error("map overlay failed", e),
+  });
+  const overlayToggle = el("overlay-toggle") as HTMLInputElement;
+  overlayToggle.checked = true;
+  el("overlay").hidden = false;
+  overlayToggle.addEventListener("change", () => {
+    void overlay.setEnabled(overlayToggle.checked);
+  });
 
   // Shows the republish prompt with its button and opens the panel; resolves
   // when the GM presses the button, which clears the prompt. The sync waits
@@ -177,6 +189,10 @@ obr.onReady(async () => {
       payload: { role, extensionVersion: EXTENSION_VERSION, token },
     }),
     onMessage: (message) => {
+      if (message.type === "map-rooms") {
+        void overlay.setRooms(message.payload);
+        return;
+      }
       if (message.type === "query" && message.id !== undefined) {
         void replyToQuery(obr, sync, message.id, message.payload).then(
           (reply) => socket.send(reply),

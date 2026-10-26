@@ -48,6 +48,39 @@ export interface ShapeSpec {
   height: number;
 }
 
+/** Text of a TEXT item (plain text in a box); the item position is the box's top-left. */
+export interface TextSpec {
+  plainText: string;
+  width: number;
+  height: number;
+  align: "LEFT" | "CENTER" | "RIGHT";
+  alignVertical: "TOP" | "MIDDLE" | "BOTTOM";
+  fontSize: number;
+  fillColor: string;
+  strokeColor: string;
+  strokeWidth: number;
+}
+
+/** How a LINE or CURVE item is stroked; an empty dash is solid. */
+export interface StrokeSpec {
+  color: string;
+  width: number;
+  dash: number[];
+}
+
+/** A LINE item; points are relative to the item position. */
+export interface LineSpec {
+  start: Vec2;
+  end: Vec2;
+  stroke: StrokeSpec;
+}
+
+/** A closed CURVE item with straight edges and no fill; points are relative to the item position. */
+export interface CurveSpec {
+  points: Vec2[];
+  stroke: StrokeSpec;
+}
+
 export interface SceneItem {
   id: string;
   type: string;
@@ -67,6 +100,16 @@ export interface SceneItem {
   scale?: Vec2;
   /** Rotation in degrees. Filled on read by the real adapter. */
   rotation?: number;
+  /** Required by the real adapter when adding a TEXT item. */
+  text?: TextSpec;
+  /** Required by the real adapter when adding a LINE item. */
+  line?: LineSpec;
+  /** Required by the real adapter when adding a CURVE item. */
+  curve?: CurveSpec;
+  /** Whether the item is locked, when adding. */
+  locked?: boolean;
+  /** Whether the item ignores pointer hits, when adding. */
+  disableHit?: boolean;
 }
 
 export type ItemPatch = Partial<

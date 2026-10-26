@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   SqliteEncounterRepository,
+  SqliteMapRepository,
   SqliteTokenArtRepository,
   SqliteTokenImageRepository,
   openDatabase,
@@ -9,7 +10,9 @@ import {
 import {
   storeTokenImage,
   type ChangeOrigin,
+  type MapRegistration,
   type PublishedTokenArt,
+  type SavedRoom,
   type TokenArt,
   type TokenImage,
 } from "@ttrpg-agents/engine";
@@ -79,6 +82,34 @@ function clearTokenArt(dir: string): void {
       )
       .get();
     if (images) db.exec("DELETE FROM token_art_image");
+  } finally {
+    db.close();
+  }
+}
+
+/** Registers `registration` as the active map in the e2e DB and saves `rooms` for its item. */
+export function seedE2eMap(
+  dir: string,
+  registration: MapRegistration,
+  rooms: SavedRoom[],
+): void {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    const maps = new SqliteMapRepository(db);
+    maps.registerMap(registration);
+    maps.replaceRooms(registration.itemId, rooms);
+  } finally {
+    db.close();
+  }
+}
+
+/** Forgets every registered map and its rooms in the e2e DB, so no map is in use. */
+export function clearE2eMap(dir: string): void {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    // map_rooms first: its rows refer to the registrations.
+    db.exec("DELETE FROM map_rooms");
+    db.exec("DELETE FROM map_registrations");
   } finally {
     db.close();
   }
