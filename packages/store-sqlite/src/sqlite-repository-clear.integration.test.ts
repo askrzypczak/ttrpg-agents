@@ -9,7 +9,12 @@ import {
 } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { openDatabase } from "./db.js";
-import { getUserVersion, migrate, migrations } from "./migrations.js";
+import {
+  LATEST_VERSION,
+  getUserVersion,
+  migrate,
+  migrations,
+} from "./migrations.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
@@ -176,7 +181,7 @@ describe("migration", () => {
 
     migrate(old);
 
-    expect(getUserVersion(old)).toBe(13);
+    expect(getUserVersion(old)).toBe(LATEST_VERSION);
     const columns = (
       old.prepare("PRAGMA table_info(encounters)").all() as { name: string }[]
     ).map((c) => c.name);
