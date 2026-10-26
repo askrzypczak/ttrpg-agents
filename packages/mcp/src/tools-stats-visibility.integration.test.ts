@@ -107,6 +107,7 @@ describe("set_stats_visibility result", () => {
           hp: 10,
           maxHp: 10,
           initiative: 1,
+          armorClass: null,
         },
         {
           id: c?.id,
@@ -115,6 +116,7 @@ describe("set_stats_visibility result", () => {
           hp: 10,
           maxHp: 10,
           initiative: 3,
+          armorClass: null,
         },
       ]);
     },
