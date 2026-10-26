@@ -31,6 +31,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `heal`                 | Heal by instance id or exact name (clamped at max)                                                                                         |
 | `set_hp`               | Set an exact current HP by instance id or exact name (clamped to 0..max); reports before and after                                         |
 | `set_max_hp`           | Set an exact max HP by instance id or exact name; HP is lowered if above it, never raised; reports before and after                        |
+| `reset_max_hp`         | Reset max HP (by id or exact name, all-or-nothing) to the statblock average or a new roll; full HP stays full; reports before and after    |
 | `set_armor_class`      | Set an exact armor class by instance id or exact name; reports before and after                                                            |
 | `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                     |
 | `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                     |
