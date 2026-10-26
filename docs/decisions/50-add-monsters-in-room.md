@@ -54,7 +54,7 @@ Issue: [#50](https://github.com/askrzypczak/ttrpg-agents/issues/50).
   - Count only the stored spawn positions whose token is not on the table yet: exact. It needs #263's result to report the instance id of our own tokens (revisit 263.2) and the engine to read the encounter during placement.
 - Where: `addMonstersInRooms` (`packages/engine/src/map/place-monsters.ts`).
 - Revisit if: overlapping placements show up in play (the maintainer decides; both alternatives extend the maintainer's rule).
-- Status: active
+- Status: superseded by 189.2
 
 ## 50.6 A group that does not fit leaves its last instances unplaced
 

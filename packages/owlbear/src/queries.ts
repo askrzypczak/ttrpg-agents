@@ -70,15 +70,13 @@ export async function handleQuery(
       };
     }
     case "scene-tokens": {
-      const tokens = await obr.getItems(isTokenItem);
-      return {
-        name: "scene-tokens",
-        result: {
-          tokens: tokens.map((item) => ({
-            position: { x: item.position.x, y: item.position.y },
-          })),
-        },
-      };
+      const items = await obr.getItems(isTokenItem);
+      const tokens = await Promise.all(
+        items.map(async (item) => ({
+          bounds: await obr.getItemBounds(item.id),
+        })),
+      );
+      return { name: "scene-tokens", result: { tokens } };
     }
   }
 }

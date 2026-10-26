@@ -83,7 +83,7 @@ Errors: 401 `unauthorized`, 400 `bad-request`, 503 `not-connected` (no GM tab), 
 
 `scene-map` returns the scene grid (dpi and type) and, for each image on the map layer, its id, name, image size, image grid (dpi and offset) and transform (position, rotation, scale). On a scene that is not ready the extension's reads fail and the reply is `query-failed`. The engine's `useMap` (the `use_map` tool) uses it: it rejects a grid that is not square, picks the map, and stores the map's transform and the scene dpi through the `MapRepository` port. The engine's `setRooms` and `listRooms` (the `set_rooms` and `list_rooms` tools) read it to convert display cells with the active map's live transform, and say when the map moved since it was registered; `removeRooms` (`remove_rooms`) does not ask the table.
 
-`scene-tokens` returns the position (scene units) of every item on the `CHARACTER` and `MOUNT` layers, hidden ones and our own tokens included, whatever their metadata. On a scene that is not ready the reply is `query-failed`. The engine's room placement for `add_monsters` (#50) reads it with `scene-map` to skip the cells that hold a token's centre.
+`scene-tokens` returns the axis-aligned bounds (scene units) of every item on the `CHARACTER` and `MOUNT` layers, hidden ones and our own tokens included, whatever their metadata; the extension reads them with Owlbear's `getItemBounds`, one call per item. On a scene that is not ready, or when a bounds read fails, the reply is `query-failed`. The engine's room placement for `add_monsters` (#50) reads it with `scene-map` and treats every cell whose centre lies inside or on the edge of a token's bounds as occupied.
 
 ## What reaches the table
 

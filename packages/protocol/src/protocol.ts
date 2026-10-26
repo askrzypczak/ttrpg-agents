@@ -122,11 +122,12 @@ export const sceneMapSchema = z.object({
 }) satisfies z.ZodType<TableSceneMap>;
 
 /**
- * The position, in scene units, of each item on the CHARACTER and MOUNT
- * layers. A token with no numeric position is rejected; an empty list is fine.
+ * The axis-aligned bounds, in scene units, of each item on the CHARACTER and
+ * MOUNT layers. A token without numeric min and max corners is rejected; an
+ * empty list is fine.
  */
 export const sceneTokensSchema = z.object({
-  tokens: z.array(z.object({ position: vec2 })),
+  tokens: z.array(z.object({ bounds: z.object({ min: vec2, max: vec2 }) })),
 }) satisfies z.ZodType<TableSceneTokens>;
 
 export const queryResultSchema = z.discriminatedUnion("name", [

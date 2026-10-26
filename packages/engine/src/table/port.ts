@@ -27,11 +27,11 @@ export interface TableSceneMap {
 }
 
 /**
- * An item on the table's CHARACTER or MOUNT layer, at a position in scene
- * units.
+ * An item on the table's CHARACTER or MOUNT layer, with its axis-aligned
+ * bounds in scene units.
  */
 export interface TableToken {
-  position: Point;
+  bounds: { min: Point; max: Point };
 }
 
 /** The items on the table's CHARACTER and MOUNT layers. */
@@ -45,7 +45,7 @@ export interface TablePort {
   /** The scene grid and map images. Fails with `TableUnavailableError`. */
   sceneMap(): Promise<TableSceneMap>;
   /**
-   * The position of each item on the CHARACTER and MOUNT layers. Fails with
+   * The bounds of each item on the CHARACTER and MOUNT layers. Fails with
    * `TableUnavailableError`.
    */
   sceneTokens(): Promise<TableSceneTokens>;

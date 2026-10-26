@@ -51,7 +51,16 @@ const STRIP_5 = room(rect(0, 0, 500, 100)); // cols 0..4, row 0
 const SQUARE_3 = room(rect(0, 0, 300, 300)); // cols 0..2, rows 0..2
 
 function cells(picks: CellPick[]): Cell[] {
-  return picks.map((p) => p.cell);
+  return picks.flatMap((p) => p.cells);
+}
+
+/** The n x n block of cells with top-left cell (col, row), in scene order. */
+function block(col: number, row: number, n: number): Cell[] {
+  const list: Cell[] = [];
+  for (let r = row; r < row + n; r++) {
+    for (let c = col; c < col + n; c++) list.push({ col: c, row: r });
+  }
+  return list;
 }
 
 /** Cells in scene order (rows, then columns), for order-free comparison. */
@@ -68,6 +77,7 @@ describe("pickFreeCells", () => {
       room: room(rect(0, 0, 100, 100)),
       occupied: [],
       count: 4,
+      footprint: 1,
     });
     expect(sorted(cells(picks))).toEqual([
       { col: 0, row: 0 },
@@ -76,9 +86,10 @@ describe("pickFreeCells", () => {
       { col: 1, row: 1 },
     ]);
     for (const pick of picks) {
+      const cell = pick.cells[0] as Cell;
       expect(pick.position).toEqual({
-        x: (pick.cell.col + 0.5) * 100,
-        y: (pick.cell.row + 0.5) * 100,
+        x: (cell.col + 0.5) * 100,
+        y: (cell.row + 0.5) * 100,
       });
     }
   });
@@ -89,6 +100,7 @@ describe("pickFreeCells", () => {
       room: STRIP_3,
       occupied: [{ col: 1, row: 0 }],
       count: 2,
+      footprint: 1,
     });
     expect(sorted(cells(picks))).toEqual([
       { col: 0, row: 0 },
@@ -102,11 +114,14 @@ describe("pickFreeCells", () => {
       room: SQUARE_3,
       occupied: [],
       count: 5,
+      footprint: 1,
     });
     expect(picks).toHaveLength(5);
-    const keys = new Set(picks.map((p) => `${p.cell.col},${p.cell.row}`));
+    const keys = new Set(
+      cells(picks).map((c) => `${String(c.col)},${String(c.row)}`),
+    );
     expect(keys.size).toBe(5);
-    for (const { cell } of picks) {
+    for (const cell of cells(picks)) {
       expect(
         cell.col >= 0 && cell.col <= 2 && cell.row >= 0 && cell.row <= 2,
       ).toBe(true);
@@ -126,6 +141,7 @@ describe("pickFreeCells", () => {
           room: SQUARE_3,
           occupied: [],
           count: 4,
+          footprint: 1,
         }),
       ),
     ).toEqual([
@@ -144,6 +160,7 @@ describe("pickFreeCells", () => {
           room: STRIP_5,
           occupied: [],
           count: 3,
+          footprint: 1,
         }),
       ),
     ).toEqual([
@@ -165,6 +182,7 @@ describe("pickFreeCells", () => {
             { col: 1, row: 0 },
           ],
           count: 2,
+          footprint: 1,
         }),
       ),
     ).toEqual([
@@ -179,6 +197,7 @@ describe("pickFreeCells", () => {
       room: STRIP_3,
       occupied: [],
       count: 5,
+      footprint: 1,
     });
     expect(sorted(cells(picks))).toEqual([
       { col: 0, row: 0 },
@@ -198,6 +217,7 @@ describe("pickFreeCells", () => {
           { col: 2, row: 0 },
         ],
         count: 2,
+        footprint: 1,
       }),
     ).toEqual([]);
   });
@@ -213,6 +233,7 @@ describe("pickFreeCells", () => {
             room: lRoom,
             occupied: [],
             count: 4,
+            footprint: 1,
           }),
         ),
       ),
@@ -227,7 +248,13 @@ describe("pickFreeCells", () => {
     // (1,0) at 141 beats (0,0) and (0,2) at 100.
     expect(
       cells(
-        pickFreeCells({ placement: FLAT, room: lRoom, occupied: [], count: 2 }),
+        pickFreeCells({
+          placement: FLAT,
+          room: lRoom,
+          occupied: [],
+          count: 2,
+          footprint: 1,
+        }),
       ),
     ).toEqual([
       { col: 0, row: 1 },
@@ -245,10 +272,11 @@ describe("pickFreeCells", () => {
       room: room(rect(2375, 2375, 2500, 2625)),
       occupied: [],
       count: 3,
+      footprint: 1,
     });
     expect(picks).toEqual([
-      { cell: { col: 19, row: -20 }, position: { x: 2925, y: -2925 } },
-      { cell: { col: 20, row: -20 }, position: { x: 3075, y: -2925 } },
+      { cells: [{ col: 19, row: -20 }], position: { x: 2925, y: -2925 } },
+      { cells: [{ col: 20, row: -20 }], position: { x: 3075, y: -2925 } },
     ]);
   });
 
@@ -259,6 +287,179 @@ describe("pickFreeCells", () => {
         room: SQUARE_3,
         occupied: [],
         count: 0,
+        footprint: 1,
+      }),
+    ).toEqual([]);
+  });
+
+  it("footprint 1 gives each pick exactly one cell", () => {
+    const picks = pickFreeCells({
+      placement: FLAT,
+      room: SQUARE_3,
+      occupied: [],
+      count: 4,
+      footprint: 1,
+    });
+    expect(picks).toHaveLength(4);
+    for (const pick of picks) {
+      expect(pick.cells).toHaveLength(1);
+      const cell = pick.cells[0] as Cell;
+      expect(pick.position).toEqual({
+        x: (cell.col + 0.5) * 100,
+        y: (cell.row + 0.5) * 100,
+      });
+    }
+  });
+
+  it("footprint 2 picks only blocks whose four cell centres are all inside the room (L-shaped room)", () => {
+    // Arm A: cols 0..3, rows 0..1; arm B: cols 0..1, rows 2..3. The 2 x 2
+    // blocks fully inside have top-left cells (0,0), (1,0), (2,0), (0,1), (0,2);
+    // (1,1) would reach (2,2), outside the room.
+    const lRoom = room(rect(0, 0, 400, 200), rect(0, 200, 200, 400));
+    const inside = new Set(
+      [
+        [0, 0],
+        [1, 0],
+        [2, 0],
+        [0, 1],
+        [0, 2],
+      ].map(([c, r]) => `${String(c)},${String(r)}`),
+    );
+    const picks = pickFreeCells({
+      placement: FLAT,
+      room: lRoom,
+      occupied: [],
+      count: 10,
+      footprint: 2,
+    });
+    expect(picks.length).toBeGreaterThan(0);
+    for (const pick of picks) {
+      const topLeft = pick.cells[0] as Cell;
+      expect(inside.has(`${String(topLeft.col)},${String(topLeft.row)}`)).toBe(
+        true,
+      );
+      expect(pick.cells).toEqual(block(topLeft.col, topLeft.row, 2));
+    }
+  });
+
+  it("footprint 2 skips any block with an occupied cell", () => {
+    // Every 2 x 2 block of a 3 x 3 room holds its middle cell.
+    expect(
+      pickFreeCells({
+        placement: FLAT,
+        room: SQUARE_3,
+        occupied: [{ col: 1, row: 1 }],
+        count: 2,
+        footprint: 2,
+      }),
+    ).toEqual([]);
+    // A 4 x 2 room with (1,0) occupied: only the block at (2,0) is free.
+    expect(
+      pickFreeCells({
+        placement: FLAT,
+        room: room(rect(0, 0, 400, 200)),
+        occupied: [{ col: 1, row: 0 }],
+        count: 3,
+        footprint: 2,
+      }),
+    ).toEqual([{ cells: block(2, 0, 2), position: { x: 300, y: 100 } }]);
+  });
+
+  it("footprint 2 picks do not overlap each other", () => {
+    const picks = pickFreeCells({
+      placement: FLAT,
+      room: room(rect(0, 0, 500, 500)),
+      occupied: [],
+      count: 10,
+      footprint: 2,
+    });
+    expect(picks.length).toBeGreaterThan(1);
+    const all = cells(picks);
+    expect(
+      new Set(all.map((c) => `${String(c.col)},${String(c.row)}`)).size,
+    ).toBe(all.length);
+  });
+
+  it("a footprint-2 pick's position is its block's centre, a grid intersection", () => {
+    expect(
+      pickFreeCells({
+        placement: FLAT,
+        room: room(rect(0, 0, 200, 200)),
+        occupied: [],
+        count: 1,
+        footprint: 2,
+      }),
+    ).toEqual([{ cells: block(0, 0, 2), position: { x: 100, y: 100 } }]);
+  });
+
+  it("a footprint-3 pick's position is the centre of its block's middle cell", () => {
+    expect(
+      pickFreeCells({
+        placement: FLAT,
+        room: SQUARE_3,
+        occupied: [],
+        count: 1,
+        footprint: 3,
+      }),
+    ).toEqual([{ cells: block(0, 0, 3), position: { x: 150, y: 150 } }]);
+  });
+
+  it("footprint 2 picks start at the block nearest the middle of the room and spread apart (hand-derived, ties to the first block in scene order)", () => {
+    // 6 x 6 room: the mean of the cell centres (300, 300) is the centre of the
+    // block at (2,2) -> seed. Farthest from it: the four corner blocks tie at
+    // 282.8 -> (0,0), first in scene order. Then (4,0), (0,4) and (4,4) tie
+    // at 282.8 from their nearest pick -> (4,0).
+    expect(
+      pickFreeCells({
+        placement: FLAT,
+        room: room(rect(0, 0, 600, 600)),
+        occupied: [],
+        count: 3,
+        footprint: 2,
+      }),
+    ).toEqual([
+      { cells: block(2, 2, 2), position: { x: 300, y: 300 } },
+      { cells: block(0, 0, 2), position: { x: 100, y: 100 } },
+      { cells: block(4, 0, 2), position: { x: 500, y: 100 } },
+    ]);
+  });
+
+  it("when the spread order fits fewer blocks than asked, the room is packed in scene order instead: a 4 x 4 room takes four footprint-2 picks", () => {
+    // The spread seed (1,1) overlaps every other block, so it places one;
+    // first fit in scene order places four.
+    expect(
+      pickFreeCells({
+        placement: FLAT,
+        room: room(rect(0, 0, 400, 400)),
+        occupied: [],
+        count: 4,
+        footprint: 2,
+      }),
+    ).toEqual([
+      { cells: block(0, 0, 2), position: { x: 100, y: 100 } },
+      { cells: block(2, 0, 2), position: { x: 300, y: 100 } },
+      { cells: block(0, 2, 2), position: { x: 100, y: 300 } },
+      { cells: block(2, 2, 2), position: { x: 300, y: 300 } },
+    ]);
+  });
+
+  it("a footprint too large for the room yields no pick", () => {
+    expect(
+      pickFreeCells({
+        placement: FLAT,
+        room: STRIP_3,
+        occupied: [],
+        count: 1,
+        footprint: 2,
+      }),
+    ).toEqual([]);
+    expect(
+      pickFreeCells({
+        placement: FLAT,
+        room: SQUARE_3,
+        occupied: [],
+        count: 1,
+        footprint: 4,
       }),
     ).toEqual([]);
   });

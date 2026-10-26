@@ -25,7 +25,10 @@ const mapItem = {
 const sceneMap = { grid: { dpi: 150, type: "SQUARE" }, maps: [mapItem] };
 
 const sceneTokens = {
-  tokens: [{ position: { x: 300, y: -150 } }, { position: { x: 0, y: 12.5 } }],
+  tokens: [
+    { bounds: { min: { x: 250, y: -200 }, max: { x: 350, y: -100 } } },
+    { bounds: { min: { x: -50, y: -37.5 }, max: { x: 50, y: 62.5 } } },
+  ],
 };
 
 function without<T extends object>(value: T, key: keyof T): Partial<T> {
@@ -116,18 +119,23 @@ describe("query schemas", () => {
     }
   });
 
-  it("a scene-tokens result needs a numeric x and y for each token's position, and may be empty", () => {
+  it("a scene-tokens result needs numeric min and max corners for each token's bounds, and may be empty", () => {
     expect(sceneTokensSchema.safeParse(sceneTokens).success).toBe(true);
     expect(sceneTokensSchema.safeParse({ tokens: [] }).success).toBe(true);
+    const min = { x: 0, y: 0 };
+    const max = { x: 100, y: 100 };
     for (const bad of [
       {},
       { tokens: [{}] },
-      { tokens: [{ position: { x: 1 } }] },
-      { tokens: [{ position: { y: 1 } }] },
-      { tokens: [{ position: { x: "1", y: 2 } }] },
-      { tokens: [{ position: { x: 1, y: null } }] },
-      { tokens: [{ position: null }] },
-      { tokens: { position: { x: 1, y: 2 } } },
+      { tokens: [{ position: { x: 1, y: 2 } }] },
+      { tokens: [{ bounds: null }] },
+      { tokens: [{ bounds: { min } }] },
+      { tokens: [{ bounds: { max } }] },
+      { tokens: [{ bounds: { min: { x: 1 }, max } }] },
+      { tokens: [{ bounds: { min, max: { y: 1 } } }] },
+      { tokens: [{ bounds: { min: { x: "1", y: 2 }, max } }] },
+      { tokens: [{ bounds: { min, max: { x: 1, y: null } } }] },
+      { tokens: { bounds: { min, max } } },
     ]) {
       expect(
         sceneTokensSchema.safeParse(bad).success,
@@ -145,7 +153,9 @@ describe("query schemas", () => {
     for (const bad of [
       {
         name: "scene-tokens",
-        result: { tokens: [{ position: { x: 1 } }] },
+        result: {
+          tokens: [{ bounds: { min: { x: 1 }, max: { x: 2, y: 2 } } }],
+        },
       },
       { name: "scene-tokens" },
       { name: "scene-map", result: sceneTokens },
