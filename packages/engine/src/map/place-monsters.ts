@@ -8,10 +8,18 @@ import {
 } from "../encounter/add-monsters.js";
 import type { ChangeOrigin } from "../encounter/origin.js";
 import { validateAddMonsters } from "../encounter/validate-add-monsters.js";
-import type { TablePort } from "../table/port.js";
+import { footprintForSize } from "../monsters/footprint.js";
+import type { TablePort, TableToken } from "../table/port.js";
+import {
+  displayGrid,
+  formatCellRange,
+  type DisplayGrid,
+} from "./display-grid.js";
 import { liveActiveMap, requireActiveMap } from "./live-map.js";
+import { pickFreeCells, type CellPick } from "./picker.js";
 import type { MapRepository } from "./repository.js";
 import { findRoom, type Room } from "./rooms.js";
+import type { Cell } from "./types.js";
 
 /** A group of monsters to add, optionally placed in a saved room of the map in use. */
 export interface RoomGroup extends AddMonstersGroup {
@@ -76,10 +84,91 @@ export async function addMonstersInRooms(
     liveActiveMap(deps.table, deps.maps),
     deps.table.sceneTokens(),
   ]);
-  void rooms;
-  void live;
-  void tokens;
-  throw new Error("not implemented");
+  const dpi = live.placement.sceneDpi;
+  const occupied = tokens.tokens.flatMap((t) => cellsUnderBounds(t, dpi));
+  const footprints = groups.map((g) => {
+    const monster = deps.monsters.byKey.get(g.monster);
+    return monster === undefined ? 1 : footprintForSize(monster.size);
+  });
+  const order = groups
+    .map((_, i) => i)
+    .sort((a, b) => (footprints[b] as number) - (footprints[a] as number));
+  const picks: (CellPick[] | undefined)[] = groups.map(() => undefined);
+  for (const i of order) {
+    const room = rooms[i];
+    const group = groups[i];
+    if (room === undefined || group === undefined) continue;
+    const picked = pickFreeCells({
+      placement: live.placement,
+      room,
+      occupied,
+      count: group.count,
+      footprint: footprints[i] as number,
+    });
+    for (const p of picked) occupied.push(...p.cells);
+    picks[i] = picked;
+  }
+
+  const result = addMonsters(
+    deps,
+    groups.map((g, i) => {
+      const plain = withoutRoom(g);
+      const groupPicks = picks[i];
+      return groupPicks === undefined
+        ? plain
+        : { ...plain, spawnPositions: groupPicks.map((p) => p.position) };
+    }),
+    origin,
+    options,
+  );
+
+  const grid = displayGrid(live.placement);
+  const placements: RoomPlacement[] = [];
+  let next = 0;
+  groups.forEach((g, i) => {
+    const room = rooms[i];
+    const groupPicks = picks[i] ?? [];
+    for (let n = 0; n < g.count; n++) {
+      const instance = result.instances[next++];
+      if (room === undefined || instance === undefined) continue;
+      const pick = groupPicks[n];
+      placements.push({
+        id: instance.id,
+        name: instance.name,
+        room: room.name,
+        cell: pick === undefined ? null : blockRange(grid, pick),
+      });
+    }
+  });
+  return { ...result, placements, moved: live.moved };
+}
+
+/** The display label of a block: "A1" for one cell, "A1:B2" for more. */
+function blockRange(grid: DisplayGrid, pick: CellPick): string {
+  const first = pick.cells[0] as Cell;
+  const last = pick.cells[pick.cells.length - 1] as Cell;
+  return formatCellRange({
+    from: grid.sceneCellToDisplay(first),
+    to: grid.sceneCellToDisplay(last),
+  });
+}
+
+/**
+ * The scene cells whose centre lies inside or on the edge of the token's
+ * bounds, with a small tolerance for float noise.
+ */
+function cellsUnderBounds(token: TableToken, dpi: number): Cell[] {
+  const { min, max } = token.bounds;
+  const eps = 1e-9;
+  const fromCol = Math.ceil(min.x / dpi - 0.5 - eps);
+  const toCol = Math.floor(max.x / dpi - 0.5 + eps);
+  const fromRow = Math.ceil(min.y / dpi - 0.5 - eps);
+  const toRow = Math.floor(max.y / dpi - 0.5 + eps);
+  const cells: Cell[] = [];
+  for (let row = fromRow; row <= toRow; row++) {
+    for (let col = fromCol; col <= toCol; col++) cells.push({ col, row });
+  }
+  return cells;
 }
 
 /** The group as `addMonsters` takes it, so the room does not leak into the store. */
