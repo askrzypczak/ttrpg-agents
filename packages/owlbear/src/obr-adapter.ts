@@ -114,6 +114,7 @@ function toItem(item: SceneItem): Item {
       position(position: Vec2): B;
       metadata(metadata: Metadata): B;
       layer(layer: NonNullable<SceneItem["layer"]>): B;
+      rotation(rotation: number): B;
       locked(locked: boolean): B;
       disableHit(disableHit: boolean): B;
     },
@@ -127,6 +128,7 @@ function toItem(item: SceneItem): Item {
       .position(item.position)
       .metadata(item.metadata)
       .layer(item.layer ?? "CHARACTER")
+      .rotation(item.rotation ?? 0)
       .locked(item.locked ?? false)
       .disableHit(item.disableHit ?? false);
   switch (item.type) {
@@ -205,6 +207,7 @@ function fromItem(item: Item): SceneItem {
     layer: item.layer,
     rotation: item.rotation,
     scale: item.scale,
+    locked: item.locked,
   };
   if (isImage(item)) {
     read.image = item.image;

@@ -24,10 +24,12 @@ import type { SceneItem } from "./scene-model.js";
 import {
   EDIT_FIELD_NAMES,
   PLACED_METADATA_KEY,
+  SYNCED_METADATA_KEY,
   defaultSyncConfig,
   instanceIdOf,
   moveOverrideNote,
   planSync,
+  replaceOverrideNote,
   restyleOverrideNote,
   type EditField,
   type EncounterInstance,
@@ -122,15 +124,16 @@ function fold(
 }
 
 /**
- * Which token write an override is the note of: a move or a redraw of its
- * instance's token; undefined for any other note.
+ * Which token write an override is the note of: a move, a redraw or a
+ * replacement of its instance's token; undefined for any other note.
  */
 function writeNoteKind(
   wanted: readonly EncounterInstance[],
   override: SyncPlan["overrides"][number],
-): "move" | "restyle" | undefined {
+): "move" | "restyle" | "replace" | undefined {
   const name = wanted.find((i) => i.id === override.instanceId)?.displayName;
   if (name === undefined) return undefined;
+  if (override.message === replaceOverrideNote(name)) return "replace";
   if (
     override.message === moveOverrideNote(name, true) ||
     override.message === moveOverrideNote(name, false)
@@ -300,15 +303,21 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * a different token value.
  *
  * An `mcp` `monster-changed` event redraws its instance's token for the new
- * monster type in the next reconcile, once, after the renames and moves: an
- * image token takes the type's art (the picker opens for a type with no art,
- * as for a new token; without a pick it keeps its own picture), a circle stays
- * a circle, both at the new footprint and scale 1, in place and with their
- * visibility; a reconcile that fails keeps the redraw for the retry. A
- * snapshot whose monster type differs from the one a token was last drawn for
- * redraws it the same way (see planSync). A redraw over a token whose art or
- * size had been changed on the table, or that has no recorded look, is
- * reported through `onOverride` once its write succeeds.
+ * monster type in the next reconcile, once, after the renames and moves, as a
+ * new token of that type would be drawn (the picker opens for a type with no
+ * art, as for a new token), at the new footprint and scale 1; a reconcile that
+ * fails keeps the redraw for the retry. A token whose kind stays (image to
+ * image, circle to circle) is redrawn in place. One whose kind must change (a
+ * circle whose type has art, an image token whose type has none) is replaced:
+ * its synced record is marked with the replacement's id, the replacement
+ * (carrying its name, position, visibility, rotation, layer, lock and
+ * metadata) is added, then the old token is deleted with its attachments. A
+ * retry after a failure between the add and the delete finishes the
+ * replacement and reports no deletion. A snapshot whose monster type differs
+ * from the one a token was last drawn for redraws it the same way (see
+ * planSync). A redraw over a token whose art or size had been changed on the
+ * table, or that has no recorded look, is reported through `onOverride` once
+ * its write succeeds; a replacement always is, once the old token is deleted.
  *
  * An instance that leaves the encounter (a `removed` or `cleared` event) is
  * dropped from the placed record before the next reconcile plans, so one that
@@ -333,9 +342,10 @@ export function createEncounterSync(
     /**
      * Called once per Stat Bubbles field a snapshot pushed over a different
      * token value, once per agent move, in any reconcile, of a token the GM
-     * had moved (or one with no recorded position), and once per redraw for a
-     * new monster type of a token whose art or size the table had changed (or
-     * one with no recorded look), with the record to show.
+     * had moved (or one with no recorded position), once per redraw for a new
+     * monster type of a token whose art or size the table had changed (or one
+     * with no recorded look), and once per token replaced for a new monster
+     * type, with the record to show.
      */
     onOverride?: (text: string) => void;
     /** Called once per store change (a snapshot or an applied `mcp` event) for each table value that could not be read back. */
@@ -905,9 +915,14 @@ export function createEncounterSync(
         const monsterKey = monsterKeyOf.get(instanceIdOf(token) ?? "");
         if (monsterKey !== undefined) gettingTokens.add(monsterKey);
       }
-      // A redrawn image token whose type has no drawable art keeps its own
-      // picture, so it may need no write; its type's stored art is still
-      // published.
+      for (const { item } of first.replace) {
+        if (item.type !== "IMAGE") continue;
+        const monsterKey = monsterKeyOf.get(instanceIdOf(item) ?? "");
+        if (monsterKey !== undefined) gettingTokens.add(monsterKey);
+      }
+      // A redrawn token whose type has no drawable art may need no write (a
+      // circle already at its footprint); its type's art without a url is
+      // still published.
       for (const monsterKey of first.needsArt) gettingTokens.add(monsterKey);
       await checkStoredArt(gettingTokens, options.loadImage);
     }
@@ -927,21 +942,30 @@ export function createEncounterSync(
       moves: takenMoves,
       restyles: takenRestyles,
     });
+    // Each note is reported at most once.
+    const reportedNotes = new Set<SyncPlan["overrides"][number]>();
     /** Reports the notes of a token write of this kind once it is written. */
     const reportWriteNotes = (
       tokenId: string,
-      kind: "move" | "restyle",
+      kind: "move" | "restyle" | "replace",
     ): void => {
       const token = items.find((item) => item.id === tokenId);
       const instanceId = token === undefined ? undefined : instanceIdOf(token);
       for (const override of plan.overrides)
         if (
           override.instanceId === instanceId &&
-          writeNoteKind(wanted, override) === kind
-        )
+          writeNoteKind(wanted, override) === kind &&
+          !reportedNotes.has(override)
+        ) {
+          reportedNotes.add(override);
           options.onOverride?.(override.message);
+        }
     };
-    if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
+    if (plan.delete.length > 0) {
+      await write(() => obr.deleteItems(plan.delete));
+      // The old token of a half-done replacement is among them.
+      for (const id of plan.delete) reportWriteNotes(id, "replace");
+    }
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
     // Before the metadata write, so a failed rename leaves the baseline
     // unwritten and the retry renames.
@@ -960,15 +984,36 @@ export function createEncounterSync(
       await write(() => obr.updateItems([r.id], r.patch));
       reportWriteNotes(r.id, "restyle");
     }
+    // A token whose kind must change is replaced: its synced record is first
+    // marked with the replacement's id, then the replacement is added, then
+    // the old token is deleted (Owlbear deletes its attachments with it). A
+    // reconcile that fails in between leaves the instance a linked token, and
+    // the retry plans the replacement again or finishes it (see planSync).
+    if (plan.replace.length > 0) {
+      await write(() =>
+        obr.setItemMetadata(
+          plan.replace.map((r) => ({
+            id: r.id,
+            key: SYNCED_METADATA_KEY,
+            value: r.marker,
+          })),
+        ),
+      );
+      await write(() => obr.addItems(plan.replace.map((r) => r.item)));
+      for (const r of plan.replace) reportWriteNotes(r.id, "move");
+      await write(() => obr.deleteItems(plan.replace.map((r) => r.id)));
+      for (const r of plan.replace) reportWriteNotes(r.id, "replace");
+    }
     if (plan.update.length > 0)
       await write(() => obr.setItemMetadata(plan.update));
 
     // Remember which instances now have a token, so a token the GM deletes
     // later stays deleted; forget instances that left the encounter.
-    const doomed = new Set(plan.delete);
+    const doomed = new Set([...plan.delete, ...plan.replace.map((r) => r.id)]);
     const present = [
       ...items.filter((item) => !doomed.has(item.id)),
       ...plan.add,
+      ...plan.replace.map((r) => r.item),
     ].map(instanceIdOf);
     const wantedIds = new Set(wanted.map((i) => i.id));
     const next = new Set(
@@ -1032,8 +1077,8 @@ export function createEncounterSync(
     appliedCount = applying.length;
     if (!quiet || recovered) onApplied();
     if (outbox !== undefined) holdEdits(plan.edits);
-    // Move and redraw notes were reported as their writes were made (see
-    // apply).
+    // Move, redraw and replacement notes were reported as their writes were
+    // made (see apply).
     for (const override of plan.overrides)
       if (writeNoteKind(applying, override) === undefined)
         options.onOverride?.(override.message);
