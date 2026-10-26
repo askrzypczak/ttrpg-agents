@@ -149,4 +149,37 @@ describe("restoreMonsters", () => {
     expect(state()).toEqual(before);
     expect(repo.listRemovedInstances()).toHaveLength(2);
   });
+
+  it("restoreMonsters numbers a renamed monster past the names kept earlier in the same call", () => {
+    const removedItems = seed(
+      shadow("Shadow 1"),
+      shadow("Shadow 2"),
+      shadow("Shadow 3"),
+    );
+    repo.removeInstances(
+      removedItems.map((i) => i.id),
+      removeOrigin,
+    );
+    seed(shadow("Shadow 1"));
+
+    const restored = restoreMonsters(
+      deps(),
+      ["Shadow 1", "Shadow 3", "Shadow 2"],
+      origin,
+    );
+
+    expect(
+      restored.map((r) => [r.instance.displayName, r.renamedFrom]),
+    ).toEqual([
+      ["Shadow 2", "Shadow 1"],
+      ["Shadow 3", null],
+      ["Shadow 4", "Shadow 2"],
+    ]);
+    expect(
+      repo
+        .listInstances()
+        .map((i) => i.displayName)
+        .sort(),
+    ).toEqual(["Shadow 1", "Shadow 2", "Shadow 3", "Shadow 4"]);
+  });
 });
