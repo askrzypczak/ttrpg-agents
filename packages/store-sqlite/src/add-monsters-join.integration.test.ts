@@ -288,9 +288,15 @@ describe("addMonsters with join", () => {
     expect(
       errorCode(() => add([{ monster: WOLF, count: 1, join: "Twin" }])),
     ).toBe("unknown_group");
+    expect(() => add([{ monster: WOLF, count: 1, join: "Twin" }])).toThrow(
+      `Group 1 (${WOLF}): several monsters are named "Twin"; join by id`,
+    );
     expect(
       errorCode(() => add([{ monster: WOLF, count: 1, join: "Loner" }])),
     ).toBe("unknown_group");
+    expect(() => add([{ monster: WOLF, count: 1, join: "Loner" }])).toThrow(
+      `Group 1 (${WOLF}): "Loner" is in no initiative group to join`,
+    );
     expect(calls).toBe(0);
     expect(repo.listInstances()).toEqual(before);
   });

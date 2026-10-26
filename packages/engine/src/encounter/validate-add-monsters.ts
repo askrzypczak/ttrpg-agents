@@ -91,7 +91,40 @@ export function findJoinTargets(
   repo: Pick<EncounterRepository, "listInstances">,
   groups: readonly AddMonstersGroup[],
 ): (JoinTarget | undefined)[] {
-  void repo;
-  void groups;
-  throw new Error("not implemented");
+  if (!groups.some((group) => group.join !== undefined)) {
+    return groups.map(() => undefined);
+  }
+  const instances = repo.listInstances();
+  return groups.map((group, i) => {
+    if (group.join === undefined) return undefined;
+    const where = `Group ${String(i + 1)} (${group.monster})`;
+    const byId = instances.find((instance) => instance.id === group.join);
+    const byName = instances.filter(
+      (instance) => instance.displayName === group.join,
+    );
+    const member = byId ?? (byName.length === 1 ? byName[0] : undefined);
+    if (member === undefined) {
+      if (byName.length > 1) {
+        throw new AddMonstersError(
+          "unknown_group",
+          `${where}: several monsters are named "${group.join}"; join by id`,
+        );
+      }
+      throw new AddMonstersError(
+        "unknown_group",
+        `${where}: no monster "${group.join}" in the encounter to join`,
+      );
+    }
+    if (member.groupId === null) {
+      throw new AddMonstersError(
+        "unknown_group",
+        `${where}: "${member.displayName}" is in no initiative group to join`,
+      );
+    }
+    return {
+      groupId: member.groupId,
+      initiative: member.initiative,
+      statsVisible: member.statsVisible,
+    };
+  });
 }

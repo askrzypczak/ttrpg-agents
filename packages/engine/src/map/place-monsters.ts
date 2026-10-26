@@ -9,7 +9,10 @@ import {
 import { UnknownInstanceError } from "../encounter/errors.js";
 import type { ChangeOrigin } from "../encounter/origin.js";
 import type { EncounterRepository } from "../encounter/repository.js";
-import { validateAddMonsters } from "../encounter/validate-add-monsters.js";
+import {
+  findJoinTargets,
+  validateAddMonsters,
+} from "../encounter/validate-add-monsters.js";
 import { footprintForSize } from "../monsters/footprint.js";
 import type { TablePort, TableToken } from "../table/port.js";
 import {
@@ -76,6 +79,7 @@ export async function addMonstersInRooms(
     options.maxGroupCount ?? MAX_GROUP_COUNT,
     options.initiative ?? "group",
   );
+  findJoinTargets(deps.repo, groups);
   const active = requireActiveMap(deps.maps);
   const saved = deps.maps.getRooms(active.itemId);
   const rooms: (Room | undefined)[] = groups.map((g) =>
