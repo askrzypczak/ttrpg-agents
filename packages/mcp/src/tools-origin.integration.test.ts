@@ -59,6 +59,10 @@ function recordingRepo(
       record("setInitiative", origin),
       inner.setInitiative(id, initiative, origin)
     ),
+    setGroupId: (id, groupId, origin) => (
+      record("setGroupId", origin),
+      inner.setGroupId(id, groupId, origin)
+    ),
     setHp: (id, hp, origin) => (
       record("setHp", origin),
       inner.setHp(id, hp, origin)
@@ -230,6 +234,45 @@ describe("tool write origin", () => {
         source: "mcp",
         commandId: issuedCommandIds[0],
       });
+    }
+  });
+
+  it("split_initiative and merge_initiative pass source mcp and one command id to every setGroupId and setInitiative write", async () => {
+    seed("Shadow 1", "Shadow 2");
+    const cases: [string, Record<string, unknown>, string[]][] = [
+      [
+        "split_initiative",
+        { targets: ["Shadow 1", "Shadow 2"], roll: true },
+        ["setGroupId", "setInitiative", "setGroupId", "setInitiative"],
+      ],
+      [
+        "merge_initiative",
+        { targets: ["Shadow 1", "Shadow 2"] },
+        ["setGroupId", "setGroupId", "setInitiative"],
+      ],
+    ];
+    for (const [name, args, methods] of cases) {
+      if (name === "merge_initiative") {
+        const [, second] = ctx.repo.listInstances();
+        ctx.repo.setInitiative(second?.id ?? "", 1, seedOrigin);
+      }
+      writes.length = 0;
+      issuedCommandIds.length = 0;
+
+      const result = await call(name, args);
+
+      expect(result.isError, name).toBeUndefined();
+      expect(
+        writes.map((w) => w.method),
+        name,
+      ).toEqual(methods);
+      expect(issuedCommandIds, name).toHaveLength(1);
+      for (const write of writes) {
+        expect(write.origin, name).toEqual({
+          source: "mcp",
+          commandId: issuedCommandIds[0],
+        });
+      }
     }
   });
 });

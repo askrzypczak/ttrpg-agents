@@ -48,6 +48,7 @@ function recordingRepo(inner: SqliteEncounterRepository): EncounterRepository {
       inner.renameInstance(id, name, origin),
     setInitiative: (id, initiative, origin) =>
       inner.setInitiative(id, initiative, origin),
+    setGroupId: (id, groupId, origin) => inner.setGroupId(id, groupId, origin),
     setHp: (id, hp, origin) => (
       origins.push(origin),
       inner.setHp(id, hp, origin)

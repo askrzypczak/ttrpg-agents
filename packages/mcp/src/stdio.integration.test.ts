@@ -19,6 +19,8 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   rename_monster: { destructiveHint: true },
   set_initiative: { destructiveHint: true },
   roll_initiative: { destructiveHint: true },
+  split_initiative: { destructiveHint: true },
+  merge_initiative: { destructiveHint: true },
   set_hp: { destructiveHint: true },
   set_max_hp: { destructiveHint: true },
   set_armor_class: { destructiveHint: true },
@@ -74,7 +76,7 @@ async function connect(): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all twenty-two tools and serves a call", async () => {
+  it("lists all twenty-four tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
@@ -87,6 +89,7 @@ describe("stdio server", () => {
       "heal",
       "list_encounter",
       "list_rooms",
+      "merge_initiative",
       "propose_rooms",
       "remove_monsters",
       "remove_rooms",
@@ -99,6 +102,7 @@ describe("stdio server", () => {
       "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "split_initiative",
       "table_status",
       "use_map",
     ]);
@@ -112,11 +116,11 @@ describe("stdio server", () => {
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
   }, 30_000);
 
-  it("stdio server (spawned via `bin/stdio.mjs`) lists twenty-two tools including `table_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
+  it("stdio server (spawned via `bin/stdio.mjs`) lists twenty-four tools including `table_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(22);
+    expect(tools).toHaveLength(24);
     const tableStatus = tools.find((t) => t.name === "table_status");
     expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });
 

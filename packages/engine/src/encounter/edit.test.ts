@@ -37,6 +37,7 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
       byId.set(id, after);
       return after;
     },
+    setGroupId: unexpected,
     setStatsVisible: unexpected,
     clearEncounter: unexpected,
     setHp: (id, hp) => {

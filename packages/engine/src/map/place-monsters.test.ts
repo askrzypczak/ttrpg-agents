@@ -175,6 +175,9 @@ class MemoryEncounter implements EncounterRepository {
   setInitiative(): MonsterInstance {
     throw new Error("unused");
   }
+  setGroupId(): MonsterInstance {
+    throw new Error("unused");
+  }
   setHp(): HpChange {
     throw new Error("unused");
   }

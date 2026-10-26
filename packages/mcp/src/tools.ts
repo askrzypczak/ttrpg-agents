@@ -476,6 +476,31 @@ const rollInitiativeTool = defineTool({
   },
 });
 
+const splitInitiativeTool = defineTool({
+  name: "split_initiative",
+  annotations: { destructiveHint: true },
+  description:
+    "Give each named monster its own initiative group, so it acts on its own. Targets are instance ids or exact names. Each keeps its initiative unless roll is true, then each rolls its own. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    roll: z.boolean().optional(),
+  },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
+const mergeInitiativeTool = defineTool({
+  name: "merge_initiative",
+  annotations: { destructiveHint: true },
+  description:
+    "Put the named monsters into one initiative group, so they act together. Targets are instance ids or exact names; each takes the initiative of the first named monster that has one, without a roll. All targets must resolve, otherwise nothing changes.",
+  inputSchema: { targets: z.array(z.string()).min(1) },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 const setStatsVisibilityTool = defineTool({
   name: "set_stats_visibility",
   annotations: { destructiveHint: false },
@@ -749,6 +774,8 @@ export const tools: readonly ToolDefinition[] = [
   renameMonsterTool,
   setInitiativeTool,
   rollInitiativeTool,
+  splitInitiativeTool,
+  mergeInitiativeTool,
   setStatsVisibilityTool,
   clearEncounterTool,
   tableStatusTool,

@@ -163,6 +163,20 @@ const mutations: MutationCase[] = [
     },
   },
   {
+    name: "setGroupId",
+    run: (o) => {
+      repo.setGroupId(first.id, "group-9", o);
+      return [
+        {
+          type: "instance-changed",
+          id: first.id,
+          changes: { groupId: "group-9" },
+          origin: o,
+        } as EncounterEvent,
+      ];
+    },
+  },
+  {
     name: "setArmorClass",
     run: (o) => {
       repo.setArmorClass(first.id, 15, o);

@@ -200,6 +200,27 @@ describe("rollInitiativeValues", () => {
     ]);
   });
 
+  it("rollInitiativeValues in group mode gives a group mixing monster types one shared roll with its first item's modifier and label", () => {
+    const rng = cycleRng(6, 11);
+    const { outcomes, rolls } = rollInitiativeValues(
+      deps(rng),
+      [
+        { monsterKey: "ogre", displayName: "Ogre 1", groupId: "g1" },
+        { monsterKey: "goblin", displayName: "Goblin 1", groupId: "g1" },
+        { monsterKey: "goblin", displayName: "Goblin 2", groupId: "g1" },
+      ],
+      "group",
+    );
+    expect(rolls).toHaveLength(1);
+    expect(rolls[0]).toMatchObject({
+      label: "Ogre initiative (group)",
+      total: 7,
+    });
+    const shared = { roll: 7, modifier: -1, initiative: 6 };
+    expect(outcomes).toEqual([shared, shared, shared]);
+    expect(rng.calls).toBe(1);
+  });
+
   it("rollInitiativeValues throws UnknownMonsterError, before any roll, when an item's monster key is not in the index", () => {
     const rng = cycleRng(5);
     expect(() =>

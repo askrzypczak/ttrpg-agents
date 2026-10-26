@@ -58,6 +58,16 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance;
   /**
+   * Sets the initiative group of an instance of the active encounter in one
+   * transaction and returns it updated. Throws UnknownInstanceError for an id
+   * not in the active encounter; nothing changes on a throw.
+   */
+  setGroupId(
+    id: string,
+    groupId: string,
+    origin: ChangeOrigin,
+  ): MonsterInstance;
+  /**
    * Sets the absolute current HP of an instance of the active encounter in one
    * transaction, clamped to 0..maxHp. Throws InvalidAmountError for a
    * non-integer value, UnknownInstanceError for an id not in the active

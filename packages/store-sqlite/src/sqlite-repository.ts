@@ -262,6 +262,17 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
+  setGroupId(
+    id: string,
+    groupId: string,
+    origin: ChangeOrigin,
+  ): MonsterInstance {
+    void id;
+    void groupId;
+    void origin;
+    throw new Error("not implemented");
+  }
+
   setHp(id: string, hp: number, origin: ChangeOrigin): HpChange {
     return this.transaction(() => {
       const row = this.db
