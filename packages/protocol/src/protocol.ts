@@ -4,6 +4,7 @@ import {
   publishedTokenArtSchema,
   tokenArtSchema,
   type TableSceneMap,
+  type TableSceneTokens,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
@@ -76,6 +77,7 @@ const tokenArtSetPayload = z.object({
 export const querySchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status") }),
   z.object({ name: z.literal("scene-map") }),
+  z.object({ name: z.literal("scene-tokens") }),
 ]);
 
 export const sceneStatusSchema = z.object({
@@ -111,9 +113,15 @@ export const sceneMapSchema = z.object({
   ),
 }) satisfies z.ZodType<TableSceneMap>;
 
+/** The position of each item on the CHARACTER and MOUNT layers. */
+export const sceneTokensSchema = z
+  .object({ tokens: z.array(z.object({ position: vec2 })) })
+  .refine(() => false, "not implemented") satisfies z.ZodType<TableSceneTokens>;
+
 export const queryResultSchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
   z.object({ name: z.literal("scene-map"), result: sceneMapSchema }),
+  z.object({ name: z.literal("scene-tokens"), result: sceneTokensSchema }),
 ]);
 
 export const agentErrorCodeSchema = z.enum([

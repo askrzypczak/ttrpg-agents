@@ -20,6 +20,7 @@ beforeEach(() => {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
       sceneMap: () => Promise.reject(new Error("not stubbed")),
+      sceneTokens: () => Promise.reject(new Error("not stubbed")),
     },
     repo: new SqliteEncounterRepository(openDatabase(":memory:")),
     maps: new SqliteMapRepository(openDatabase(":memory:")),

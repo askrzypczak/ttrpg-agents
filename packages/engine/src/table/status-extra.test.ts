@@ -27,6 +27,7 @@ describe("getTableStatus (extra cases)", () => {
           appliedInstanceCount: 2,
         }),
       sceneMap: () => Promise.reject(new Error("not stubbed")),
+      sceneTokens: () => Promise.reject(new Error("not stubbed")),
     };
     const status = await getTableStatus(repo, table);
     expect(status.encounterCount).toBe(3);

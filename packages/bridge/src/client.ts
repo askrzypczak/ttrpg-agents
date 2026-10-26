@@ -115,5 +115,8 @@ export function createBridgeTable(
       const { grid, maps } = res.result.result;
       return { grid, maps };
     },
+    sceneTokens() {
+      throw new Error("not implemented");
+    },
   };
 }

@@ -64,6 +64,9 @@ export async function handleQuery(
         },
       };
     }
+    case "scene-tokens": {
+      throw new Error("not implemented");
+    }
   }
 }
 

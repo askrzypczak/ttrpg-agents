@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { PROTOCOL_VERSION, type QueryResult } from "@ttrpg-agents/protocol";
-import { queryReply, handleQuery } from "./queries.js";
+import { describeError } from "./panel-state.js";
+import { queryReply, handleQuery, replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import { createMessageFeed } from "./testing/messages.js";
-import { SceneModel, type SceneItem } from "./scene-model.js";
+import {
+  MissingSceneError,
+  SceneModel,
+  type Layer,
+  type SceneItem,
+} from "./scene-model.js";
 import { INSTANCE_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
 
 const inst = (n: number): EncounterInstance =>
@@ -130,6 +136,106 @@ describe("handleQuery scene-map", () => {
   });
 });
 
+function itemOn(
+  id: string,
+  layer: Layer,
+  position: { x: number; y: number },
+  extra: Partial<SceneItem> = {},
+): SceneItem {
+  return {
+    id,
+    type: "IMAGE",
+    name: id,
+    visible: true,
+    position,
+    metadata: {},
+    layer,
+    ...extra,
+  };
+}
+
+describe("handleQuery scene-tokens", () => {
+  it("`scene-tokens` reports the position of every item on the CHARACTER and MOUNT layers, hidden ones and our own tokens included", async () => {
+    const { obr, scene } = createFakeObr();
+    scene.addItems([
+      itemOn("player", "CHARACTER", { x: 10, y: 20 }),
+      itemOn("hidden", "CHARACTER", { x: -30, y: 45.5 }, { visible: false }),
+      itemOn(
+        "ttrpg-instance-i1",
+        "CHARACTER",
+        { x: 150, y: 300 },
+        {
+          type: "SHAPE",
+          metadata: { [INSTANCE_METADATA_KEY]: { instanceId: "i1" } },
+        },
+      ),
+      itemOn("horse", "MOUNT", { x: 600, y: -75 }),
+    ]);
+    const sync = createEncounterSync(obr);
+
+    expect(await handleQuery(obr, sync, { name: "scene-tokens" })).toEqual({
+      name: "scene-tokens",
+      result: {
+        tokens: [
+          { position: { x: 10, y: 20 } },
+          { position: { x: -30, y: 45.5 } },
+          { position: { x: 150, y: 300 } },
+          { position: { x: 600, y: -75 } },
+        ],
+      },
+    });
+  });
+
+  it("`scene-tokens` leaves out items on the MAP, PROP, DRAWING, ATTACHMENT and other layers", async () => {
+    const { obr, scene } = createFakeObr();
+    const others: Layer[] = [
+      "MAP",
+      "GRID",
+      "DRAWING",
+      "PROP",
+      "ATTACHMENT",
+      "NOTE",
+      "TEXT",
+      "RULER",
+      "FOG",
+      "POINTER",
+      "POST_PROCESS",
+      "CONTROL",
+      "POPOVER",
+    ];
+    scene.addItems([
+      ...others.map((layer, i) =>
+        itemOn(`other-${layer}`, layer, { x: i, y: i }),
+      ),
+      itemOn("goblin", "CHARACTER", { x: 75, y: 225 }),
+    ]);
+    const sync = createEncounterSync(obr);
+
+    expect(await handleQuery(obr, sync, { name: "scene-tokens" })).toEqual({
+      name: "scene-tokens",
+      result: { tokens: [{ position: { x: 75, y: 225 } }] },
+    });
+  });
+
+  it("`scene-tokens` on a scene that is not ready replies with a non-fatal `query-failed`", async () => {
+    const { obr } = createFakeObr(new SceneModel("gm", false));
+    const sync = createEncounterSync(obr);
+
+    expect(
+      await replyToQuery(obr, sync, "c9", { name: "scene-tokens" }),
+    ).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "error",
+      id: "c9",
+      payload: {
+        code: "query-failed",
+        message: describeError(new MissingSceneError()),
+        fatal: false,
+      },
+    });
+  });
+});
+
 describe("handleQuery read-only guard", () => {
   it("handleQuery makes no write call on the adapter", async () => {
     const { obr: base } = createFakeObr();
@@ -149,9 +255,11 @@ describe("handleQuery read-only guard", () => {
 
     const status = await handleQuery(obr, sync, { name: "scene-status" });
     const map = await handleQuery(obr, sync, { name: "scene-map" });
+    const tokens = await handleQuery(obr, sync, { name: "scene-tokens" });
 
     expect(status.name).toBe("scene-status");
     expect(map.name).toBe("scene-map");
+    expect(tokens.name).toBe("scene-tokens");
     expect(write).not.toHaveBeenCalled();
   });
 });
