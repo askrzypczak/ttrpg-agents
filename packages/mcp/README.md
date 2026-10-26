@@ -42,7 +42,8 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `split_initiative`     | Give several monsters their own initiative group each, by id or exact name; keeps each value, or rolls each with `roll`                    |
 | `merge_initiative`     | Put several monsters in one initiative group by id or exact name; each takes the first named monster's initiative, no roll                 |
 | `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                     |
-| `clear_encounter`      | Remove every monster                                                                                                                       |
+| `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                |
+| `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number           |
 | `table_status`         | Ask the Owlbear tab for its scene status; reports in sync or not                                                                           |
 | `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                            |
 | `set_rooms`            | Name rooms on the map in use by display-cell ranges (confirmed, or proposed); a room named like a saved one replaces it                    |

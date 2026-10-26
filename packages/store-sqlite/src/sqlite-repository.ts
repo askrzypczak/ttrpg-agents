@@ -47,6 +47,8 @@ interface InstanceRow {
 interface RemovedRow extends InstanceRow {
   removed_source: ChangeOrigin["source"];
   removed_command_id: string;
+  /** 1 when the row's removal is the encounter's last clear; NULL reads as 0. */
+  cleared: number | null;
 }
 
 /** Live rows of the active encounter; removed rows are out of scope for every per-id mutation. */
@@ -215,10 +217,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
   listRemovedInstances(): RemovedInstance[] {
     const rows = this.db
       .prepare(
-        `SELECT m.* FROM monster_instances m
+        `SELECT m.*, (m.removed_seq = e.cleared_seq) AS cleared FROM monster_instances m
          JOIN encounters e ON e.id = m.encounter_id
          WHERE e.active = 1 AND m.removed_seq IS NOT NULL
-         ORDER BY m.removed_seq DESC`,
+         ORDER BY m.removed_seq DESC, m.created_at, m.rowid`,
       )
       .all() as unknown as RemovedRow[];
     return rows.map((row) => ({
@@ -227,6 +229,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         source: row.removed_source,
         commandId: row.removed_command_id,
       },
+      cleared: row.cleared === 1,
     }));
   }
 
@@ -487,15 +490,30 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  clearEncounter(origin: ChangeOrigin): void {
-    this.transaction(() => {
+  clearEncounter(origin: ChangeOrigin): MonsterInstance[] {
+    return this.transaction(() => {
+      const cleared = this.listInstances();
+      const seq = this.record({ type: "cleared", origin });
+      if (cleared.length === 0) return [];
+      // Earlier removals, an earlier clear's set included, cannot be restored any more.
       this.db
         .prepare(
           `DELETE FROM monster_instances
-           WHERE encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
+           WHERE removed_seq IS NOT NULL
+             AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
         )
         .run();
-      this.record({ type: "cleared", origin });
+      this.db
+        .prepare(
+          `UPDATE monster_instances
+           SET removed_seq = ?, removed_source = ?, removed_command_id = ?
+           WHERE ${ACTIVE_SCOPE}`,
+        )
+        .run(seq, origin.source, origin.commandId);
+      this.db
+        .prepare("UPDATE encounters SET cleared_seq = ? WHERE active = 1")
+        .run(seq);
+      return cleared;
     });
   }
 

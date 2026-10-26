@@ -88,10 +88,10 @@ function recordingRepo(
       record("setSpawnPositions", origin),
       inner.setSpawnPositions(positions, origin)
     ),
-    clearEncounter: (origin) => {
-      record("clearEncounter", origin);
-      inner.clearEncounter(origin);
-    },
+    clearEncounter: (origin) => (
+      record("clearEncounter", origin),
+      inner.clearEncounter(origin)
+    ),
   };
 }
 
@@ -206,6 +206,25 @@ describe("tool write origin", () => {
     issuedCommandIds.length = 0;
 
     const result = await call("restore_monsters", { targets: ["Shadow 2"] });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes).toEqual([
+      {
+        method: "restoreInstances",
+        origin: { source: "mcp", commandId: issuedCommandIds[0] },
+      },
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+  });
+
+  it("restore_encounter passes source mcp and a fresh commandId to the repository", async () => {
+    seed("Shadow 1", "Shadow 2");
+    const cleared = await call("clear_encounter");
+    expect(cleared.isError).toBeUndefined();
+    writes.length = 0;
+    issuedCommandIds.length = 0;
+
+    const result = await call("restore_encounter");
 
     expect(result.isError).toBeUndefined();
     expect(writes).toEqual([
