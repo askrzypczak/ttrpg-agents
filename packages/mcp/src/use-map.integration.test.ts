@@ -39,6 +39,7 @@ function contextWith(sceneMap: TablePort["sceneMap"]): ToolContext {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
       sceneMap,
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
+      mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     repo: new SqliteEncounterRepository(openDatabase(":memory:")),
     maps: new SqliteMapRepository(openDatabase(":memory:")),

@@ -80,6 +80,8 @@ export interface BridgeServerOptions {
   agentToken?: string;
   /** How long `POST /agent/query` waits for the client's reply. Default 5000. */
   queryTimeoutMs?: number;
+  /** How long `POST /agent/query` waits for a `map-image` reply. Default 30000. */
+  mapImageTimeoutMs?: number;
   /** Removes an instance from the store when the GM deletes its token on the table. */
   removeInstance?: (instanceId: string, commandId: string) => WriteBackResult;
   /** Stores the art the GM picked for a monster type. */

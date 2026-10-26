@@ -127,5 +127,8 @@ export function createBridgeTable(
       const { tokens } = res.result.result;
       return { tokens };
     },
+    mapImage() {
+      return Promise.reject(new Error("not implemented"));
+    },
   };
 }

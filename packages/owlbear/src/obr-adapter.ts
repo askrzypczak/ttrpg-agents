@@ -93,6 +93,7 @@ export type ObrReader = Pick<
   | "getSceneMetadata"
   | "getViewportCenter"
   | "getGrid"
+  | "fetchImage"
 >;
 
 function toItem(item: SceneItem): Item {

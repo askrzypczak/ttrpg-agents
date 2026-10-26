@@ -6,6 +6,8 @@ import {
   type QueryResult,
 } from "@ttrpg-agents/protocol";
 import { isOurs, type EncounterSync } from "./encounter-sync.js";
+import { drawMapImageOnCanvas } from "./map-image-canvas.js";
+import type { DrawMapImage } from "./map-image.js";
 import { describeError } from "./panel-state.js";
 import type { ObrReader } from "./obr-adapter.js";
 import type { SceneItem } from "./scene-model.js";
@@ -42,6 +44,7 @@ export async function handleQuery(
   obr: ObrReader,
   sync: Pick<EncounterSync, "appliedInstanceCount">,
   query: Query,
+  draw: DrawMapImage = drawMapImageOnCanvas,
 ): Promise<QueryResult> {
   switch (query.name) {
     case "scene-status": {
@@ -80,6 +83,10 @@ export async function handleQuery(
         },
       };
     }
+    case "map-image": {
+      void draw;
+      throw new Error("not implemented");
+    }
   }
 }
 
@@ -97,9 +104,10 @@ export async function replyToQuery(
   sync: Pick<EncounterSync, "appliedInstanceCount">,
   id: string,
   query: Query,
+  draw: DrawMapImage = drawMapImageOnCanvas,
 ): Promise<BridgeMessage> {
   try {
-    return queryReply(id, await handleQuery(obr, sync, query));
+    return queryReply(id, await handleQuery(obr, sync, query, draw));
   } catch (e) {
     return {
       v: PROTOCOL_VERSION,

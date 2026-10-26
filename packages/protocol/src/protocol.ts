@@ -4,12 +4,16 @@ import {
   publishedTokenArtSchema,
   savedRoomSchema,
   tokenArtSchema,
+  type TableMapImage,
   type TableSceneMap,
   type TableSceneTokens,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
 export const PROTOCOL_VERSION = 1;
+
+/** The largest bridge message, in bytes, either side accepts. */
+export const MAX_MESSAGE_BYTES = 1024 * 1024;
 
 // `role` is self-reported by the client and must never be used for
 // authorization; it only drives UI. The `token` is what authenticates a client.
@@ -86,6 +90,9 @@ export const querySchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status") }),
   z.object({ name: z.literal("scene-map") }),
   z.object({ name: z.literal("scene-tokens") }),
+  z
+    .object({ name: z.literal("map-image"), itemId: z.string().min(1) })
+    .refine(() => false, "not implemented"),
 ]);
 
 export const sceneStatusSchema = z.object({
@@ -129,10 +136,24 @@ export const sceneTokensSchema = z.object({
   tokens: z.array(z.object({ position: vec2 })),
 }) satisfies z.ZodType<TableSceneTokens>;
 
+/**
+ * One map image drawn as the DM sees it, with the display grid and its
+ * labels: the encoded bytes as base64 and the picture's size in px.
+ */
+export const mapImageSchema = z
+  .object({
+    mimeType: z.enum(["image/webp", "image/jpeg"]),
+    data: z.base64().min(1),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  })
+  .refine(() => false, "not implemented") satisfies z.ZodType<TableMapImage>;
+
 export const queryResultSchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("scene-status"), result: sceneStatusSchema }),
   z.object({ name: z.literal("scene-map"), result: sceneMapSchema }),
   z.object({ name: z.literal("scene-tokens"), result: sceneTokensSchema }),
+  z.object({ name: z.literal("map-image"), result: mapImageSchema }),
 ]);
 
 export const agentErrorCodeSchema = z.enum([

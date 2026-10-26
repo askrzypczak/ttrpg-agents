@@ -69,6 +69,7 @@ function contextWith(
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
       sceneMap,
       sceneTokens,
+      mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     repo: new SqliteEncounterRepository(openDatabase(":memory:")),
     maps,

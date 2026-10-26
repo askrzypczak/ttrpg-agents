@@ -66,6 +66,7 @@ describe("list_rooms cells", () => {
         sceneStatus: () => Promise.reject(new Error("not stubbed")),
         sceneMap: () => Promise.resolve(live),
         sceneTokens: () => Promise.reject(new Error("not stubbed")),
+        mapImage: () => Promise.reject(new Error("not stubbed")),
       },
       repo: new SqliteEncounterRepository(openDatabase(":memory:")),
       maps,

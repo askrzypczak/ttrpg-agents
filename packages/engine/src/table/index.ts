@@ -1,4 +1,5 @@
 export type {
+  TableMapImage,
   TableMapItem,
   TablePort,
   TableSceneMap,

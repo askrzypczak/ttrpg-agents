@@ -39,6 +39,17 @@ export interface TableSceneTokens {
   tokens: TableToken[];
 }
 
+/**
+ * One map image drawn as the DM sees it, with the display grid and its
+ * labels: the encoded bytes as base64 and the picture's size in px.
+ */
+export interface TableMapImage {
+  mimeType: "image/webp" | "image/jpeg";
+  data: string;
+  width: number;
+  height: number;
+}
+
 /** Driven port: ask the table (the VTT). Fails with `TableUnavailableError`. */
 export interface TablePort {
   sceneStatus(): Promise<TableSceneStatus>;
@@ -49,4 +60,9 @@ export interface TablePort {
    * `TableUnavailableError`.
    */
   sceneTokens(): Promise<TableSceneTokens>;
+  /**
+   * The map image with this item id, drawn as the DM sees it with the display
+   * grid and its labels. Fails with `TableUnavailableError`.
+   */
+  mapImage(itemId: string): Promise<TableMapImage>;
 }
