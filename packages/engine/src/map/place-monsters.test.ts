@@ -430,6 +430,30 @@ describe("addMonstersInRooms", () => {
     expect(repo.addCalls).toBe(0);
   });
 
+  it("a group without a room in a call with rooms gets no spawn position and no placement", async () => {
+    const { deps, repo } = setup();
+    const result = await addMonstersInRooms(
+      deps,
+      [
+        { monster: "goblin", count: 1 },
+        { monster: "bandit", count: 1, room: "Attic" },
+      ],
+      origin,
+    );
+    expect(result.placements).toEqual([
+      {
+        id: result.instances[1]?.id,
+        name: "Bandit 1",
+        room: "Attic",
+        cell: "E5",
+      },
+    ]);
+    expect(result.instances.map((i) => spawnOf(repo, i.id))).toEqual([
+      null,
+      cellCentres["E5"],
+    ]);
+  });
+
   it("without a room the monsters get no spawn position and the table is not asked", async () => {
     const groups: RoomGroup[] = [
       { monster: "goblin", count: 2 },
