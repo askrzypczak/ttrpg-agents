@@ -13,6 +13,7 @@ import OBR, {
 } from "@owlbear-rodeo/sdk";
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type {
+  ItemBounds,
   ItemPatch,
   Metadata,
   PlayerRole,
@@ -53,6 +54,8 @@ export interface ObrAdapter {
   getViewportCenter(): Promise<Vec2>;
   /** The scene grid's dpi and type. */
   getGrid(): Promise<SceneGrid>;
+  /** The axis-aligned bounds of item `id`, in scene units. */
+  getItemBounds(id: string): Promise<ItemBounds>;
   /**
    * Asks the GM to pick one image from their Owlbear asset library, with
    * `defaultSearch` filled into its search box when given; resolves with its
@@ -93,6 +96,7 @@ export type ObrReader = Pick<
   | "getSceneMetadata"
   | "getViewportCenter"
   | "getGrid"
+  | "getItemBounds"
 >;
 
 function toItem(item: SceneItem): Item {
@@ -272,6 +276,10 @@ export function createObrAdapter(): ObrAdapter {
         OBR.scene.grid.getType(),
       ]);
       return { dpi, type };
+    },
+    getItemBounds: (id) => {
+      void id;
+      return Promise.reject(new Error("not implemented"));
     },
     pickImage: async (defaultSearch) => {
       const [picked] = await (defaultSearch === undefined

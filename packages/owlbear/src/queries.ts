@@ -71,14 +71,8 @@ export async function handleQuery(
     }
     case "scene-tokens": {
       const tokens = await obr.getItems(isTokenItem);
-      return {
-        name: "scene-tokens",
-        result: {
-          tokens: tokens.map((item) => ({
-            position: { x: item.position.x, y: item.position.y },
-          })),
-        },
-      };
+      void tokens;
+      throw new Error("not implemented");
     }
   }
 }

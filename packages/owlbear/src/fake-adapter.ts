@@ -3,6 +3,7 @@ import type { ImageUpload, ObrAdapter } from "./obr-adapter.js";
 import {
   MissingSceneError,
   SceneModel,
+  type ItemBounds,
   type SceneGrid,
   type Vec2,
 } from "./scene-model.js";
@@ -41,6 +42,8 @@ export function createFakeObr(
     grid?: SceneGrid;
     /** The local items of this tab (`OBR.scene.local`). Default: a new, empty model. */
     local?: SceneModel;
+    /** The bounds `getItemBounds` answers, per item id; an id without bounds rejects. */
+    itemBounds?: Record<string, ItemBounds>;
   } = {},
 ): {
   obr: ObrAdapter;
@@ -88,6 +91,10 @@ export function createFakeObr(
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
     getGrid: () => whenReady(() => ({ ...grid })),
+    getItemBounds: (id) => {
+      void id;
+      return Promise.reject(new Error("not implemented"));
+    },
     pickImage: async (defaultSearch) => {
       picks++;
       const pick = options.pickImage;

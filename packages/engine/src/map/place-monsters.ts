@@ -9,10 +9,7 @@ import {
 import type { ChangeOrigin } from "../encounter/origin.js";
 import { validateAddMonsters } from "../encounter/validate-add-monsters.js";
 import type { TablePort } from "../table/port.js";
-import { sceneToCell } from "./cells.js";
-import { displayGrid, formatCellLabel } from "./display-grid.js";
 import { liveActiveMap, requireActiveMap } from "./live-map.js";
-import { pickFreeCells, type CellPick } from "./picker.js";
 import type { MapRepository } from "./repository.js";
 import { findRoom, type Room } from "./rooms.js";
 
@@ -22,7 +19,11 @@ export interface RoomGroup extends AddMonstersGroup {
   room?: string;
 }
 
-/** Where one monster of a group with a room was placed; `cell` is null when no free cell was left. */
+/**
+ * Where one monster of a group with a room was placed: `cell` is its display
+ * cell label, or its block's display range ("A1:B2") for a footprint above 1;
+ * null when no free block was left.
+ */
 export interface RoomPlacement {
   id: string;
   name: string;
@@ -36,12 +37,12 @@ export interface AddMonstersInRoomsResult extends AddMonstersResult {
 }
 
 /**
- * Adds the groups like `addMonsters`; each group with a room gets free cells
- * inside that room of the map in use as spawn positions. A cell is occupied
- * when it holds the centre of a token on the table or was picked for an
- * earlier group; monsters left without a free cell get no spawn position.
- * Without any room the table is not asked. Every check runs before the store
- * write.
+ * Adds the groups like `addMonsters`; each group with a room gets free blocks
+ * of its footprint inside that room of the map in use as spawn positions,
+ * larger monsters first. A cell is occupied when its centre lies inside or on
+ * the edge of a token's bounds on the table or it was picked for another
+ * group; monsters left without a free block get no spawn position. Without any
+ * room the table is not asked. Every check runs before the store write.
  */
 export async function addMonstersInRooms(
   deps: AddMonstersDeps & {
@@ -75,57 +76,10 @@ export async function addMonstersInRooms(
     liveActiveMap(deps.table, deps.maps),
     deps.table.sceneTokens(),
   ]);
-  const occupied = tokens.tokens.map((t) =>
-    sceneToCell(t.position, live.placement.sceneDpi),
-  );
-  const picks: (CellPick[] | undefined)[] = groups.map((g, i) => {
-    const room = rooms[i];
-    if (room === undefined) return undefined;
-    const picked = pickFreeCells({
-      placement: live.placement,
-      room,
-      occupied,
-      count: g.count,
-    });
-    occupied.push(...picked.map((p) => p.cell));
-    return picked;
-  });
-
-  const result = addMonsters(
-    deps,
-    groups.map((g, i) => {
-      const plain = withoutRoom(g);
-      const groupPicks = picks[i];
-      return groupPicks === undefined
-        ? plain
-        : { ...plain, spawnPositions: groupPicks.map((p) => p.position) };
-    }),
-    origin,
-    options,
-  );
-
-  const grid = displayGrid(live.placement);
-  const placements: RoomPlacement[] = [];
-  let next = 0;
-  groups.forEach((g, i) => {
-    const room = rooms[i];
-    const groupPicks = picks[i] ?? [];
-    for (let n = 0; n < g.count; n++) {
-      const instance = result.instances[next++];
-      if (room === undefined || instance === undefined) continue;
-      const pick = groupPicks[n];
-      placements.push({
-        id: instance.id,
-        name: instance.name,
-        room: room.name,
-        cell:
-          pick === undefined
-            ? null
-            : formatCellLabel(grid.sceneCellToDisplay(pick.cell)),
-      });
-    }
-  });
-  return { ...result, placements, moved: live.moved };
+  void rooms;
+  void live;
+  void tokens;
+  throw new Error("not implemented");
 }
 
 /** The group as `addMonsters` takes it, so the room does not leak into the store. */

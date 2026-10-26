@@ -193,6 +193,7 @@ function twoScenes() {
     setSceneMetadata: (u) => current.obr.setSceneMetadata(u),
     getViewportCenter: () => current.obr.getViewportCenter(),
     getGrid: () => current.obr.getGrid(),
+    getItemBounds: (id) => current.obr.getItemBounds(id),
     pickImage: (search) => current.obr.pickImage(search),
     fetchImage: (url) => current.obr.fetchImage(url),
     isImageAlive: (url) => current.obr.isImageAlive(url),
