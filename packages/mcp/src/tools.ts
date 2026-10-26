@@ -7,10 +7,13 @@ import {
   getMapImage,
   getTableStatus,
   listRooms,
+  moveMonstersIntoRoom,
   proposeRooms,
   removeRooms,
   mergeInitiative,
+  resetMaxHp,
   resolveTargets,
+  restoreMonsters,
   rollInitiative,
   setRooms,
   splitInitiative,
@@ -19,6 +22,7 @@ import {
   useMap,
   type ChangeOrigin,
   type MonsterInstance,
+  type RestoredMonster,
   type RoomPlacement,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
@@ -253,6 +257,41 @@ const addMonstersTool = defineTool({
   },
 });
 
+const moveMonstersTool = defineTool({
+  name: "move_monsters",
+  annotations: { destructiveHint: true },
+  description:
+    "Move existing monsters, by instance id or exact name, into a saved room of the map in use: each gets a free cell there and its token moves on the table, keeping its id, HP, initiative and name. All targets must resolve, otherwise nothing is moved. Monsters left without a free cell stay where they are. Needs the bridge running.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    room: z
+      .string()
+      .min(1)
+      .describe("A saved room of the map in use, by name (any case)."),
+  },
+  async run(ctx, { targets, room }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was moved.`);
+      }
+      throw e;
+    }
+    const result = await moveMonstersIntoRoom(
+      { repo: ctx.repo, table: ctx.table, maps: ctx.maps },
+      resolved.map((i) => i.id),
+      room,
+      mcpOrigin(ctx),
+    );
+    return ok(
+      withMovedLine(moveLines(result.placements).join("\n\n"), result.moved),
+      { placements: result.placements, moved: result.moved },
+    );
+  },
+});
+
 const listEncounterTool = defineTool({
   name: "list_encounter",
   annotations: { readOnlyHint: true },
@@ -260,21 +299,29 @@ const listEncounterTool = defineTool({
   inputSchema: {},
   run(ctx) {
     const instances = ctx.repo.listInstances().sort(compareByInitiative);
-    if (instances.length === 0) {
-      return ok("The encounter is empty.", { instances: [] });
-    }
-    return ok(
-      table(
-        ["id", "name", "HP", "initiative"],
-        instances.map((i) => [
-          i.id,
-          i.displayName,
-          `${String(i.currentHp)}/${String(i.maxHp)}`,
-          i.initiative,
-        ]),
-      ),
-      { instances: instances.map(instanceView) },
-    );
+    const removed = ctx.repo.listRemovedInstances().map((r) => r.instance);
+    const body =
+      instances.length === 0
+        ? "The encounter is empty."
+        : table(
+            ["id", "name", "HP", "initiative"],
+            instances.map((i) => [
+              i.id,
+              i.displayName,
+              `${String(i.currentHp)}/${String(i.maxHp)}`,
+              i.initiative,
+            ]),
+          );
+    const removedLine =
+      removed.length === 0
+        ? []
+        : [
+            `Removed, can be restored: ${removed.map((i) => i.displayName).join(", ")}.`,
+          ];
+    return ok([body, ...removedLine].join("\n\n"), {
+      instances: instances.map(instanceView),
+      removed: removed.map(instanceView),
+    });
   },
 });
 
@@ -341,6 +388,51 @@ const setMaxHpTool = defineTool({
   },
 });
 
+const resetMaxHpTool = defineTool({
+  name: "reset_max_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set monsters' max HP to their statblock average (hp average) or a new roll of their HP dice (hp rolled). A monster at full HP stays at full HP; a damaged one keeps its current HP, lowered to the new max if above it. Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    hp: z.enum(["average", "rolled"]),
+  },
+  run(ctx, { targets, hp }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = resetMaxHp(
+      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+      resolved.map((i) => i.id),
+      hp,
+      mcpOrigin(ctx),
+    );
+    const lines = result.instances.map(
+      ({ before, after }) =>
+        `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+    );
+    const rollLines = result.rolls.map(
+      (r) =>
+        `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
+    );
+    const text = [
+      ...lines,
+      ...(rollLines.length > 0 ? ["", "Rolls:", ...rollLines] : []),
+    ].join("\n");
+    return ok(text, {
+      instances: result.instances.map((c) => instanceView(c.after)),
+      before: result.instances.map((c) => instanceView(c.before)),
+      rolls: result.rolls,
+    });
+  },
+});
+
 const setArmorClassTool = defineTool({
   name: "set_armor_class",
   annotations: { destructiveHint: true },
@@ -391,6 +483,40 @@ const removeMonstersTool = defineTool({
     const names = removed.map((i) => i.displayName);
     return ok(`Removed ${String(names.length)}: ${names.join(", ")}`, {
       removed: removed.map(instanceView),
+    });
+  },
+});
+
+const restoreMonstersTool = defineTool({
+  name: "restore_monsters",
+  annotations: { destructiveHint: false },
+  description:
+    "Bring back monsters removed from the encounter, by instance id or exact name, with the HP, initiative and group they had. All targets must resolve, otherwise nothing is restored. list_encounter names what can be restored; a name taken meanwhile gets a new number.",
+  inputSchema: { targets: z.array(z.string()).min(1) },
+  run(ctx, { targets }) {
+    let restored: RestoredMonster[];
+    try {
+      restored = restoreMonsters(
+        { repo: ctx.repo, monsters: ctx.monsters },
+        targets,
+        mcpOrigin(ctx),
+      );
+    } catch (e) {
+      if (e instanceof DomainError) {
+        return fail(`${e.message}. Nothing was restored.`);
+      }
+      throw e;
+    }
+    const parts = restored.map(({ instance, renamedFrom }) => {
+      const hp = `${String(instance.currentHp)}/${String(instance.maxHp)} HP`;
+      const was = renamedFrom === null ? "" : `, was ${renamedFrom}`;
+      return `${instance.displayName} (${hp}${was})`;
+    });
+    return ok(`Restored ${String(restored.length)}: ${parts.join(", ")}`, {
+      restored: restored.map(({ instance, renamedFrom }) => ({
+        ...instanceView(instance),
+        renamedFrom,
+      })),
     });
   },
 });
@@ -827,6 +953,31 @@ function placementLines(
   });
 }
 
+/**
+ * The "Moved into" line for the placed monsters and the "No free cell left"
+ * line for the rest, each only when it names someone.
+ */
+function moveLines(placements: readonly RoomPlacement[]): string[] {
+  const room = placements[0]?.room ?? "";
+  const placed = placements.filter((p) => p.cell !== null);
+  const unplaced = placements.filter((p) => p.cell === null);
+  const lines: string[] = [];
+  if (placed.length > 0) {
+    lines.push(
+      `Moved into ${room}: ${placed.map((p) => `${p.name} at ${String(p.cell)}`).join(", ")}.`,
+    );
+  }
+  if (unplaced.length > 0) {
+    const names = unplaced.map((p) => p.name).join(", ");
+    lines.push(
+      unplaced.length === 1
+        ? `No free cell left in ${room} for ${names}: it stays where it is.`
+        : `No free cell left in ${room} for ${names}: they stay where they are.`,
+    );
+  }
+  return lines;
+}
+
 function withMovedLine(text: string, moved: boolean): string {
   return moved ? `${text}\n\n${movedLine}` : text;
 }
@@ -835,13 +986,16 @@ export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
   addMonstersTool,
+  moveMonstersTool,
   listEncounterTool,
   hpTool("damage"),
   hpTool("heal"),
   setHpTool,
   setMaxHpTool,
+  resetMaxHpTool,
   setArmorClassTool,
   removeMonstersTool,
+  restoreMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
   rollInitiativeTool,

@@ -51,6 +51,11 @@ function recordingRepo(
       record("removeInstances", origin),
       inner.removeInstances(ids, origin)
     ),
+    listRemovedInstances: () => inner.listRemovedInstances(),
+    restoreInstances: (ids, name, origin) => (
+      record("restoreInstances", origin),
+      inner.restoreInstances(ids, name, origin)
+    ),
     renameInstance: (id, name, origin) => (
       record("renameInstance", origin),
       inner.renameInstance(id, name, origin)
@@ -78,6 +83,10 @@ function recordingRepo(
     setStatsVisible: (id, visible, origin) => (
       record("setStatsVisible", origin),
       inner.setStatsVisible(id, visible, origin)
+    ),
+    setSpawnPositions: (positions, origin) => (
+      record("setSpawnPositions", origin),
+      inner.setSpawnPositions(positions, origin)
     ),
     clearEncounter: (origin) => {
       record("clearEncounter", origin);
@@ -189,6 +198,25 @@ describe("tool write origin", () => {
     }
   });
 
+  it("restore_monsters passes source mcp and a fresh commandId to the repository", async () => {
+    seed("Shadow 1", "Shadow 2");
+    const removed = await call("remove_monsters", { targets: ["Shadow 2"] });
+    expect(removed.isError).toBeUndefined();
+    writes.length = 0;
+    issuedCommandIds.length = 0;
+
+    const result = await call("restore_monsters", { targets: ["Shadow 2"] });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes).toEqual([
+      {
+        method: "restoreInstances",
+        origin: { source: "mcp", commandId: issuedCommandIds[0] },
+      },
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+  });
+
   it("two tool calls get different command ids", async () => {
     seed("Shadow 1");
 
@@ -273,6 +301,32 @@ describe("tool write origin", () => {
           commandId: issuedCommandIds[0],
         });
       }
+    }
+  });
+
+  it("reset_max_hp passes source mcp and one command id to every setMaxHp and setHp write", async () => {
+    // At full HP with a max below the Shadow's average, so each reset raises
+    // the max and then refills the HP.
+    seed("Shadow 1", "Shadow 2");
+
+    const result = await call("reset_max_hp", {
+      targets: ["Shadow 1", "Shadow 2"],
+      hp: "average",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes.map((w) => w.method).sort()).toEqual([
+      "setHp",
+      "setHp",
+      "setMaxHp",
+      "setMaxHp",
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+    for (const write of writes) {
+      expect(write.origin).toEqual({
+        source: "mcp",
+        commandId: issuedCommandIds[0],
+      });
     }
   });
 });

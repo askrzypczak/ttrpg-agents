@@ -8,6 +8,8 @@ export type {
   EncounterRepository,
   HpChange,
   InstanceBuilder,
+  RemovedInstance,
+  RestoreNamer,
 } from "./repository.js";
 export * from "./add-monsters.js";
 export * from "./edit.js";
@@ -16,10 +18,16 @@ export * from "./errors.js";
 export * from "./hp.js";
 export * from "./initiative.js";
 export * from "./initiative-groups.js";
+export {
+  resetMaxHp,
+  type ResetMaxHpDeps,
+  type ResetMaxHpResult,
+} from "./max-hp.js";
 export * from "./log.js";
 export * from "./origin.js";
 export * from "./queries.js";
 export * from "./rename.js";
+export * from "./restore.js";
 export {
   publishedTokenArtSchema,
   tokenArtSchema,

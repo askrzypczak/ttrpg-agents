@@ -19,6 +19,7 @@ import {
   type Monster,
   type MonsterIndex,
   type MonsterInstance,
+  type RemovedInstance,
   type RoomGroup,
   type SavedRoom,
   type TableMapItem,
@@ -169,6 +170,12 @@ class MemoryEncounter implements EncounterRepository {
   removeInstances(): MonsterInstance[] {
     throw new Error("unused");
   }
+  listRemovedInstances(): RemovedInstance[] {
+    throw new Error("unused");
+  }
+  restoreInstances(): MonsterInstance[] {
+    throw new Error("unused");
+  }
   renameInstance(): MonsterInstance {
     throw new Error("unused");
   }
@@ -188,6 +195,9 @@ class MemoryEncounter implements EncounterRepository {
     throw new Error("unused");
   }
   setStatsVisible(): MonsterInstance {
+    throw new Error("unused");
+  }
+  setSpawnPositions(): MonsterInstance[] {
     throw new Error("unused");
   }
   clearEncounter(): void {

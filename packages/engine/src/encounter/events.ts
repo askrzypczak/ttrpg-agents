@@ -39,6 +39,12 @@ export const encounterEventSchema = z.discriminatedUnion("type", [
       }),
     origin: changeOriginSchema,
   }),
+  z.object({
+    type: z.literal("position-changed"),
+    id: z.string(),
+    spawnPosition: z.object({ x: z.number(), y: z.number() }),
+    origin: changeOriginSchema,
+  }),
 ]);
 
 export type EncounterEvent = z.infer<typeof encounterEventSchema>;

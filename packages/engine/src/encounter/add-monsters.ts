@@ -1,11 +1,11 @@
-import { createLogEntry, type RollLogEntry } from "../dice/log.js";
-import { roll } from "../dice/roll.js";
+import type { RollLogEntry } from "../dice/log.js";
 import type { Rng } from "../dice/rng.js";
 import type { Point } from "../map/types.js";
 import { footprintForSize } from "../monsters/footprint.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import { rollInitiativeValues } from "./initiative.js";
+import { rollMaxHp } from "./max-hp.js";
 import type { ChangeOrigin } from "./origin.js";
 import type { EncounterRepository } from "./repository.js";
 import type { NewMonsterInstance } from "./types.js";
@@ -137,17 +137,12 @@ export function addMonsters(
       for (let n = 0; n < group.count; n++) {
         const displayName = naming({ monster, existingNames: names });
         names.push(displayName);
-        let maxHp = monster.hp.average;
-        if (hpMode === "rolled") {
-          const result = roll(monster.hp.dice, rng);
-          rolls.push(createLogEntry(result, now(), `${displayName} HP`));
-          // Clamp to 1; the logged roll keeps the raw total, so it can differ from maxHp.
-          maxHp = Math.max(1, result.total);
-        }
+        const hpRoll = rollMaxHp({ rng, now }, monster.hp, hpMode, displayName);
+        if (hpRoll.roll !== null) rolls.push(hpRoll.roll);
         items.push({
           monsterKey: monster.key,
           displayName,
-          maxHp,
+          maxHp: hpRoll.maxHp,
           armorClass: monster.ac,
           groupId,
           footprint: footprintForSize(monster.size),

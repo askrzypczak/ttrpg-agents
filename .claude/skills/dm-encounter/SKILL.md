@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "remove the wolves", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `set_armor_class`, `remove_monsters`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -29,6 +29,8 @@ HP, AC, initiative, rolls, damage totals and attack bonuses come only from tool 
 
 - A named room ("in the taproom", "into the kitchen") goes to that group's `room` in `add_monsters`, as the DM says it (the tool matches saved rooms ignoring case). Several groups can name the same or different rooms in one call.
 - If a call with a room fails because the room is unknown (the error lists the known rooms), follow the live steps under Proposing rooms. On any other failure (no map in use, the map is no longer on the scene, a grid that is not square, or the bridge or the Owlbear tab cannot be reached), relay the error and stop: nothing was added. Do not retry without the room, and do not call `use_map` on your own.
+- Moving monsters already in the encounter into a room ("no, the wolf goes in the kitchen" right after an add, or "the goblins retreat to the hall") is ONE `move_monsters` call with the monsters' exact names (or ids) in `targets` and the room as the DM says it. Never remove the monsters and add them again: the move keeps their HP, initiative and names. If the room is unknown, follow the same live steps as for `add_monsters` (under Proposing rooms), then make the same `move_monsters` call again; on any other failure relay the error and stop.
+- After a move, relay the tool's "Moved into ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present.
 - Other positions and flavour ("on the left", "circling from behind", "ambushing from the trees") are not tracked. Acknowledge them in one short line ("Positions other than rooms aren't tracked, so I've skipped 'on the left'.") and still run the rest of the request.
 
 ## Using the map
@@ -95,6 +97,13 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 - `set_max_hp` lowers HP above the new max but never raises it. If the DM says the monster is at full HP, call `set_hp` after `set_max_hp`, using the max HP from its reply.
 - Do not call `list_encounter` after the calls. Relay each tool's line verbatim (for example "Goblin Warrior 2: HP 9 -> 4/9", "Wolf 1: max HP 11 -> 15, HP 11 -> 11/15", "Shadow 1: AC 12 -> 15").
 
+## Average or re-rolled max HP
+
+- "Wolf 2 should have average HP" / "change it to average HP" is one `reset_max_hp` call with `hp` "average"; "re-roll the wolf's HP" is the same call with `hp` "rolled". Several monsters ("give the wolves average HP") go in one call's `targets`. Target each monster as under Damage and healing.
+- A number from the DM ("the wolf has 15 max HP") is `set_max_hp`, not this tool.
+- The tool keeps a monster at full HP at full, and a damaged monster keeps its HP (lowered to the new max if above it). Do not call `set_hp` or `set_max_hp` after it.
+- Do not call `list_encounter` after the call. Relay the tool's lines verbatim (for example "Wolf 2: max HP 8 -> 11, HP 8 -> 11/11"), with its Rolls lines after a re-roll.
+
 ## Changing initiative
 
 - "The goblins act on 14" is one `set_initiative` call per goblin, each with `initiative` 14. The tool takes one target, so run the calls in parallel. Target each goblin as under Damage and healing.
@@ -114,3 +123,12 @@ Monsters' HP and AC (the Stat Bubbles on their tokens) are GM-only by default. T
 - To add monsters the players can see stats for ("add 2 wolves the players can see"), set `statsVisible: true` on that group in the `add_monsters` call; one call, no second step.
 - If you do not know the exact names, call `list_encounter` once to find them. Do not call it after the change. Relay the tool's line verbatim.
 - This only controls the stat bubbles. The token itself stays hidden from players until the DM shows it in Owlbear.
+
+## Bringing monsters back
+
+Removed monsters stay restorable until the encounter is cleared.
+
+- "Oops, the wolf's not dead" or "bring back goblin warrior 2" is ONE `restore_monsters` call with every monster the DM names in `targets`, by the exact name it had when removed (or its id). It comes back with its HP, initiative and group, and its token comes back on the table.
+- If you do not know the exact name, call `list_encounter` once: its last line names the removed monsters that can be restored. If a target errors, do the same.
+- Relay the tool's line verbatim (for example "Restored 1: Wolf 2 (5/11 HP)"). A monster whose name was taken meanwhile comes back under a new number, and the line says so ("was Wolf 2").
+- Monsters removed before a `clear_encounter` cannot be restored.

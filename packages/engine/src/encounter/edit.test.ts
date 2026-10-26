@@ -31,6 +31,8 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
     applyDamage: unexpected,
     applyHealing: unexpected,
     removeInstances: unexpected,
+    listRemovedInstances: unexpected,
+    restoreInstances: unexpected,
     renameInstance: unexpected,
     setInitiative: (id, initiative) => {
       const after = { ...find(id), initiative };
@@ -39,6 +41,7 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
     },
     setGroupId: unexpected,
     setStatsVisible: unexpected,
+    setSpawnPositions: unexpected,
     clearEncounter: unexpected,
     setHp: (id, hp) => {
       const before = find(id);
