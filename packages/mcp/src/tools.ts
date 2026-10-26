@@ -10,6 +10,7 @@ import {
   proposeRooms,
   removeRooms,
   resolveTargets,
+  restoreMonsters,
   rollInitiative,
   setRooms,
   getMonsterByKey,
@@ -17,6 +18,7 @@ import {
   useMap,
   type ChangeOrigin,
   type MonsterInstance,
+  type RestoredMonster,
   type RoomPlacement,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
@@ -258,21 +260,29 @@ const listEncounterTool = defineTool({
   inputSchema: {},
   run(ctx) {
     const instances = ctx.repo.listInstances().sort(compareByInitiative);
-    if (instances.length === 0) {
-      return ok("The encounter is empty.", { instances: [] });
-    }
-    return ok(
-      table(
-        ["id", "name", "HP", "initiative"],
-        instances.map((i) => [
-          i.id,
-          i.displayName,
-          `${String(i.currentHp)}/${String(i.maxHp)}`,
-          i.initiative,
-        ]),
-      ),
-      { instances: instances.map(instanceView) },
-    );
+    const removed = ctx.repo.listRemovedInstances().map((r) => r.instance);
+    const body =
+      instances.length === 0
+        ? "The encounter is empty."
+        : table(
+            ["id", "name", "HP", "initiative"],
+            instances.map((i) => [
+              i.id,
+              i.displayName,
+              `${String(i.currentHp)}/${String(i.maxHp)}`,
+              i.initiative,
+            ]),
+          );
+    const removedLine =
+      removed.length === 0
+        ? []
+        : [
+            `Removed, can be restored: ${removed.map((i) => i.displayName).join(", ")}.`,
+          ];
+    return ok([body, ...removedLine].join("\n\n"), {
+      instances: instances.map(instanceView),
+      removed: removed.map(instanceView),
+    });
   },
 });
 
@@ -389,6 +399,40 @@ const removeMonstersTool = defineTool({
     const names = removed.map((i) => i.displayName);
     return ok(`Removed ${String(names.length)}: ${names.join(", ")}`, {
       removed: removed.map(instanceView),
+    });
+  },
+});
+
+const restoreMonstersTool = defineTool({
+  name: "restore_monsters",
+  annotations: { destructiveHint: false },
+  description:
+    "Bring back monsters removed from the encounter, by instance id or exact name, with the HP, initiative and group they had. All targets must resolve, otherwise nothing is restored. list_encounter names what can be restored; a name taken meanwhile gets a new number.",
+  inputSchema: { targets: z.array(z.string()).min(1) },
+  run(ctx, { targets }) {
+    let restored: RestoredMonster[];
+    try {
+      restored = restoreMonsters(
+        { repo: ctx.repo, monsters: ctx.monsters },
+        targets,
+        mcpOrigin(ctx),
+      );
+    } catch (e) {
+      if (e instanceof DomainError) {
+        return fail(`${e.message}. Nothing was restored.`);
+      }
+      throw e;
+    }
+    const parts = restored.map(({ instance, renamedFrom }) => {
+      const hp = `${String(instance.currentHp)}/${String(instance.maxHp)} HP`;
+      const was = renamedFrom === null ? "" : `, was ${renamedFrom}`;
+      return `${instance.displayName} (${hp}${was})`;
+    });
+    return ok(`Restored ${String(restored.length)}: ${parts.join(", ")}`, {
+      restored: restored.map(({ instance, renamedFrom }) => ({
+        ...instanceView(instance),
+        renamedFrom,
+      })),
     });
   },
 });
@@ -746,6 +790,7 @@ export const tools: readonly ToolDefinition[] = [
   setMaxHpTool,
   setArmorClassTool,
   removeMonstersTool,
+  restoreMonstersTool,
   renameMonsterTool,
   setInitiativeTool,
   rollInitiativeTool,

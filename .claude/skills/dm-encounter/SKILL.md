@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "remove the wolves", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `set_armor_class`, `remove_monsters`, `set_initiative`, `roll_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -111,3 +111,12 @@ Monsters' HP and AC (the Stat Bubbles on their tokens) are GM-only by default. T
 - To add monsters the players can see stats for ("add 2 wolves the players can see"), set `statsVisible: true` on that group in the `add_monsters` call; one call, no second step.
 - If you do not know the exact names, call `list_encounter` once to find them. Do not call it after the change. Relay the tool's line verbatim.
 - This only controls the stat bubbles. The token itself stays hidden from players until the DM shows it in Owlbear.
+
+## Bringing monsters back
+
+Removed monsters stay restorable until the encounter is cleared.
+
+- "Oops, the wolf's not dead" or "bring back goblin warrior 2" is ONE `restore_monsters` call with every monster the DM names in `targets`, by the exact name it had when removed (or its id). It comes back with its HP, initiative and group, and its token comes back on the table.
+- If you do not know the exact name, call `list_encounter` once: its last line names the removed monsters that can be restored. If a target errors, do the same.
+- Relay the tool's line verbatim (for example "Restored 1: Wolf 2 (5/11 HP)"). A monster whose name was taken meanwhile comes back under a new number, and the line says so ("was Wolf 2").
+- Monsters removed before a `clear_encounter` cannot be restored.

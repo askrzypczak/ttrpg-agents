@@ -69,7 +69,7 @@ describe("encounterEventSchema origin", () => {
 
 type MutationName = Exclude<
   keyof EncounterRepository,
-  "getOrCreateActiveEncounter" | "listInstances"
+  "getOrCreateActiveEncounter" | "listInstances" | "listRemovedInstances"
 >;
 
 /** The event type each repository mutation is reported as. */
@@ -78,6 +78,7 @@ const eventForMutation: Record<MutationName, EncounterEvent["type"]> = {
   applyDamage: "hp-changed",
   applyHealing: "hp-changed",
   removeInstances: "removed",
+  restoreInstances: "added",
   renameInstance: "instance-changed",
   setInitiative: "instance-changed",
   setHp: "hp-changed",
