@@ -43,8 +43,14 @@ interface InstanceRow {
   spawn_y: number | null;
 }
 
+interface RemovedRow extends InstanceRow {
+  removed_source: ChangeOrigin["source"];
+  removed_command_id: string;
+}
+
+/** Live rows of the active encounter; removed rows are out of scope for every per-id mutation. */
 const ACTIVE_SCOPE =
-  "encounter_id IN (SELECT id FROM encounters WHERE active = 1)";
+  "removed_seq IS NULL AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)";
 
 function toInstance(row: InstanceRow): MonsterInstance {
   return {
@@ -192,19 +198,35 @@ export class SqliteEncounterRepository implements EncounterRepository {
         if (!instance) throw new UnknownInstanceError(unknownMessage(id));
         return instance;
       });
-      const del = this.db.prepare(
-        `DELETE FROM monster_instances WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      const mark = this.db.prepare(
+        `UPDATE monster_instances
+         SET removed_seq = ?, removed_source = ?, removed_command_id = ?
+         WHERE id = ?`,
       );
       for (const instance of removed) {
-        del.run(instance.id);
-        this.record({ type: "removed", id: instance.id, origin });
+        const seq = this.record({ type: "removed", id: instance.id, origin });
+        mark.run(seq, origin.source, origin.commandId, instance.id);
       }
       return removed;
     });
   }
 
   listRemovedInstances(): RemovedInstance[] {
-    throw new Error("not implemented");
+    const rows = this.db
+      .prepare(
+        `SELECT m.* FROM monster_instances m
+         JOIN encounters e ON e.id = m.encounter_id
+         WHERE e.active = 1 AND m.removed_seq IS NOT NULL
+         ORDER BY m.removed_seq DESC`,
+      )
+      .all() as unknown as RemovedRow[];
+    return rows.map((row) => ({
+      instance: toInstance(row),
+      removedBy: {
+        source: row.removed_source,
+        commandId: row.removed_command_id,
+      },
+    }));
   }
 
   restoreInstances(
@@ -212,10 +234,34 @@ export class SqliteEncounterRepository implements EncounterRepository {
     name: RestoreNamer,
     origin: ChangeOrigin,
   ): MonsterInstance[] {
-    void ids;
-    void name;
-    void origin;
-    throw new Error("not implemented");
+    return this.transaction(() => {
+      const namesInUse = this.listInstances().map((i) => i.displayName);
+      const restored = ids.map((id) => {
+        const row = this.db
+          .prepare(
+            `SELECT * FROM monster_instances
+             WHERE id = ? AND removed_seq IS NOT NULL
+               AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
+          )
+          .get(id) as InstanceRow | undefined;
+        if (!row) throw new UnknownInstanceError(unknownMessage(id));
+        const displayName = validateInstanceName(
+          name(toInstance(row), namesInUse),
+          namesInUse,
+        );
+        this.db
+          .prepare(
+            `UPDATE monster_instances
+             SET display_name = ?, removed_seq = NULL, removed_source = NULL, removed_command_id = NULL
+             WHERE id = ?`,
+          )
+          .run(displayName, id);
+        namesInUse.push(displayName);
+        return toInstance({ ...row, display_name: displayName });
+      });
+      this.record({ type: "added", instances: restored, origin });
+      return restored;
+    });
   }
 
   renameInstance(
@@ -400,7 +446,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
       .prepare(
         `SELECT m.* FROM monster_instances m
          JOIN encounters e ON e.id = m.encounter_id
-         WHERE e.active = 1
+         WHERE e.active = 1 AND m.removed_seq IS NULL
          ORDER BY m.created_at, m.rowid`,
       )
       .all() as unknown as InstanceRow[];
@@ -442,11 +488,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  /** Appends an event to the change log; call it inside the mutation's transaction. */
-  private record(event: EncounterEvent): void {
-    this.db
+  /** Appends an event to the change log and returns its seq; call it inside the mutation's transaction. */
+  private record(event: EncounterEvent): number {
+    const { lastInsertRowid } = this.db
       .prepare("INSERT INTO encounter_events (event) VALUES (?)")
       .run(JSON.stringify(event));
+    return Number(lastInsertRowid);
   }
 
   /** Records the HP values an instance has after a change. */

@@ -147,6 +147,17 @@ export const migrations: Migration[] = [
       ALTER TABLE monster_instances ADD COLUMN spawn_y REAL CHECK ((spawn_x IS NULL) = (spawn_y IS NULL));
     `,
   },
+  {
+    // A removed instance keeps its row, marked with the change that removed it:
+    // the seq of its `removed` event in the change log and the origin's source
+    // and command id. NULL in every column means the instance is in the encounter.
+    version: 12,
+    sql: `
+      ALTER TABLE monster_instances ADD COLUMN removed_seq INTEGER;
+      ALTER TABLE monster_instances ADD COLUMN removed_source TEXT CHECK (removed_source IN ('mcp', 'table'));
+      ALTER TABLE monster_instances ADD COLUMN removed_command_id TEXT CHECK ((removed_seq IS NULL) = (removed_source IS NULL) AND (removed_seq IS NULL) = (removed_command_id IS NULL));
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));
