@@ -154,6 +154,7 @@ interface Hooks {
   token: string;
   pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
+  mapRooms: (() => BridgeMessage) | undefined;
   removeInstance:
     ((instanceId: string, commandId: string) => WriteBackResult) | undefined;
   setTokenArt: ((monsterKey: string, art: TokenArt) => void) | undefined;
@@ -176,6 +177,19 @@ function sendSnapshot(ws: WebSocket, hooks: Hooks): void {
       ),
     );
   }
+}
+
+/** Sends the active map's rooms, if configured; a failing read is logged and nothing is sent. */
+function sendMapRooms(ws: WebSocket, hooks: Hooks): void {
+  if (!hooks.mapRooms) return;
+  let message: BridgeMessage;
+  try {
+    message = hooks.mapRooms();
+  } catch (e) {
+    console.error("map-rooms could not be read after hello-ack", e);
+    return;
+  }
+  send(ws, message);
 }
 
 /**
@@ -230,6 +244,7 @@ function handleMessage(
         payload: { serverVersion: SERVER_VERSION },
       });
       sendSnapshot(ws, hooks);
+      sendMapRooms(ws, hooks);
       break;
     case "token-deleted": {
       if (!hooks.removeInstance) {
@@ -379,6 +394,7 @@ export async function startBridgeServer(
     host = "127.0.0.1",
     token = randomBytes(32).toString("hex"),
     snapshot,
+    mapRooms,
     agentToken = randomBytes(32).toString("hex"),
     queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS,
     removeInstance,
@@ -541,6 +557,7 @@ export async function startBridgeServer(
         token,
         pending,
         snapshot,
+        mapRooms,
         removeInstance,
         setTokenArt,
         editInstance,

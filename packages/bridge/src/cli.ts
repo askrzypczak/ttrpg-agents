@@ -4,6 +4,7 @@ import { storeTokenImage } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterLog,
   SqliteEncounterRepository,
+  SqliteMapRepository,
   SqliteTokenArtRepository,
   SqliteTokenImageRepository,
   openDatabase,
@@ -14,6 +15,7 @@ import {
   removeInstance,
   snapshotMessage,
 } from "./encounter-bridge.js";
+import { broadcastMapRooms, mapRoomsMessage } from "./map-rooms.js";
 import { DEFAULT_BRIDGE_PORT, startBridgeServer } from "./server.js";
 import {
   defaultAgentTokenPath,
@@ -47,12 +49,14 @@ const repo = new SqliteEncounterRepository(db);
 const artRepo = new SqliteTokenArtRepository(db);
 const imageRepo = new SqliteTokenImageRepository(db);
 const log = new SqliteEncounterLog(db);
+const maps = new SqliteMapRepository(db);
 const server = await startBridgeServer({
   port,
   staticDir,
   token,
   agentToken,
   snapshot: () => snapshotMessage(repo, artRepo, log),
+  mapRooms: () => mapRoomsMessage(maps),
   removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
   editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
@@ -66,6 +70,7 @@ const stopPolling = broadcastLogEvents(log, server, {
     ),
   snapshot: () => snapshotMessage(repo, artRepo, log),
 });
+const stopMapRooms = broadcastMapRooms(maps, server);
 console.log(`bridge listening on http://localhost:${server.port}`);
 console.log(`serving ${staticDir}`);
 console.log(`token file: ${tokenPath}`);
@@ -77,6 +82,7 @@ console.log(
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     stopPolling();
+    stopMapRooms();
     void server.close().then(() => process.exit(0));
   });
 }
