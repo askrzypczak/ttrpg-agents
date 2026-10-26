@@ -230,4 +230,61 @@ describe("preview_monsters", () => {
       expect(text(previewed), c.label).toBe(text(added));
     }
   });
+
+  it("preview_monsters with a moved map says the map moved", async () => {
+    await saveRooms([{ name: "Attic", ranges: ["A1:B2"] }]);
+    const shifted: TableSceneMap = {
+      ...scene,
+      maps: [{ ...manor, position: { x: 450, y: 0 } }],
+    };
+    ctx.table.sceneMap = () => Promise.resolve(shifted);
+
+    const r = await call("preview_monsters", {
+      groups: [{ monster: SHADOW, count: 1, room: "Attic" }],
+    });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain(
+      "The map moved since it was registered; cells are read where it is now.",
+    );
+    expect(r.structuredContent?.["moved"]).toBe(true);
+  });
+
+  it("preview_monsters gives each group with a room its own placement line", async () => {
+    await saveRooms([{ name: "Hall", ranges: ["A1:D4"] }]);
+
+    const r = await call("preview_monsters", {
+      groups: [
+        { monster: SHADOW, count: 2, room: "Hall" },
+        { monster: GOBLIN, count: 1, room: "Hall" },
+      ],
+    });
+    expect(r.isError).toBeUndefined();
+    const lines = text(r)
+      .split("\n")
+      .filter((line) => line.startsWith("Would be placed in Hall: "));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("Shadow 1 at ");
+    expect(lines[0]).toContain("Shadow 2 at ");
+    expect(lines[0]).not.toContain("Goblin Warrior 1");
+    expect(lines[1]).toContain("Goblin Warrior 1 at ");
+    expect(lines[1]).not.toContain("Shadow");
+  });
+
+  it("preview_monsters shows a dash for a joined member with no initiative", async () => {
+    await seedShadows(1);
+    const member = ctx.repo
+      .listInstances()
+      .find((i) => i.displayName === "Shadow 1");
+    if (!member) throw new Error("no instance Shadow 1");
+    ctx.repo.setInitiative(member.id, null, {
+      source: "mcp",
+      commandId: "seed",
+    });
+
+    const r = await call("preview_monsters", {
+      groups: [{ monster: SHADOW, count: 1, join: "Shadow 1" }],
+    });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain("| - (joins Shadow 1) |");
+  });
 });
