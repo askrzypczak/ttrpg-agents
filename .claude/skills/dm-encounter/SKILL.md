@@ -5,7 +5,7 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `roll_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -90,8 +90,10 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 ## Changing initiative
 
 - "The goblins act on 14" is one `set_initiative` call per goblin, each with `initiative` 14. The tool takes one target, so run the calls in parallel. Target each goblin as under Damage and healing.
-- Use only the number the DM gives. If they name a monster without a number, ask for it.
+- Use only the number the DM gives. If they name a monster without a number and do not ask to roll, ask for it.
 - Do not call `list_encounter` after the calls. Relay the tool's line verbatim (for example "Goblin Warrior 1: initiative 12 -> 14").
+- "Re-roll the goblins' initiative" and "roll initiative for the wolves" are ONE `roll_initiative` call with every matching monster in `targets`, targeted as under Damage and healing. Omit `mode`, so monsters of one group share one roll; pass `mode: "each"` only when the DM asks for separate rolls ("roll each goblin separately"). Every named monster is rolled, even one that already has initiative.
+- Do not call `list_encounter` after the call. Relay the tool's lines verbatim (for example "Goblin Warrior 1: initiative 12 -> 9 (d20 7, modifier +2)").
 
 ## Showing stats to players
 

@@ -32,6 +32,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                     |
 | `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                     |
 | `set_initiative`       | Set an exact initiative by instance id or exact name; reports before and after                                                             |
+| `roll_initiative`      | Roll initiative for several monsters by id or exact name (one roll per group, or each); reports roll, modifier, before and after           |
 | `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                     |
 | `clear_encounter`      | Remove every monster                                                                                                                       |
 | `table_status`         | Ask the Owlbear tab for its scene status; reports in sync or not                                                                           |
