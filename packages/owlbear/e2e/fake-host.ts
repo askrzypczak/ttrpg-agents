@@ -58,6 +58,8 @@ export class FakeHost {
     size: number;
   }[] = [];
   readonly scene: SceneModel;
+  /** The extension's local items (`OBR.scene.local`), apart from the scene's. */
+  readonly local: SceneModel = new SceneModel();
   private readonly iframe: HTMLIFrameElement;
   private readonly ref = "e2e-ref";
   private readonly userId: string;
@@ -143,6 +145,8 @@ export class FakeHost {
       if (this.failItems !== undefined) throw new Error(this.failItems);
       if (!this.scene.isReady()) throw new MissingSceneError();
     }
+    if (message.id.startsWith("OBR_SCENE_LOCAL_") && !this.scene.isReady())
+      throw new MissingSceneError();
     switch (message.id) {
       case "OBR_PLAYER_GET_ROLE":
         return { role: this.scene.role === "gm" ? "GM" : "PLAYER" };
@@ -172,6 +176,19 @@ export class FakeHost {
       case "OBR_SCENE_ITEMS_DELETE_ITEMS":
         this.scene.deleteItems(data.ids as string[]);
         return {};
+      case "OBR_SCENE_LOCAL_GET_ALL_ITEMS":
+        return { items: this.local.getItems() };
+      case "OBR_SCENE_LOCAL_ADD_ITEMS":
+        this.local.addItems(data.items as SceneItem[]);
+        return {};
+      case "OBR_SCENE_LOCAL_DELETE_ITEMS":
+        this.local.deleteItems(data.ids as string[]);
+        return {};
+      // A fixed square grid at 150 dpi.
+      case "OBR_SCENE_GRID_GET_DPI":
+        return { dpi: 150 };
+      case "OBR_SCENE_GRID_GET_TYPE":
+        return { type: "SQUARE" };
       // Viewport: a fixed 1000x600 screen with an identity transform, so the
       // view centre in scene coordinates is (500, 300).
       case "OBR_VIEWPORT_GET_WIDTH":
