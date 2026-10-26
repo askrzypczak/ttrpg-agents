@@ -339,6 +339,23 @@ const setMaxHpTool = defineTool({
   },
 });
 
+const resetMaxHpTool = defineTool({
+  name: "reset_max_hp",
+  annotations: { destructiveHint: true },
+  description:
+    "Set monsters' max HP to their statblock average (hp average) or a new roll of their HP dice (hp rolled). A monster at full HP stays at full HP; a damaged one keeps its current HP, lowered to the new max if above it. Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    hp: z.enum(["average", "rolled"]),
+  },
+  run(ctx, { targets, hp }) {
+    void ctx;
+    void targets;
+    void hp;
+    throw new Error("not implemented");
+  },
+});
+
 const setArmorClassTool = defineTool({
   name: "set_armor_class",
   annotations: { destructiveHint: true },

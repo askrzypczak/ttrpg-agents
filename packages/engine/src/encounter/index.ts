@@ -15,6 +15,11 @@ export * from "./events.js";
 export * from "./errors.js";
 export * from "./hp.js";
 export * from "./initiative.js";
+export {
+  resetMaxHp,
+  type ResetMaxHpDeps,
+  type ResetMaxHpResult,
+} from "./max-hp.js";
 export * from "./log.js";
 export * from "./origin.js";
 export * from "./queries.js";
