@@ -26,6 +26,7 @@ import {
   PLACED_METADATA_KEY,
   defaultSyncConfig,
   instanceIdOf,
+  moveOverrideNote,
   planSync,
   type EditField,
   type EncounterInstance,
@@ -90,8 +91,31 @@ function fold(
           : i,
       );
     case "position-changed":
-      return desired;
+      return desired.map((i) =>
+        i.id === event.id
+          ? {
+              ...i,
+              spawnPosition: {
+                x: event.spawnPosition.x,
+                y: event.spawnPosition.y,
+              },
+            }
+          : i,
+      );
   }
+}
+
+/** Whether an override is the note of a move of its instance's token. */
+function isMoveNote(
+  wanted: readonly EncounterInstance[],
+  override: SyncPlan["overrides"][number],
+): boolean {
+  const name = wanted.find((i) => i.id === override.instanceId)?.displayName;
+  return (
+    name !== undefined &&
+    (override.message === moveOverrideNote(name, true) ||
+      override.message === moveOverrideNote(name, false))
+  );
 }
 
 /** What the GM is told to do while a token image uploaded again waits for them. */
@@ -229,6 +253,15 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * snapshot with no `hello-ack` since the last one (sent on the same
  * connection, in place of an unreadable change-log row) forgets the sent
  * edits, whose answers its `seq` may cover.
+ *
+ * An `mcp` `position-changed` event moves its instance's token to the new
+ * spawn position in the next reconcile, once (a token not created yet is
+ * created there); a reconcile that fails keeps the move for the retry. A
+ * snapshot whose spawn position differs from the position a token was last
+ * placed at moves it the same way (see planSync). A move over a token that
+ * was not where it was last placed, or has no recorded position, is reported
+ * through `onOverride`, as is a snapshot that pushes a Stat Bubbles field over
+ * a different token value.
  */
 export function createEncounterSync(
   obr: ObrAdapter,
@@ -247,8 +280,9 @@ export function createEncounterSync(
     onWaitingChange?: (waiting: number) => void;
     /**
      * Called once per Stat Bubbles field a snapshot pushed over a different
-     * token value, and once per agent move over a token the GM had moved (or
-     * one with no recorded position), with the record to show.
+     * token value, and once per agent move, in any reconcile, of a token the
+     * GM had moved (or one with no recorded position), with the record to
+     * show.
      */
     onOverride?: (text: string) => void;
     /** Called once per store change (a snapshot or an applied `mcp` event) for each table value that could not be read back. */
@@ -328,6 +362,9 @@ export function createEncounterSync(
   // What the next reconcile is told: the facts since the last successful one,
   // and whether a snapshot arrived since.
   let facts: Facts = new Map();
+  // Instances whose spawn position an `mcp` event set since the last
+  // successful reconcile: their tokens are moved there.
+  let moves = new Set<string>();
   let afterSnapshot = false;
   // Whether a hello-ack came since the last snapshot. A snapshot without one
   // came on the same connection (in place of an unreadable change-log row).
@@ -355,9 +392,14 @@ export function createEncounterSync(
   }
 
   /** The facts of a reconcile that did not go through, under the newer ones. */
-  function restore(taken: Facts, snapshot: boolean): void {
+  function restore(
+    taken: Facts,
+    takenMoves: ReadonlySet<string>,
+    snapshot: boolean,
+  ): void {
     for (const [id, earlier] of taken)
       facts.set(id, new Map([...earlier, ...(facts.get(id) ?? [])]));
+    for (const id of takenMoves) moves.add(id);
     afterSnapshot ||= snapshot;
   }
 
@@ -737,6 +779,7 @@ export function createEncounterSync(
   async function apply(
     wanted: EncounterInstance[],
     taken: Facts,
+    takenMoves: ReadonlySet<string>,
     snapshot: boolean,
   ): Promise<SyncPlan> {
     artStepRan = false;
@@ -750,6 +793,7 @@ export function createEncounterSync(
       placed,
       art: usableArt(),
       fields: fieldContexts(taken),
+      moves: takenMoves,
     });
     // Ask once per new monster type, before anything is written, so its
     // tokens are created once with the right look.
@@ -794,6 +838,7 @@ export function createEncounterSync(
       placed,
       art: usableArt(),
       fields: fieldContexts(taken),
+      moves: takenMoves,
     });
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
     if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
@@ -801,6 +846,17 @@ export function createEncounterSync(
     // unwritten and the retry renames.
     for (const r of plan.rename)
       await write(() => obr.updateItems([r.id], { name: r.name }));
+    // Likewise, a failed move leaves the position baseline unwritten. A
+    // move's override note is reported once its write succeeds: the retry of
+    // a reconcile that fails later finds the token moved and plans no note.
+    for (const m of plan.move) {
+      await write(() => obr.updateItems([m.id], { position: m.position }));
+      const token = items.find((item) => item.id === m.id);
+      const instanceId = token === undefined ? undefined : instanceIdOf(token);
+      for (const override of plan.overrides)
+        if (override.instanceId === instanceId && isMoveNote(wanted, override))
+          options.onOverride?.(override.message);
+    }
     if (plan.update.length > 0)
       await write(() => obr.setItemMetadata(plan.update));
 
@@ -831,14 +887,16 @@ export function createEncounterSync(
     const applying = desired;
     // Facts that arrive while this reconcile applies are for the next one.
     const taken = facts;
+    const takenMoves = moves;
     const snapshot = afterSnapshot;
     facts = new Map();
+    moves = new Set();
     afterSnapshot = false;
     let plan: SyncPlan;
     try {
-      plan = await apply(applying, taken, snapshot);
+      plan = await apply(applying, taken, takenMoves, snapshot);
     } catch (error) {
-      restore(taken, snapshot);
+      restore(taken, takenMoves, snapshot);
       // The scene went away mid-apply: the ready flip reconciles again.
       if (!(await obr.isSceneReady())) return;
       try {
@@ -860,7 +918,10 @@ export function createEncounterSync(
     appliedCount = applying.length;
     if (!quiet || recovered) onApplied();
     if (outbox !== undefined) holdEdits(plan.edits);
-    for (const { message } of plan.overrides) options.onOverride?.(message);
+    // Move notes were reported as their moves were written (see apply).
+    for (const override of plan.overrides)
+      if (!isMoveNote(applying, override))
+        options.onOverride?.(override.message);
     holdRejections(plan.rejected);
     for (const id of plan.deleted) {
       if (reported.has(id) || deletionPending(id)) continue;
@@ -945,6 +1006,7 @@ export function createEncounterSync(
           desired = fold(desired, event);
         } else {
           noteMoved(event);
+          if (event.type === "position-changed") moves.add(event.id);
           desired = fold(desired, event);
           reported.clear();
           rejectedReported.clear();

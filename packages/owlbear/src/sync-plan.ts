@@ -179,7 +179,10 @@ export type SyncPlan = {
   delete: string[];
   /** Token renames (a top-level item field, not metadata). */
   rename: { id: string; name: string }[];
-  /** Existing tokens moved to their instance's new spawn position (a top-level item field). */
+  /**
+   * Existing tokens moved to their instance's new spawn position (a top-level
+   * item field); only tokens not already there.
+   */
   move: { id: string; position: Vec2 }[];
   /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
   deleted: string[];
@@ -189,7 +192,11 @@ export type SyncPlan = {
   edits: InstanceEdit[];
   /** Table values that could not be read back, left on the table. */
   rejected: { instanceId: string; message: string }[];
-  /** Stat Bubbles fields a snapshot pushed over a different token value, for the DM to audit. */
+  /**
+   * Writes over table values for the DM to audit: Stat Bubbles fields a
+   * snapshot pushed over a different token value, and moves of a token that
+   * was not where it was last placed (or has no recorded position).
+   */
   overrides: { instanceId: string; message: string }[];
 };
 
@@ -224,6 +231,25 @@ const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+
+/**
+ * The override note for a move over a token that was not where it was last
+ * placed (`recorded`), or that has no recorded position.
+ */
+export function moveOverrideNote(name: string, recorded: boolean): string {
+  return recorded
+    ? `${name} was moved at the agent's request; its token had been moved on the table, and that position was overwritten.`
+    : `${name} was moved at the agent's request; its token may have been moved on the table, and that position was overwritten.`;
+}
+
+/** A recorded position, if the value is one. */
+function asPosition(value: unknown): Vec2 | undefined {
+  const record = asRecord(value);
+  const { x, y } = record;
+  return typeof x === "number" && typeof y === "number" ? { x, y } : undefined;
+}
+
+const samePosition = (a: Vec2, b: Vec2): boolean => a.x === b.x && a.y === b.y;
 
 const omitKeys = (
   value: Record<string, unknown>,
@@ -386,10 +412,19 @@ function movesEditField(
  * flight or settled; an unreadable one is planned as rejected.
  * The token name follows the same rule, with its baseline under
  * NAME_BASELINE_KEY in the synced record.
- * `create-only` keys, position and visibility are set at creation only.
+ * `create-only` keys and visibility are set at creation only.
  * A new token is created at its instance's spawn position when it has one;
- * the others of the batch sit in a row at the viewport centre. An existing
- * token is never moved.
+ * the others of the batch sit in a row at the viewport centre. The created
+ * position is recorded under POSITION_BASELINE_KEY in the synced record.
+ * An existing token whose instance has a spawn position is moved there when
+ * the instance is in `context.moves` (an `mcp` change set it) or when its
+ * recorded position differs from the spawn position (a change seen only in a
+ * snapshot); the move is planned only when the token is not already there, and
+ * the recorded position becomes the spawn position either way. A planned move
+ * of a token that is not at its recorded position, or has none (a token
+ * created before positions were recorded), is reported in `overrides`. No
+ * position is ever recorded for an older token without a move, and otherwise
+ * an existing token is never moved.
  * An instance in `context.placed` whose token is missing was deleted by the
  * GM and is not recreated.
  */
@@ -521,6 +556,28 @@ export function planSync(
     } else {
       next[NAME_BASELINE_KEY] = d;
     }
+    const spawn = instance.spawnPosition;
+    if (spawn) {
+      const recorded = asPosition(baseline[POSITION_BASELINE_KEY]);
+      const target = { x: spawn.x, y: spawn.y };
+      if (
+        context.moves?.has(id) === true ||
+        (recorded !== undefined && !samePosition(recorded, target))
+      ) {
+        if (!samePosition(token.position, target)) {
+          plan.move.push({ id: token.id, position: target });
+          if (recorded === undefined || !samePosition(token.position, recorded))
+            plan.overrides.push({
+              instanceId: id,
+              message: moveOverrideNote(
+                instance.displayName,
+                recorded !== undefined,
+              ),
+            });
+        }
+        next[POSITION_BASELINE_KEY] = target;
+      }
+    }
     if (!deepEqual(next, baseline))
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
   }
@@ -550,6 +607,7 @@ export function planSync(
       if (p.mode === "owned") synced[p.key] = value;
     }
     synced[NAME_BASELINE_KEY] = instance.displayName;
+    synced[POSITION_BASELINE_KEY] = { x: position.x, y: position.y };
     metadata[SYNCED_METADATA_KEY] = synced;
     const art = Object.hasOwn(context.art, instance.monsterKey)
       ? context.art[instance.monsterKey]
