@@ -26,6 +26,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `search_monsters`      | Name search (top 10) with keys                                                                                                             |
 | `get_statblock`        | Markdown statblock by key                                                                                                                  |
 | `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init; `join` (id or exact name) adds to that monster's group and initiative    |
+| `preview_monsters`     | Dry run of `add_monsters` (same arguments and checks): names, AC, average HP and dice, init modifier, footprint, room cells; adds nothing  |
 | `move_monsters`        | Move monsters (ids or exact names, all-or-nothing) into a saved room, keeping their state; one already in that room avoids its own cells   |
 | `list_encounter`       | Encounter in initiative order with AC and HP, and the removed monsters that can be restored                                                |
 | `apply_damage`         | Damage by instance id or exact name (clamped at 0)                                                                                         |
@@ -54,7 +55,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `propose_rooms`        | Room proposals from ranges read on the map image: each range shrunk by one cell where the room is at least three cells wide; saves nothing |
 
 `table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`,
-`move_monsters`, and `add_monsters` with a `room` need the bridge running (`npm run bridge`) and a GM
+`move_monsters`, and `add_monsters` or `preview_monsters` with a `room`, need the bridge running (`npm run bridge`) and a GM
 tab open: they ask the table through the engine's `TablePort` (wired to the bridge
 client in `src/stdio.ts`), and a stopped bridge, no tab or a slow tab come back as
 `isError` results. `remove_rooms` and `propose_rooms` do not ask the table.

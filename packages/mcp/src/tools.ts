@@ -9,6 +9,7 @@ import {
   getTableStatus,
   listRooms,
   moveMonstersIntoRoom,
+  previewMonstersInRooms,
   proposeRooms,
   removeRooms,
   mergeInitiative,
@@ -24,6 +25,8 @@ import {
   useMap,
   type ChangeOrigin,
   type MonsterInstance,
+  type PreviewInstance,
+  type PreviewPlacement,
   type RestoredMonster,
   type RoomPlacement,
 } from "@ttrpg-agents/engine";
@@ -182,46 +185,49 @@ const getStatblockTool = defineTool({
   },
 });
 
+/** The add_monsters input, shared with preview_monsters so the same arguments validate the same way. */
+const addMonstersInput = {
+  groups: z.array(
+    z.object({
+      monster: z.string().describe("Monster key, e.g. srd-2024_shadow"),
+      count: z.number().int().min(1),
+      hp: z.enum(["rolled", "average"]).optional(),
+      statsVisible: z
+        .boolean()
+        .optional()
+        .describe(
+          "Players can see the Stat Bubbles (HP/AC); default false, GM-only",
+        ),
+      room: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "A saved room of the map in use, by name (any case); its monsters are placed on free cells in that room. Needs the bridge running.",
+        ),
+      join: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "A monster already in the encounter, by id or exact name: this group's monsters join its initiative group and take its current initiative (no roll), and its stats visibility unless statsVisible is set",
+        ),
+    }),
+  ),
+  initiative: z
+    .enum(["group", "each"])
+    .optional()
+    .describe(
+      "One roll per group (default) or per monster; a group with join rolls none",
+    ),
+};
+
 const addMonstersTool = defineTool({
   name: "add_monsters",
   annotations: { destructiveHint: false },
   description:
     "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically. A group's optional room places its monsters on free cells of that saved room of the map in use (needs the bridge running). A group's optional join names a monster already in the encounter (id or exact name): its monsters join that monster's initiative group and take its current initiative, without a roll.",
-  inputSchema: {
-    groups: z.array(
-      z.object({
-        monster: z.string().describe("Monster key, e.g. srd-2024_shadow"),
-        count: z.number().int().min(1),
-        hp: z.enum(["rolled", "average"]).optional(),
-        statsVisible: z
-          .boolean()
-          .optional()
-          .describe(
-            "Players can see the Stat Bubbles (HP/AC); default false, GM-only",
-          ),
-        room: z
-          .string()
-          .min(1)
-          .optional()
-          .describe(
-            "A saved room of the map in use, by name (any case); its monsters are placed on free cells in that room. Needs the bridge running.",
-          ),
-        join: z
-          .string()
-          .min(1)
-          .optional()
-          .describe(
-            "A monster already in the encounter, by id or exact name: this group's monsters join its initiative group and take its current initiative (no roll), and its stats visibility unless statsVisible is set",
-          ),
-      }),
-    ),
-    initiative: z
-      .enum(["group", "each"])
-      .optional()
-      .describe(
-        "One roll per group (default) or per monster; a group with join rolls none",
-      ),
-  },
+  inputSchema: addMonstersInput,
   async run(ctx, { groups, initiative }) {
     const result = await addMonstersInRooms(
       {
@@ -269,6 +275,51 @@ const addMonstersTool = defineTool({
       rolls: result.rolls,
       placements: result.placements,
       moved: result.moved,
+    });
+  },
+});
+
+const previewMonstersTool = defineTool({
+  name: "preview_monsters",
+  annotations: { readOnlyHint: true },
+  description:
+    "Preview an add_monsters call without adding anything: same groups and initiative, same checks. Returns each would-be monster's name, AC, average HP with its dice, initiative modifier (or, for a group with join, that monster's initiative) and footprint; with a room, the cells they would take or which would not fit (needs the bridge running). Nothing is stored or rolled.",
+  inputSchema: addMonstersInput,
+  async run(ctx, { groups, initiative }) {
+    const preview = await previewMonstersInRooms(
+      {
+        repo: ctx.repo,
+        monsters: ctx.monsters,
+        table: ctx.table,
+        maps: ctx.maps,
+      },
+      groups,
+      initiative === undefined ? {} : { initiative },
+    );
+    const text = [
+      "Preview only: nothing was added or rolled.",
+      "",
+      table(
+        ["name", "AC", "HP", "initiative", "footprint"],
+        preview.instances.map((i) => [
+          i.name,
+          i.ac,
+          `${String(i.averageHp)} (${i.hpDice})`,
+          i.joins === null
+            ? signed(i.initiativeModifier)
+            : `${String(i.joins.initiative ?? "-")} (joins ${i.joins.name})`,
+          `${String(i.footprint)} x ${String(i.footprint)}`,
+        ]),
+      ),
+      ...previewPlacementLines(preview.placements, preview.instances).flatMap(
+        (line) => ["", line],
+      ),
+      ...(preview.moved ? ["", movedLine] : []),
+    ].join("\n");
+    return ok(text, {
+      instances: preview.instances,
+      placements: preview.placements,
+      moved: preview.moved,
     });
   },
 });
@@ -1019,6 +1070,23 @@ function roomCount(n: number): string {
 const movedLine =
   "The map moved since it was registered; cells are read where it is now. Use the map again to confirm the new position.";
 
+/** Splits placements into runs of consecutive ones of the same group. */
+function runsByGroup<P>(
+  placements: readonly P[],
+  groupOf: (placement: P) => unknown,
+): P[][] {
+  const runs: P[][] = [];
+  let previous: unknown;
+  for (const placement of placements) {
+    const group = groupOf(placement);
+    const last = runs.at(-1);
+    if (last === undefined || group !== previous) runs.push([placement]);
+    else last.push(placement);
+    previous = group;
+  }
+  return runs;
+}
+
 /**
  * One "Placed in" line and one "No free cell left" line per group with a
  * room, in group order; a group's placements are consecutive.
@@ -1028,16 +1096,7 @@ function placementLines(
   instances: readonly { id: string; groupId: string }[],
 ): string[] {
   const groupOf = new Map(instances.map((i) => [i.id, i.groupId] as const));
-  const runs: RoomPlacement[][] = [];
-  let previous: string | undefined;
-  for (const placement of placements) {
-    const group = groupOf.get(placement.id);
-    const last = runs.at(-1);
-    if (last === undefined || group !== previous) runs.push([placement]);
-    else last.push(placement);
-    previous = group;
-  }
-  return runs.flatMap((run) => {
+  return runsByGroup(placements, (p) => groupOf.get(p.id)).flatMap((run) => {
     const room = run[0]?.room ?? "";
     const placed = run.filter((p) => p.cell !== null);
     const unplaced = run.filter((p) => p.cell === null);
@@ -1053,6 +1112,34 @@ function placementLines(
         unplaced.length === 1
           ? `No free cell left in ${room} for ${names}: its token appears in a row at the centre of the GM's view.`
           : `No free cell left in ${room} for ${names}: their tokens appear in a row at the centre of the GM's view.`,
+      );
+    }
+    return lines;
+  });
+}
+
+/**
+ * One "Would be placed in" line and one "No free cell left" line per group
+ * with a room, in group order; a group's placements are consecutive.
+ */
+function previewPlacementLines(
+  placements: readonly PreviewPlacement[],
+  instances: readonly PreviewInstance[],
+): string[] {
+  const groupOf = new Map(instances.map((i) => [i.name, i.group] as const));
+  return runsByGroup(placements, (p) => groupOf.get(p.name)).flatMap((run) => {
+    const room = run[0]?.room ?? "";
+    const placed = run.filter((p) => p.cell !== null);
+    const unplaced = run.filter((p) => p.cell === null);
+    const lines: string[] = [];
+    if (placed.length > 0) {
+      lines.push(
+        `Would be placed in ${room}: ${placed.map((p) => `${p.name} at ${String(p.cell)}`).join(", ")}.`,
+      );
+    }
+    if (unplaced.length > 0) {
+      lines.push(
+        `No free cell left in ${room} for ${unplaced.map((p) => p.name).join(", ")}.`,
       );
     }
     return lines;
@@ -1106,6 +1193,7 @@ export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
   addMonstersTool,
+  previewMonstersTool,
   moveMonstersTool,
   listEncounterTool,
   hpTool("damage"),
