@@ -25,7 +25,7 @@ Issue: [#281](https://github.com/askrzypczak/ttrpg-agents/issues/281). Part of E
   - Keep forever: the listing in `list_encounter` would grow across fights.
 - Where: `clearEncounter` and `listRemovedInstances` in `packages/store-sqlite/src/sqlite-repository.ts`; `docs/architecture.md` (Shared database).
 - Revisit if: #282 keeps cleared sets, or DMs want to restore a monster removed before the last clear.
-- Status: active
+- Status: superseded by 282.1
 
 ## 281.3 The removal's origin (source and command id) is stored with the removed state
 
