@@ -47,6 +47,7 @@ const emptyPlan: SyncPlan = {
   delete: [],
   rename: [],
   move: [],
+  restyle: [],
   deleted: [],
   needsArt: [],
   edits: [],

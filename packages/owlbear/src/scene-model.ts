@@ -119,7 +119,17 @@ export interface SceneItem {
 }
 
 export type ItemPatch = Partial<
-  Pick<SceneItem, "name" | "visible" | "position" | "metadata">
+  Pick<
+    SceneItem,
+    | "name"
+    | "visible"
+    | "position"
+    | "metadata"
+    | "image"
+    | "grid"
+    | "shape"
+    | "scale"
+  >
 >;
 
 export type SceneChange =

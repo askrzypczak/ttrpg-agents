@@ -50,3 +50,11 @@ export class InvalidArmorClassError extends DomainError {
     this.name = "InvalidArmorClassError";
   }
 }
+
+/** A target that already is the requested monster. */
+export class SameMonsterError extends DomainError {
+  constructor(message: string) {
+    super("same_monster", message);
+    this.name = "SameMonsterError";
+  }
+}

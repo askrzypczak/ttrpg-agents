@@ -12,6 +12,18 @@ export interface HpChange {
   after: MonsterInstance;
 }
 
+/** One instance's new monster type and the values that come with it. */
+export interface MonsterChange {
+  id: string;
+  monsterKey: string;
+  displayName: string;
+  maxHp: number;
+  currentHp: number;
+  armorClass: number;
+  initiative: number | null;
+  footprint: number;
+}
+
 /** Builds the items to insert from the display names already in the active encounter. */
 export type InstanceBuilder = (existingNames: string[]) => NewMonsterInstance[];
 
@@ -146,6 +158,21 @@ export interface EncounterRepository {
    */
   setSpawnPositions(
     positions: readonly { id: string; spawnPosition: Point }[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[];
+  /**
+   * Changes the monster type of each given live instance of the active
+   * encounter in one transaction: writes the monster key, display name, max
+   * HP, current HP, armor class, initiative and footprint as given, keeping
+   * id, group, stats visibility, spawn position and creation time; appends one
+   * `monster-changed` event per entry and returns the instances updated, in
+   * input order. Throws UnknownInstanceError for an id that is not a live
+   * instance of the active encounter, InvalidNameError for a name that is
+   * empty or used by another instance (or given earlier in the call); nothing
+   * changes on a throw.
+   */
+  changeMonsters(
+    changes: readonly MonsterChange[],
     origin: ChangeOrigin,
   ): MonsterInstance[];
   /**

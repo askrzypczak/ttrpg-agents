@@ -38,6 +38,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                     |
 | `restore_monsters`     | Bring back removed monsters by instance id or exact name, all-or-nothing, with HP and initiative; a taken name gets a new number           |
 | `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                     |
+| `change_monster_type`  | Change monsters (id or exact name, all-or-nothing) to another type: new name, HP, AC, size; keeps damage, initiative roll, group, place    |
 | `set_initiative`       | Set an exact initiative by instance id or exact name; reports before and after                                                             |
 | `roll_initiative`      | Roll initiative for several monsters by id or exact name (one roll per group, or each); reports roll, modifier, before and after           |
 | `split_initiative`     | Give several monsters their own initiative group each, by id or exact name; keeps each value, or rolls each with `roll`                    |

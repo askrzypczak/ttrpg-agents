@@ -8,10 +8,12 @@ export type {
   EncounterRepository,
   HpChange,
   InstanceBuilder,
+  MonsterChange,
   RemovedInstance,
   RestoreNamer,
 } from "./repository.js";
 export * from "./add-monsters.js";
+export * from "./change-monster.js";
 export * from "./edit.js";
 export * from "./events.js";
 export * from "./errors.js";

@@ -109,6 +109,7 @@ function wrapRepo(
       inner.setStatsVisible(id, visible, origin),
     setSpawnPositions: (positions) =>
       inner.setSpawnPositions(positions, origin),
+    changeMonsters: (changes) => inner.changeMonsters(changes, origin),
     clearEncounter: () => inner.clearEncounter(origin),
     listInstances: () => inner.listInstances(),
     ...over,
@@ -138,10 +139,11 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the twenty-nine tools", () => {
+  it("exposes the thirty tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
+      "change_monster_type",
       "clear_encounter",
       "get_map_image",
       "get_statblock",

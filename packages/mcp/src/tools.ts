@@ -2,6 +2,7 @@ import {
   DomainError,
   TargetError,
   addMonstersInRooms,
+  changeMonsterType,
   compareByInitiative,
   formatColumnLabel,
   getMapImage,
@@ -615,6 +616,60 @@ const renameMonsterTool = defineTool({
   },
 });
 
+const changeMonsterTypeTool = defineTool({
+  name: "change_monster_type",
+  annotations: { destructiveHint: true },
+  description:
+    "Change monsters to another monster type, keeping their tokens' places. Targets are instance ids or exact names; monster is a monster key. Each gets a new numbered name and the new monster's max HP (hp: rolled by default, or average), AC and size; damage taken, the initiative roll (with the new modifier), group and stats visibility are kept. All targets must resolve, otherwise nothing changes.",
+  inputSchema: {
+    targets: z.array(z.string()).min(1),
+    monster: z.string(),
+    hp: z.enum(["rolled", "average"]).optional(),
+  },
+  run(ctx, { targets, monster, hp }) {
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = changeMonsterType(
+      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+      resolved.map((i) => i.id),
+      monster,
+      hp ?? "rolled",
+      mcpOrigin(ctx),
+    );
+    const orNone = (value: number | null): string =>
+      value === null ? "none" : String(value);
+    const lines = result.instances.map(({ before, after, noLongerFits }) => {
+      const line = `${before.displayName} -> ${after.displayName}: HP ${String(before.currentHp)}/${String(before.maxHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}, AC ${orNone(before.armorClass)} -> ${orNone(after.armorClass)}, initiative ${orNone(before.initiative)} -> ${orNone(after.initiative)}`;
+      return noLongerFits
+        ? `${line}; no longer fits its cell (now ${String(after.footprint)}x${String(after.footprint)} cells)`
+        : line;
+    });
+    const rollLines = result.rolls.map(
+      (r) =>
+        `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
+    );
+    const text = [
+      ...lines,
+      ...(rollLines.length > 0 ? ["", "Rolls:", ...rollLines] : []),
+    ].join("\n");
+    return ok(text, {
+      instances: result.instances.map((c) => instanceView(c.after)),
+      before: result.instances.map((c) => instanceView(c.before)),
+      noLongerFits: result.instances
+        .filter((c) => c.noLongerFits)
+        .map((c) => c.after.id),
+      rolls: result.rolls,
+    });
+  },
+});
+
 const setInitiativeTool = defineTool({
   name: "set_initiative",
   annotations: { destructiveHint: true },
@@ -1150,6 +1205,7 @@ export const tools: readonly ToolDefinition[] = [
   removeMonstersTool,
   restoreMonstersTool,
   renameMonsterTool,
+  changeMonsterTypeTool,
   setInitiativeTool,
   rollInitiativeTool,
   splitInitiativeTool,

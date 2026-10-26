@@ -6,6 +6,19 @@ import type { EncounterRepository } from "./repository.js";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "c1" };
 
+const monsterChanged = {
+  type: "monster-changed",
+  id: "i1",
+  monsterKey: "dire-wolf",
+  displayName: "Dire Wolf 1",
+  maxHp: 37,
+  currentHp: 31,
+  armorClass: 14,
+  initiative: 15,
+  footprint: 2,
+  origin,
+} satisfies EncounterEvent;
+
 const withOrigin = {
   added: { type: "added", instances: [makeTestInstance()], origin },
   removed: { type: "removed", id: "i1", origin },
@@ -63,6 +76,21 @@ describe("encounterEventSchema origin", () => {
     ).toBe(false);
   });
 
+  it("encounterEventSchema requires origin on monster-changed, and changeMonsters is reported as monster-changed", () => {
+    const parsed = encounterEventSchema.safeParse(monsterChanged);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual(monsterChanged);
+    expect(
+      encounterEventSchema.safeParse({ ...monsterChanged, origin: undefined })
+        .success,
+    ).toBe(false);
+    expect(
+      encounterEventSchema.safeParse({ ...monsterChanged, initiative: null })
+        .success,
+    ).toBe(true);
+    expect(eventForMutation.changeMonsters).toBe("monster-changed");
+  });
+
   it("encounterEventSchema rejects instance-changed with no changes", () => {
     const event = {
       type: "instance-changed",
@@ -103,6 +131,7 @@ const eventForMutation: Record<MutationName, EncounterEvent["type"]> = {
   setArmorClass: "instance-changed",
   setStatsVisible: "instance-changed",
   setSpawnPositions: "position-changed",
+  changeMonsters: "monster-changed",
   clearEncounter: "cleared",
 };
 
@@ -120,6 +149,7 @@ const sampleEvents: Record<EncounterEvent["type"], unknown> = {
     spawnPosition: { x: 250, y: 150 },
     origin,
   },
+  "monster-changed": monsterChanged,
 };
 
 describe("repository mutations and events", () => {

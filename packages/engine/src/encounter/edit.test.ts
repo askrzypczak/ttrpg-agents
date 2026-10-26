@@ -42,6 +42,7 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
     setGroupId: unexpected,
     setStatsVisible: unexpected,
     setSpawnPositions: unexpected,
+    changeMonsters: unexpected,
     clearEncounter: unexpected,
     setHp: (id, hp) => {
       const before = find(id);

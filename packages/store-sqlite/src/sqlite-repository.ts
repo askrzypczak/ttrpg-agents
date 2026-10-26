@@ -16,6 +16,7 @@ import type {
   EncounterRepository,
   HpChange,
   InstanceBuilder,
+  MonsterChange,
   MonsterInstance,
   Point,
   RemovedInstance,
@@ -485,6 +486,70 @@ export class SqliteEncounterRepository implements EncounterRepository {
         return {
           ...instance,
           spawnPosition: { x: spawnPosition.x, y: spawnPosition.y },
+        };
+      });
+    });
+  }
+
+  changeMonsters(
+    changes: readonly MonsterChange[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    return this.transaction(() => {
+      const existing = this.listInstances();
+      const given: string[] = [];
+      const targets = changes.map((change) => {
+        const instance = existing.find((i) => i.id === change.id);
+        if (!instance)
+          throw new UnknownInstanceError(unknownMessage(change.id));
+        const others = existing
+          .filter((i) => i.id !== change.id)
+          .map((i) => i.displayName);
+        const displayName = validateInstanceName(change.displayName, [
+          ...others,
+          ...given,
+        ]);
+        given.push(displayName);
+        return { instance, change: { ...change, displayName } };
+      });
+      const update = this.db.prepare(
+        `UPDATE monster_instances
+         SET monster_key = ?, display_name = ?, max_hp = ?, current_hp = ?,
+             armor_class = ?, initiative = ?, footprint = ?
+         WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      );
+      return targets.map(({ instance, change }) => {
+        update.run(
+          change.monsterKey,
+          change.displayName,
+          change.maxHp,
+          change.currentHp,
+          change.armorClass,
+          change.initiative,
+          change.footprint,
+          change.id,
+        );
+        this.record({
+          type: "monster-changed",
+          id: change.id,
+          monsterKey: change.monsterKey,
+          displayName: change.displayName,
+          maxHp: change.maxHp,
+          currentHp: change.currentHp,
+          armorClass: change.armorClass,
+          initiative: change.initiative,
+          footprint: change.footprint,
+          origin,
+        });
+        return {
+          ...instance,
+          monsterKey: change.monsterKey,
+          displayName: change.displayName,
+          maxHp: change.maxHp,
+          currentHp: change.currentHp,
+          armorClass: change.armorClass,
+          initiative: change.initiative,
+          footprint: change.footprint,
         };
       });
     });

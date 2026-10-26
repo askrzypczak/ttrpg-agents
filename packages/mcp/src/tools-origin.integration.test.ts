@@ -88,6 +88,10 @@ function recordingRepo(
       record("setSpawnPositions", origin),
       inner.setSpawnPositions(positions, origin)
     ),
+    changeMonsters: (changes, origin) => (
+      record("changeMonsters", origin),
+      inner.changeMonsters(changes, origin)
+    ),
     clearEncounter: (origin) => (
       record("clearEncounter", origin),
       inner.clearEncounter(origin)
