@@ -20,9 +20,13 @@ import { z } from "zod";
 import type { ToolContext } from "./context.js";
 import { formatStatblock } from "./statblock.js";
 
+export type ToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
 export interface ToolResult {
   [key: string]: unknown;
-  content: { type: "text"; text: string }[];
+  content: ToolContent[];
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
@@ -509,6 +513,40 @@ const removeRoomsTool = defineTool({
   },
 });
 
+const getMapImageTool = defineTool({
+  name: "get_map_image",
+  annotations: { readOnlyHint: true },
+  description:
+    "Look at the map in use as the GM sees it: the image with the display grid drawn over it and its columns and rows labelled on the edges, plus the grid size. Needs the bridge running.",
+  inputSchema: {},
+  run(ctx) {
+    void ctx;
+    return Promise.reject(new Error("not implemented"));
+  },
+});
+
+const proposeRoomsTool = defineTool({
+  name: "propose_rooms",
+  annotations: { readOnlyHint: true },
+  description:
+    "Turn rooms read off the map image into proposed ranges: each range is shrunk by one cell on every side where the room is at least three cells wide. Saves nothing; show the result to the GM, then save it with set_rooms.",
+  inputSchema: {
+    rooms: z
+      .array(
+        z.object({
+          name: z.string().min(1),
+          ranges: z.array(z.string().min(1)).min(1),
+        }),
+      )
+      .min(1),
+  },
+  run(ctx, { rooms }) {
+    void ctx;
+    void rooms;
+    throw new Error("not implemented");
+  },
+});
+
 /** "1 room" or "2 rooms". */
 function roomCount(n: number): string {
   return `${String(n)} ${n === 1 ? "room" : "rooms"}`;
@@ -578,4 +616,6 @@ export const tools: readonly ToolDefinition[] = [
   setRoomsTool,
   listRoomsTool,
   removeRoomsTool,
+  getMapImageTool,
+  proposeRoomsTool,
 ];

@@ -59,7 +59,7 @@ async function useMap(
 }
 
 function text(r: ToolResult): string {
-  return r.content.map((c) => c.text).join("\n");
+  return r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
 }
 
 describe("use_map", () => {

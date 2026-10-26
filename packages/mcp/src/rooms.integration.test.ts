@@ -90,7 +90,7 @@ async function call(
 }
 
 function text(r: ToolResult): string {
-  return r.content.map((c) => c.text).join("\n");
+  return r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
 }
 
 describe("room tools", () => {
@@ -202,6 +202,34 @@ describe("room tools", () => {
     expect(ctx.maps.getRooms("map-1").map((room) => room.name)).toEqual([
       "Taproom",
     ]);
+  });
+
+  it("propose_rooms returns each room with its shrunk ranges and saves nothing", async () => {
+    let sceneCalls = 0;
+    const ctx = contextWith(() => {
+      sceneCalls += 1;
+      return Promise.resolve(scene(trollskull));
+    }, registered);
+    const r = await call(ctx, "propose_rooms", {
+      rooms: [
+        { name: "Taproom", ranges: ["T5:AB11", "T12:V14"] },
+        { name: "Closet", ranges: ["A1:B2"] },
+      ],
+    });
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toContain(
+      "Proposed 2 rooms (not saved): Taproom U6:AA10, U13; Closet A1:B2.",
+    );
+    expect(r.structuredContent).toEqual({
+      rooms: [
+        { name: "Taproom", ranges: ["U6:AA10", "U13"] },
+        { name: "Closet", ranges: ["A1:B2"] },
+      ],
+    });
+    expect(sceneCalls).toBe(0);
+    expect(ctx.maps.getRooms("map-1")).toEqual([]);
+    const listed = await call(ctx, "list_rooms");
+    expect(text(listed)).toContain("No rooms saved for Trollskull Manor yet.");
   });
 
   it("without an active map, `set_rooms`, `list_rooms` and `remove_rooms` return an isError result telling the DM to use the map first", async () => {

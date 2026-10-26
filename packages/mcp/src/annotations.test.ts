@@ -18,6 +18,8 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   set_rooms: { destructiveHint: true },
   list_rooms: { readOnlyHint: true },
   remove_rooms: { destructiveHint: true },
+  get_map_image: { readOnlyHint: true },
+  propose_rooms: { readOnlyHint: true },
 };
 
 describe("tool annotations", () => {

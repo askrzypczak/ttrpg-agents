@@ -78,7 +78,7 @@ function tableAnswering(status: TableSceneStatus): TablePort {
 }
 
 function text(r: ToolResult): string {
-  return r.content.map((c) => c.text).join("\n");
+  return r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
 }
 
 function seed(...items: NewMonsterInstance[]): void {
@@ -132,15 +132,17 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the sixteen tools", () => {
+  it("exposes the eighteen tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
       "clear_encounter",
+      "get_map_image",
       "get_statblock",
       "heal",
       "list_encounter",
       "list_rooms",
+      "propose_rooms",
       "remove_monsters",
       "remove_rooms",
       "rename_monster",

@@ -8,11 +8,13 @@ import {
   cellRangeToPolygon,
   listRooms,
   parseCellRange,
+  proposeRooms,
   removeRooms,
   setRooms,
   type MapRegistration,
   type MapRepository,
   type Polygon,
+  type RoomInput,
   type SavedRoom,
   type TableMapItem,
   type TablePort,
@@ -446,5 +448,74 @@ describe("room input", () => {
     }
     expect(maps.stored()).toEqual([taproom]);
     expect(maps.writes).toBe(0);
+  });
+});
+
+describe("proposeRooms", () => {
+  it("proposeRooms: a range at least three cells wide on an axis loses its first and last cell on that axis (T5:AB11 becomes U6:AA10)", () => {
+    expect(
+      proposeRooms([
+        { name: "Taproom", ranges: ["T5:AB11", "T12:V14"] },
+        { name: "kitchen", ranges: ["A1:C3"] },
+      ]),
+    ).toEqual([
+      { name: "Taproom", ranges: ["U6:AA10", "U13"] },
+      { name: "kitchen", ranges: ["B2"] },
+    ]);
+  });
+
+  it("proposeRooms: a range under three cells on an axis keeps that axis (A1:B2 stays A1:B2; A1:C2 becomes B1:B2)", () => {
+    expect(
+      proposeRooms([
+        { name: "Closet", ranges: ["A1:B2", "A1:C2", "A1:B3", "D4"] },
+      ]),
+    ).toEqual([{ name: "Closet", ranges: ["A1:B2", "B1:B2", "A2:B2", "D4"] }]);
+  });
+
+  const rejected: { case: string; rooms: RoomInput[] }[] = [
+    { case: "an empty name", rooms: [{ name: "", ranges: ["T5:AB11"] }] },
+    {
+      case: "a whitespace-only name",
+      rooms: [{ name: "   ", ranges: ["T5:AB11"] }],
+    },
+    {
+      case: "a name twice ignoring case",
+      rooms: [
+        { name: "Taproom", ranges: ["T5:AB11"] },
+        { name: "taproom", ranges: ["T12:V14"] },
+      ],
+    },
+    {
+      case: "a room without ranges",
+      rooms: [
+        { name: "Taproom", ranges: ["T5:AB11"] },
+        { name: "Hall", ranges: [] },
+      ],
+    },
+    {
+      case: "a malformed range",
+      rooms: [
+        { name: "Kitchen", ranges: ["A1:C3"] },
+        { name: "Cellar", ranges: ["5T"] },
+      ],
+    },
+  ];
+
+  it("proposeRooms rejects the names and ranges setRooms rejects, with the same errors", async () => {
+    for (const { case: name, rooms } of rejected) {
+      const expected = (await rejection(
+        setRooms(
+          tableWith(scene([trollskull])),
+          new MemoryMaps(registered),
+          rooms,
+        ),
+      )) as Error;
+      expect([InvalidRoomError, InvalidCellRangeError], name).toContain(
+        expected.constructor,
+      );
+      const error = thrown(() => proposeRooms(rooms));
+      expect(error, name).toBeInstanceOf(expected.constructor);
+      expect((error as Error).message, name).toBe(expected.message);
+    }
   });
 });

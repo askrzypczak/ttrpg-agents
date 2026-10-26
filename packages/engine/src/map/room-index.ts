@@ -102,6 +102,21 @@ export async function setRooms(
   };
 }
 
+/** A proposed room with its ranges shrunk, in display cells ("U6:AA10"). */
+export interface RoomProposal {
+  name: string;
+  ranges: string[];
+}
+
+/**
+ * Checks rooms like setRooms and shrinks each range by one cell at both ends
+ * of every axis it spans three or more cells on; reads and stores nothing.
+ */
+export function proposeRooms(rooms: readonly RoomInput[]): RoomProposal[] {
+  void rooms;
+  throw new Error("not implemented");
+}
+
 /** The saved rooms of the map in use, with their ranges under its live transform. */
 export async function listRooms(
   table: Pick<TablePort, "sceneMap">,
