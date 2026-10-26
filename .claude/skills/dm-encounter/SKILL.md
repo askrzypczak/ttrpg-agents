@@ -28,7 +28,7 @@ HP, AC, initiative, rolls, damage totals and attack bonuses come only from tool 
 ## Spatial and narrative hints
 
 - A named room ("in the taproom", "into the kitchen") goes to that group's `room` in `add_monsters`, as the DM says it (the tool matches saved rooms ignoring case). Several groups can name the same or different rooms in one call.
-- If the call fails because no map is in use, the map is no longer on the scene, or the room is unknown (the error lists the known rooms), relay the error and stop: nothing was added. Do not retry without the room, and do not call `use_map` or `set_rooms` on your own.
+- If a call with a room fails (no map in use, the map is no longer on the scene, an unknown room (the error lists the known rooms), a grid that is not square, or the bridge or the Owlbear tab cannot be reached), relay the error and stop: nothing was added. Do not retry without the room, and do not call `use_map` or `set_rooms` on your own.
 - Other positions and flavour ("on the left", "circling from behind", "ambushing from the trees") are not tracked. Acknowledge them in one short line ("Positions other than rooms aren't tracked, so I've skipped 'on the left'.") and still run the rest of the request.
 
 ## Using the map
