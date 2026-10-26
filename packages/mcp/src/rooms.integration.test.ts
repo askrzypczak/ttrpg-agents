@@ -241,12 +241,19 @@ describe("room tools", () => {
 describe("add_monsters in a room", () => {
   const GOBLIN = "srd-2024_goblin-warrior";
 
-  /** A token on the table at the centre of a display cell of the map at `placement`. */
+  /** A one-cell token on the table covering a display cell of the map at `placement`. */
   function tokenOn(label: string, placement: MapPlacement): TableToken {
     const cell = displayGrid(placement).displayToSceneCell(
       parseCellLabel(label),
     );
-    return { position: cellCenter(cell, placement.sceneDpi) };
+    const centre = cellCenter(cell, placement.sceneDpi);
+    const half = placement.sceneDpi / 2;
+    return {
+      bounds: {
+        min: { x: centre.x - half, y: centre.y - half },
+        max: { x: centre.x + half, y: centre.y + half },
+      },
+    };
   }
 
   /** The reply lines in order, each found after the previous one. */

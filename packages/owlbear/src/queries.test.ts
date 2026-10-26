@@ -9,6 +9,7 @@ import { createMessageFeed } from "./testing/messages.js";
 import {
   MissingSceneError,
   SceneModel,
+  type ItemBounds,
   type Layer,
   type SceneItem,
 } from "./scene-model.js";
@@ -155,8 +156,16 @@ function itemOn(
 }
 
 describe("handleQuery scene-tokens", () => {
-  it("`scene-tokens` reports the position of every item on the CHARACTER and MOUNT layers, hidden ones and our own tokens included", async () => {
-    const { obr, scene } = createFakeObr();
+  it("`scene-tokens` reports the bounds of every item on the CHARACTER and MOUNT layers, hidden ones and our own tokens included", async () => {
+    const bounds: Record<string, ItemBounds> = {
+      player: { min: { x: -65, y: -55 }, max: { x: 85, y: 95 } },
+      hidden: { min: { x: -105, y: -29.5 }, max: { x: 45, y: 120.5 } },
+      "ttrpg-instance-i1": { min: { x: 0, y: 150 }, max: { x: 300, y: 450 } },
+      horse: { min: { x: 525, y: -150 }, max: { x: 675, y: 0 } },
+    };
+    const { obr, scene } = createFakeObr(undefined, undefined, {
+      itemBounds: bounds,
+    });
     scene.addItems([
       itemOn("player", "CHARACTER", { x: 10, y: 20 }),
       itemOn("hidden", "CHARACTER", { x: -30, y: 45.5 }, { visible: false }),
@@ -177,17 +186,23 @@ describe("handleQuery scene-tokens", () => {
       name: "scene-tokens",
       result: {
         tokens: [
-          { position: { x: 10, y: 20 } },
-          { position: { x: -30, y: 45.5 } },
-          { position: { x: 150, y: 300 } },
-          { position: { x: 600, y: -75 } },
+          { bounds: bounds["player"] },
+          { bounds: bounds["hidden"] },
+          { bounds: bounds["ttrpg-instance-i1"] },
+          { bounds: bounds["horse"] },
         ],
       },
     });
   });
 
   it("`scene-tokens` leaves out items on the MAP, PROP, DRAWING, ATTACHMENT and other layers", async () => {
-    const { obr, scene } = createFakeObr();
+    const goblin: ItemBounds = {
+      min: { x: 0, y: 150 },
+      max: { x: 150, y: 300 },
+    };
+    const { obr, scene } = createFakeObr(undefined, undefined, {
+      itemBounds: { goblin },
+    });
     const others: Layer[] = [
       "MAP",
       "GRID",
@@ -213,7 +228,7 @@ describe("handleQuery scene-tokens", () => {
 
     expect(await handleQuery(obr, sync, { name: "scene-tokens" })).toEqual({
       name: "scene-tokens",
-      result: { tokens: [{ position: { x: 75, y: 225 } }] },
+      result: { tokens: [{ bounds: goblin }] },
     });
   });
 

@@ -4,6 +4,12 @@ export type Metadata = Record<string, unknown>;
 
 export type Vec2 = { x: number; y: number };
 
+/** An item's axis-aligned bounds in scene units. */
+export interface ItemBounds {
+  min: Vec2;
+  max: Vec2;
+}
+
 export type Layer =
   | "MAP"
   | "GRID"

@@ -148,13 +148,20 @@ describe("pickFreeCells extras", () => {
       room: room(rect(0, 0, 160, 160)),
       occupied: [],
       count: 4,
+      footprint: 1,
     });
     expect(picks).toHaveLength(4);
   });
 
   it("returns nothing for a room with no polygons", () => {
     expect(
-      pickFreeCells({ placement: FLAT, room: room(), occupied: [], count: 2 }),
+      pickFreeCells({
+        placement: FLAT,
+        room: room(),
+        occupied: [],
+        count: 2,
+        footprint: 1,
+      }),
     ).toEqual([]);
   });
 
@@ -166,8 +173,11 @@ describe("pickFreeCells extras", () => {
       room: room(rect(0, 0, 1000, 100)),
       occupied: [],
       count: 4,
+      footprint: 1,
     });
-    expect(picks.map((p) => p.cell.col)).toEqual([4, 9, 0, 2]);
+    expect(picks.flatMap((p) => p.cells).map((c) => c.col)).toEqual([
+      4, 9, 0, 2,
+    ]);
   });
 
   it("breaks a farthest-point tie toward the first cell in scene order", () => {
@@ -181,8 +191,9 @@ describe("pickFreeCells extras", () => {
       ),
       occupied: [],
       count: 2,
+      footprint: 1,
     });
-    expect(picks.map((p) => p.cell)).toEqual([
+    expect(picks.flatMap((p) => p.cells)).toEqual([
       { col: 1, row: 1 },
       { col: 0, row: 0 },
     ]);

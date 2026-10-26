@@ -192,12 +192,12 @@ class MemoryEncounter implements EncounterRepository {
   }
 }
 
-function monster(key: string, name: string): Monster {
+function monster(key: string, name: string, size = "medium"): Monster {
   return {
     key,
     name,
     source: "private",
-    size: "medium",
+    size,
     type: "humanoid",
     alignment: "neutral",
     ac: 12,
@@ -225,7 +225,11 @@ function monster(key: string, name: string): Monster {
   };
 }
 
-const bestiary = [monster("goblin", "Goblin"), monster("bandit", "Bandit")];
+const bestiary = [
+  monster("goblin", "Goblin"),
+  monster("bandit", "Bandit"),
+  monster("ogre", "Ogre", "large"),
+];
 const monsters: MonsterIndex = {
   monsters: bestiary,
   byKey: new Map(bestiary.map((m) => [m.key, m] as const)),
@@ -279,15 +283,202 @@ describe("addMonstersInRooms", () => {
     ]);
   });
 
-  it("does not pick a cell that holds the centre of a token on the table", async () => {
+  it("does not pick a cell whose centre lies inside a token's bounds on the table", async () => {
     // B1 (the middle of the room) is the cell the picker would choose first.
-    const { deps } = setup({ tokens: [{ position: { x: 340, y: 160 } }] });
+    const { deps } = setup({
+      tokens: [
+        { bounds: { min: { x: 300, y: 100 }, max: { x: 400, y: 200 } } },
+      ],
+    });
     const result = await addMonstersInRooms(
       deps,
       [{ monster: "goblin", count: 2, room: "Taproom" }],
       origin,
     );
     expect(result.placements.map((p) => p.cell).sort()).toEqual(["A1", "C1"]);
+  });
+
+  it("a 2 x 2 token centred on a grid intersection makes all four cells under it occupied", async () => {
+    // Centred on (300, 200), the corner shared by A1, B1, A2 and B2.
+    const { deps } = setup({
+      rooms: [room("Bar", "A1:C2")],
+      tokens: [
+        { bounds: { min: { x: 200, y: 100 }, max: { x: 400, y: 300 } } },
+      ],
+    });
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "goblin", count: 6, room: "Bar" }],
+      origin,
+    );
+    expect(
+      result.placements
+        .map((p) => p.cell)
+        .filter((c) => c !== null)
+        .sort(),
+    ).toEqual(["C1", "C2"]);
+  });
+
+  it("a cell whose centre lies on the edge of a token's bounds is occupied", async () => {
+    // A one-cell token offset by half a cell: the centres of A1 (250, 150),
+    // B1 (350, 150), A2 (250, 250) and B2 (350, 250) are its corners.
+    const { deps } = setup({
+      rooms: [room("Bar", "A1:C2")],
+      tokens: [
+        { bounds: { min: { x: 250, y: 150 }, max: { x: 350, y: 250 } } },
+      ],
+    });
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "goblin", count: 6, room: "Bar" }],
+      origin,
+    );
+    expect(
+      result.placements
+        .map((p) => p.cell)
+        .filter((c) => c !== null)
+        .sort(),
+    ).toEqual(["C1", "C2"]);
+  });
+
+  it("a cell centre within float noise of a token's bounds edge is occupied", async () => {
+    // The edge case above, with each bound nudged just inside the token.
+    const { deps } = setup({
+      rooms: [room("Bar", "A1:C2")],
+      tokens: [
+        {
+          bounds: {
+            min: { x: 250 + 1e-12, y: 150 + 1e-12 },
+            max: { x: 350 - 1e-12, y: 250 - 1e-12 },
+          },
+        },
+      ],
+    });
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "goblin", count: 6, room: "Bar" }],
+      origin,
+    );
+    expect(
+      result.placements
+        .map((p) => p.cell)
+        .filter((c) => c !== null)
+        .sort(),
+    ).toEqual(["C1", "C2"]);
+  });
+
+  it("a call with one Large and two Medium monsters in a room puts the Large one on a free 2 x 2 block, at the block's centre", async () => {
+    // Room A1:D2 is scene cols 2..5, rows 1..2. Its 2 x 2 blocks are B1:C2
+    // centred (400, 200), A1:B2 at (300, 200) and C1:D2 at (500, 200).
+    const blocks: Record<
+      string,
+      { at: { x: number; y: number }; cells: string[] }
+    > = {
+      "A1:B2": { at: { x: 300, y: 200 }, cells: ["A1", "B1", "A2", "B2"] },
+      "B1:C2": { at: { x: 400, y: 200 }, cells: ["B1", "C1", "B2", "C2"] },
+      "C1:D2": { at: { x: 500, y: 200 }, cells: ["C1", "D1", "C2", "D2"] },
+    };
+    const { deps, repo } = setup({ rooms: [room("Hall", "A1:D2")] });
+    const result = await addMonstersInRooms(
+      deps,
+      [
+        { monster: "ogre", count: 1, room: "Hall" },
+        { monster: "bandit", count: 2, room: "Hall" },
+      ],
+      origin,
+    );
+    const [ogre, ...bandits] = result.placements;
+    const taken = blocks[ogre?.cell ?? ""];
+    expect(taken).toBeDefined();
+    expect(spawnOf(repo, ogre?.id ?? "")).toEqual(taken?.at);
+    expect(bandits).toHaveLength(2);
+    for (const bandit of bandits) {
+      expect(bandit.cell).not.toBeNull();
+      expect(taken?.cells).not.toContain(bandit.cell);
+    }
+    expect(new Set(bandits.map((b) => b.cell)).size).toBe(2);
+  });
+
+  it("a Large group listed after a Medium group, in a room with a single free 2 x 2 block, still gets that block", async () => {
+    // Hall A1:B3 is scene cols 2..3, rows 1..3. Placing the bandits first
+    // would take A2 and leave no free 2 x 2 block.
+    const { deps, repo } = setup({ rooms: [room("Hall", "A1:B3")] });
+    const result = await addMonstersInRooms(
+      deps,
+      [
+        { monster: "bandit", count: 2, room: "Hall" },
+        { monster: "ogre", count: 1, room: "Hall" },
+      ],
+      origin,
+    );
+    const ogre = result.placements.find((p) => p.name === "Ogre 1");
+    expect(ogre?.cell).toBe("A1:B2");
+    expect(spawnOf(repo, ogre?.id ?? "")).toEqual({ x: 300, y: 200 });
+    expect(
+      result.placements.filter((p) => p.name !== "Ogre 1").map((p) => p.cell),
+    ).toEqual(["A3", "B3"]);
+  });
+
+  it("placements stay in input order when a later group is placed first", async () => {
+    const { deps, repo } = setup({ rooms: [room("Hall", "A1:B3")] });
+    const result = await addMonstersInRooms(
+      deps,
+      [
+        { monster: "bandit", count: 2, room: "Hall" },
+        { monster: "ogre", count: 1, room: "Hall" },
+      ],
+      origin,
+    );
+    expect(result.placements.map((p) => [p.name, p.room, p.cell])).toEqual([
+      ["Bandit 1", "Hall", "A3"],
+      ["Bandit 2", "Hall", "B3"],
+      ["Ogre 1", "Hall", "A1:B2"],
+    ]);
+    expect(result.placements.map((p) => p.id)).toEqual(
+      result.instances.map((i) => i.id),
+    );
+    expect(result.instances.map((i) => spawnOf(repo, i.id))).toEqual([
+      { x: 250, y: 350 },
+      { x: 350, y: 350 },
+      { x: 300, y: 200 },
+    ]);
+  });
+
+  it("a Large monster that finds no free 2 x 2 block is added without a spawn position and reported unplaced", async () => {
+    // Taproom is a 3 x 1 strip.
+    const { deps, repo } = setup();
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "ogre", count: 1, room: "Taproom" }],
+      origin,
+    );
+    expect(result.instances).toHaveLength(1);
+    expect(spawnOf(repo, result.instances[0]?.id ?? "")).toBeNull();
+    expect(result.placements).toEqual([
+      {
+        id: result.instances[0]?.id,
+        name: "Ogre 1",
+        room: "Taproom",
+        cell: null,
+      },
+    ]);
+  });
+
+  it('a Large monster\'s placement gives its block as a display range ("A1:B2")', async () => {
+    const { deps } = setup({ rooms: [room("Den", "A1:B2")] });
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "ogre", count: 1, room: "Den" }],
+      origin,
+    );
+    expect(result.placements).toEqual([
+      {
+        id: result.instances[0]?.id,
+        name: "Ogre 1",
+        room: "Den",
+        cell: "A1:B2",
+      },
+    ]);
   });
 
   it("two groups in the same room get different cells", async () => {

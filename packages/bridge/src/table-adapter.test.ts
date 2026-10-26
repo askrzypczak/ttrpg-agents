@@ -134,8 +134,8 @@ describe("createBridgeTable", () => {
   it("`sceneTokens` returns the tokens from an ok `scene-tokens` result", async () => {
     const sceneTokens = {
       tokens: [
-        { position: { x: 300, y: -150 } },
-        { position: { x: 12.5, y: 40 } },
+        { bounds: { min: { x: 250, y: -200 }, max: { x: 350, y: -100 } } },
+        { bounds: { min: { x: -37.5, y: -10 }, max: { x: 62.5, y: 90 } } },
       ],
     };
     const { client, queries } = clientAnswering({

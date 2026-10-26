@@ -87,8 +87,8 @@ export function createBridgeClient(options?: {
  * Driven adapter for the engine's `TablePort`, over `client` (default
  * `createBridgeClient()`). `sceneStatus` sends `scene-status` and returns the
  * scene counts; `sceneMap` sends `scene-map` and returns the scene grid and
- * map items; `sceneTokens` sends `scene-tokens` and returns the token
- * positions; `mapImage` sends `map-image` with the item id and returns the
+ * map items; `sceneTokens` sends `scene-tokens` and returns each token's
+ * bounds; `mapImage` sends `map-image` with the item id and returns the
  * gridded map image. For any of them, a `{ ok: false }` becomes a
  * `TableUnavailableError` with the bridge's message, and so does a result for
  * another query.
