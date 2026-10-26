@@ -35,4 +35,4 @@ Each event carries the `origin` of the mutation that caused it. `instance-change
 
 ## Table
 
-`src/table/`: `TablePort` (driven port: `sceneStatus()` asks the table, the VTT, about its scene, and `sceneMap()` asks for the scene grid and the map images with their transforms; both fail with `TableUnavailableError`) and `getTableStatus(repo, table)`, which adds the encounter count and the verdict: `inSync` = scene ready and token, applied and encounter counts all equal. The bridge client implements the port; `mcp` only formats the result.
+`src/table/`: `TablePort` (driven port: `sceneStatus()` asks the table, the VTT, about its scene; `sceneMap()` asks for the scene grid and the map images with their transforms; `sceneTokens()` asks for the position of each item on the table's character and mount layers, which the room placement for `add_monsters` (#50) reads to skip occupied cells; all fail with `TableUnavailableError`) and `getTableStatus(repo, table)`, which adds the encounter count and the verdict: `inSync` = scene ready and token, applied and encounter counts all equal. The bridge client implements the port; `mcp` only formats the result.

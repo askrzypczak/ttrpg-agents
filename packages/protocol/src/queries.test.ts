@@ -5,6 +5,7 @@ import {
   querySchema,
   sceneMapSchema,
   sceneStatusSchema,
+  sceneTokensSchema,
 } from "./protocol.js";
 
 const status = { sceneReady: true, tokenCount: 2, appliedInstanceCount: 2 };
@@ -23,6 +24,10 @@ const mapItem = {
 
 const sceneMap = { grid: { dpi: 150, type: "SQUARE" }, maps: [mapItem] };
 
+const sceneTokens = {
+  tokens: [{ position: { x: 300, y: -150 } }, { position: { x: 0, y: 12.5 } }],
+};
+
 function without<T extends object>(value: T, key: keyof T): Partial<T> {
   const copy: Partial<T> = { ...value };
   delete copy[key];
@@ -33,6 +38,7 @@ describe("query schemas", () => {
   it("accepts only the known queries", () => {
     expect(querySchema.safeParse({ name: "scene-status" }).success).toBe(true);
     expect(querySchema.safeParse({ name: "scene-map" }).success).toBe(true);
+    expect(querySchema.safeParse({ name: "scene-tokens" }).success).toBe(true);
     for (const bad of [{ name: "nope" }, {}, [], null, "scene-status"]) {
       expect(querySchema.safeParse(bad).success, JSON.stringify(bad)).toBe(
         false,
@@ -102,6 +108,48 @@ describe("query schemas", () => {
       },
       { name: "scene-map" },
       { name: "scene-status", result: sceneMap },
+    ]) {
+      expect(
+        queryResultSchema.safeParse(bad).success,
+        JSON.stringify(bad),
+      ).toBe(false);
+    }
+  });
+
+  it("a scene-tokens result needs a numeric x and y for each token's position, and may be empty", () => {
+    expect(sceneTokensSchema.safeParse(sceneTokens).success).toBe(true);
+    expect(sceneTokensSchema.safeParse({ tokens: [] }).success).toBe(true);
+    for (const bad of [
+      {},
+      { tokens: [{}] },
+      { tokens: [{ position: { x: 1 } }] },
+      { tokens: [{ position: { y: 1 } }] },
+      { tokens: [{ position: { x: "1", y: 2 } }] },
+      { tokens: [{ position: { x: 1, y: null } }] },
+      { tokens: [{ position: null }] },
+      { tokens: { position: { x: 1, y: 2 } } },
+    ]) {
+      expect(
+        sceneTokensSchema.safeParse(bad).success,
+        JSON.stringify(bad),
+      ).toBe(false);
+    }
+  });
+
+  it("a query result carries `scene-tokens` with valid tokens", () => {
+    const result = { name: "scene-tokens", result: sceneTokens };
+    expect(queryResultSchema.safeParse(result).success).toBe(true);
+    expect(
+      agentQueryResponseSchema.safeParse({ ok: true, result }).success,
+    ).toBe(true);
+    for (const bad of [
+      {
+        name: "scene-tokens",
+        result: { tokens: [{ position: { x: 1 } }] },
+      },
+      { name: "scene-tokens" },
+      { name: "scene-map", result: sceneTokens },
+      { name: "scene-status", result: sceneTokens },
     ]) {
       expect(
         queryResultSchema.safeParse(bad).success,

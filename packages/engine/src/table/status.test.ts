@@ -32,6 +32,7 @@ function tableAnswering(status: TableSceneStatus): TablePort {
   return {
     sceneStatus: () => Promise.resolve(status),
     sceneMap: () => Promise.reject(new Error("not stubbed")),
+    sceneTokens: () => Promise.reject(new Error("not stubbed")),
   };
 }
 
@@ -121,6 +122,7 @@ describe("getTableStatus", () => {
     const table: TablePort = {
       sceneStatus: () => Promise.reject(error),
       sceneMap: () => Promise.reject(new Error("not stubbed")),
+      sceneTokens: () => Promise.reject(new Error("not stubbed")),
     };
     let caught: unknown;
     try {

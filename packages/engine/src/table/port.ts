@@ -26,9 +26,27 @@ export interface TableSceneMap {
   maps: TableMapItem[];
 }
 
+/**
+ * An item on the table's CHARACTER or MOUNT layer, at a position in scene
+ * units.
+ */
+export interface TableToken {
+  position: Point;
+}
+
+/** The items on the table's CHARACTER and MOUNT layers. */
+export interface TableSceneTokens {
+  tokens: TableToken[];
+}
+
 /** Driven port: ask the table (the VTT). Fails with `TableUnavailableError`. */
 export interface TablePort {
   sceneStatus(): Promise<TableSceneStatus>;
   /** The scene grid and map images. Fails with `TableUnavailableError`. */
   sceneMap(): Promise<TableSceneMap>;
+  /**
+   * The position of each item on the CHARACTER and MOUNT layers. Fails with
+   * `TableUnavailableError`.
+   */
+  sceneTokens(): Promise<TableSceneTokens>;
 }

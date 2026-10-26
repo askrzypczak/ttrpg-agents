@@ -94,6 +94,7 @@ beforeEach(() => {
     table: {
       sceneStatus: () => Promise.reject(new Error("table not stubbed")),
       sceneMap: () => Promise.reject(new Error("not stubbed")),
+      sceneTokens: () => Promise.reject(new Error("not stubbed")),
     },
     repo: recordingRepo(inner, writes),
     maps: new SqliteMapRepository(openDatabase(":memory:")),

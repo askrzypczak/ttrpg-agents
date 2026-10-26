@@ -130,4 +130,59 @@ describe("createBridgeTable", () => {
     }
     expect(caught).toBeInstanceOf(TableUnavailableError);
   });
+
+  it("`sceneTokens` returns the tokens from an ok `scene-tokens` result", async () => {
+    const sceneTokens = {
+      tokens: [
+        { position: { x: 300, y: -150 } },
+        { position: { x: 12.5, y: 40 } },
+      ],
+    };
+    const { client, queries } = clientAnswering({
+      ok: true,
+      result: { name: "scene-tokens", result: sceneTokens },
+    });
+    expect(await createBridgeTable(client).sceneTokens()).toEqual(sceneTokens);
+    expect(queries).toEqual([{ name: "scene-tokens" }]);
+  });
+
+  it("`sceneTokens` throws `TableUnavailableError` carrying the bridge's message for any `{ ok: false }` response, each error code", async () => {
+    for (const code of agentErrorCodeSchema.options) {
+      const message = `bridge says ${code}`;
+      const { client } = clientAnswering({
+        ok: false,
+        error: { code, message },
+      });
+      let caught: unknown;
+      try {
+        await createBridgeTable(client).sceneTokens();
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught, code).toBeInstanceOf(TableUnavailableError);
+      expect((caught as Error).message, code).toBe(message);
+    }
+  });
+
+  it("a result for another query throws `TableUnavailableError` from `sceneTokens`", async () => {
+    for (const result of [
+      {
+        name: "scene-status" as const,
+        result: { sceneReady: true, tokenCount: 1, appliedInstanceCount: 1 },
+      },
+      {
+        name: "scene-map" as const,
+        result: { grid: { dpi: 150, type: "SQUARE" }, maps: [] },
+      },
+    ]) {
+      const { client } = clientAnswering({ ok: true, result });
+      let caught: unknown;
+      try {
+        await createBridgeTable(client).sceneTokens();
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught, result.name).toBeInstanceOf(TableUnavailableError);
+    }
+  });
 });

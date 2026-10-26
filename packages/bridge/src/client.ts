@@ -87,8 +87,10 @@ export function createBridgeClient(options?: {
  * Driven adapter for the engine's `TablePort`, over `client` (default
  * `createBridgeClient()`). `sceneStatus` sends `scene-status` and returns the
  * scene counts; `sceneMap` sends `scene-map` and returns the scene grid and
- * map items. For either, any `{ ok: false }` becomes a `TableUnavailableError`
- * with the bridge's message, and so does a result for the other query.
+ * map items; `sceneTokens` sends `scene-tokens` and returns the token
+ * positions. For any of them, a `{ ok: false }` becomes a
+ * `TableUnavailableError` with the bridge's message, and so does a result for
+ * another query.
  */
 export function createBridgeTable(
   client: BridgeClient = createBridgeClient(),
@@ -114,6 +116,16 @@ export function createBridgeTable(
         );
       const { grid, maps } = res.result.result;
       return { grid, maps };
+    },
+    async sceneTokens() {
+      const res = await client.query({ name: "scene-tokens" });
+      if (!res.ok) throw new TableUnavailableError(res.error.message);
+      if (res.result.name !== "scene-tokens")
+        throw new TableUnavailableError(
+          `the table answered "${res.result.name}" to a "scene-tokens" query`,
+        );
+      const { tokens } = res.result.result;
+      return { tokens };
     },
   };
 }
