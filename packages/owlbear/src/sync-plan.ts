@@ -22,6 +22,12 @@ export const POSITION_BASELINE_KEY = "position";
  * `{ monsterKey, image }` (the picture's url, null for a circle).
  */
 export const LOOK_BASELINE_KEY = "look";
+/**
+ * Reserved key in the synced record of an old token being replaced (for a
+ * new monster type that needs another kind of token): its replacement's item
+ * id.
+ */
+export const REPLACED_BY_KEY = "replacedBy";
 /** Scene metadata: the instance ids already placed on this scene. */
 export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 
@@ -181,6 +187,10 @@ export type SyncPlan = {
   add: SceneItem[];
   /** Key-level item metadata writes; `value: undefined` clears the key. */
   update: { id: string; key: string; value: unknown }[];
+  /**
+   * Tokens of instances no longer wanted, and the old token of a half-done
+   * replacement (see `replace`).
+   */
   delete: string[];
   /** Token renames (a top-level item field, not metadata). */
   rename: { id: string; name: string }[];
@@ -197,9 +207,17 @@ export type SyncPlan = {
     id: string;
     patch: Pick<ItemPatch, "image" | "grid" | "shape" | "scale">;
   }[];
+  /**
+   * Existing tokens replaced with a new item for their instance's new monster
+   * type, when the token's kind (Owlbear's read-only item type) must change:
+   * `id` is the old token, `marker` its synced record marked with the
+   * replacement's id under REPLACED_BY_KEY (written before the replacement is
+   * added), and `item` the replacement.
+   */
+  replace: { id: string; marker: Record<string, unknown>; item: SceneItem }[];
   /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
   deleted: string[];
-  /** Monster keys, once each, of instances getting a token, or an image token redrawn, that have no art. */
+  /** Monster keys, once each, of instances getting a token, or a token redrawn or replaced, that have no art. */
   needsArt: string[];
   /** Table edits of owned keys to write back to the store. */
   edits: InstanceEdit[];
@@ -208,9 +226,10 @@ export type SyncPlan = {
   /**
    * Writes over table values for the DM to audit: Stat Bubbles fields a
    * snapshot pushed over a different token value, moves of a token that
-   * was not where it was last placed (or has no recorded position), and
+   * was not where it was last placed (or has no recorded position),
    * redraws of a token whose art or size the table had changed (or that has
-   * no recorded look).
+   * no recorded look), and every replacement (once per instance, also when a
+   * half-done one is finished).
    */
   overrides: { instanceId: string; message: string }[];
 };
@@ -267,6 +286,14 @@ export function restyleOverrideNote(name: string, recorded: boolean): string {
     : `${name}'s token was redrawn for its new monster type at the agent's request; its art or size may have been changed on the table, and was overwritten.`;
 }
 
+/**
+ * The override note for a token replaced with a new one for its new monster
+ * type (a redraw that needs another kind of token).
+ */
+export function replaceOverrideNote(name: string): string {
+  return `${name}'s token was replaced with a new one for its new monster type at the agent's request; any attachments on the old token were deleted with it.`;
+}
+
 /** A token's look as recorded under LOOK_BASELINE_KEY. */
 type Look = { monsterKey: string; image: string | null };
 
@@ -284,58 +311,72 @@ type Restyle = SyncPlan["restyle"][number]["patch"];
 const UNIT_SCALE: Vec2 = { x: 1, y: 1 };
 
 /**
- * The look an existing token is redrawn with for its instance's monster type,
- * from the look a new token of that type gets (`config.tokenKind`), keeping
- * the token's kind: an IMAGE takes the image and grid drawn from the type's
- * art, or keeps its own picture with a grid spanning the footprint when the
- * type has no art (`needsArt`); a SHAPE takes the shape of a new token without
- * art. Both at scale 1. `image` is the picture's url (null for a SHAPE).
- * Undefined for any other item, an IMAGE without a picture, or a SHAPE when a
- * new token gets no shape.
+ * How an existing token is redrawn for its instance's monster type: as a new
+ * token of that type would be drawn (`config.tokenKind`, given the type's
+ * usable art). Only IMAGE and SHAPE tokens are redrawn; undefined for any
+ * other item. `typeArt` is the art drawn from, undefined when the type has
+ * none (the type then goes to `needsArt`). When the target look has the
+ * token's kind, `patch` holds its fields at scale 1 (an IMAGE's image and
+ * grid, a SHAPE's shape; undefined when the target lacks them, and the token
+ * is left alone); when the kind differs, `patch` is undefined and the token is
+ * replaced. `image` is the target picture's url (null for a SHAPE).
  */
 function redrawnLook(
   token: SceneItem,
   instance: EncounterInstance,
   art: Readonly<Record<string, PublishedTokenArt>>,
   config: SyncConfig,
-): { patch: Restyle; image: string | null; needsArt: boolean } | undefined {
-  if (token.type === "IMAGE") {
-    const typeArt = Object.hasOwn(art, instance.monsterKey)
-      ? art[instance.monsterKey]
-      : undefined;
-    const drawn =
-      typeArt === undefined ? undefined : config.tokenKind(instance, typeArt);
-    if (drawn?.image !== undefined && drawn.grid !== undefined)
-      return {
-        patch: {
-          image: { ...drawn.image },
-          grid: drawn.grid,
-          scale: { ...UNIT_SCALE },
-        },
-        image: drawn.image.url,
-        needsArt: false,
-      };
-    if (token.image === undefined) return undefined;
-    return {
-      patch: {
-        image: { ...token.image },
-        grid: cellsGrid(token.image, instance.footprint),
-        scale: { ...UNIT_SCALE },
-      },
-      image: token.image.url,
-      needsArt: true,
+):
+  | {
+      target: TokenKind;
+      typeArt: PublishedTokenArt | undefined;
+      patch: Restyle | undefined;
+      image: string | null;
+    }
+  | undefined {
+  if (token.type !== "IMAGE" && token.type !== "SHAPE") return undefined;
+  const typeArt = Object.hasOwn(art, instance.monsterKey)
+    ? art[instance.monsterKey]
+    : undefined;
+  const target = config.tokenKind(instance, typeArt);
+  const image = target.type === "IMAGE" ? (target.image?.url ?? null) : null;
+  let patch: Restyle | undefined;
+  if (
+    target.type === "IMAGE" &&
+    token.type === "IMAGE" &&
+    target.image !== undefined &&
+    target.grid !== undefined
+  )
+    patch = {
+      image: { ...target.image },
+      grid: target.grid,
+      scale: { ...UNIT_SCALE },
     };
-  }
-  if (token.type === "SHAPE") {
-    const { shape } = config.tokenKind(instance, undefined);
-    if (shape === undefined) return undefined;
-    return {
-      patch: { shape: { ...shape }, scale: { ...UNIT_SCALE } },
-      image: null,
-      needsArt: false,
-    };
-  }
-  return undefined;
+  if (
+    target.type === "SHAPE" &&
+    token.type === "SHAPE" &&
+    target.shape !== undefined
+  )
+    patch = { shape: { ...target.shape }, scale: { ...UNIT_SCALE } };
+  return { target, typeArt, patch, image };
+}
+
+/**
+ * The id of the item replacing the item `id`: the next generation suffix
+ * (`X` -> `X-r2`, `X-r<n>` -> `X-r<n+1>`), counting up past the ids in `taken`.
+ */
+function replacementId(id: string, taken: ReadonlySet<string>): string {
+  const match = /^(.*)-r(\d+)$/.exec(id);
+  const base = match?.[1] ?? id;
+  let generation = match?.[2] === undefined ? 2 : Number(match[2]) + 1;
+  while (taken.has(`${base}-r${generation}`)) generation++;
+  return `${base}-r${generation}`;
+}
+
+/** The item id a token's synced record names as its replacement, if any. */
+function replacedBy(item: SceneItem): string | undefined {
+  const value = asRecord(item.metadata[SYNCED_METADATA_KEY])[REPLACED_BY_KEY];
+  return typeof value === "string" ? value : undefined;
 }
 
 /** Whether the token already shows every field of the patch (no scale counts as 1). */
@@ -536,16 +577,31 @@ function movesEditField(
  * its instance's monster key and its picture's url (null for a circle). An
  * existing token is redrawn when its instance is in `context.restyles` (an
  * `mcp` change set a new monster type) or its recorded look names another
- * monster key (a change seen only in a snapshot). The redraw keeps the token's
- * kind: an IMAGE takes the type's art, or keeps its own picture when the type
- * has none (the type then goes to `needsArt`), with a grid spanning the
- * footprint; a SHAPE becomes a circle as wide as the footprint; both at scale
- * 1 (no scale counts as 1). It is planned in `restyle` only when the token
- * differs from that look, and the recorded look becomes the drawn one either
- * way. A planned redraw of a token whose picture differs from its recorded
- * one, whose scale is not 1, or that has no recorded look is reported in
- * `overrides`. A token with no recorded look and no `restyles` entry is never
- * redrawn and gets no record; other item types are left alone.
+ * monster key (a change seen only in a snapshot). It is drawn as a new token
+ * of the type would be (`config.tokenKind` with the type's art; a type with no
+ * art goes to `needsArt`), at scale 1 (no scale counts as 1). When the kind
+ * stays, the redraw is in place: an IMAGE takes the image and grid, a SHAPE
+ * the shape. It is planned in `restyle` only when the token differs from that
+ * look, and the recorded look becomes the drawn one either way. A planned
+ * redraw of a token whose picture differs from its recorded one, whose scale
+ * is not 1, or that has no recorded look is reported in `overrides`.
+ * When the kind must change (a SHAPE whose type has art, an IMAGE whose type
+ * has none), the token is replaced (`replace`): a new item of the target look
+ * with the token's name, position, visibility, rotation, layer, lock and
+ * metadata, each as this plan leaves them (its planned rename, move and
+ * metadata writes are folded in, and none is planned on the old token), its
+ * synced record the token's next one with the new look. Its id is the old
+ * one's with the next generation suffix (`X-r2`, `X-r3`, ...), skipping ids on
+ * the scene. The old token's record, as read, is marked with that id under
+ * REPLACED_BY_KEY. Every replacement is reported in `overrides` (a folded
+ * move keeps its own note). A token with no recorded look and no `restyles`
+ * entry is never redrawn and gets no record; other item types are left alone.
+ * The first linked token seen is an instance's token (others are duplicates,
+ * left alone), except after a half-done replacement: a linked token whose
+ * record names another linked token of its instance on the scene under
+ * REPLACED_BY_KEY is deleted, its replacement is the instance's token, and the
+ * replacement is reported in `overrides`. A marker whose replacement is not on
+ * the scene is left as it is.
  * An instance in `context.placed` whose token is missing was deleted by the
  * GM and is not recreated.
  */
@@ -575,6 +631,7 @@ export function planSync(
     rename: [],
     move: [],
     restyle: [],
+    replace: [],
     deleted: [],
     needsArt: [],
     edits: [],
@@ -582,21 +639,59 @@ export function planSync(
     overrides: [],
   };
   const wanted = new Map(desired.map((i) => [i.id, i]));
-  const tokens = new Map<string, SceneItem>();
+  const linked = new Map<string, SceneItem[]>();
   for (const item of observed) {
     const id = instanceIdOf(item);
     if (id === undefined) continue;
-    // A duplicate token (e.g. a copy-pasted one) is left alone: the first
-    // one seen is the instance's token.
     if (!wanted.has(id)) plan.delete.push(item.id);
-    else if (!tokens.has(id)) tokens.set(id, item);
+    else linked.set(id, [...(linked.get(id) ?? []), item]);
   }
+  // Instances whose replacement note is already planned.
+  const replaceNoted = new Set<string>();
+  const noteReplacement = (instance: EncounterInstance): void => {
+    if (replaceNoted.has(instance.id)) return;
+    replaceNoted.add(instance.id);
+    plan.overrides.push({
+      instanceId: instance.id,
+      message: replaceOverrideNote(instance.displayName),
+    });
+  };
+  const tokens = new Map<string, SceneItem>();
+  for (const [id, items] of linked) {
+    // A half-done replacement: the old token, marked with the id of its
+    // replacement, is still on the scene next to it. The old token is
+    // deleted and the replacement is the instance's token.
+    const ids = new Set(items.map((item) => item.id));
+    const marked = items.find((item) => {
+      const by = replacedBy(item);
+      return by !== undefined && by !== item.id && ids.has(by);
+    });
+    const replacement =
+      marked === undefined
+        ? undefined
+        : items.find((item) => item.id === replacedBy(marked));
+    if (marked !== undefined && replacement !== undefined) {
+      plan.delete.push(marked.id);
+      tokens.set(id, replacement);
+      noteReplacement(wanted.get(id)!);
+    } else {
+      // A duplicate token (e.g. a copy-pasted one) is left alone: the first
+      // one seen is the instance's token.
+      tokens.set(id, items[0]!);
+    }
+  }
+  // Ids a replacement may not take: those on the scene and those planned.
+  const takenIds = new Set(observed.map((item) => item.id));
 
   const owned = config.projectors.filter((p) => p.mode === "owned");
   for (const [id, token] of tokens) {
     const instance = wanted.get(id)!;
     const baseline = asRecord(token.metadata[SYNCED_METADATA_KEY]);
     const next = { ...baseline };
+    // The token's planned writes, made on it or folded into its replacement.
+    const updates: { key: string; value: unknown }[] = [];
+    let rename: string | undefined;
+    let move: Vec2 | undefined;
     for (const projector of owned) {
       const { key, project, readBack } = projector;
       const raw = project(instance);
@@ -646,7 +741,7 @@ export function planSync(
           context.fields?.get(id) ?? {},
         );
         if (fields.push !== undefined)
-          plan.update.push({ id: token.id, key, value: fields.push });
+          updates.push({ key, value: fields.push });
         next[key] = fields.baseline;
         if (Object.keys(fields.edit).length > 0)
           plan.edits.push({ instanceId: id, ...fields.edit });
@@ -661,11 +756,11 @@ export function planSync(
         next[key] = raw;
       } else if (hasBaseline) {
         if (!deepEqual(raw, baseline[key])) {
-          plan.update.push({ id: token.id, key, value: d });
+          updates.push({ key, value: d });
           next[key] = raw;
         }
       } else {
-        if (o === undefined) plan.update.push({ id: token.id, key, value: d });
+        if (o === undefined) updates.push({ key, value: d });
         next[key] = raw;
       }
     }
@@ -674,7 +769,7 @@ export function planSync(
       next[NAME_BASELINE_KEY] = d;
     } else if (Object.hasOwn(baseline, NAME_BASELINE_KEY)) {
       if (d !== baseline[NAME_BASELINE_KEY]) {
-        plan.rename.push({ id: token.id, name: d });
+        rename = d;
         next[NAME_BASELINE_KEY] = d;
       }
     } else {
@@ -689,7 +784,7 @@ export function planSync(
         (recorded !== undefined && !samePosition(recorded, target))
       ) {
         if (!samePosition(token.position, target)) {
-          plan.move.push({ id: token.id, position: target });
+          move = target;
           if (recorded === undefined || !samePosition(token.position, recorded))
             plan.overrides.push({
               instanceId: id,
@@ -703,14 +798,21 @@ export function planSync(
       }
     }
     const look = asLook(baseline[LOOK_BASELINE_KEY]);
+    let replacing: ReturnType<typeof redrawnLook>;
     if (
       context.restyles?.has(id) === true ||
       (look !== undefined && look.monsterKey !== instance.monsterKey)
     ) {
       const redrawn = redrawnLook(token, instance, context.art, config);
-      if (redrawn !== undefined) {
-        if (redrawn.needsArt && !plan.needsArt.includes(instance.monsterKey))
-          plan.needsArt.push(instance.monsterKey);
+      if (
+        redrawn !== undefined &&
+        redrawn.typeArt === undefined &&
+        !plan.needsArt.includes(instance.monsterKey)
+      )
+        plan.needsArt.push(instance.monsterKey);
+      if (redrawn !== undefined && redrawn.target.type !== token.type)
+        replacing = redrawn;
+      else if (redrawn?.patch !== undefined) {
         if (!drawnAs(token, redrawn.patch)) {
           plan.restyle.push({ id: token.id, patch: redrawn.patch });
           const picture =
@@ -736,6 +838,50 @@ export function planSync(
         };
       }
     }
+    if (replacing !== undefined) {
+      // A new item with the old token's fields as this plan leaves them; the
+      // old token gets no write but the marker, and is then deleted.
+      const newId = replacementId(token.id, takenIds);
+      takenIds.add(newId);
+      const metadata: Record<string, unknown> = { ...token.metadata };
+      for (const { key, value } of updates)
+        if (value === undefined) delete metadata[key];
+        else metadata[key] = value;
+      const record: Record<string, unknown> = {
+        ...next,
+        [LOOK_BASELINE_KEY]: {
+          monsterKey: instance.monsterKey,
+          image: replacing.image,
+        },
+      };
+      delete record[REPLACED_BY_KEY];
+      metadata[SYNCED_METADATA_KEY] = record;
+      const position = move ?? token.position;
+      plan.replace.push({
+        id: token.id,
+        marker: {
+          ...baseline,
+          [REPLACED_BY_KEY]: newId,
+        },
+        item: {
+          ...replacing.target,
+          id: newId,
+          name: rename ?? token.name,
+          visible: token.visible,
+          position: { x: position.x, y: position.y },
+          layer: token.layer ?? replacing.target.layer,
+          ...(token.rotation === undefined ? {} : { rotation: token.rotation }),
+          ...(token.locked === undefined ? {} : { locked: token.locked }),
+          metadata,
+        },
+      });
+      noteReplacement(instance);
+      continue;
+    }
+    for (const { key, value } of updates)
+      plan.update.push({ id: token.id, key, value });
+    if (rename !== undefined) plan.rename.push({ id: token.id, name: rename });
+    if (move !== undefined) plan.move.push({ id: token.id, position: move });
     if (!deepEqual(next, baseline))
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
   }

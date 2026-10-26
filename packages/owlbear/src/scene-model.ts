@@ -112,7 +112,7 @@ export interface SceneItem {
   line?: LineSpec;
   /** Required by the real adapter when adding a CURVE item. */
   curve?: CurveSpec;
-  /** Whether the item is locked, when adding. */
+  /** Whether the item is locked, when adding. Default: false. Filled on read by the real adapter. */
   locked?: boolean;
   /** Whether the item ignores pointer hits, when adding. */
   disableHit?: boolean;

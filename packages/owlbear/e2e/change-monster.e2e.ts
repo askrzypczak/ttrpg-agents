@@ -5,7 +5,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import type { ChangeOrigin } from "@ttrpg-agents/engine";
-import type { SceneItem } from "../src/scene-model.js";
+import type { ItemPatch, SceneItem } from "../src/scene-model.js";
 import { SHADOW_IDS, seedE2eTokenArt } from "./db.js";
 import { e2eDir } from "./env.js";
 import { test, expect, openHarness } from "./fixtures.js";
@@ -126,6 +126,98 @@ test.describe("changing a monster's type", () => {
           image: shadowArt,
           grid: { dpi: 300, offset: { x: 150, y: 140 } },
         });
+      await expect(syncError(page)).toHaveText("");
+    } finally {
+      try {
+        // Put the seeded shadow back as it was, for the next test.
+        if (changed)
+          db.prepare(
+            `UPDATE monster_instances
+             SET monster_key = ?, display_name = ?, max_hp = ?, current_hp = ?,
+                 armor_class = ?, initiative = ?, footprint = ?
+             WHERE id = ?`,
+          ).run(
+            instance.monsterKey,
+            instance.displayName,
+            instance.maxHp,
+            instance.currentHp,
+            instance.armorClass,
+            instance.initiative,
+            instance.footprint,
+            instance.id,
+          );
+      } finally {
+        db.close();
+      }
+    }
+  });
+  test("a monster changed through the store to a type with art has its circle token replaced with an image token at the new footprint, keeping its position, visibility, rotation and lock", async ({
+    page,
+    bridge,
+  }) => {
+    // No shadow art: the picker is cancelled and the shadows are circles.
+    seedE2eTokenArt(workerDir(), "dire-wolf", direWolfArt, PNG);
+    await openHarness(page, { role: "gm" });
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    const before = tokenOf(await readItems(page), SHADOW_IDS[0]!);
+    expect(before.type).toBe("SHAPE");
+
+    // The GM reveals, turns and locks the token.
+    await page.evaluate(
+      (id) =>
+        window.__host!.scene.updateItems([id], {
+          visible: true,
+          rotation: 45,
+          locked: true,
+          // Not patchable through the adapter; the host's model takes any field.
+        } as ItemPatch),
+      before.id,
+    );
+    await expect
+      .poll(async () => tokenOf(await readItems(page), SHADOW_IDS[0]!).rotation)
+      .toBe(45);
+
+    const db = openDatabase(bridge.dbPath);
+    const repo = new SqliteEncounterRepository(db);
+    const instance = repo.listInstances().find((i) => i.id === SHADOW_IDS[0]);
+    if (!instance) throw new Error("seeded shadow missing");
+    let changed = false;
+    try {
+      repo.changeMonsters(
+        [
+          {
+            id: instance.id,
+            monsterKey: "dire-wolf",
+            displayName: "Dire Wolf 1",
+            maxHp: 37,
+            currentHp: 37,
+            armorClass: 14,
+            initiative: instance.initiative,
+            footprint: 2,
+          },
+        ],
+        origin,
+      );
+      changed = true;
+
+      await expect
+        .poll(async () => tokenOf(await readItems(page), SHADOW_IDS[0]!).type)
+        .toBe("IMAGE");
+      await expect.poll(async () => (await readItems(page)).length).toBe(5);
+      const after = await readItems(page);
+      expect(tokenOf(after, SHADOW_IDS[0]!)).toMatchObject({
+        id: `${before.id}-r2`,
+        type: "IMAGE",
+        name: "Dire Wolf 1",
+        image: direWolfArt,
+        // Two cells, image centred.
+        grid: { dpi: 200, offset: { x: 200, y: 100 } },
+        position: before.position,
+        visible: true,
+        rotation: 45,
+        locked: true,
+      });
+      expect(after.some((item) => item.id === before.id)).toBe(false);
       await expect(syncError(page)).toHaveText("");
     } finally {
       try {

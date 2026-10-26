@@ -105,7 +105,7 @@ Issue: [#285](https://github.com/askrzypczak/ttrpg-agents/issues/285).
   - Replace the token (add a new one, delete the old) when its kind must change: Owlbear deletes the GM's attachments with the old token, and a failure between the two writes reads as a GM deletion unless a recovery rule is added.
 - Where: `planSync` (`packages/owlbear/src/sync-plan.ts`); `createEncounterSync` (`packages/owlbear/src/encounter-sync.ts`); `createObrAdapter().updateItems` (`packages/owlbear/src/obr-adapter.ts`).
 - Revisit if: #303 lands.
-- Status: active
+- Status: superseded by 303.1
 
 ## 285.11 Each token records the type and picture it was drawn with; a redraw resets scale to 1 and is listed when the token's art or size had changed
 
