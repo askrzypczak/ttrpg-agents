@@ -40,7 +40,7 @@ from `@ttrpg-agents/protocol`, e.g. `{"name":"scene-status"}`,
 `{"name":"scene-map"}`, `{"name":"scene-tokens"}` or
 `{"name":"map-image","itemId":"..."}`) relays the query to the connected
 Owlbear tab and returns its `query-result`. `scene-tokens` returns the
-position of each item on the character and mount layers; the room placement
+axis-aligned bounds of each item on the character and mount layers; the room placement
 for `add_monsters` (#50) reads it. `map-image` returns the map item's image
 as the DM sees it with the display grid and its labels, as WEBP or JPEG
 base64 with its size in px; the bridge waits 30 s for it
