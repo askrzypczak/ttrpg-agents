@@ -189,38 +189,14 @@ describe("planSync token look", () => {
     expect(plan.overrides).toEqual([]);
   });
 
-  it("planSync redraws an image token whose new type has no art with its own picture at the new footprint and lists the type in needsArt", () => {
-    const plan = planSync(
-      [direWolf(1), direWolf(2)],
-      [imageToken(1), imageToken(2)],
-      config,
-      ctx({ restyles: ["i1", "i2"], art: { wolf: wolfArt } }),
-    );
-
-    // The wolf picture, its longer side over 2 cells.
-    const ownPicture = {
-      image: wolfImage,
-      grid: { dpi: 150, offset: { x: 150, y: 150 } },
-      scale: { x: 1, y: 1 },
-    };
-    expect(plan.restyle).toEqual([
-      { id: "token-1", patch: ownPicture },
-      { id: "token-2", patch: ownPicture },
-    ]);
-    expect(plan.needsArt).toEqual(["dire-wolf"]);
-    expect(recordedLook(plan, "token-1")).toEqual({
-      monsterKey: "dire-wolf",
-      image: wolfArt.url,
-    });
-  });
-
-  it("planSync resizes a circle token to the new footprint and keeps it a circle", () => {
+  it("planSync resizes a circle token whose new type has no art to the new footprint and keeps it a circle", () => {
     const plan = planSync(
       [direWolf(1)],
       [circleToken(1)],
       config,
       ctx({
         restyles: ["i1"],
+        art: { wolf: wolfArt },
       }),
     );
 
@@ -237,7 +213,7 @@ describe("planSync token look", () => {
       monsterKey: "dire-wolf",
       image: null,
     });
-    expect(plan.needsArt).toEqual([]);
+    expect(plan.needsArt).toEqual(["dire-wolf"]);
     expect(plan.overrides).toEqual([]);
   });
 
@@ -366,6 +342,14 @@ describe("planSync token look", () => {
     ]);
     // As it was last drawn: no note.
     expect(notesFor(imageToken(1))).toEqual([]);
-    expect(notesFor(circleToken(1))).toEqual([]);
+    // A circle whose new type has no art stays a circle.
+    expect(
+      planSync(
+        [direWolf(1)],
+        [circleToken(1)],
+        config,
+        ctx({ restyles: ["i1"], art: { wolf: wolfArt } }),
+      ).overrides,
+    ).toEqual([]);
   });
 });

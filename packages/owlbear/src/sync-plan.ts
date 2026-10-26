@@ -22,6 +22,12 @@ export const POSITION_BASELINE_KEY = "position";
  * `{ monsterKey, image }` (the picture's url, null for a circle).
  */
 export const LOOK_BASELINE_KEY = "look";
+/**
+ * Reserved key in the synced record of an old token being replaced (for a
+ * new monster type that needs another kind of token): its replacement's item
+ * id.
+ */
+export const REPLACED_BY_KEY = "replacedBy";
 /** Scene metadata: the instance ids already placed on this scene. */
 export const PLACED_METADATA_KEY = "com.ttrpg-agents/placed";
 
@@ -197,6 +203,14 @@ export type SyncPlan = {
     id: string;
     patch: Pick<ItemPatch, "image" | "grid" | "shape" | "scale">;
   }[];
+  /**
+   * Existing tokens replaced with a new item for their instance's new monster
+   * type, when the token's kind (Owlbear's read-only item type) must change:
+   * `id` is the old token, `marker` its synced record marked with the
+   * replacement's id under REPLACED_BY_KEY (written before the replacement is
+   * added), and `item` the replacement.
+   */
+  replace: { id: string; marker: Record<string, unknown>; item: SceneItem }[];
   /** Wanted instances placed on this scene whose token is gone (the GM deleted it). */
   deleted: string[];
   /** Monster keys, once each, of instances getting a token, or an image token redrawn, that have no art. */
@@ -265,6 +279,15 @@ export function restyleOverrideNote(name: string, recorded: boolean): string {
   return recorded
     ? `${name}'s token was redrawn for its new monster type at the agent's request; its art or size had been changed on the table, and was overwritten.`
     : `${name}'s token was redrawn for its new monster type at the agent's request; its art or size may have been changed on the table, and was overwritten.`;
+}
+
+/**
+ * The override note for a token replaced with a new one for its new monster
+ * type (a redraw that needs another kind of token).
+ */
+export function replaceOverrideNote(name: string): string {
+  void name;
+  throw new Error("not implemented");
 }
 
 /** A token's look as recorded under LOOK_BASELINE_KEY. */
@@ -575,6 +598,7 @@ export function planSync(
     rename: [],
     move: [],
     restyle: [],
+    replace: [],
     deleted: [],
     needsArt: [],
     edits: [],
