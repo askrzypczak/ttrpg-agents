@@ -9,6 +9,7 @@ import {
   listRooms,
   proposeRooms,
   removeRooms,
+  resetMaxHp,
   resolveTargets,
   rollInitiative,
   setRooms,
@@ -349,10 +350,38 @@ const resetMaxHpTool = defineTool({
     hp: z.enum(["average", "rolled"]),
   },
   run(ctx, { targets, hp }) {
-    void ctx;
-    void targets;
-    void hp;
-    throw new Error("not implemented");
+    let resolved: MonsterInstance[];
+    try {
+      resolved = resolveTargets(ctx.repo.listInstances(), targets);
+    } catch (e) {
+      if (e instanceof TargetError) {
+        return fail(`${e.message}. Nothing was changed.`);
+      }
+      throw e;
+    }
+    const result = resetMaxHp(
+      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+      resolved.map((i) => i.id),
+      hp,
+      mcpOrigin(ctx),
+    );
+    const lines = result.instances.map(
+      ({ before, after }) =>
+        `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+    );
+    const rollLines = result.rolls.map(
+      (r) =>
+        `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
+    );
+    const text = [
+      ...lines,
+      ...(rollLines.length > 0 ? ["", "Rolls:", ...rollLines] : []),
+    ].join("\n");
+    return ok(text, {
+      instances: result.instances.map((c) => instanceView(c.after)),
+      before: result.instances.map((c) => instanceView(c.before)),
+      rolls: result.rolls,
+    });
   },
 });
 
@@ -761,6 +790,7 @@ export const tools: readonly ToolDefinition[] = [
   hpTool("heal"),
   setHpTool,
   setMaxHpTool,
+  resetMaxHpTool,
   setArmorClassTool,
   removeMonstersTool,
   renameMonsterTool,

@@ -238,6 +238,39 @@ describe("reset_max_hp", () => {
 
     expect(stored()).toEqual(before);
   });
+
+  it("reset_max_hp returns each monster after and before the reset and the roll log as structured content", async () => {
+    // The Shadow's statblock average is 27.
+    const [full, damaged] = seed(item("Shadow 1", 20), item("Shadow 2", 30));
+    if (!full || !damaged) throw new Error("seed failed");
+    ctx.repo.applyDamage(damaged.id, 10, origin);
+
+    const average = await call("reset_max_hp", {
+      targets: [full.id, damaged.id],
+      hp: "average",
+    });
+
+    expect(average.structuredContent).toEqual({
+      instances: [
+        { ...view(full), hp: 27, maxHp: 27 },
+        { ...view(damaged), hp: 20, maxHp: 27 },
+      ],
+      before: [
+        { ...view(full), hp: 20, maxHp: 20 },
+        { ...view(damaged), hp: 20, maxHp: 30 },
+      ],
+      rolls: [],
+    });
+
+    const rolled = await call("reset_max_hp", {
+      targets: [full.id, damaged.id],
+      hp: "rolled",
+    });
+
+    expect(rolled.structuredContent).toMatchObject({
+      rolls: [{ label: "Shadow 1 HP" }, { label: "Shadow 2 HP" }],
+    });
+  });
 });
 
 describe("set_armor_class", () => {
