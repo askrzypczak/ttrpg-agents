@@ -73,7 +73,7 @@ Issue: [#185](https://github.com/askrzypczak/ttrpg-agents/issues/185).
   - Chosen: internal `live-map.ts` (not re-exported from the engine index) with `requireActiveMap`, `requireSquareGrid`, `scenePlacement` and `liveActiveMap`; `useMap` uses the grid check and the placement builder with no change in behaviour. Set and list fail with `useMap`'s `UnsupportedGridError` when the grid is no longer square (A3).
   - Inline copies in each use case: three copies of the grid message.
 - Where: `packages/engine/src/map/live-map.ts`, `useMap` (`packages/engine/src/map/use-map.ts`).
-- Status: active
+- Status: superseded by 191.2
 
 ## 185.8 Input checks run before the table is asked; the grid bounds check uses the live grid
 
