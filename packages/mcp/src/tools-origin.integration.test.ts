@@ -51,6 +51,11 @@ function recordingRepo(
       record("removeInstances", origin),
       inner.removeInstances(ids, origin)
     ),
+    listRemovedInstances: () => inner.listRemovedInstances(),
+    restoreInstances: (ids, name, origin) => (
+      record("restoreInstances", origin),
+      inner.restoreInstances(ids, name, origin)
+    ),
     renameInstance: (id, name, origin) => (
       record("renameInstance", origin),
       inner.renameInstance(id, name, origin)
@@ -187,6 +192,25 @@ describe("tool write origin", () => {
       expect(writes[0]?.origin.source, name).toBe("mcp");
       expect(writes[0]?.origin.commandId, name).toMatch(/^command-/);
     }
+  });
+
+  it("restore_monsters passes source mcp and a fresh commandId to the repository", async () => {
+    seed("Shadow 1", "Shadow 2");
+    const removed = await call("remove_monsters", { targets: ["Shadow 2"] });
+    expect(removed.isError).toBeUndefined();
+    writes.length = 0;
+    issuedCommandIds.length = 0;
+
+    const result = await call("restore_monsters", { targets: ["Shadow 2"] });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes).toEqual([
+      {
+        method: "restoreInstances",
+        origin: { source: "mcp", commandId: issuedCommandIds[0] },
+      },
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
   });
 
   it("two tool calls get different command ids", async () => {

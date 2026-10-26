@@ -15,6 +15,8 @@ function recordingRepository(received: unknown[]): EncounterRepository {
     applyDamage: (_id, _amount, origin) => record(origin),
     applyHealing: (_id, _amount, origin) => record(origin),
     removeInstances: (_ids, origin) => record(origin),
+    listRemovedInstances: () => [],
+    restoreInstances: (_ids, _name, origin) => record(origin),
     renameInstance: (_id, _name, origin) => record(origin),
     setInitiative: (_id, _initiative, origin) => record(origin),
     setHp: (_id, _hp, origin) => record(origin),
@@ -45,6 +47,8 @@ describe("EncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.removeInstances(["i1"]),
       // @ts-expect-error origin is required
+      () => repo.restoreInstances(["i1"], (i) => i.displayName),
+      // @ts-expect-error origin is required
       () => repo.renameInstance("i1", "Boss"),
       // @ts-expect-error origin is required
       () => repo.setInitiative("i1", 5),
@@ -61,13 +65,14 @@ describe("EncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.clearEncounter(),
     ];
-    expect(withoutOrigin).toHaveLength(12);
+    expect(withoutOrigin).toHaveLength(13);
 
     // Runtime half: with an origin, every mutation hands it on unchanged.
     repo.addInstances(() => [], origin);
     repo.applyDamage("i1", 1, origin);
     repo.applyHealing("i1", 1, origin);
     repo.removeInstances(["i1"], origin);
+    repo.restoreInstances(["i1"], (i) => i.displayName, origin);
     repo.renameInstance("i1", "Boss", origin);
     repo.setInitiative("i1", 5, origin);
     repo.setHp("i1", 5, origin);
@@ -76,7 +81,7 @@ describe("EncounterRepository mutations", () => {
     repo.setStatsVisible("i1", true, origin);
     repo.setSpawnPositions([spawnAt], origin);
     repo.clearEncounter(origin);
-    expect(received).toEqual(Array<ChangeOrigin>(12).fill(origin));
+    expect(received).toEqual(Array<ChangeOrigin>(13).fill(origin));
     expect(changeOriginSchema.safeParse(received[0]).success).toBe(true);
   });
 });
