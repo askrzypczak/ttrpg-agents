@@ -37,6 +37,12 @@ export interface ObrAdapter {
     updates: { id: string; key: string; value: unknown }[],
   ): Promise<void>;
   deleteItems(ids: string[]): Promise<void>;
+  /** Adds items only this tab sees (`OBR.scene.local`); nothing reaches the scene. */
+  addLocalItems(items: SceneItem[]): Promise<void>;
+  /** The local items of this tab, optionally filtered. */
+  getLocalItems(filter?: (item: SceneItem) => boolean): Promise<SceneItem[]>;
+  /** Deletes local items of this tab by id. */
+  deleteLocalItems(ids: string[]): Promise<void>;
   getSceneMetadata(): Promise<Metadata>;
   /** Shallow-merges into existing scene metadata. */
   setSceneMetadata(update: Metadata): Promise<void>;
@@ -184,6 +190,15 @@ export function createObrAdapter(): ObrAdapter {
       );
     },
     deleteItems: (ids) => OBR.scene.items.deleteItems(ids),
+    addLocalItems: () => {
+      throw new Error("not implemented");
+    },
+    getLocalItems: () => {
+      throw new Error("not implemented");
+    },
+    deleteLocalItems: () => {
+      throw new Error("not implemented");
+    },
     getSceneMetadata: () => OBR.scene.getMetadata(),
     setSceneMetadata: (update) => OBR.scene.setMetadata(update),
     getViewportCenter: async () => {

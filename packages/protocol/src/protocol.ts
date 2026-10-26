@@ -2,6 +2,7 @@ import {
   encounterEventSchema,
   monsterInstanceSchema,
   publishedTokenArtSchema,
+  savedRoomSchema,
   tokenArtSchema,
   type TableSceneMap,
 } from "@ttrpg-agents/engine";
@@ -64,6 +65,13 @@ const encounterEventPayload = encounterEventSchema.and(
 const tokenArtSetPayload = z.object({
   monsterKey: z.string().min(1).max(200),
   art: publishedTokenArtSchema,
+});
+
+// Bridge -> extension: the active map's item and its saved rooms, for the
+// overlay; a null item id when no map is in use.
+const mapRoomsPayload = z.object({
+  itemId: z.string().min(1).nullable(),
+  rooms: z.array(savedRoomSchema),
 });
 
 /**
@@ -209,10 +217,12 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("token-deleted", tokenDeletedPayload),
   envelope("token-art-set", tokenArtSetPayload),
   envelope("instance-edit", instanceEditPayload),
+  envelope("map-rooms", mapRoomsPayload),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
 export type BridgeMessageType = BridgeMessage["type"];
+export type MapRooms = z.infer<typeof mapRoomsPayload>;
 
 const MESSAGE_TYPES: readonly string[] = bridgeMessageSchema.options.map(
   (o) => o.shape.type.value,

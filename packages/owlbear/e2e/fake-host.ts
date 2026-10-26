@@ -58,6 +58,8 @@ export class FakeHost {
     size: number;
   }[] = [];
   readonly scene: SceneModel;
+  /** The extension's local items (`OBR.scene.local`), apart from the scene's. */
+  readonly local: SceneModel = new SceneModel();
   private readonly iframe: HTMLIFrameElement;
   private readonly ref = "e2e-ref";
   private readonly userId: string;
