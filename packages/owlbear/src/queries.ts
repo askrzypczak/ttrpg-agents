@@ -70,9 +70,13 @@ export async function handleQuery(
       };
     }
     case "scene-tokens": {
-      const tokens = await obr.getItems(isTokenItem);
-      void tokens;
-      throw new Error("not implemented");
+      const items = await obr.getItems(isTokenItem);
+      const tokens = await Promise.all(
+        items.map(async (item) => ({
+          bounds: await obr.getItemBounds(item.id),
+        })),
+      );
+      return { name: "scene-tokens", result: { tokens } };
     }
   }
 }

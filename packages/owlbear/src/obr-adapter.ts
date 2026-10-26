@@ -277,9 +277,9 @@ export function createObrAdapter(): ObrAdapter {
       ]);
       return { dpi, type };
     },
-    getItemBounds: (id) => {
-      void id;
-      return Promise.reject(new Error("not implemented"));
+    getItemBounds: async (id) => {
+      const { min, max } = await OBR.scene.items.getItemBounds([id]);
+      return { min: { x: min.x, y: min.y }, max: { x: max.x, y: max.y } };
     },
     pickImage: async (defaultSearch) => {
       const [picked] = await (defaultSearch === undefined

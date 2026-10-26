@@ -91,10 +91,16 @@ export function createFakeObr(
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
     getGrid: () => whenReady(() => ({ ...grid })),
-    getItemBounds: (id) => {
-      void id;
-      return Promise.reject(new Error("not implemented"));
-    },
+    getItemBounds: (id) =>
+      whenReady(() => options.itemBounds?.[id]).then((bounds) => {
+        if (bounds === undefined) {
+          throw new Error(`No bounds for item ${id}`);
+        }
+        return {
+          min: { ...bounds.min },
+          max: { ...bounds.max },
+        };
+      }),
     pickImage: async (defaultSearch) => {
       picks++;
       const pick = options.pickImage;
