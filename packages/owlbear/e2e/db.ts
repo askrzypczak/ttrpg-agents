@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   SqliteEncounterRepository,
+  SqliteMapRepository,
   SqliteTokenArtRepository,
   SqliteTokenImageRepository,
   openDatabase,
@@ -92,16 +93,26 @@ export function seedE2eMap(
   registration: MapRegistration,
   rooms: SavedRoom[],
 ): void {
-  void dir;
-  void registration;
-  void rooms;
-  throw new Error("not implemented");
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    const maps = new SqliteMapRepository(db);
+    maps.registerMap(registration);
+    maps.replaceRooms(registration.itemId, rooms);
+  } finally {
+    db.close();
+  }
 }
 
 /** Forgets every registered map and its rooms in the e2e DB, so no map is in use. */
 export function clearE2eMap(dir: string): void {
-  void dir;
-  throw new Error("not implemented");
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    // map_rooms first: its rows refer to the registrations.
+    db.exec("DELETE FROM map_rooms");
+    db.exec("DELETE FROM map_registrations");
+  } finally {
+    db.close();
+  }
 }
 
 /** The token art stored in the e2e DB, by monster key. */

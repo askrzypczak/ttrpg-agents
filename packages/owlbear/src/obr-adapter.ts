@@ -2,9 +2,12 @@
 // Everything else depends on the narrow ObrAdapter interface so it can be
 // unit-tested against the fake in fake-adapter.ts.
 import OBR, {
+  buildCurve,
   buildImage,
   buildImageUpload,
+  buildLine,
   buildShape,
+  buildText,
   isImage,
   type Item,
 } from "@owlbear-rodeo/sdk";
@@ -93,35 +96,90 @@ export type ObrReader = Pick<
 >;
 
 function toItem(item: SceneItem): Item {
-  if (item.type === "SHAPE") {
-    if (!item.shape)
-      throw new Error(`SHAPE item ${item.id} needs a shape spec`);
-    return buildShape()
+  const common = <
+    B extends {
+      id(id: string): B;
+      name(name: string): B;
+      visible(visible: boolean): B;
+      position(position: Vec2): B;
+      metadata(metadata: Metadata): B;
+      layer(layer: NonNullable<SceneItem["layer"]>): B;
+      locked(locked: boolean): B;
+      disableHit(disableHit: boolean): B;
+    },
+  >(
+    builder: B,
+  ): B =>
+    builder
       .id(item.id)
       .name(item.name)
       .visible(item.visible)
       .position(item.position)
       .metadata(item.metadata)
       .layer(item.layer ?? "CHARACTER")
-      .scale(item.scale ?? { x: 1, y: 1 })
-      .shapeType(item.shape.shapeType)
-      .width(item.shape.width)
-      .height(item.shape.height)
-      .build();
+      .locked(item.locked ?? false)
+      .disableHit(item.disableHit ?? false);
+  switch (item.type) {
+    case "SHAPE": {
+      if (!item.shape)
+        throw new Error(`SHAPE item ${item.id} needs a shape spec`);
+      return common(buildShape())
+        .scale(item.scale ?? { x: 1, y: 1 })
+        .shapeType(item.shape.shapeType)
+        .width(item.shape.width)
+        .height(item.shape.height)
+        .build();
+    }
+    case "IMAGE": {
+      if (!item.image || !item.grid)
+        throw new Error(`IMAGE item ${item.id} needs image and grid specs`);
+      return common(buildImage(item.image, item.grid))
+        .scale(item.scale ?? { x: 1, y: 1 })
+        .build();
+    }
+    case "TEXT": {
+      const { text } = item;
+      if (!text) throw new Error(`TEXT item ${item.id} needs a text spec`);
+      return common(buildText())
+        .textType("PLAIN")
+        .plainText(text.plainText)
+        .width(text.width)
+        .height(text.height)
+        .textAlign(text.align)
+        .textAlignVertical(text.alignVertical)
+        .fontSize(text.fontSize)
+        .fillColor(text.fillColor)
+        .strokeColor(text.strokeColor)
+        .strokeWidth(text.strokeWidth)
+        .build();
+    }
+    case "LINE": {
+      const { line } = item;
+      if (!line) throw new Error(`LINE item ${item.id} needs a line spec`);
+      return common(buildLine())
+        .startPosition(line.start)
+        .endPosition(line.end)
+        .strokeColor(line.stroke.color)
+        .strokeWidth(line.stroke.width)
+        .strokeDash(line.stroke.dash)
+        .build();
+    }
+    case "CURVE": {
+      const { curve } = item;
+      if (!curve) throw new Error(`CURVE item ${item.id} needs a curve spec`);
+      return common(buildCurve())
+        .points(curve.points)
+        .tension(0)
+        .closed(true)
+        .fillOpacity(0)
+        .strokeColor(curve.stroke.color)
+        .strokeWidth(curve.stroke.width)
+        .strokeDash(curve.stroke.dash)
+        .build();
+    }
+    default:
+      throw new Error(`adding ${item.type} items is not supported yet`);
   }
-  if (item.type !== "IMAGE")
-    throw new Error(`adding ${item.type} items is not supported yet`);
-  if (!item.image || !item.grid)
-    throw new Error(`IMAGE item ${item.id} needs image and grid specs`);
-  return buildImage(item.image, item.grid)
-    .id(item.id)
-    .name(item.name)
-    .visible(item.visible)
-    .position(item.position)
-    .metadata(item.metadata)
-    .layer(item.layer ?? "CHARACTER")
-    .scale(item.scale ?? { x: 1, y: 1 })
-    .build();
 }
 
 // Read-side fields are copied as given, without reading into them: the e2e fake
@@ -190,15 +248,12 @@ export function createObrAdapter(): ObrAdapter {
       );
     },
     deleteItems: (ids) => OBR.scene.items.deleteItems(ids),
-    addLocalItems: () => {
-      throw new Error("not implemented");
+    addLocalItems: (items) => OBR.scene.local.addItems(items.map(toItem)),
+    getLocalItems: async (filter) => {
+      const items = (await OBR.scene.local.getItems()).map(fromItem);
+      return filter ? items.filter(filter) : items;
     },
-    getLocalItems: () => {
-      throw new Error("not implemented");
-    },
-    deleteLocalItems: () => {
-      throw new Error("not implemented");
-    },
+    deleteLocalItems: (ids) => OBR.scene.local.deleteItems(ids),
     getSceneMetadata: () => OBR.scene.getMetadata(),
     setSceneMetadata: (update) => OBR.scene.setMetadata(update),
     getViewportCenter: async () => {

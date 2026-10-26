@@ -81,15 +81,9 @@ export function createFakeObr(
     setItemMetadata: (updates) =>
       whenReady(() => scene.setItemMetadata(updates)),
     deleteItems: (ids) => whenReady(() => scene.deleteItems(ids)),
-    addLocalItems: () => {
-      throw new Error("not implemented");
-    },
-    getLocalItems: () => {
-      throw new Error("not implemented");
-    },
-    deleteLocalItems: () => {
-      throw new Error("not implemented");
-    },
+    addLocalItems: (items) => whenReady(() => local.addItems(items)),
+    getLocalItems: (filter) => whenReady(() => local.getItems(filter)),
+    deleteLocalItems: (ids) => whenReady(() => local.deleteItems(ids)),
     getSceneMetadata: () => Promise.resolve(scene.getMetadata()),
     setSceneMetadata: (update) => Promise.resolve(scene.setMetadata(update)),
     getViewportCenter: () => Promise.resolve({ ...viewportCenter }),
