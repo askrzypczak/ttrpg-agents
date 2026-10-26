@@ -331,6 +331,37 @@ describe("add_monsters in a room", () => {
     expect(text(one)).not.toContain("Placed in Attic");
   });
 
+  it("add_monsters gives each group with a room its own line, even in the same room", async () => {
+    let groups = 0;
+    const ctx: ToolContext = {
+      ...contextWith(
+        () => Promise.resolve(scene(trollskull)),
+        registered,
+        () => Promise.resolve({ tokens: [] }),
+      ),
+      // Unique per group, like the server's random UUIDs.
+      newGroupId: () => `group-${String(++groups)}`,
+    };
+    await call(ctx, "set_rooms", {
+      rooms: [{ name: "Kitchen", ranges: ["A1:C1"] }],
+    });
+    const r = await call(ctx, "add_monsters", {
+      groups: [
+        { monster: GOBLIN, count: 1, room: "Kitchen" },
+        { monster: GOBLIN, count: 1, room: "kitchen" },
+      ],
+    });
+    expect(r.isError).toBeFalsy();
+    const [first, second] = (
+      r.structuredContent?.["placements"] as { cell: string | null }[]
+    ).map((p) => p.cell);
+    expectInOrder(text(r), [
+      `Placed in Kitchen: Goblin Warrior 1 at ${String(first)}.`,
+      `Placed in Kitchen: Goblin Warrior 2 at ${String(second)}.`,
+      "Rolls:",
+    ]);
+  });
+
   it("add_monsters with a room on a moved map adds the moved line", async () => {
     const moved = { ...trollskull, scale: { x: 2, y: 2 } };
     const ctx = contextWith(
