@@ -32,6 +32,11 @@ function mapItemOf(item: SceneItem): TableMapItem | undefined {
   };
 }
 
+/** Whether an item sits on the CHARACTER or MOUNT layer, where tokens are. */
+function isTokenItem(item: SceneItem): boolean {
+  return item.layer === "CHARACTER" || item.layer === "MOUNT";
+}
+
 /** Answers a bridge `query` from the scene and the encounter sync state. */
 export async function handleQuery(
   obr: ObrReader,
@@ -65,7 +70,15 @@ export async function handleQuery(
       };
     }
     case "scene-tokens": {
-      throw new Error("not implemented");
+      const tokens = await obr.getItems(isTokenItem);
+      return {
+        name: "scene-tokens",
+        result: {
+          tokens: tokens.map((item) => ({
+            position: { x: item.position.x, y: item.position.y },
+          })),
+        },
+      };
     }
   }
 }
