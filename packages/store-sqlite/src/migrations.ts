@@ -158,6 +158,13 @@ export const migrations: Migration[] = [
       ALTER TABLE monster_instances ADD COLUMN removed_command_id TEXT CHECK ((removed_seq IS NULL) = (removed_source IS NULL) AND (removed_seq IS NULL) = (removed_command_id IS NULL));
     `,
   },
+  {
+    // The change-log seq of the encounter's last clear that cleared at least
+    // one instance. The instances whose removed_seq equals it are that clear's
+    // set. NULL: never cleared.
+    version: 13,
+    sql: "ALTER TABLE encounters ADD COLUMN cleared_seq INTEGER;",
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

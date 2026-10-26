@@ -7,7 +7,8 @@ import { TargetError, resolveTargets } from "./queries.js";
 import type { EncounterRepository } from "./repository.js";
 import type { MonsterInstance } from "./types.js";
 
-export type RestoreMonstersErrorCode = "not_removed" | "unknown_monster";
+export type RestoreMonstersErrorCode =
+  "not_removed" | "unknown_monster" | "nothing_cleared";
 
 export class RestoreMonstersError extends DomainError {
   declare readonly code: RestoreMonstersErrorCode;
@@ -38,6 +39,41 @@ export function restoreMonsters(
 ): RestoredMonster[] {
   const removed = deps.repo.listRemovedInstances().map((r) => r.instance);
   const resolved = resolveRemoved(deps.repo, removed, targets);
+  return restoreResolved(deps, resolved, origin);
+}
+
+/**
+ * Restores the last clear's instances not restored since, in creation order,
+ * all or nothing. Throws RestoreMonstersError `nothing_cleared` when there are
+ * none, `unknown_monster` as restoreMonsters does.
+ */
+export function restoreEncounter(
+  deps: RestoreMonstersDeps,
+  origin: ChangeOrigin,
+): RestoredMonster[] {
+  const cleared = deps.repo
+    .listRemovedInstances()
+    .filter((r) => r.cleared)
+    .map((r) => r.instance);
+  if (cleared.length === 0) {
+    throw new RestoreMonstersError(
+      "nothing_cleared",
+      "No cleared monsters to restore",
+    );
+  }
+  return restoreResolved(deps, cleared, origin);
+}
+
+/**
+ * Puts the resolved removed instances back in one write, each under its name
+ * or, when that is taken, the next free number; checks every monster type
+ * first so an unknown one restores nothing.
+ */
+function restoreResolved(
+  deps: RestoreMonstersDeps,
+  resolved: readonly MonsterInstance[],
+  origin: ChangeOrigin,
+): RestoredMonster[] {
   for (const instance of resolved) monsterOf(deps.monsters, instance);
 
   const restored = deps.repo.restoreInstances(

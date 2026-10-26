@@ -13,6 +13,7 @@ import {
   mergeInitiative,
   resetMaxHp,
   resolveTargets,
+  restoreEncounter,
   restoreMonsters,
   rollInitiative,
   setRooms,
@@ -301,7 +302,9 @@ const listEncounterTool = defineTool({
   inputSchema: {},
   run(ctx) {
     const instances = ctx.repo.listInstances().sort(compareByInitiative);
-    const removed = ctx.repo.listRemovedInstances().map((r) => r.instance);
+    const restorable = ctx.repo.listRemovedInstances();
+    const removed = restorable.filter((r) => !r.cleared).map((r) => r.instance);
+    const cleared = restorable.filter((r) => r.cleared).map((r) => r.instance);
     const body =
       instances.length === 0
         ? "The encounter is empty."
@@ -321,9 +324,11 @@ const listEncounterTool = defineTool({
         : [
             `Removed, can be restored: ${removed.map((i) => i.displayName).join(", ")}.`,
           ];
-    return ok([body, ...removedLine].join("\n\n"), {
+    const clearedLine = clearedListLine(cleared);
+    return ok([body, ...removedLine, ...clearedLine].join("\n\n"), {
       instances: instances.map(instanceView),
       removed: removed.map(instanceView),
+      cleared: cleared.map(instanceView),
     });
   },
 });
@@ -490,6 +495,21 @@ const removeMonstersTool = defineTool({
   },
 });
 
+/** The reply of a restore: "Restored N: name (HP, was old name), ...". */
+function restoredReply(restored: readonly RestoredMonster[]): ToolResult {
+  const parts = restored.map(({ instance, renamedFrom }) => {
+    const hp = `${String(instance.currentHp)}/${String(instance.maxHp)} HP`;
+    const was = renamedFrom === null ? "" : `, was ${renamedFrom}`;
+    return `${instance.displayName} (${hp}${was})`;
+  });
+  return ok(`Restored ${String(restored.length)}: ${parts.join(", ")}`, {
+    restored: restored.map(({ instance, renamedFrom }) => ({
+      ...instanceView(instance),
+      renamedFrom,
+    })),
+  });
+}
+
 const restoreMonstersTool = defineTool({
   name: "restore_monsters",
   annotations: { destructiveHint: false },
@@ -510,17 +530,7 @@ const restoreMonstersTool = defineTool({
       }
       throw e;
     }
-    const parts = restored.map(({ instance, renamedFrom }) => {
-      const hp = `${String(instance.currentHp)}/${String(instance.maxHp)} HP`;
-      const was = renamedFrom === null ? "" : `, was ${renamedFrom}`;
-      return `${instance.displayName} (${hp}${was})`;
-    });
-    return ok(`Restored ${String(restored.length)}: ${parts.join(", ")}`, {
-      restored: restored.map(({ instance, renamedFrom }) => ({
-        ...instanceView(instance),
-        renamedFrom,
-      })),
-    });
+    return restoredReply(restored);
   },
 });
 
@@ -732,14 +742,39 @@ const setStatsVisibilityTool = defineTool({
 const clearEncounterTool = defineTool({
   name: "clear_encounter",
   annotations: { destructiveHint: true },
-  description: "Remove every monster from the encounter.",
+  description:
+    "Remove every monster from the encounter. The cleared monsters can be brought back with restore_encounter.",
   inputSchema: {},
   run(ctx) {
-    const count = ctx.repo.listInstances().length;
-    ctx.repo.clearEncounter(mcpOrigin(ctx));
+    const cleared = ctx.repo.clearEncounter(mcpOrigin(ctx));
+    if (cleared.length === 0) {
+      return ok("The encounter is already empty; nothing was cleared.", {
+        removed: 0,
+        cleared: [],
+      });
+    }
+    const count = cleared.length;
+    const names = cleared.map((i) => i.displayName).join(", ");
+    const pronoun = count === 1 ? "It" : "They";
     return ok(
-      `Cleared ${String(count)} ${count === 1 ? "monster" : "monsters"}.`,
-      { removed: count },
+      `Cleared ${String(count)} ${count === 1 ? "monster" : "monsters"}: ${names}. ${pronoun} can be restored with restore_encounter.`,
+      { removed: count, cleared: cleared.map(instanceView) },
+    );
+  },
+});
+
+const restoreEncounterTool = defineTool({
+  name: "restore_encounter",
+  annotations: { destructiveHint: false },
+  description:
+    "Bring back every monster the last clear_encounter removed, with the HP, initiative, group and stats visibility they had; their tokens are created again. Monsters added since stay; a name taken meanwhile gets a new number. Fails when nothing cleared is left to restore.",
+  inputSchema: {},
+  run(ctx) {
+    return restoredReply(
+      restoreEncounter(
+        { repo: ctx.repo, monsters: ctx.monsters },
+        mcpOrigin(ctx),
+      ),
     );
   },
 });
@@ -985,6 +1020,20 @@ function withMovedLine(text: string, moved: boolean): string {
   return moved ? `${text}\n\n${movedLine}` : text;
 }
 
+/** The list_encounter line for the last clear's monsters: named up to five, else counted. */
+function clearedListLine(cleared: readonly MonsterInstance[]): string[] {
+  if (cleared.length === 0) return [];
+  if (cleared.length > 5) {
+    return [
+      `Cleared encounter: ${String(cleared.length)} monsters, can be restored with restore_encounter.`,
+    ];
+  }
+  const names = cleared.map((i) => i.displayName).join(", ");
+  return [
+    `Cleared encounter, can be restored with restore_encounter: ${names}.`,
+  ];
+}
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -1006,6 +1055,7 @@ export const tools: readonly ToolDefinition[] = [
   mergeInitiativeTool,
   setStatsVisibilityTool,
   clearEncounterTool,
+  restoreEncounterTool,
   tableStatusTool,
   useMapTool,
   setRoomsTool,

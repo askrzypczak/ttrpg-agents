@@ -187,6 +187,8 @@ export function restoreE2eSeed(dir: string): void {
       newId: () => ids.shift()!,
     });
     repo.clearEncounter(origin);
+    // The clear keeps its rows, which would collide with the ids re-added below.
+    db.exec("DELETE FROM monster_instances WHERE removed_seq IS NOT NULL");
     repo.addInstances(
       () =>
         SHADOW_IDS.map((_, i) => ({

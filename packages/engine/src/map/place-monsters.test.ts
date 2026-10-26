@@ -200,7 +200,7 @@ class MemoryEncounter implements EncounterRepository {
   setSpawnPositions(): MonsterInstance[] {
     throw new Error("unused");
   }
-  clearEncounter(): void {
+  clearEncounter(): MonsterInstance[] {
     throw new Error("unused");
   }
 }

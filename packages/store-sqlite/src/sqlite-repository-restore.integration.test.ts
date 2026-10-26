@@ -71,7 +71,7 @@ describe("removing keeps the instance for restoring", () => {
 
     expect(repo.listInstances().map((i) => i.id)).toEqual([a!.id]);
     expect(repo.listRemovedInstances()).toEqual([
-      { instance: damaged, removedBy: removeOrigin },
+      { instance: damaged, removedBy: removeOrigin, cleared: false },
     ]);
     expect(damaged.currentHp).toBe(11);
   });
@@ -112,7 +112,7 @@ describe("removing keeps the instance for restoring", () => {
 
     expect(repo.listInstances().map((i) => i.id)).toEqual([a!.id]);
     expect(repo.listRemovedInstances()).toEqual([
-      { instance: b, removedBy: removeOrigin },
+      { instance: b, removedBy: removeOrigin, cleared: false },
     ]);
   });
 });
@@ -227,22 +227,6 @@ describe("restoreInstances", () => {
     expect(repo.listRemovedInstances()).toEqual(removedBefore);
     expect(removedBefore).toHaveLength(2);
     expect(log.eventsSince(seq)).toEqual([]);
-  });
-});
-
-describe("clearEncounter", () => {
-  it("clearEncounter drops the removed instances too", () => {
-    const [, b] = seed(shadow("Shadow 1"), shadow("Shadow 2"));
-    repo.removeInstances([b!.id], removeOrigin);
-    expect(removedIds()).toEqual([b!.id]);
-
-    repo.clearEncounter(seedOrigin);
-
-    expect(repo.listInstances()).toEqual([]);
-    expect(repo.listRemovedInstances()).toEqual([]);
-    expect(() =>
-      repo.restoreInstances([b!.id], keepName, restoreOrigin),
-    ).toThrow(UnknownInstanceError);
   });
 });
 
