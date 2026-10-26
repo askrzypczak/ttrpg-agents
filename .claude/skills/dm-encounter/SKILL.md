@@ -5,7 +5,7 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `remove_monsters`, `set_initiative`, `set_stats_visibility`, `clear_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -29,6 +29,8 @@ HP, AC, initiative, rolls, damage totals and attack bonuses come only from tool 
 
 - A named room ("in the taproom", "into the kitchen") goes to that group's `room` in `add_monsters`, as the DM says it (the tool matches saved rooms ignoring case). Several groups can name the same or different rooms in one call.
 - If a call with a room fails because the room is unknown (the error lists the known rooms), follow the live steps under Proposing rooms. On any other failure (no map in use, the map is no longer on the scene, a grid that is not square, or the bridge or the Owlbear tab cannot be reached), relay the error and stop: nothing was added. Do not retry without the room, and do not call `use_map` on your own.
+- Moving monsters already in the encounter into a room ("no, the wolf goes in the kitchen" right after an add, or "the goblins retreat to the hall") is ONE `move_monsters` call with the monsters' exact names (or ids) in `targets` and the room as the DM says it. Never remove the monsters and add them again: the move keeps their HP, initiative and names. If the room is unknown, follow the same live steps as for `add_monsters` (under Proposing rooms), then make the same `move_monsters` call again; on any other failure relay the error and stop.
+- After a move, relay the tool's "Moved into ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present.
 - Other positions and flavour ("on the left", "circling from behind", "ambushing from the trees") are not tracked. Acknowledge them in one short line ("Positions other than rooms aren't tracked, so I've skipped 'on the left'.") and still run the rest of the request.
 
 ## Using the map
