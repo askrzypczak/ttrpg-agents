@@ -2,9 +2,17 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   SqliteEncounterRepository,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
-import type { ChangeOrigin } from "@ttrpg-agents/engine";
+import {
+  storeTokenImage,
+  type ChangeOrigin,
+  type PublishedTokenArt,
+  type TokenArt,
+  type TokenImage,
+} from "@ttrpg-agents/engine";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -64,6 +72,65 @@ function clearTokenArt(dir: string): void {
       )
       .get();
     if (table) db.exec("DELETE FROM token_art");
+    // After token_art, whose rows refer to the images.
+    const images = db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'token_art_image'",
+      )
+      .get();
+    if (images) db.exec("DELETE FROM token_art_image");
+  } finally {
+    db.close();
+  }
+}
+
+/** The token art stored in the e2e DB, by monster key. */
+export function readE2eTokenArt(dir: string): Record<string, TokenArt> {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    return new SqliteTokenArtRepository(db).listTokenArt();
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Stores `bytes` as a token image in the e2e DB and sets the art of
+ * `monsterKey` to `art` with their hash, or to only their hash (no url) when
+ * `art` is `null`; returns the hash. Call it after the auto `seed` fixture,
+ * which forgets all art.
+ */
+export function seedE2eTokenArt(
+  dir: string,
+  monsterKey: string,
+  art: Omit<PublishedTokenArt, "sha256"> | null,
+  bytes: Uint8Array,
+): string {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    const stored = storeTokenImage(new SqliteTokenImageRepository(db), bytes);
+    if (!stored.ok)
+      throw new Error(`seeding token image failed: ${stored.message}`);
+    new SqliteTokenArtRepository(db).setTokenArt(
+      monsterKey,
+      art === null
+        ? { sha256: stored.sha256 }
+        : { ...art, sha256: stored.sha256 },
+    );
+    return stored.sha256;
+  } finally {
+    db.close();
+  }
+}
+
+/** The token image stored in the e2e DB under that hash, or undefined. */
+export function readE2eTokenImage(
+  dir: string,
+  sha256: string,
+): TokenImage | undefined {
+  const db = openDatabase(e2eDbPath(dir));
+  try {
+    return new SqliteTokenImageRepository(db).getTokenImage(sha256);
   } finally {
     db.close();
   }

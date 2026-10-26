@@ -253,6 +253,122 @@ describe("migrations", () => {
     db.close();
   });
 
+  it("a version 7 database migrates to the latest version keeping its art rows with and without an image hash", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 7)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 7");
+    const sha256 = "ab".repeat(32);
+    db.prepare(
+      `INSERT INTO token_art_image (sha256, mime, width, height, bytes)
+       VALUES (?, 'image/png', 1, 1, ?)`,
+    ).run(sha256, new Uint8Array([1, 2, 3]));
+    db.exec(
+      `INSERT INTO token_art (monster_key, url, mime, width, height)
+       VALUES ('shadow', 'https://cdn.owlbear.rodeo/assets/shadow.png', 'image/png', 300, 280)`,
+    );
+    db.prepare(
+      `INSERT INTO token_art (monster_key, url, mime, width, height, sha256)
+       VALUES ('ghoul', 'https://cdn.owlbear.rodeo/assets/ghoul.webp', 'image/webp', 512, 512, ?)`,
+    ).run(sha256);
+
+    migrate(db);
+
+    expect(LATEST_VERSION).toBeGreaterThan(7);
+    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    const repo = new SqliteTokenArtRepository(db);
+    const listed = repo.listTokenArt();
+    expect(listed).toEqual({
+      shadow: {
+        url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+        mime: "image/png",
+        width: 300,
+        height: 280,
+      },
+      ghoul: {
+        url: "https://cdn.owlbear.rodeo/assets/ghoul.webp",
+        mime: "image/webp",
+        width: 512,
+        height: 512,
+        sha256,
+      },
+    });
+    expect(Object.keys(listed.shadow ?? {})).not.toContain("sha256");
+    // The migrated table takes art with only a hash, and still checks the
+    // hash against the stored images.
+    repo.setTokenArt("wight", { sha256 });
+    expect(repo.listTokenArt().wight).toEqual({ sha256 });
+    let error: unknown;
+    try {
+      repo.setTokenArt("ghast", { sha256: "cd".repeat(32) });
+    } catch (e) {
+      error = e;
+    }
+    // SQLITE_CONSTRAINT_FOREIGNKEY
+    expect(error).toMatchObject({ errcode: 787 });
+    db.close();
+  });
+
+  it("the token_art table refuses a row with neither a url nor an image hash", () => {
+    const db = openDatabase(":memory:");
+    let error: unknown;
+    try {
+      db.exec("INSERT INTO token_art (monster_key) VALUES ('shadow')");
+    } catch (e) {
+      error = e;
+    }
+    // SQLITE_CONSTRAINT_CHECK
+    expect(error).toMatchObject({ errcode: 275 });
+    expect(new SqliteTokenArtRepository(db).listTokenArt()).toEqual({});
+    db.close();
+  });
+
+  it("the token_art table refuses a row with only part of url, mime, width and height", () => {
+    const db = openDatabase(":memory:");
+    const sha256 = "ab".repeat(32);
+    db.prepare(
+      `INSERT INTO token_art_image (sha256, mime, width, height, bytes)
+       VALUES (?, 'image/png', 1, 1, ?)`,
+    ).run(sha256, new Uint8Array([1, 2, 3]));
+    const full: Record<string, string | number> = {
+      url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+      mime: "image/png",
+      width: 300,
+      height: 280,
+    };
+    const insert = (monsterKey: string, columns: string[]) =>
+      db
+        .prepare(
+          `INSERT INTO token_art (monster_key, sha256${columns.map((c) => `, ${c}`).join("")})
+           VALUES (?, ?${columns.map(() => ", ?").join("")})`,
+        )
+        .run(monsterKey, sha256, ...columns.map((c) => full[c] ?? null));
+    const partials = [
+      ["url"],
+      ["mime", "width", "height"],
+      ["url", "mime", "width"],
+      ["url", "height"],
+    ];
+    for (const columns of partials) {
+      let error: unknown;
+      try {
+        insert(columns.join("-"), columns);
+      } catch (e) {
+        error = e;
+      }
+      // SQLITE_CONSTRAINT_CHECK
+      expect(error, columns.join(",")).toMatchObject({ errcode: 275 });
+    }
+    expect(new SqliteTokenArtRepository(db).listTokenArt()).toEqual({});
+    // Control: the hash alone, or with the whole reference, is stored.
+    insert("hash-only", []);
+    insert("published", ["url", "mime", "width", "height"]);
+    expect(
+      Object.keys(new SqliteTokenArtRepository(db).listTokenArt()).sort(),
+    ).toEqual(["hash-only", "published"]);
+    db.close();
+  });
+
   it("a row stored before migration 4 reads as footprint 1", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON");

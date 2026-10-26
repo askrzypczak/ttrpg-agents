@@ -1,15 +1,24 @@
 import {
-  tokenArtSchema,
+  publishedTokenArtSchema,
   type InstanceEdit,
+  type PublishedTokenArt,
   type TokenArt,
 } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import type {
+  BridgeMessage,
+  TokenImageUploadResponse,
+} from "@ttrpg-agents/protocol";
 import { instanceEditMessage, splitEdit } from "./instance-edit.js";
 import { tokenDeletedMessage } from "./token-deleted.js";
-import { tokenArtMessage } from "./token-art.js";
+import {
+  republishName,
+  tokenArtMessage,
+  type StoredTokenImage,
+} from "./token-art.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import { createOutbox } from "./outbox.js";
+import { describeError } from "./panel-state.js";
 import type { Timers } from "./reconnecting-socket.js";
 import type { SceneItem } from "./scene-model.js";
 import {
@@ -83,6 +92,24 @@ function fold(
   }
 }
 
+/** What the GM is told to do while a token image uploaded again waits for them. */
+function republishPrompt(monsterKey: string, assetName: string): string {
+  return `Confirm the folder for the ${monsterKey} token art in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${assetName}.`;
+}
+
+/**
+ * Whether token art shows the same image as a pick, whatever their stored
+ * hash; never for art without a url.
+ */
+function samePicture(a: TokenArt, b: PublishedTokenArt): boolean {
+  return (
+    a.url === b.url &&
+    a.mime === b.mime &&
+    a.width === b.width &&
+    a.height === b.height
+  );
+}
+
 const EDIT_FIELDS: readonly EditField[] = [
   "currentHp",
   "maxHp",
@@ -151,9 +178,48 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * go through an outbox over `options.send`: one that cannot go out waits for
  * the next `hello-ack`, and each is remembered until the store settles it. An
  * art pick gets no answer, so it is remembered until the snapshot after the
- * next `hello-ack` and is never sent again. A `table`
- * event with the id of a sent edit acknowledges it: the token keeps the typed
- * value (a clamp shows a note through `onEditDiffers`), and a field the edit
+ * next `hello-ack` and is never sent again.
+ *
+ * A picked image is sent as a link at once and its tokens are created without
+ * waiting for its bytes. With `options.storeImage`, the bytes are then fetched
+ * and stored on the bridge, outside the reconcile chain; once stored, the art
+ * of that type takes the returned hash (if it is still the picked image) and
+ * is sent again with it. One attempt per pick: a failed fetch or a refused or
+ * failed upload is reported once through `onArtStoreFailed`, and the art
+ * stays a link.
+ *
+ * With `options.storeImage`, each snapshot's art that has a url and no hash
+ * (picked before its bytes were stored, or whose upload failed) is also
+ * checked once per session, whether or not its type gets tokens, outside the
+ * reconcile chain: when its url still answers, its bytes are fetched and
+ * stored as after a pick, with the same failure report; a dead url, or a
+ * check that cannot tell, leaves it as it is, silently. A type picked this
+ * session is not checked: its pick was its attempt.
+ *
+ * With `options.loadImage`, the stored art of a type about to get tokens is
+ * checked once per session, before they are created, when it has a hash and
+ * the GM did not pick it this session. A url that no longer answers gets the
+ * stored bytes uploaded to the GM's Owlbear library again; once the GM
+ * confirms (`awaitUploadConfirmed`) they pick the upload, which replaces the
+ * art with the same hash, is sent once, and wins over a snapshot's art for
+ * the type for the rest of the session. A url the check cannot tell about
+ * is used as stored. Bytes that cannot be loaded (reported once through
+ * `onArtRepublishFailed`), a failed upload, or a cancelled, failed or unusable
+ * pick leave the stored art unchanged, and the type's tokens are circles for
+ * the session.
+ *
+ * Art without a url (stored bytes never published) is never drawn, and the
+ * picker never opens afresh for its type. With `options.loadImage` it is
+ * published like art whose url is dead, with no check, when its type first
+ * gets tokens; the same once-per-session rule applies. Until then, or without
+ * `options.loadImage`, the type's tokens are circles. After an art step (the
+ * picker, or a stored art check, republish or first publish) the scene items
+ * and the placed record are read again before the writes are planned, so a
+ * table change made meanwhile is kept; a reconcile with no art step reads them
+ * once.
+ *
+ * A `table` event with the id of a sent edit acknowledges it: the token keeps
+ * the typed value (a clamp shows a note through `onEditDiffers`), and a field the edit
  * did not set that the store changed is pushed. A `table` event with an id the
  * extension does not know settles its fields at the store's value. A refused
  * edit is settled at its sent value, so it is not sent again. An `mcp` event
@@ -189,6 +255,20 @@ export function createEncounterSync(
     onStoreChange?: () => void;
     /** Called once when an event arrives with a gap in `seq`: the caller should reconnect for a snapshot. */
     onGap?: () => void;
+    /** Stores image bytes on the bridge (a picked image, or art without a hash whose url still answers); answers its hash or a refusal. */
+    storeImage?: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>;
+    /** Called once per pick, or per art without a hash, whose image bytes could not be fetched or stored, with the text to show. */
+    onArtStoreFailed?: (text: string) => void;
+    /**
+     * Loads the stored bytes of a token image from the bridge. With it, art
+     * that has a hash and whose url is dead, or that has no url, is uploaded
+     * to Owlbear.
+     */
+    loadImage?: (sha256: string) => Promise<StoredTokenImage>;
+    /** Shows the GM `prompt` and resolves when they confirm the upload. Default: resolves at once. */
+    awaitUploadConfirmed?: (prompt: string) => Promise<void>;
+    /** Called once per type whose stored bytes could not be loaded, with the text to show. */
+    onArtRepublishFailed?: (text: string) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
@@ -202,8 +282,22 @@ export function createEncounterSync(
   let attempt = 0;
   // Monster key -> art, from the snapshots and the GM's picks this session.
   let art: Record<string, TokenArt> = {};
-  // Monster types the GM declined (or whose pick was unusable) this session.
+  // Monster types the GM declined (or whose pick was unusable, or whose
+  // stored art could not be republished) this session. Their art is left out
+  // of the plan, so their tokens are circles.
   const declined = new Set<string>();
+  // Monster types whose stored art was checked for liveness (or, without a
+  // url, published; or, without a hash, checked to store its bytes) this
+  // session, or whose art the GM picked this session.
+  const checked = new Set<string>();
+  // Whether the current reconcile ran an art step (a fresh pick or a stored
+  // art check), after which it reads the scene again before planning writes.
+  let artStepRan = false;
+  // Monster key -> art the GM re-picked after a republish this session. It
+  // wins over a snapshot's art for the type: a snapshot built before its
+  // token-art-set reached the store still carries the dead art, or the art
+  // without a url.
+  const republished: Record<string, PublishedTokenArt> = {};
   // Deleted tokens already reported since the last store change.
   const reported = new Set<string>();
   // Unreadable table values already reported since the last store change.
@@ -440,10 +534,30 @@ export function createEncounterSync(
     }
   }
 
-  /** The GM's pick, or `undefined` for a cancel, an error or an unusable image. */
-  async function pickArt(): Promise<TokenArt | undefined> {
+  /**
+   * The art the plan draws with: none for the types declined this session or
+   * whose art has no url (Owlbear cannot draw it), and the re-picked art for
+   * the types republished this session.
+   */
+  function usableArt(): Record<string, PublishedTokenArt> {
+    const kept: Record<string, PublishedTokenArt> = {};
+    for (const [monsterKey, value] of Object.entries(art))
+      if (value.url !== undefined && !declined.has(monsterKey))
+        kept[monsterKey] = value;
+    return { ...kept, ...republished };
+  }
+
+  /**
+   * The GM's pick, with `defaultSearch` in the picker's search box when
+   * given, or `undefined` for a cancel, an error or an unusable image.
+   */
+  async function pickArt(
+    defaultSearch?: string,
+  ): Promise<PublishedTokenArt | undefined> {
     try {
-      const parsed = tokenArtSchema.safeParse(await obr.pickImage());
+      const parsed = publishedTokenArtSchema.safeParse(
+        await obr.pickImage(defaultSearch),
+      );
       if (parsed.success) return parsed.data;
     } catch {
       // A picker error is the same as no pick.
@@ -451,11 +565,159 @@ export function createEncounterSync(
     return undefined;
   }
 
-  async function apply(
-    wanted: EncounterInstance[],
-    taken: Facts,
-    snapshot: boolean,
-  ): Promise<SyncPlan> {
+  /**
+   * Fetches the image of picked art (a fresh pick, or art without a hash whose
+   * url still answers: all such art was picked by the GM at some point) and
+   * stores its bytes through `storeImage`, once. Stored: the art of that type
+   * takes the hash and is sent again with it. Otherwise the failure is reported
+   * and the art stays a link. Never rejects.
+   */
+  async function storePicked(
+    monsterKey: string,
+    picked: PublishedTokenArt,
+    storeImage: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>,
+  ): Promise<void> {
+    let reason: string;
+    try {
+      const answer = await storeImage(await obr.fetchImage(picked.url));
+      if (answer.ok) {
+        const { sha256 } = answer.image;
+        void enqueue(() => {
+          const current = art[monsterKey];
+          // A snapshot may have brought the same art as a new object since.
+          if (current !== undefined && samePicture(current, picked)) {
+            const stored = { ...picked, sha256 };
+            art = { ...art, [monsterKey]: stored };
+            outbox?.submit(tokenArtMessage(monsterKey, stored));
+          }
+          return Promise.resolve();
+        });
+        return;
+      }
+      reason = answer.error.message;
+    } catch (error) {
+      reason = describeError(error);
+    }
+    try {
+      options.onArtStoreFailed?.(
+        `Could not store the image of the token art for ${monsterKey}; it is kept as a link: ${reason}`,
+      );
+    } catch {
+      // A throwing handler must not leave an unhandled rejection.
+    }
+  }
+
+  /**
+   * Stores the bytes of art that has a url and no hash, as after a pick, when
+   * its url still answers. A dead url, or a check that cannot tell, leaves the
+   * art as it is with nothing reported. Never rejects.
+   */
+  async function backfillImage(
+    monsterKey: string,
+    linked: PublishedTokenArt,
+    storeImage: (bytes: Uint8Array) => Promise<TokenImageUploadResponse>,
+  ): Promise<void> {
+    let alive: boolean;
+    try {
+      alive = await obr.isImageAlive(linked.url);
+    } catch {
+      return;
+    }
+    if (alive) await storePicked(monsterKey, linked, storeImage);
+  }
+
+  /**
+   * Uploads the stored bytes of a type's art to the GM's Owlbear library
+   * again, waits for the GM to confirm the upload, and asks them to pick it.
+   * A valid pick becomes the type's art with the stored hash and is sent
+   * once. Anything else declines the type for the session, leaving the
+   * stored art unchanged; bytes that cannot be loaded are also reported.
+   * A step of its own because it is not tied to the liveness check: art
+   * without a url is published through it with no check.
+   */
+  async function republish(
+    monsterKey: string,
+    sha256: string,
+    loadImage: (sha256: string) => Promise<StoredTokenImage>,
+  ): Promise<void> {
+    let image: StoredTokenImage;
+    try {
+      image = await loadImage(sha256);
+    } catch (error) {
+      declined.add(monsterKey);
+      try {
+        options.onArtRepublishFailed?.(
+          `Could not republish the token art for ${monsterKey}: ${describeError(error)}`,
+        );
+      } catch {
+        // A throwing handler must not break the reconcile.
+      }
+      return;
+    }
+    const name = republishName(sha256);
+    try {
+      await obr.uploadImage({ bytes: image.bytes, mime: image.mime, name });
+      await (options.awaitUploadConfirmed ?? (() => Promise.resolve()))(
+        republishPrompt(monsterKey, name),
+      );
+    } catch {
+      // A failed upload (or a confirmation that failed) is the same as no pick.
+      declined.add(monsterKey);
+      return;
+    }
+    const picked = await pickArt(name);
+    if (picked === undefined) {
+      declined.add(monsterKey);
+      return;
+    }
+    const restored = { ...picked, sha256 };
+    art = { ...art, [monsterKey]: restored };
+    republished[monsterKey] = restored;
+    outbox?.submit(tokenArtMessage(monsterKey, restored));
+  }
+
+  /**
+   * Checks, once per session, whether the stored art of each type about to
+   * get tokens still answers, and republishes the art whose url is dead.
+   * Art without a url has nothing to check and is published at once. Art
+   * without a hash, or picked this session, is not checked; a check that
+   * cannot tell uses the stored art.
+   */
+  async function checkStoredArt(
+    monsterKeys: Iterable<string>,
+    loadImage: (sha256: string) => Promise<StoredTokenImage>,
+  ): Promise<void> {
+    for (const monsterKey of monsterKeys) {
+      const current = art[monsterKey];
+      const sha256 = current?.sha256;
+      if (
+        current === undefined ||
+        sha256 === undefined ||
+        checked.has(monsterKey) ||
+        declined.has(monsterKey)
+      )
+        continue;
+      checked.add(monsterKey);
+      artStepRan = true;
+      if (current.url === undefined) {
+        await republish(monsterKey, sha256, loadImage);
+        continue;
+      }
+      let alive: boolean;
+      try {
+        alive = await obr.isImageAlive(current.url);
+      } catch {
+        continue;
+      }
+      if (!alive) await republish(monsterKey, sha256, loadImage);
+    }
+  }
+
+  /** The scene's items and the ids in its placed record, read together. */
+  async function readScene(): Promise<{
+    items: SceneItem[];
+    placed: Set<string>;
+  }> {
     const items = await obr.getItems();
     const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
     const placed = new Set(
@@ -463,31 +725,68 @@ export function createEncounterSync(
         ? stored.filter((id): id is string => typeof id === "string")
         : [],
     );
+    return { items, placed };
+  }
+
+  async function apply(
+    wanted: EncounterInstance[],
+    taken: Facts,
+    snapshot: boolean,
+  ): Promise<SyncPlan> {
+    artStepRan = false;
+    let { items, placed } = await readScene();
     const context = {
       viewportCenter: await obr.getViewportCenter(),
-      placed,
       snapshot,
     };
     const first = planSync(wanted, items, defaultSyncConfig, {
       ...context,
-      art,
+      placed,
+      art: usableArt(),
       fields: fieldContexts(taken),
     });
     // Ask once per new monster type, before anything is written, so its
     // tokens are created once with the right look.
     for (const monsterKey of first.needsArt) {
-      if (declined.has(monsterKey)) continue;
+      // A type that needs art yet has stored art has art without a url (art
+      // with one is usable unless declined). It is published below from its
+      // stored bytes; a fresh pick would drop the link to them.
+      if (declined.has(monsterKey) || art[monsterKey] !== undefined) continue;
+      artStepRan = true;
       const chosen = await pickArt();
       if (chosen === undefined) {
         declined.add(monsterKey);
         continue;
       }
+      checked.add(monsterKey);
       art = { ...art, [monsterKey]: chosen };
       outbox?.submit(tokenArtMessage(monsterKey, chosen));
+      // Not awaited: the tokens do not wait for the bytes.
+      if (options.storeImage !== undefined)
+        void storePicked(monsterKey, chosen, options.storeImage);
+    }
+    // Likewise, stored art whose Owlbear asset is gone, or that has no url,
+    // is published before its tokens are created.
+    if (options.loadImage !== undefined) {
+      const monsterKeyOf = new Map(wanted.map((i) => [i.id, i.monsterKey]));
+      const gettingTokens = new Set<string>();
+      for (const item of first.add) {
+        const monsterKey = monsterKeyOf.get(instanceIdOf(item) ?? "");
+        if (monsterKey !== undefined) gettingTokens.add(monsterKey);
+      }
+      await checkStoredArt(gettingTokens, options.loadImage);
+    }
+    if (artStepRan) {
+      // An art step waits on the GM, so the table and the scene may have
+      // changed meanwhile: plan from what is there now.
+      const fresh = await readScene();
+      items = fresh.items;
+      placed = fresh.placed;
     }
     const plan = planSync(wanted, items, defaultSyncConfig, {
       ...context,
-      art,
+      placed,
+      art: usableArt(),
       fields: fieldContexts(taken),
     });
     if (plan.delete.length > 0) await write(() => obr.deleteItems(plan.delete));
@@ -601,6 +900,20 @@ export function createEncounterSync(
         outbox?.snapshot();
         desired = message.payload.instances;
         art = { ...art, ...message.payload.art };
+        if (options.storeImage !== undefined)
+          for (const [monsterKey, value] of Object.entries(
+            message.payload.art ?? {},
+          ))
+            if (
+              value.url !== undefined &&
+              value.sha256 === undefined &&
+              !checked.has(monsterKey)
+            ) {
+              checked.add(monsterKey);
+              // Not part of the reconcile chain, as a pick's upload is: tokens
+              // never wait for the bytes.
+              void backfillImage(monsterKey, value, options.storeImage);
+            }
         seq = message.payload.seq;
         afterSnapshot = true;
         reported.clear();

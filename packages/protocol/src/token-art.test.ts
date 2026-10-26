@@ -79,4 +79,42 @@ describe("token art on the wire", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
   });
+
+  it("a snapshot can carry art with an image hash and no url", () => {
+    const sha256 = "ab".repeat(32);
+    const raw = {
+      v: 1,
+      type: "encounter-snapshot",
+      payload: {
+        instances: [instance],
+        art: { shadow: { sha256 }, ghoul: { ...art, sha256: "cd".repeat(32) } },
+        seq: 0,
+      },
+    };
+    const decoded = decodeMessage(JSON.stringify(raw));
+    expect(decoded).toEqual({ ok: true, message: raw });
+    if (!decoded.ok) return;
+    expect(decodeMessage(encodeMessage(decoded.message))).toEqual({
+      ok: true,
+      message: raw,
+    });
+  });
+
+  it("token-art-set with art that has no url is rejected", () => {
+    const sha256 = "ab".repeat(32);
+    const raw = {
+      v: 1,
+      type: "token-art-set",
+      payload: { monsterKey: "shadow", art: { sha256 } },
+    };
+    const r = decodeMessage(JSON.stringify(raw));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("invalid-payload");
+    // Control: the same hash with a published reference is accepted.
+    const published = {
+      ...raw,
+      payload: { monsterKey: "shadow", art: { ...art, sha256 } },
+    };
+    expect(decodeMessage(JSON.stringify(published)).ok).toBe(true);
+  });
 });

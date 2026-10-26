@@ -189,7 +189,11 @@ function twoScenes() {
     getSceneMetadata: () => current.obr.getSceneMetadata(),
     setSceneMetadata: (u) => current.obr.setSceneMetadata(u),
     getViewportCenter: () => current.obr.getViewportCenter(),
-    pickImage: () => current.obr.pickImage(),
+    pickImage: (search) => current.obr.pickImage(search),
+    fetchImage: (url) => current.obr.fetchImage(url),
+    isImageAlive: (url) => current.obr.isImageAlive(url),
+    uploadImage: (image) => current.obr.uploadImage(image),
+    openPanel: () => current.obr.openPanel(),
   };
   return {
     obr,

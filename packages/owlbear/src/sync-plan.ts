@@ -1,4 +1,4 @@
-import type { InstanceEdit, TokenArt } from "@ttrpg-agents/engine";
+import type { InstanceEdit, PublishedTokenArt } from "@ttrpg-agents/engine";
 import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { initiativeProjector } from "./initiative.js";
 import type { GridSpec, SceneItem, Vec2 } from "./scene-model.js";
@@ -26,7 +26,7 @@ const TOKEN_SIZE = 150;
  * item position.
  */
 function cellsGrid(
-  art: Pick<TokenArt, "width" | "height">,
+  art: Pick<PublishedTokenArt, "width" | "height">,
   cells: number,
 ): GridSpec {
   return {
@@ -96,7 +96,10 @@ export type TokenKind = Pick<
 export type SyncConfig = {
   projectors: Projector[];
   /** The look of a new token; `art` is the stored art of its monster type, if any. */
-  tokenKind(instance: EncounterInstance, art: TokenArt | undefined): TokenKind;
+  tokenKind(
+    instance: EncounterInstance,
+    art: PublishedTokenArt | undefined,
+  ): TokenKind;
 };
 
 /**
@@ -390,7 +393,7 @@ export function planSync(
     viewportCenter: Vec2;
     placed: ReadonlySet<string>;
     /** Monster key -> the art its new tokens are created with. */
-    art: Readonly<Record<string, TokenArt>>;
+    art: Readonly<Record<string, PublishedTokenArt>>;
     /** True when the reconcile follows a snapshot (connect, reconnect or gap). */
     snapshot?: boolean;
     /** Per instance id: what the events and commands since the last reconcile say about its edit fields. */

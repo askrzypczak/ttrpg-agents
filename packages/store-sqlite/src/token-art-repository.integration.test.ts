@@ -163,6 +163,30 @@ describe("SqliteTokenArtRepository", () => {
     expect(listed.shadow?.sha256).toBe(sha256);
   });
 
+  it("stores art with an image hash and no url and lists it with only its hash", () => {
+    const db = openDatabase(":memory:");
+    const sha256 = new SqliteTokenImageRepository(db).saveTokenImage(
+      storedImage,
+    );
+    const repo = new SqliteTokenArtRepository(db);
+    repo.setTokenArt("shadow", { sha256 });
+    repo.setTokenArt("ghoul", ghoulArt);
+    const listed = repo.listTokenArt();
+    expect(listed).toEqual({ shadow: { sha256 }, ghoul: ghoulArt });
+    expect(Object.keys(listed.shadow ?? {})).toEqual(["sha256"]);
+  });
+
+  it("art without a url is completed by art with a url and the same hash", () => {
+    const db = openDatabase(":memory:");
+    const sha256 = new SqliteTokenImageRepository(db).saveTokenImage(
+      storedImage,
+    );
+    const repo = new SqliteTokenArtRepository(db);
+    repo.setTokenArt("shadow", { sha256 });
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    expect(repo.listTokenArt()).toEqual({ shadow: { ...shadowArt, sha256 } });
+  });
+
   it("keeps the art after the database is reopened", () => {
     const dir = mkdtempSync(join(tmpdir(), "ttrpg-art-"));
     dirs.push(dir);

@@ -1,6 +1,7 @@
 import {
   encounterEventSchema,
   monsterInstanceSchema,
+  publishedTokenArtSchema,
   tokenArtSchema,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
@@ -61,7 +62,7 @@ const encounterEventPayload = encounterEventSchema.and(
 // Extension -> bridge: the GM picked this art for a monster type.
 const tokenArtSetPayload = z.object({
   monsterKey: z.string().min(1).max(200),
-  art: tokenArtSchema,
+  art: publishedTokenArtSchema,
 });
 
 /**
@@ -106,6 +107,54 @@ export type Query = z.infer<typeof querySchema>;
 export type SceneStatus = z.infer<typeof sceneStatusSchema>;
 export type QueryResult = z.infer<typeof queryResultSchema>;
 export type AgentQueryResponse = z.infer<typeof agentQueryResponseSchema>;
+
+/** The bridge route that stores one token image: POST, raw bytes, extension token as bearer. */
+export const TOKEN_IMAGE_UPLOAD_PATH = "/token-images";
+
+export const tokenImageUploadResponseSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    image: z.object({
+      sha256: z.string().regex(/^[0-9a-f]{64}$/),
+      mime: z.enum(["image/png", "image/jpeg", "image/webp"]),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    }),
+  }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({
+      code: z.enum([
+        "unauthorized",
+        "too_large",
+        "svg",
+        "unsupported_type",
+        "unreadable",
+        "dimensions_too_large",
+        "store_failed",
+      ]),
+      message: z.string(),
+    }),
+  }),
+]);
+
+export type TokenImageUploadResponse = z.infer<
+  typeof tokenImageUploadResponseSchema
+>;
+
+/** The bridge route that answers the stored bytes of one token image: GET, extension token as bearer. */
+export function tokenImagePath(sha256: string): string {
+  return `${TOKEN_IMAGE_UPLOAD_PATH}/${sha256}`;
+}
+
+/** The bridge's refusal of a token image read. */
+export const tokenImageReadErrorSchema = z.object({
+  ok: z.literal(false),
+  error: z.object({
+    code: z.enum(["unauthorized", "not_found"]),
+    message: z.string(),
+  }),
+});
 
 function envelope<T extends string, P extends z.ZodType>(type: T, payload: P) {
   return z.object({

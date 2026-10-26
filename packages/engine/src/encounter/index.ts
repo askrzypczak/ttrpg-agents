@@ -19,11 +19,18 @@ export * from "./origin.js";
 export * from "./queries.js";
 export * from "./rename.js";
 export {
+  publishedTokenArtSchema,
   tokenArtSchema,
+  type PublishedTokenArt,
   type TokenArt,
   type TokenArtRepository,
 } from "./token-art.js";
 export {
+  importTokenArt,
+  type TokenArtImportResult,
+} from "./token-art-import.js";
+export {
+  storeTokenImage,
   validateTokenImage,
   TOKEN_IMAGE_MAX_BYTES,
   type NewTokenImage,
@@ -32,5 +39,6 @@ export {
   type TokenImageInfo,
   type TokenImageMime,
   type TokenImageRepository,
+  type TokenImageStoreResult,
   type TokenImageValidation,
 } from "./token-image.js";

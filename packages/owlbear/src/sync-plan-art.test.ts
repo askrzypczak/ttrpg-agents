@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TokenArt } from "@ttrpg-agents/engine";
+import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type { SceneItem } from "./scene-model.js";
 import { STAT_BUBBLES_METADATA_KEY } from "./stat-bubbles.js";
 import {
@@ -32,14 +32,14 @@ const inst = (
   statsVisible: false,
 });
 
-const shadowArt: TokenArt = {
+const shadowArt: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/shadow.png",
   mime: "image/png",
   width: 300,
   height: 280,
 };
 
-const ghoulArt: TokenArt = {
+const ghoulArt: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/ghoul.webp",
   mime: "image/webp",
   width: 512,
@@ -47,7 +47,10 @@ const ghoulArt: TokenArt = {
 };
 
 const center = { x: 1000, y: 500 };
-const ctx = (art: Record<string, TokenArt> = {}, placed: string[] = []) => ({
+const ctx = (
+  art: Record<string, PublishedTokenArt> = {},
+  placed: string[] = [],
+) => ({
   viewportCenter: center,
   placed: new Set(placed),
   art,
@@ -193,7 +196,7 @@ describe("planSync token art sizing", () => {
   ])(
     "sizes a token art image to one grid cell with the image centred (%s)",
     (_shape, width, height, grid) => {
-      const art: TokenArt = { ...shadowArt, width, height };
+      const art: PublishedTokenArt = { ...shadowArt, width, height };
       const plan = planSync(
         [inst(1)],
         [],
