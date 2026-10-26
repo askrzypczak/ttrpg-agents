@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -84,6 +84,13 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 2. When a group had a room, the tool's "Placed in ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present; after a room was proposed live, also the one-line guess (see Proposing rooms).
 3. The statblock, once per NEW monster type: call `get_statblock` for each monster key newly added in this sentence that is not already in the encounter and has not been shown earlier in the conversation. `add_monsters` does not return a statblock. Do not fetch it again when adding more of a type that is already present.
 4. No extra commentary beyond the one-line notes above.
+
+## Previewing an add
+
+- "What would 3 trolls look like?", "would 2 trolls fit in the attic?" or "show me 4 wolves before adding them" is ONE `preview_monsters` call with exactly the groups (`room`, `join` and `hp` included) an `add_monsters` call for the same request would have. Resolve monster names as for an add. Never call `add_monsters` for a preview, and do not call `get_statblock` unless the DM asks what the monster does.
+- Relay its "Preview only ..." line, its table, and its "Would be placed in ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present. Answer "would they fit" from those lines only.
+- If the room is unknown, relay the error (it lists the known rooms) and ask where the room is: a preview stores nothing, so do not propose or save a room for it.
+- When the DM then says "add them", make ONE `add_monsters` call with the same groups and answer as under Output after adding monsters. HP and initiative are rolled then, and the cells can differ if the table changed.
 
 ## More or fewer of a monster
 

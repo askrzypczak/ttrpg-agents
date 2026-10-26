@@ -7,7 +7,10 @@ import {
   addMonstersInRooms,
   cellRangeToPolygon,
   parseCellRange,
+  previewMonsters,
+  previewMonstersInRooms,
   type AddMonstersDeps,
+  type AddMonstersOptions,
   type ChangeOrigin,
   type EncounterRepository,
   type Encounter,
@@ -721,5 +724,332 @@ describe("addMonstersInRooms", () => {
       null,
       null,
     ]);
+  });
+});
+
+/** A monster store holding Goblin 1 (initiative 15, group "pack") and Bandit 1 (no initiative, group "band"). */
+function seedMembers(repo: MemoryEncounter): void {
+  repo.addInstances(() => [
+    {
+      monsterKey: "goblin",
+      displayName: "Goblin 1",
+      maxHp: 7,
+      initiative: 15,
+      groupId: "pack",
+    },
+    {
+      monsterKey: "bandit",
+      displayName: "Bandit 1",
+      maxHp: 7,
+      initiative: null,
+      groupId: "band",
+    },
+  ]);
+}
+
+/** The preview's deps from a setup: the store, the bestiary, the table and the maps, and nothing to roll with. */
+function previewDeps(s: ReturnType<typeof setup>) {
+  return {
+    repo: s.repo,
+    monsters,
+    table: s.table,
+    maps: s.deps.maps,
+  };
+}
+
+/** The error a call fails with; fails the test when the call succeeds. */
+async function failureOf(run: () => unknown): Promise<unknown> {
+  try {
+    await run();
+  } catch (e) {
+    return e;
+  }
+  throw new Error("expected the call to fail");
+}
+
+function describeError(e: unknown): unknown {
+  if (!(e instanceof Error)) return e;
+  return {
+    class: e.constructor,
+    code: (e as { code?: unknown }).code,
+    message: e.message,
+  };
+}
+
+describe("previewMonsters", () => {
+  it("previewMonsters returns each would-be monster's name, AC, average HP, HP dice, initiative modifier and footprint, in input order", () => {
+    const troll: Monster = {
+      ...monster("troll", "Troll", "large"),
+      ac: 15,
+      hp: { average: 94, dice: "9d10 + 45" },
+      initiativeModifier: 1,
+    };
+    const shadow: Monster = {
+      ...monster("shadow", "Shadow"),
+      ac: 12,
+      hp: { average: 27, dice: "5d8 + 5" },
+      initiativeModifier: 2,
+    };
+    const index: MonsterIndex = {
+      monsters: [troll, shadow],
+      byKey: new Map([
+        [troll.key, troll],
+        [shadow.key, shadow],
+      ]),
+    };
+    const { repo } = setup();
+    const preview = previewMonsters({ repo, monsters: index }, [
+      { monster: "shadow", count: 2 },
+      { monster: "troll", count: 1 },
+    ]);
+    expect(preview.instances).toEqual([
+      {
+        name: "Shadow 1",
+        group: 0,
+        ac: 12,
+        averageHp: 27,
+        hpDice: "5d8 + 5",
+        initiativeModifier: 2,
+        joins: null,
+        footprint: 1,
+      },
+      {
+        name: "Shadow 2",
+        group: 0,
+        ac: 12,
+        averageHp: 27,
+        hpDice: "5d8 + 5",
+        initiativeModifier: 2,
+        joins: null,
+        footprint: 1,
+      },
+      {
+        name: "Troll 1",
+        group: 1,
+        ac: 15,
+        averageHp: 94,
+        hpDice: "9d10 + 45",
+        initiativeModifier: 1,
+        joins: null,
+        footprint: 2,
+      },
+    ]);
+  });
+
+  it("previewMonsters gives the names the next addMonsters of the same groups gives, continuing the numbers in use", () => {
+    const { repo, deps } = setup();
+    seedMembers(repo);
+    const groups: RoomGroup[] = [
+      { monster: "goblin", count: 2 },
+      { monster: "bandit", count: 1, join: "Goblin 1" },
+      { monster: "ogre", count: 1 },
+    ];
+    const preview = previewMonsters({ repo, monsters }, groups);
+    const added = addMonsters(deps, groups, origin);
+    expect(preview.instances.map((i) => i.name)).toEqual(
+      added.instances.map((i) => i.name),
+    );
+    expect(preview.instances.map((i) => i.name)).toEqual([
+      "Goblin 2",
+      "Goblin 3",
+      "Bandit 2",
+      "Ogre 1",
+    ]);
+  });
+
+  it("previewMonsters makes no store write and leaves the stored instances unchanged", () => {
+    const { repo } = setup();
+    seedMembers(repo);
+    const before = repo.listInstances();
+    const addCalls = repo.addCalls;
+    previewMonsters({ repo, monsters }, [
+      { monster: "goblin", count: 2, join: "Goblin 1" },
+      { monster: "ogre", count: 1, hp: "average" },
+    ]);
+    expect(repo.addCalls).toBe(addCalls);
+    expect(repo.listInstances()).toEqual(before);
+  });
+
+  it("a joined group's preview gives the member's name and current initiative, null included", () => {
+    const { repo } = setup();
+    seedMembers(repo);
+    const banditId = repo
+      .listInstances()
+      .find((i) => i.displayName === "Bandit 1")?.id;
+    const preview = previewMonsters({ repo, monsters }, [
+      { monster: "goblin", count: 1, join: "Goblin 1" },
+      { monster: "bandit", count: 1, join: banditId ?? "" },
+      { monster: "ogre", count: 1 },
+    ]);
+    expect(preview.instances.map((i) => [i.name, i.joins])).toEqual([
+      ["Goblin 2", { name: "Goblin 1", initiative: 15 }],
+      ["Bandit 2", { name: "Bandit 1", initiative: null }],
+      ["Ogre 1", null],
+    ]);
+  });
+});
+
+describe("previewMonstersInRooms", () => {
+  it("previewMonstersInRooms gives each monster of a group with a room the cell addMonstersInRooms then gives it, a Large monster's block first", async () => {
+    // Hall A1:B3 has a single free 2 x 2 block; placing the bandits first
+    // would take A2 and leave the ogre none.
+    const groups: RoomGroup[] = [
+      { monster: "bandit", count: 2, room: "Hall" },
+      { monster: "ogre", count: 1, room: "Hall" },
+    ];
+    const s = setup({ rooms: [room("Hall", "A1:B3")] });
+    const preview = await previewMonstersInRooms(previewDeps(s), groups);
+    const added = await addMonstersInRooms(s.deps, groups, origin);
+
+    expect(preview.placements).toEqual(
+      added.placements.map((p) => ({
+        name: p.name,
+        room: p.room,
+        cell: p.cell,
+      })),
+    );
+    expect(preview.placements).toEqual([
+      { name: "Bandit 1", room: "Hall", cell: "A3" },
+      { name: "Bandit 2", room: "Hall", cell: "B3" },
+      { name: "Ogre 1", room: "Hall", cell: "A1:B2" },
+    ]);
+    expect(preview.instances.map((i) => i.name)).toEqual(
+      added.instances.map((i) => i.name),
+    );
+    expect(preview.moved).toBe(false);
+  });
+
+  it("previewMonstersInRooms reports the monsters of a group that does not fit with no cell", async () => {
+    const s = setup();
+    const preview = await previewMonstersInRooms(previewDeps(s), [
+      { monster: "goblin", count: 3, room: "Attic" },
+      { monster: "ogre", count: 1, room: "Taproom" },
+    ]);
+    expect(preview.placements).toEqual([
+      { name: "Goblin 1", room: "Attic", cell: "E5" },
+      { name: "Goblin 2", room: "Attic", cell: null },
+      { name: "Goblin 3", room: "Attic", cell: null },
+      { name: "Ogre 1", room: "Taproom", cell: null },
+    ]);
+    expect(preview.instances).toHaveLength(4);
+  });
+
+  it("previewMonstersInRooms with a room only reads the table and makes no store write", async () => {
+    const groups: RoomGroup[] = [
+      { monster: "goblin", count: 1 },
+      { monster: "bandit", count: 2, room: "Taproom", join: "Goblin 1" },
+    ];
+    const s = setup();
+    seedMembers(s.repo);
+    const before = s.repo.listInstances();
+    const addCalls = s.repo.addCalls;
+    await previewMonstersInRooms(previewDeps(s), groups);
+    expect(s.repo.addCalls).toBe(addCalls);
+    expect(s.repo.listInstances()).toEqual(before);
+
+    const reference = setup();
+    seedMembers(reference.repo);
+    await addMonstersInRooms(reference.deps, groups, origin);
+    expect(s.table.sceneMapCalls).toBeGreaterThan(0);
+    expect(s.table.sceneTokensCalls).toBeGreaterThan(0);
+    expect([s.table.sceneMapCalls, s.table.sceneTokensCalls]).toEqual([
+      reference.table.sceneMapCalls,
+      reference.table.sceneTokensCalls,
+    ]);
+  });
+
+  it("previewMonstersInRooms without a room does not ask the table", async () => {
+    const groups: RoomGroup[] = [
+      { monster: "goblin", count: 2 },
+      { monster: "bandit", count: 1, hp: "average" },
+    ];
+    const s = setup({ active: undefined });
+    const preview = await previewMonstersInRooms(previewDeps(s), groups);
+
+    const plain = setup();
+    const expected = previewMonsters({ repo: plain.repo, monsters }, groups);
+    expect(preview).toEqual({ ...expected, placements: [], moved: false });
+    expect(s.table.sceneMapCalls).toBe(0);
+    expect(s.table.sceneTokensCalls).toBe(0);
+    expect(s.repo.addCalls).toBe(0);
+  });
+
+  it("previewMonstersInRooms throws the same error as addMonstersInRooms for each invalid input", async () => {
+    const cases: {
+      label: string;
+      groups: RoomGroup[];
+      options?: AddMonstersOptions;
+      setup?: Parameters<typeof setup>[0];
+    }[] = [
+      { label: "no groups", groups: [] },
+      {
+        label: "unknown monster",
+        groups: [{ monster: "dragon", count: 1, room: "Taproom" }],
+      },
+      {
+        label: "count 0",
+        groups: [{ monster: "goblin", count: 0, room: "Taproom" }],
+      },
+      {
+        label: "hp not rolled or average",
+        groups: [
+          { monster: "goblin", count: 1, room: "Taproom", hp: "max" },
+        ] as unknown as RoomGroup[],
+      },
+      {
+        label: "initiative not group or each",
+        groups: [{ monster: "goblin", count: 1, room: "Taproom" }],
+        options: { initiative: "random" } as unknown as AddMonstersOptions,
+      },
+      {
+        label: "unknown join",
+        groups: [
+          { monster: "goblin", count: 1, room: "Taproom", join: "Nobody" },
+        ],
+      },
+      {
+        label: "no map in use",
+        groups: [{ monster: "goblin", count: 1, room: "Taproom" }],
+        setup: { active: undefined },
+      },
+      {
+        label: "unknown room",
+        groups: [{ monster: "goblin", count: 1, room: "Library" }],
+      },
+      {
+        label: "map item gone from the scene",
+        groups: [{ monster: "goblin", count: 1, room: "Taproom" }],
+        setup: { scene: scene() },
+      },
+    ];
+    for (const c of cases) {
+      const added = setup(c.setup);
+      const expected = await failureOf(() =>
+        addMonstersInRooms(added.deps, c.groups, origin, c.options),
+      );
+      const previewed = setup(c.setup);
+      const actual = await failureOf(() =>
+        previewMonstersInRooms(previewDeps(previewed), c.groups, c.options),
+      );
+      expect(describeError(actual), c.label).toEqual(describeError(expected));
+      expect(previewed.repo.addCalls, c.label).toBe(0);
+    }
+  });
+
+  it("previewMonstersInRooms with a moved map places with the live transform and flags the move", async () => {
+    // Moved three cells to the right: B1 is now scene cell (6, 1).
+    const live: MapPlacement = { ...placement, position: { x: 500, y: 100 } };
+    const groups: RoomGroup[] = [
+      { monster: "goblin", count: 1, room: "Taproom" },
+    ];
+    const s = setup({ scene: scene(mapItem(live)) });
+    const preview = await previewMonstersInRooms(previewDeps(s), groups);
+    const added = await addMonstersInRooms(s.deps, groups, origin);
+
+    expect(preview.moved).toBe(true);
+    expect(preview.placements.map((p) => p.cell)).toEqual(
+      added.placements.map((p) => p.cell),
+    );
+    expect(preview.placements.map((p) => p.cell)).toEqual(["B1"]);
   });
 });

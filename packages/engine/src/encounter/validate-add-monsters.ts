@@ -75,6 +75,8 @@ export function validateAddMonsters(
 /** What a group with `join` takes from the member it names. */
 export interface JoinTarget {
   groupId: string;
+  /** The member's display name. */
+  name: string;
   initiative: number | null;
   /** Used when the group does not set `statsVisible`. */
   statsVisible: boolean;
@@ -123,6 +125,7 @@ export function findJoinTargets(
     }
     return {
       groupId: member.groupId,
+      name: member.displayName,
       initiative: member.initiative,
       statsVisible: member.statsVisible,
     };
