@@ -77,7 +77,7 @@ Issue: [#283](https://github.com/askrzypczak/ttrpg-agents/issues/283).
   - A barrier row whose reply names `restore_encounter` (proposed addition A1): cut by the spec audit, since the ticket puts the clear out of scope and the skill already routes it.
   - Keep a fixed number of commands: no present need; the records stay one fight long, like removed rows (281.2).
 - Where: `clearEncounter` (`packages/store-sqlite/src/sqlite-repository.ts`).
-- Status: active
+- Status: superseded by 310.10 (the reply only; the records rule stands)
 
 ## 283.8 Undo of an add or a restore removes the monsters as ordinary removals
 

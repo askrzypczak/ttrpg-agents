@@ -227,7 +227,8 @@ export type SyncPlan = {
    * Writes over table values for the DM to audit: Stat Bubbles fields a
    * snapshot pushed over a different token value, moves of a token that
    * was not where it was last placed (or has no recorded position),
-   * redraws of a token whose art or size the table had changed (or that has
+   * redraws (for a new monster type, or with the art re-uploaded for its
+   * type) of a token whose art or size the table had changed (or that has
    * no recorded look), and every replacement (once per instance, also when a
    * half-done one is finished).
    */
@@ -292,6 +293,25 @@ export function restyleOverrideNote(name: string, recorded: boolean): string {
  */
 export function replaceOverrideNote(name: string): string {
   return `${name}'s token was replaced with a new one for its new monster type at the agent's request; any attachments on the old token were deleted with it.`;
+}
+
+/**
+ * The override note for a redraw with the art re-uploaded for its monster
+ * type, over a token whose art or size had been changed on the table
+ * (`recorded`), or that has no recorded look.
+ */
+export function reskinOverrideNote(name: string, recorded: boolean): string {
+  return recorded
+    ? `${name}'s token was redrawn with the art uploaded for its monster type; its art or size had been changed on the table, and was overwritten.`
+    : `${name}'s token was redrawn with the art uploaded for its monster type; its art or size may have been changed on the table, and was overwritten.`;
+}
+
+/**
+ * The override note for a token replaced with a new one drawn with the art
+ * re-uploaded for its monster type.
+ */
+export function reskinReplaceNote(name: string): string {
+  return `${name}'s token was replaced with a new one drawn with the art uploaded for its monster type; any attachments on the old token were deleted with it.`;
 }
 
 /** A token's look as recorded under LOOK_BASELINE_KEY. */
@@ -594,8 +614,14 @@ function movesEditField(
  * one's with the next generation suffix (`X-r2`, `X-r3`, ...), skipping ids on
  * the scene. The old token's record, as read, is marked with that id under
  * REPLACED_BY_KEY. Every replacement is reported in `overrides` (a folded
- * move keeps its own note). A token with no recorded look and no `restyles`
- * entry is never redrawn and gets no record; other item types are left alone.
+ * move keeps its own note).
+ * A token whose instance is in `context.reskins` (the GM picked the art
+ * re-uploaded for its type) and whose type has art in `context.art` is
+ * redrawn the same way, in place or replaced, with the re-skin notes
+ * (reskinOverrideNote, reskinReplaceNote) in place of the monster change ones;
+ * a redraw for a new monster type wins over it. A token with no recorded look
+ * and no `restyles` or `reskins` entry is never redrawn and gets no record;
+ * other item types are left alone.
  * The first linked token seen is an instance's token (others are duplicates,
  * left alone), except after a half-done replacement: a linked token whose
  * record names another linked token of its instance on the scene under
@@ -622,6 +648,8 @@ export function planSync(
     moves?: ReadonlySet<string>;
     /** Instance ids an `mcp` monster-changed event named since the last reconcile. */
     restyles?: ReadonlySet<string>;
+    /** Instance ids whose tokens are redrawn with the art re-uploaded for their type. */
+    reskins?: ReadonlySet<string>;
   },
 ): SyncPlan {
   const plan: SyncPlan = {
@@ -648,12 +676,15 @@ export function planSync(
   }
   // Instances whose replacement note is already planned.
   const replaceNoted = new Set<string>();
-  const noteReplacement = (instance: EncounterInstance): void => {
+  const noteReplacement = (
+    instance: EncounterInstance,
+    note: (name: string) => string = replaceOverrideNote,
+  ): void => {
     if (replaceNoted.has(instance.id)) return;
     replaceNoted.add(instance.id);
     plan.overrides.push({
       instanceId: instance.id,
-      message: replaceOverrideNote(instance.displayName),
+      message: note(instance.displayName),
     });
   };
   const tokens = new Map<string, SceneItem>();
@@ -673,7 +704,13 @@ export function planSync(
     if (marked !== undefined && replacement !== undefined) {
       plan.delete.push(marked.id);
       tokens.set(id, replacement);
-      noteReplacement(wanted.get(id)!);
+      // A re-skin's replacement keeps its own note; a monster change wins.
+      noteReplacement(
+        wanted.get(id)!,
+        context.reskins?.has(id) === true && context.restyles?.has(id) !== true
+          ? reskinReplaceNote
+          : undefined,
+      );
     } else {
       // A duplicate token (e.g. a copy-pasted one) is left alone: the first
       // one seen is the instance's token.
@@ -799,10 +836,15 @@ export function planSync(
     }
     const look = asLook(baseline[LOOK_BASELINE_KEY]);
     let replacing: ReturnType<typeof redrawnLook>;
-    if (
+    const restyled =
       context.restyles?.has(id) === true ||
-      (look !== undefined && look.monsterKey !== instance.monsterKey)
-    ) {
+      (look !== undefined && look.monsterKey !== instance.monsterKey);
+    // A re-skin draws with the type's art, so only a type that has some.
+    const reskinned =
+      !restyled &&
+      context.reskins?.has(id) === true &&
+      Object.hasOwn(context.art, instance.monsterKey);
+    if (restyled || reskinned) {
       const redrawn = redrawnLook(token, instance, context.art, config);
       if (
         redrawn !== undefined &&
@@ -826,7 +868,7 @@ export function planSync(
           )
             plan.overrides.push({
               instanceId: id,
-              message: restyleOverrideNote(
+              message: (reskinned ? reskinOverrideNote : restyleOverrideNote)(
                 instance.displayName,
                 look !== undefined,
               ),
@@ -875,7 +917,7 @@ export function planSync(
           metadata,
         },
       });
-      noteReplacement(instance);
+      noteReplacement(instance, reskinned ? reskinReplaceNote : undefined);
       continue;
     }
     for (const { key, value } of updates)

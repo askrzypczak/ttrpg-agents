@@ -1,3 +1,4 @@
+import type { ArtStep, Reupload } from "./encounter-sync.js";
 import type { RejectionCode, SocketState } from "./reconnecting-socket.js";
 
 import type { PlayerRole } from "./scene-model.js";
@@ -21,8 +22,10 @@ export interface PanelInput {
   editError?: string;
   /** The latest failure to store the image of token art, or to load it for a republish, until the panel reloads. */
   artError?: string;
-  /** What the GM must do while a token art republish waits on them, if any. */
-  artPrompt?: string;
+  /** The fresh image picker open now, if any. */
+  artStep?: ArtStep;
+  /** The monster types whose stored art needs re-uploading, in list order. */
+  reuploads?: Reupload[];
   /** A note on the latest write-back answer that differs from the table, if any. */
   editNote?: string;
   /** How many table edits, token deletions and token art picks wait for the bridge (see outbox.ts). */
@@ -55,8 +58,18 @@ export interface PanelView {
   note?: string;
   /** The override records to list; present only when there are any. */
   overrides?: string[];
-  /** What the GM must do while a token art republish waits on them. */
+  /** The art step line while a fresh image picker is open. */
   prompt?: string;
+  /**
+   * One row per monster type to re-upload, with its label, the hint once
+   * uploaded, and whether its uploaded image can be picked.
+   */
+  reuploads?: {
+    monsterKey: string;
+    label: string;
+    hint?: string;
+    canPick: boolean;
+  }[];
 }
 
 /**
@@ -104,8 +117,35 @@ export function panelView(input: PanelInput): PanelView {
     ...(input.overrides && input.overrides.length > 0
       ? { overrides: [...input.overrides] }
       : {}),
-    ...(input.artPrompt ? { prompt: input.artPrompt } : {}),
+    ...(input.artStep ? { prompt: artStepPrompt(input.artStep) } : {}),
+    ...(input.reuploads && input.reuploads.length > 0
+      ? { reuploads: reuploadRows(input.reuploads) }
+      : {}),
   };
+}
+
+/** What the GM is told while a fresh image picker is open. */
+function artStepPrompt({ monsterName, index, total }: ArtStep): string {
+  return `Art ${String(index)} of ${String(total)}: choose the token art for ${monsterName} in Owlbear's image picker, or cancel it to use circles.`;
+}
+
+/**
+ * One row per type to re-upload: its name and place in the list and, once
+ * its bytes were uploaded, what the GM does next and the pick it offers.
+ */
+function reuploadRows(
+  reuploads: readonly Reupload[],
+): NonNullable<PanelView["reuploads"]> {
+  return reuploads.map((row, i) => ({
+    monsterKey: row.monsterKey,
+    label: `${row.monsterName} (${String(i + 1)} of ${String(reuploads.length)})`,
+    ...(row.uploaded
+      ? {
+          hint: `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${row.assetName}.`,
+        }
+      : {}),
+    canPick: row.uploaded,
+  }));
 }
 
 function connectionView(input: PanelInput): PanelView {

@@ -6,11 +6,15 @@ import {
   type SocketState,
 } from "./reconnecting-socket.js";
 import { replyToQuery } from "./queries.js";
-import { createEncounterSync } from "./encounter-sync.js";
+import {
+  createEncounterSync,
+  type ArtStep,
+  type Reupload,
+} from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
 import { createMapOverlay } from "./overlay.js";
-import { describeError, panelView } from "./panel-state.js";
+import { describeError, panelView, type PanelView } from "./panel-state.js";
 import { tokenDeletedErrorText } from "./token-deleted.js";
 import { downloadTokenImage, uploadTokenImage } from "./token-art.js";
 
@@ -38,16 +42,48 @@ obr.onReady(async () => {
   let editError: string | undefined;
   let editNote: string | undefined;
   // The latest failure to store the bytes of token art (after a pick, or on
-  // connect for art without stored bytes) or to load stored bytes for a
-  // republish. Kept until the panel reloads (no store change clears it); a
-  // later failure replaces it.
+  // connect for art without stored bytes) or to load or upload stored bytes
+  // for a re-upload. Kept until the panel reloads (no store change clears
+  // it); a later failure replaces it.
   let artError: string | undefined;
-  // What the GM must do while a token art republish waits on them.
-  let artPrompt: string | undefined;
+  // The fresh image picker open now, if any.
+  let artStep: ArtStep | undefined;
+  // The monster types whose stored art needs re-uploading.
+  let reuploads: Reupload[] = [];
   let waitingCommands = 0;
   // Store values a snapshot wrote over the table's, until the DM dismisses
   // them. In memory only: a reload starts with its own.
   const overrides: string[] = [];
+
+  // The re-upload rows as last drawn: they are drawn again only when they
+  // change, so a periodic render never replaces a button under the pointer.
+  let drawnReuploads = "";
+  const drawReuploads = (rows: PanelView["reuploads"]) => {
+    const drawn = JSON.stringify(rows ?? []);
+    if (drawn === drawnReuploads) return;
+    drawnReuploads = drawn;
+    el("reupload").hidden = rows === undefined;
+    el("reupload-list").replaceChildren(
+      ...(rows ?? []).map((row) => {
+        const item = document.createElement("li");
+        item.dataset.monsterKey = row.monsterKey;
+        const label = document.createElement("span");
+        label.textContent = row.label;
+        const reupload = document.createElement("button");
+        reupload.dataset.action = "reupload";
+        reupload.textContent = "Re-upload";
+        const pick = document.createElement("button");
+        pick.dataset.action = "pick";
+        pick.textContent = "Pick the uploaded image";
+        pick.hidden = !row.canPick;
+        const hint = document.createElement("p");
+        hint.className = "reupload-hint";
+        hint.textContent = row.hint ?? "";
+        item.append(label, " ", reupload, " ", pick, hint);
+        return item;
+      }),
+    );
+  };
 
   let rejection: RejectionCode | undefined;
   const render = () => {
@@ -60,7 +96,8 @@ obr.onReady(async () => {
       ...(removeError !== undefined ? { removeError } : {}),
       ...(editError !== undefined ? { editError } : {}),
       ...(artError !== undefined ? { artError } : {}),
-      ...(artPrompt !== undefined ? { artPrompt } : {}),
+      ...(artStep !== undefined ? { artStep } : {}),
+      reuploads,
       ...(editNote !== undefined ? { editNote } : {}),
       waitingCommands,
       overrides,
@@ -71,7 +108,7 @@ obr.onReady(async () => {
     status.dataset.kind = view.kind;
     el("hint").textContent = view.hint ?? "";
     el("art-prompt").textContent = view.prompt ?? "";
-    el("pick-art").hidden = view.prompt === undefined;
+    drawReuploads(view.reuploads);
     el("use-this-tab").hidden = view.action !== "use-this-tab";
     el("sync-error").textContent = view.error ?? "";
     el("edit-note").textContent = view.note ?? "";
@@ -100,25 +137,6 @@ obr.onReady(async () => {
   overlayToggle.addEventListener("change", () => {
     void overlay.setEnabled(overlayToggle.checked);
   });
-
-  // Shows the republish prompt with its button and opens the panel; resolves
-  // when the GM presses the button, which clears the prompt. The sync waits
-  // on one prompt at a time.
-  const awaitUploadConfirmed = (prompt: string): Promise<void> =>
-    new Promise((resolve) => {
-      el("pick-art").addEventListener(
-        "click",
-        () => {
-          artPrompt = undefined;
-          render();
-          resolve();
-        },
-        { once: true },
-      );
-      artPrompt = prompt;
-      render();
-      void obr.openPanel();
-    });
 
   // The socket is created after the sync, which reports deletions and gaps through it.
   let sendToBridge: (message: BridgeMessage) => boolean = () => false;
@@ -164,10 +182,25 @@ obr.onReady(async () => {
         render();
       },
       loadImage: (sha256) => downloadTokenImage(sha256, token),
-      awaitUploadConfirmed,
       onArtRepublishFailed: (text) => {
         artError = text;
         render();
+      },
+      // The GM is told which picker is open; the panel opens so they see it.
+      onArtStep: (step) => {
+        artStep = step;
+        render();
+        if (step !== undefined) void obr.openPanel();
+      },
+      // The panel opens when a type joins the list, so the GM sees what to
+      // re-upload.
+      onReuploadsChange: (list) => {
+        const joined = list.some(
+          (row) => !reuploads.some((r) => r.monsterKey === row.monsterKey),
+        );
+        reuploads = list;
+        render();
+        if (joined) void obr.openPanel();
       },
       // The override list stays: only the DM dismisses it.
       onStoreChange: () => {
@@ -229,6 +262,18 @@ obr.onReady(async () => {
   el("dismiss-overrides").addEventListener("click", () => {
     overrides.length = 0;
     render();
+  });
+  // The re-upload rows' buttons; nothing in the sync waits on them.
+  el("reupload-list").addEventListener("click", (event) => {
+    const button =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("button[data-action]")
+        : null;
+    const monsterKey = button?.closest<HTMLElement>("li")?.dataset.monsterKey;
+    if (button === null || monsterKey === undefined) return;
+    if (button.dataset.action === "reupload") void sync.reuploadArt(monsterKey);
+    else if (button.dataset.action === "pick")
+      void sync.pickUploadedArt(monsterKey);
   });
   socket.start();
   // Re-render periodically so the stalled hint appears without a state change.

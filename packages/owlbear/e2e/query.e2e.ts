@@ -35,7 +35,12 @@ test.describe("agent query -> bridge -> extension", () => {
         ok: true,
         result: {
           name: "scene-status",
-          result: { sceneReady: true, tokenCount: 5, appliedInstanceCount: 5 },
+          result: {
+            sceneReady: true,
+            tokenCount: 5,
+            appliedInstanceCount: 5,
+            artWaits: [],
+          },
         },
       },
     });

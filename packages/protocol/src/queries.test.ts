@@ -71,6 +71,54 @@ describe("query schemas", () => {
     }
   });
 
+  it("a scene-status result carries art waits with monster key, monster name and step", () => {
+    const artWaits = [
+      { monsterKey: "srd-2024_ogre", monsterName: "Ogre", step: "pick" },
+      { monsterKey: "srd-2024_wolf", monsterName: "Wolf", step: "reupload" },
+    ];
+    const parsed = queryResultSchema.safeParse({
+      name: "scene-status",
+      result: { ...status, artWaits },
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({
+      name: "scene-status",
+      result: { ...status, artWaits },
+    });
+    for (const bad of [
+      { monsterKey: "", monsterName: "Ogre", step: "pick" },
+      { monsterKey: "srd-2024_ogre", monsterName: "", step: "pick" },
+      { monsterName: "Ogre", step: "pick" },
+      { monsterKey: "srd-2024_ogre", step: "pick" },
+      { monsterKey: "srd-2024_ogre", monsterName: "Ogre" },
+    ]) {
+      expect(
+        sceneStatusSchema.safeParse({ ...status, artWaits: [bad] }).success,
+        JSON.stringify(bad),
+      ).toBe(false);
+    }
+  });
+
+  it("a scene-status result without art waits decodes with none", () => {
+    const parsed = sceneStatusSchema.safeParse(status);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({ ...status, artWaits: [] });
+  });
+
+  it("an art wait with an unknown step is rejected", () => {
+    for (const step of ["upload", "confirm", "", "PICK"]) {
+      expect(
+        sceneStatusSchema.safeParse({
+          ...status,
+          artWaits: [
+            { monsterKey: "srd-2024_ogre", monsterName: "Ogre", step },
+          ],
+        }).success,
+        step,
+      ).toBe(false);
+    }
+  });
+
   it("a scene map needs a grid with a positive dpi and a type, and map items with every transform field", () => {
     expect(sceneMapSchema.safeParse(sceneMap).success).toBe(true);
     expect(sceneMapSchema.safeParse({ ...sceneMap, maps: [] }).success).toBe(

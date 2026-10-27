@@ -31,6 +31,7 @@ export * from "./origin.js";
 export * from "./queries.js";
 export * from "./rename.js";
 export * from "./restore.js";
+export * from "./type-name.js";
 export * from "./undo.js";
 export {
   publishedTokenArtSchema,

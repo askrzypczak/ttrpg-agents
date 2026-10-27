@@ -5,7 +5,7 @@ import type {
   TokenArt,
 } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import { createEncounterSync } from "./encounter-sync.js";
+import { createEncounterSync, type Reupload } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
 import { instanceIdOf, type EncounterInstance } from "./sync-plan.js";
@@ -22,7 +22,7 @@ const wolfArt: PublishedTokenArt = {
 
 const ORC_SHA = "d4".repeat(32);
 
-/** What the GM picks after the stored orc image is uploaded again. */
+/** What the picker would answer, were it opened. */
 const picked: PublishedTokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/ttrpg-art-d4d4d4d4d4d4d4d4.png",
   mime: "image/png",
@@ -55,6 +55,14 @@ const toOrc = (footprint: number) =>
     origin: mcp,
   }) as const;
 
+/** The orc's row in the re-upload list. */
+const orcRow: Reupload = {
+  monsterKey: "orc",
+  monsterName: "Orc",
+  assetName: `ttrpg-art-${"d4".repeat(8)}`,
+  uploaded: false,
+};
+
 /** Timers that never fire: no retry runs behind the test's back. */
 const idleTimers: Timers = {
   setTimeout: () => 1,
@@ -65,6 +73,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
 function setup() {
   const loads: string[] = [];
+  const reuploads: Reupload[][] = [];
   const fake = createFakeObr(undefined, undefined, {
     imageAlive: false,
     pickImage: picked,
@@ -79,14 +88,24 @@ function setup() {
         mime: "image/png",
       });
     },
+    onReuploadsChange: (list) => reuploads.push(structuredClone(list)),
   });
   const token = () =>
     fake.scene.getItems().find((item) => instanceIdOf(item) === "i1");
-  return { fake, sync, loads, errors, token, feed: createMessageFeed() };
+  const listed = () => reuploads.at(-1) ?? [];
+  return {
+    fake,
+    sync,
+    loads,
+    errors,
+    token,
+    listed,
+    feed: createMessageFeed(),
+  };
 }
 
 describe("createEncounterSync token redraw with stored art", () => {
-  it("a monster change to a type whose stored art has no url publishes it and draws the token with the pick, even when the token's own picture already spans the footprint", async () => {
+  it("a monster change to a type whose stored art has no url replaces the image token with a circle and lists the type, with no upload or picker", async () => {
     const s = setup();
     await s.sync.handleMessage(
       s.feed.snapshot([wolf], {
@@ -99,19 +118,19 @@ describe("createEncounterSync token redraw with stored art", () => {
     await s.sync.handleMessage(s.feed.event(toOrc(1)));
     await settle();
 
-    expect(s.loads).toEqual([ORC_SHA]);
-    expect(s.fake.uploads()).toHaveLength(1);
-    expect(s.token()?.image?.url).toBe(picked.url);
     expect(s.token()).toMatchObject({
-      type: "IMAGE",
+      type: "SHAPE",
       name: "Orc 1",
-      grid: { dpi: 400, offset: { x: 200, y: 100 } },
       position: { x: 450, y: 300 },
     });
+    expect(s.listed()).toEqual([orcRow]);
+    expect(s.loads).toEqual([]);
+    expect(s.fake.uploads()).toEqual([]);
+    expect(s.fake.pickImageCalls()).toBe(0);
     expect(s.errors).toEqual([]);
   });
 
-  it("a monster change to a type whose stored art's url is gone republishes it and draws the token with the pick at the new footprint", async () => {
+  it("a monster change to a type whose stored art's url is gone replaces the image token with a circle at the new footprint and lists the type, with no upload or picker", async () => {
     const s = setup();
     const deadOrcArt: TokenArt = {
       url: "https://cdn.owlbear.rodeo/assets/orc-gone.png",
@@ -128,15 +147,18 @@ describe("createEncounterSync token redraw with stored art", () => {
     await s.sync.handleMessage(s.feed.event(toOrc(2)));
     await settle();
 
-    expect(s.loads).toEqual([ORC_SHA]);
-    expect(s.fake.uploads()).toHaveLength(1);
     expect(s.token()).toMatchObject({
-      type: "IMAGE",
-      image: picked,
-      grid: { dpi: 200, offset: { x: 200, y: 100 } },
-      scale: { x: 1, y: 1 },
+      type: "SHAPE",
+      shape: { shapeType: "CIRCLE", width: 300, height: 300 },
       position: { x: 450, y: 300 },
     });
+    expect(s.listed().map((row) => row.monsterKey)).toEqual(["orc"]);
+    expect(s.sync.artWaits()).toEqual([
+      { monsterKey: "orc", monsterName: "Orc", step: "reupload" },
+    ]);
+    expect(s.loads).toEqual([]);
+    expect(s.fake.uploads()).toEqual([]);
+    expect(s.fake.pickImageCalls()).toBe(0);
     expect(s.errors).toEqual([]);
   });
 });

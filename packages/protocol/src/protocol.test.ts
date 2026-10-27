@@ -254,7 +254,12 @@ describe("protocol", () => {
         id: "c1",
         payload: {
           name: "scene-status",
-          result: { sceneReady: true, tokenCount: 3, appliedInstanceCount: 2 },
+          result: {
+            sceneReady: true,
+            tokenCount: 3,
+            appliedInstanceCount: 2,
+            artWaits: [],
+          },
         },
       },
     ];
@@ -271,7 +276,12 @@ describe("protocol", () => {
       ok: true,
       result: {
         name: "scene-status",
-        result: { sceneReady: false, tokenCount: 0, appliedInstanceCount: 0 },
+        result: {
+          sceneReady: false,
+          tokenCount: 0,
+          appliedInstanceCount: 0,
+          artWaits: [],
+        },
       },
     };
     expect(agentQueryResponseSchema.safeParse(okResponse)).toEqual({

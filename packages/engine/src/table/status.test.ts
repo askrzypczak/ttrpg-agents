@@ -4,6 +4,7 @@ import { makeTestInstance } from "../testing/index.js";
 import {
   TableUnavailableError,
   getTableStatus,
+  type TableArtWait,
   type TablePort,
   type TableSceneStatus,
 } from "./index.js";
@@ -41,7 +42,70 @@ const scene = (
   sceneReady: boolean,
   tokenCount: number,
   appliedInstanceCount: number,
-): TableSceneStatus => ({ sceneReady, tokenCount, appliedInstanceCount });
+  artWaits: TableArtWait[] = [],
+): TableSceneStatus => ({
+  sceneReady,
+  tokenCount,
+  appliedInstanceCount,
+  artWaits,
+});
+
+describe("getTableStatus art waits", () => {
+  const ogrePick: TableArtWait = {
+    monsterKey: "srd-2024_ogre",
+    monsterName: "Ogre",
+    step: "pick",
+  };
+  const wolfReupload: TableArtWait = {
+    monsterKey: "srd-2024_wolf",
+    monsterName: "Wolf",
+    step: "reupload",
+  };
+
+  it("getTableStatus passes the table's art waits through", async () => {
+    const status = await getTableStatus(
+      repoWith(3),
+      tableAnswering(scene(true, 1, 3, [ogrePick, wolfReupload])),
+    );
+    expect(status.artWaits).toEqual([ogrePick, wolfReupload]);
+  });
+
+  it("an open pick wait makes the table out of sync even when the counts match", async () => {
+    const status = await getTableStatus(
+      repoWith(3),
+      tableAnswering(scene(true, 3, 3, [ogrePick])),
+    );
+    expect(status).toEqual({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      encounterCount: 3,
+      inSync: false,
+      artWaits: [ogrePick],
+    });
+  });
+
+  it("a re-upload wait alone leaves the table in sync when the counts match", async () => {
+    const status = await getTableStatus(
+      repoWith(3),
+      tableAnswering(scene(true, 3, 3, [wolfReupload])),
+    );
+    expect(status).toEqual({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      encounterCount: 3,
+      inSync: true,
+      artWaits: [wolfReupload],
+    });
+    // Control: the same wait with a pick beside it is out of sync.
+    const withPick = await getTableStatus(
+      repoWith(3),
+      tableAnswering(scene(true, 3, 3, [wolfReupload, ogrePick])),
+    );
+    expect(withPick.inSync).toBe(false);
+  });
+});
 
 describe("getTableStatus", () => {
   it("reports in sync, with the full status (`sceneReady`, the three counts, `inSync`), when the scene is ready and token, applied and encounter counts match", async () => {
@@ -55,6 +119,7 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: true,
+      artWaits: [],
     });
   });
 
@@ -69,6 +134,7 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 0,
       encounterCount: 0,
       inSync: true,
+      artWaits: [],
     });
   });
 
@@ -83,6 +149,7 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 2,
       encounterCount: 2,
       inSync: false,
+      artWaits: [],
     });
   });
 
@@ -98,6 +165,7 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: false,
+      artWaits: [],
     });
   });
 
@@ -113,6 +181,7 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 3,
       encounterCount: 4,
       inSync: false,
+      artWaits: [],
     });
   });
 

@@ -2,6 +2,7 @@ import {
   DomainError,
   TargetError,
   addMonstersInRooms,
+  canRestoreEncounter,
   changeMonsterType,
   compareByInitiative,
   formatColumnLabel,
@@ -30,6 +31,7 @@ import {
   type PreviewPlacement,
   type RestoredMonster,
   type RoomPlacement,
+  type TableArtWait,
   type UndoChange,
   type UndoField,
   type UndoNext,
@@ -921,13 +923,18 @@ const undoTool = defineTool({
     };
     switch (result.kind) {
       case "nothing":
-        return ok("Nothing to undo.", {
-          undone: null,
-          notCovered: null,
-          changes: [],
-          kept: [],
-          next: null,
-        });
+        return ok(
+          canRestoreEncounter(ctx.repo)
+            ? "Nothing to undo. The last clear_encounter can be brought back with restore_encounter."
+            : "Nothing to undo.",
+          {
+            undone: null,
+            notCovered: null,
+            changes: [],
+            kept: [],
+            next: null,
+          },
+        );
       case "not-covered":
         return ok(
           [
@@ -969,7 +976,7 @@ const tableStatusTool = defineTool({
   name: "table_status",
   annotations: { readOnlyHint: true },
   description:
-    "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count) and compare it with the encounter. Needs the bridge running.",
+    "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count) and compare it with the encounter; also names the monster types whose token art waits on the GM, with what to click (waitingOnGm). Needs the bridge running.",
   inputSchema: {},
   async run(ctx) {
     const {
@@ -978,20 +985,50 @@ const tableStatusTool = defineTool({
       appliedInstanceCount,
       encounterCount,
       inSync,
+      artWaits,
     } = await getTableStatus(ctx.repo, ctx.table);
     const counts = `${String(tokenCount)} tokens on the scene, ${String(appliedInstanceCount)} instances applied, ${String(encounterCount)} in the encounter`;
-    const text = inSync
+    const status = inSync
       ? `Owlbear is in sync: scene ready, ${counts}.`
       : `Owlbear is out of sync: ${sceneReady ? "scene ready" : "scene not ready"}, ${counts}.`;
-    return ok(text, {
+    const waitingOnGm = artWaitLines(artWaits);
+    return ok([status, ...waitingOnGm].join("\n"), {
       sceneReady,
       tokenCount,
       appliedInstanceCount,
       encounterCount,
       inSync,
+      ...(waitingOnGm.length > 0 ? { waitingOnGm } : {}),
     });
   },
 });
+
+/**
+ * One line per art step the table waits on the GM for, naming its monster
+ * types and what the GM does: the fresh picker, then the re-uploads.
+ */
+function artWaitLines(waits: readonly TableArtWait[]): string[] {
+  const named = (step: TableArtWait["step"]): string[] =>
+    waits.filter((w) => w.step === step).map((w) => w.monsterName);
+  const andList = (names: readonly string[]): string =>
+    names.length <= 1
+      ? names.join("")
+      : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
+  const picks = named("pick");
+  const reuploads = named("reupload");
+  return [
+    ...(picks.length > 0
+      ? [
+          `Tokens are waiting on the GM: art for ${andList(picks)} is being chosen in Owlbear's image picker; cancelling it gives circles.`,
+        ]
+      : []),
+    ...(reuploads.length > 0
+      ? [
+          `Art for ${andList(reuploads)} needs re-uploading: click Re-upload next to ${reuploads.length === 1 ? "it" : "each"} in the extension panel, then Pick the uploaded image.`,
+        ]
+      : []),
+  ];
+}
 
 const useMapTool = defineTool({
   name: "use_map",

@@ -124,7 +124,12 @@ function queryBefore(
 
 const sceneStatusResult = (tokenCount: number) => ({
   name: "scene-status" as const,
-  result: { sceneReady: true, tokenCount, appliedInstanceCount: tokenCount },
+  result: {
+    sceneReady: true,
+    tokenCount,
+    appliedInstanceCount: tokenCount,
+    artWaits: [],
+  },
 });
 
 function reply(ws: WebSocket, id: string | undefined, tokenCount: number) {
