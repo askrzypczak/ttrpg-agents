@@ -50,6 +50,7 @@ let ctx: ToolContext;
 beforeEach(() => {
   let tick = 1000;
   let commands = 0;
+  let groups = 0;
   const maps = new SqliteMapRepository(openDatabase(":memory:"));
   maps.registerMap(registered);
   ctx = {
@@ -70,7 +71,7 @@ beforeEach(() => {
     monsters: loadSrdMonsters(),
     rng: { nextInt: (max) => 3 % max },
     now: () => new Date("2026-01-01T00:00:00Z"),
-    newGroupId: () => `group-${String(tick)}`,
+    newGroupId: () => `group-${String(++groups)}`,
     newCommandId: () => `command-${String(++commands)}`,
   };
 });
@@ -518,5 +519,51 @@ describe("undo structured content and next-undo line", () => {
     expect(replyText(five).split("\n").at(-1)).toBe(
       "Next undo would reverse add_monsters: Wolf 1, Wolf 2, Wolf 3, Wolf 4, Wolf 5.",
     );
+  });
+
+  it("undo reports armor class, initiative, stats visibility and position changes, and the same keys when nothing is left", async () => {
+    await ok("set_rooms", { rooms: [{ name: "Kitchen", ranges: ["A1:C1"] }] });
+    seed(wolf("Wolf 1", { spawnPosition: { x: 3000, y: 3000 } }));
+
+    await ok("set_armor_class", { target: "Wolf 1", armorClass: 18 });
+    const armorClass = await ok("undo");
+    expect(armorClass.structuredContent?.["changes"]).toEqual([
+      { monster: "Wolf 1", field: "armorClass", before: 18, after: 12 },
+    ]);
+
+    await ok("set_initiative", { target: "Wolf 1", initiative: 20 });
+    const initiative = await ok("undo");
+    expect(initiative.structuredContent?.["changes"]).toEqual([
+      { monster: "Wolf 1", field: "initiative", before: 20, after: 15 },
+    ]);
+
+    await ok("set_stats_visibility", { targets: ["Wolf 1"], visible: true });
+    const statsVisible = await ok("undo");
+    expect(statsVisible.structuredContent?.["changes"]).toEqual([
+      { monster: "Wolf 1", field: "statsVisible", before: true, after: false },
+    ]);
+
+    await ok("move_monsters", { targets: ["Wolf 1"], room: "Kitchen" });
+    const position = await ok("undo");
+    expect(position.structuredContent?.["changes"]).toEqual([
+      {
+        monster: "Wolf 1",
+        field: "position",
+        before: "moved",
+        after: "moved back",
+      },
+    ]);
+
+    const roomChange = await ok("undo");
+    expect(roomChange.structuredContent?.["notCovered"]).toBe("set_rooms");
+
+    expect((await ok("undo")).structuredContent).toEqual({
+      summary: "Nothing to undo.",
+      undone: null,
+      notCovered: null,
+      changes: [],
+      kept: [],
+      next: null,
+    });
   });
 });
