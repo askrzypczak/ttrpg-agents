@@ -1534,8 +1534,6 @@ function undoLine(change: UndoChange, view: UndoView): string {
     case "kept-no-value": {
       const name = change.instance.displayName;
       switch (change.field) {
-        case "position":
-          return `${name} token not moved back: it had no spawn position`;
         case "group":
           return `${name} initiative group not restored: it had none`;
         case "armorClass":

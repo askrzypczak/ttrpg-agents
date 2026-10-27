@@ -480,12 +480,16 @@ export class SqliteEncounterRepository implements EncounterRepository {
   }
 
   setSpawnPositions(
-    positions: readonly { id: string; spawnPosition: Point }[],
+    positions: readonly { id: string; spawnPosition: Point | null }[],
     origin: ChangeOrigin,
   ): MonsterInstance[] {
     return this.transaction(() => {
+      const points = positions.map(({ id, spawnPosition }) => {
+        if (spawnPosition === null) throw new Error("not implemented");
+        return { id, spawnPosition };
+      });
       const existing = this.listInstances();
-      const targets = positions.map(({ id, spawnPosition }) => {
+      const targets = points.map(({ id, spawnPosition }) => {
         const instance = existing.find((i) => i.id === id);
         if (!instance) throw new UnknownInstanceError(unknownMessage(id));
         return { instance, spawnPosition };

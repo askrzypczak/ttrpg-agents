@@ -120,18 +120,21 @@ function fold(
           ? { ...i, currentHp: event.currentHp, maxHp: event.maxHp }
           : i,
       );
-    case "position-changed":
+    case "position-changed": {
+      const spawnPosition = event.spawnPosition;
+      if (spawnPosition === null) throw new Error("not implemented");
       return desired.map((i) =>
         i.id === event.id
           ? {
               ...i,
               spawnPosition: {
-                x: event.spawnPosition.x,
-                y: event.spawnPosition.y,
+                x: spawnPosition.x,
+                y: spawnPosition.y,
               },
             }
           : i,
       );
+    }
     case "monster-changed":
       return desired.map((i) =>
         i.id === event.id

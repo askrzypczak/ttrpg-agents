@@ -140,7 +140,9 @@ function fakeRepo(state: {
     setSpawnPositions: (positions, origin) => {
       log("setSpawnPositions", [structuredClone([...positions]), origin]);
       return positions.map(({ id, spawnPosition }) =>
-        update(id, { spawnPosition: { ...spawnPosition } }),
+        update(id, {
+          spawnPosition: spawnPosition === null ? null : { ...spawnPosition },
+        }),
       );
     },
     changeMonsters: (changes, origin) => {
@@ -548,17 +550,56 @@ describe("undoLastCommand", () => {
     ]);
   });
 
-  it("undoLastCommand reports a position, group or armor class whose earlier value was none as kept-no-value and writes nothing for it", () => {
+  it("undoLastCommand clears the spawn position of a monster that had none before the command, through setSpawnPositions, and reports the position reverted", () => {
     const before = makeTestInstance({
       id: "w1",
       displayName: "Wolf 1",
       spawnPosition: null,
+    });
+    const now = { ...before, spawnPosition: { x: 75, y: 75 } };
+    const { repo, writes } = fakeRepo({
+      live: [now],
+      record: record(
+        "move_monsters",
+        [{ instanceId: "w1", before }],
+        [
+          {
+            type: "position-changed",
+            id: "w1",
+            spawnPosition: { x: 75, y: 75 },
+            origin: commandOrigin,
+          },
+        ],
+      ),
+    });
+
+    const result = undoLastCommand(repo, undoOrigin);
+
+    expect(writes()).toEqual([
+      {
+        method: "setSpawnPositions",
+        args: [[{ id: "w1", spawnPosition: null }], undoOrigin],
+        inTransaction: true,
+      },
+    ]);
+    expect(result).toEqual({
+      kind: "undone",
+      command: "move_monsters",
+      changes: [{ kind: "reverted", field: "position", from: now, to: before }],
+      next: null,
+    });
+    expect(repo.listInstances()).toEqual([before]);
+  });
+
+  it("undoLastCommand reports a group or armor class whose earlier value was none as kept-no-value and writes nothing for it", () => {
+    const before = makeTestInstance({
+      id: "w1",
+      displayName: "Wolf 1",
       groupId: null,
       armorClass: null,
     });
     const now = {
       ...before,
-      spawnPosition: { x: 75, y: 75 },
       groupId: "g1",
       armorClass: 13,
     };
@@ -568,12 +609,6 @@ describe("undoLastCommand", () => {
         "edit",
         [{ instanceId: "w1", before }],
         [
-          {
-            type: "position-changed",
-            id: "w1",
-            spawnPosition: { x: 75, y: 75 },
-            origin: commandOrigin,
-          },
           {
             type: "instance-changed",
             id: "w1",
@@ -594,8 +629,8 @@ describe("undoLastCommand", () => {
 
     expect(writes()).toEqual([]);
     const changes = result.kind === "undone" ? result.changes : [];
-    expect(changes).toHaveLength(3);
-    for (const field of ["position", "group", "armorClass"]) {
+    expect(changes).toHaveLength(2);
+    for (const field of ["group", "armorClass"]) {
       expect(changes).toContainEqual(
         expect.objectContaining({ kind: "kept-no-value", field }),
       );

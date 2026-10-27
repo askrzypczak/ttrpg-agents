@@ -149,6 +149,24 @@ describe("setSpawnPositions", () => {
     ]);
   });
 
+  it("setSpawnPositions with a null spawn position clears the instance's spawn position and appends a position-changed event with a null spawn position", () => {
+    const seq = log.latestSeq();
+
+    const updated = repo.setSpawnPositions(
+      [{ id: first.id, spawnPosition: null }],
+      origin,
+    );
+
+    expect(updated.map((i) => [i.id, i.spawnPosition])).toEqual([
+      [first.id, null],
+    ]);
+    expect(byId(first.id)?.spawnPosition).toBeNull();
+    expect(byId(second.id)?.spawnPosition).toBeNull();
+    expect(eventsAfter(seq)).toEqual([
+      { type: "position-changed", id: first.id, spawnPosition: null, origin },
+    ]);
+  });
+
   it("setSpawnPositions changes nothing and throws UnknownInstanceError when an id is not in the active encounter", () => {
     const before = repo.listInstances();
     const seq = log.latestSeq();

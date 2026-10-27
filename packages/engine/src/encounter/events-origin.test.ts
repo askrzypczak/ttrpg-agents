@@ -76,6 +76,19 @@ describe("encounterEventSchema origin", () => {
     ).toBe(false);
   });
 
+  it("encounterEventSchema accepts a position-changed event whose spawn position is null", () => {
+    const event = {
+      type: "position-changed",
+      id: "i1",
+      spawnPosition: null,
+      origin,
+    };
+
+    const parsed = encounterEventSchema.safeParse(event);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual(event);
+  });
+
   it("encounterEventSchema requires origin on monster-changed, and changeMonsters is reported as monster-changed", () => {
     const parsed = encounterEventSchema.safeParse(monsterChanged);
     expect(parsed.success).toBe(true);

@@ -18,6 +18,12 @@ export const NAME_BASELINE_KEY = "name";
 /** Reserved key in the synced record: the token position we last placed it at. */
 export const POSITION_BASELINE_KEY = "position";
 /**
+ * Reserved key in the synced record: where the token stood before the
+ * extension first moved it to a spawn position (`{ x, y }`), or null when its
+ * instance had no spawn position when the token was last placed.
+ */
+export const PREVIOUS_POSITION_KEY = "previousPosition";
+/**
  * Reserved key in the synced record: the look the token was last drawn with,
  * `{ monsterKey, image }` (the picture's url, null for a circle).
  */

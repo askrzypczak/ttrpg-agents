@@ -31,7 +31,7 @@ export type UndoChange =
   /** Left alone: its before value was none, which cannot be written back. */
   | {
       kind: "kept-no-value";
-      field: "position" | "group" | "armorClass";
+      field: "group" | "armorClass";
       instance: MonsterInstance;
     };
 
@@ -235,7 +235,7 @@ function revertFields(
     changes.push({ kind: "kept-table", field, instance });
   };
   const keptNoValue = (
-    field: "position" | "group" | "armorClass",
+    field: "group" | "armorClass",
     instance: MonsterInstance,
   ): void => {
     reported.add(field);
@@ -334,8 +334,7 @@ function revertFields(
         break;
       case "position": {
         if (before.spawnPosition === null) {
-          keptNoValue("position", current);
-          break;
+          throw new Error("not implemented");
         }
         const [to] = repo.setSpawnPositions(
           [{ id, spawnPosition: before.spawnPosition }],

@@ -239,7 +239,7 @@ describe("undo", () => {
     expect(text(r)).toContain("Undid move_monsters:");
   });
 
-  it("undo after move_monsters of a monster with no earlier spawn position leaves it and says its token was not moved back", async () => {
+  it("undo after move_monsters of a monster with no earlier spawn position clears its spawn position and says its token moved back", async () => {
     await saveKitchen();
     seed(
       wolf("Wolf 1", { spawnPosition: { x: 3000, y: 3000 } }),
@@ -249,16 +249,20 @@ describe("undo", () => {
       targets: ["Wolf 1", "Wolf 2"],
       room: "Kitchen",
     });
-    const moved = byName("Wolf 2").spawnPosition;
-    expect(moved).not.toBeNull();
+    expect(byName("Wolf 2").spawnPosition).not.toBeNull();
 
     const r = await ok("undo");
 
     expect(byName("Wolf 1").spawnPosition).toEqual({ x: 3000, y: 3000 });
-    expect(byName("Wolf 2").spawnPosition).toEqual(moved);
-    expect(text(r)).toContain(
-      "Wolf 2 token not moved back: it had no spawn position",
-    );
+    expect(byName("Wolf 2").spawnPosition).toBeNull();
+    expect(text(r).split("\n")).toContain("Wolf 2 token moved back");
+    expect(r.structuredContent?.["changes"]).toContainEqual({
+      monster: "Wolf 2",
+      field: "position",
+      before: "moved",
+      after: "moved back",
+    });
+    expect(r.structuredContent?.["kept"]).toEqual([]);
   });
 
   it('undo after apply_damage sets the HP back and replies "Undid apply_damage: <name> HP a -> b/max"', async () => {

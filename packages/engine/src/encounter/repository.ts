@@ -178,7 +178,7 @@ export interface EncounterRepository {
    * encounter.
    */
   setSpawnPositions(
-    positions: readonly { id: string; spawnPosition: Point }[],
+    positions: readonly { id: string; spawnPosition: Point | null }[],
     origin: ChangeOrigin,
   ): MonsterInstance[];
   /**

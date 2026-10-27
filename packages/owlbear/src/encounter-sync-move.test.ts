@@ -191,4 +191,58 @@ describe("createEncounterSync token move", () => {
     expect(tokenOf(s.scene, 1).position).toEqual(target);
     expect(s.heard.overrides).toEqual([movedNote]);
   });
+
+  it("an mcp position-changed event with a null spawn position moves the token back to where it stood before its move", async () => {
+    const s = setup();
+    await s.sync.handleMessage(s.feed.snapshot([inRow(1), inRow(2)]));
+    await settle();
+    const before = { ...tokenOf(s.scene, 1).position };
+    await s.sync.handleMessage(positionChanged(s.feed, 1, target));
+    await settle();
+    expect(tokenOf(s.scene, 1).position).toEqual(target);
+
+    await s.sync.handleMessage(positionCleared(s.feed, 1));
+    await settle();
+
+    expect(tokenOf(s.scene, 1).position).toEqual(before);
+    expect(s.heard.errors).toEqual([]);
+    expect(s.heard.overrides).toEqual([]);
+  });
+
+  it("the sync reports a move back over a token the GM dragged since through onOverride", async () => {
+    const s = setup();
+    await s.sync.handleMessage(s.feed.snapshot([inRow(1)]));
+    await settle();
+    const before = { ...tokenOf(s.scene, 1).position };
+    await s.sync.handleMessage(positionChanged(s.feed, 1, target));
+    await settle();
+    s.drag(1, dragged);
+    await settle();
+    expect(s.heard.overrides).toEqual([]);
+
+    await s.sync.handleMessage(positionCleared(s.feed, 1));
+    await settle();
+
+    expect(tokenOf(s.scene, 1).position).toEqual(before);
+    expect(s.heard.overrides).toEqual([movedNote]);
+  });
 });
+
+/** Instance `n` with no spawn position: its token goes in the default row. */
+function inRow(n: number): EncounterInstance {
+  return makeTestInstance({
+    id: `i${n}`,
+    displayName: `Shadow ${n}`,
+    createdAt: n,
+  });
+}
+
+/** An mcp change that cleared instance `n`'s spawn position. */
+function positionCleared(feed: MessageFeed, n: number) {
+  return feed.event({
+    type: "position-changed",
+    id: `i${n}`,
+    spawnPosition: null,
+    origin: mcp,
+  });
+}
