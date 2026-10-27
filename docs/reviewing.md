@@ -71,6 +71,12 @@ Repeating a rule across layers buys little: the engine's test already fails when
 
 A plan whose Interfaces touch five or more packages proposes a prerequisite ticket and a feature ticket at the plan gate. Epic G (#206) did this with #208 before #128 before #209.
 
+## 6. Docs
+
+- `CLAUDE.md`, `docs/architecture.md` and the READMEs hold the current rules; `docs/decisions/` holds their history. A doc change states the rule as it now is and leaves the ticket number, the options and who decided to the decision-log entry.
+- `docs/architecture.md` is the runtime view (processes, ports, auth, data flow) and the rules for what reaches the table. Mechanics (which module does what, option names, panel elements) go in the package README; wire detail (routes, payloads, timeouts, error codes) in the bridge README.
+- A prose block in the root README, `scripts/README.md`, `docs/*.md` or a package README is at most 1,000 characters (`scripts/docs.test.ts`, part of `npm run check`). A change that would push a block over the limit splits the section or shortens it; it does not append.
+
 ## Promotion path
 
 If PRs keep arriving without a review map, the review map slot moves into the `work-ticket` PR template in the claude-workflow repository, as a separate ticket there. The hard rules are summarised in [`CLAUDE.md`](../CLAUDE.md), under "PRs and reviews".
