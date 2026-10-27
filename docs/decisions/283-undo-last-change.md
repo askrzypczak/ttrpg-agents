@@ -66,7 +66,7 @@ Issue: [#283](https://github.com/askrzypczak/ttrpg-agents/issues/283).
   - Skip them silently (this plan's first proposal): "undo that" after a room change would reverse the encounter change before it.
   - Undo map and room changes too: needs an origin and before-state in the map store; the maintainer proposed encounter changes only.
 - Where: `noteCommand` (`packages/engine/src/encounter/repository.ts`, `packages/store-sqlite/src/sqlite-repository.ts`); `use_map`, `set_rooms`, `remove_rooms`, `undo` (`packages/mcp/src/tools.ts`).
-- Status: active
+- Status: superseded by 311.4
 
 ## 283.7 Undo records live until a clear that clears monsters; undo right after it replies "Nothing to undo."
 
@@ -129,4 +129,4 @@ Issue: [#283](https://github.com/askrzypczak/ttrpg-agents/issues/283).
   - Chosen: "Nothing to undo." returns `{ undone: null, changes: [] }`. A map or room barrier returns the same plus `notCovered: <tool>`. An undo returns `{ undone: <tool>, changes }`. The same keys appear in every case.
   - A `kind` field mirroring `UndoResult`: one more key that the reply text already conveys.
 - Where: the `undo` tool (`packages/mcp/src/tools.ts`).
-- Status: active
+- Status: superseded by 311.2

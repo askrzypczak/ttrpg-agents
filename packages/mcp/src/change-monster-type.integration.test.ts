@@ -124,6 +124,7 @@ describe("change_monster_type", () => {
     ]);
     const after = ctx.repo.listInstances();
     expect(r.structuredContent).toEqual({
+      summary: text(r),
       instances: after.map(view),
       before: [view({ ...hurt, currentHp: 5 }), view(shadow)],
       noLongerFits: [],
