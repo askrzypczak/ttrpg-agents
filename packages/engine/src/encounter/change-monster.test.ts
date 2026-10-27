@@ -318,6 +318,20 @@ describe("changeMonsterType", () => {
     expect(repo.calls[0]?.changes.map((c) => c.initiative)).toEqual([14, null]);
   });
 
+  it("changeMonsterType reports the kept roll, and null when the target had no initiative", () => {
+    // Wolf +2: 15 - 2 = 13 is the kept roll.
+    const { result } = run(
+      [
+        wolf("w1", "Wolf 1", { initiative: 15 }),
+        wolf("w2", "Wolf 2", { initiative: null }),
+      ],
+      ["w1", "w2"],
+      "dire-wolf",
+    );
+
+    expect(result.instances.map((c) => c.initiativeRoll)).toEqual([13, null]);
+  });
+
   it("changeMonsterType in rolled mode rolls each target's max HP labelled with its new name and returns the rolls", () => {
     // Every die shows 1: 5d10+10 = 15.
     const { result, rng } = run(

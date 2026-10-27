@@ -31,10 +31,10 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `list_encounter`       | Encounter in initiative order with AC and HP, and the removed monsters that can be restored                                                |
 | `apply_damage`         | Damage by instance id or exact name (clamped at 0)                                                                                         |
 | `heal`                 | Heal by instance id or exact name (clamped at max)                                                                                         |
-| `set_hp`               | Set an exact current HP by instance id or exact name (clamped to 0..max); reports before and after                                         |
-| `set_max_hp`           | Set an exact max HP by instance id or exact name; HP is lowered if above it, never raised; reports before and after                        |
+| `set_hp`               | Set an exact current HP by id or exact name (clamped to 0..max); reports before/after and any clamp                                        |
+| `set_max_hp`           | Set an exact max HP by id or exact name; HP is lowered if above it, never raised; reports before/after and any clamp                       |
 | `reset_max_hp`         | Reset max HP (by id or exact name, all-or-nothing) to the statblock average or a new roll; full HP stays full; reports before and after    |
-| `set_armor_class`      | Set an exact armor class by instance id or exact name; reports before and after                                                            |
+| `set_armor_class`      | Set an exact armor class by id or exact name; reports before/after and any clamp                                                           |
 | `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                     |
 | `restore_monsters`     | Bring back removed monsters by instance id or exact name, all-or-nothing, with HP and initiative; a taken name gets a new number           |
 | `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                     |
