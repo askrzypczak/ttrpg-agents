@@ -30,14 +30,20 @@ interface Call {
 const NOT_WRITES = new Set(["latestUndoRecord", "forgetCommands"]);
 
 /**
- * An in-memory repository holding live and removed instances and one undo
- * record; every call it receives is logged with whether a transaction was open.
+ * An in-memory repository holding live and removed instances and a stack of
+ * undo records (`records`, oldest first, or the single `record`) that
+ * `forgetCommands` removes from; every call it receives is logged with whether
+ * a transaction was open.
  */
 function fakeRepo(state: {
   live: MonsterInstance[];
   removed?: MonsterInstance[];
   record?: UndoRecord;
+  records?: UndoRecord[];
 }): { repo: EncounterRepository; calls: Call[]; writes: () => Call[] } {
+  let records: UndoRecord[] = structuredClone(
+    state.records ?? (state.record === undefined ? [] : [state.record]),
+  );
   const live = new Map(state.live.map((i) => [i.id, structuredClone(i)]));
   const removed = new Map(
     (state.removed ?? []).map((i) => [i.id, structuredClone(i)]),
@@ -151,12 +157,12 @@ function fakeRepo(state: {
     },
     latestUndoRecord: () => {
       log("latestUndoRecord", []);
-      return state.record === undefined
-        ? undefined
-        : structuredClone(state.record);
+      const latest = records.at(-1);
+      return latest === undefined ? undefined : structuredClone(latest);
     },
     forgetCommands: (ids) => {
       log("forgetCommands", [[...ids]]);
+      records = records.filter((r) => !ids.includes(r.commandId));
     },
   };
   return {
@@ -170,8 +176,9 @@ function record(
   command: string,
   instances: UndoRecord["instances"],
   events: EncounterEvent[],
+  commandId: string = commandOrigin.commandId,
 ): UndoRecord {
-  return { commandId: commandOrigin.commandId, command, instances, events };
+  return { commandId, command, instances, events };
 }
 
 function forgotten(calls: Call[]): string[] {
@@ -202,7 +209,11 @@ describe("undoLastCommand", () => {
 
     const result = undoLastCommand(repo, undoOrigin);
 
-    expect(result).toEqual({ kind: "not-covered", command: "set_rooms" });
+    expect(result).toEqual({
+      kind: "not-covered",
+      command: "set_rooms",
+      next: null,
+    });
     expect(writes()).toEqual([]);
     expect(forgotten(calls)).toContain(commandOrigin.commandId);
     expect(repo.listInstances()).toEqual([wolf]);
@@ -240,7 +251,7 @@ describe("undoLastCommand", () => {
       expect(call.inTransaction, call.method).toBe(true);
     }
     expect(calls.map((c) => c.method)).toContain("setHp");
-    const last = calls.at(-1);
+    const last = calls.filter((c) => c.method !== "latestUndoRecord").at(-1);
     expect(last?.method).toBe("forgetCommands");
     expect([...((last?.args[0] as string[]) ?? [])].sort()).toEqual(
       [commandOrigin.commandId, undoOrigin.commandId].sort(),
@@ -290,6 +301,7 @@ describe("undoLastCommand", () => {
           to: { ...now, maxHp: 20, currentHp: 20 },
         },
       ],
+      next: null,
     });
     expect(repo.listInstances()).toEqual([before]);
   });
@@ -374,6 +386,7 @@ describe("undoLastCommand", () => {
       kind: "undone",
       command: "add_monsters",
       changes: [{ kind: "removed", instance: added }],
+      next: null,
     });
     expect(repo.listInstances()).toEqual([keep]);
   });
@@ -402,6 +415,7 @@ describe("undoLastCommand", () => {
       kind: "undone",
       command: "remove_monsters",
       changes: [{ kind: "restored", instance: wolf }],
+      next: null,
     });
     expect(repo.listInstances()).toEqual([wolf]);
   });
@@ -446,6 +460,7 @@ describe("undoLastCommand", () => {
           instance: expect.objectContaining({ id: "w1" }) as MonsterInstance,
         },
       ],
+      next: null,
     });
     expect(repo.listInstances()).toEqual([]);
   });
@@ -617,6 +632,149 @@ describe("undoLastCommand", () => {
       kind: "undone",
       command: "set_initiative",
       changes: [],
+      next: null,
     });
+  });
+
+  it("undoLastCommand reports as next the newest remaining command with its monsters' current names", () => {
+    const renamedBefore = makeTestInstance({ id: "w2", displayName: "Wolf 2" });
+    const renamed = { ...renamedBefore, displayName: "Alpha" };
+    const goneBefore = makeTestInstance({ id: "w3", displayName: "Wolf 3" });
+    const gone = { ...goneBefore, displayName: "Old Wolf" };
+    const vanished = makeTestInstance({ id: "w4", displayName: "Wolf 4" });
+    const added = makeTestInstance({ id: "w5", displayName: "Wolf 5" });
+    const target = makeTestInstance({
+      id: "w1",
+      displayName: "Wolf 1",
+      armorClass: 12,
+    });
+    const { repo } = fakeRepo({
+      live: [{ ...target, armorClass: 18 }, renamed, added],
+      removed: [gone],
+      records: [
+        record(
+          "reset_max_hp",
+          [
+            { instanceId: "w2", before: renamedBefore },
+            { instanceId: "w3", before: goneBefore },
+            { instanceId: "w4", before: vanished },
+            { instanceId: "w5", before: null },
+          ],
+          [],
+          "cmd-0",
+        ),
+        record(
+          "set_armor_class",
+          [{ instanceId: "w1", before: target }],
+          [
+            {
+              type: "instance-changed",
+              id: "w1",
+              changes: { armorClass: 18 },
+              origin: commandOrigin,
+            },
+          ],
+        ),
+      ],
+    });
+
+    const result = undoLastCommand(repo, undoOrigin);
+
+    expect(result).toMatchObject({
+      kind: "undone",
+      command: "set_armor_class",
+      next: {
+        command: "reset_max_hp",
+        monsters: ["Alpha", "Old Wolf", "Wolf 4", "Wolf 5"],
+        covered: true,
+      },
+    });
+  });
+
+  it("undoLastCommand reports no next when no command is left", () => {
+    const before = makeTestInstance({ id: "w1", displayName: "Wolf 1" });
+    const { repo } = fakeRepo({
+      live: [{ ...before, initiative: 20 }],
+      record: record(
+        "set_initiative",
+        [{ instanceId: "w1", before }],
+        [
+          {
+            type: "instance-changed",
+            id: "w1",
+            changes: { initiative: 20 },
+            origin: commandOrigin,
+          },
+        ],
+      ),
+    });
+
+    const result = undoLastCommand(repo, undoOrigin);
+
+    expect(result.kind).toBe("undone");
+    expect(result).toHaveProperty("next", null);
+    expect(repo.listInstances()[0]?.initiative).toBe(before.initiative);
+  });
+
+  it("undoLastCommand reports a next map or room change as not covered", () => {
+    const before = makeTestInstance({ id: "w1", displayName: "Wolf 1" });
+    const { repo } = fakeRepo({
+      live: [{ ...before, initiative: 20 }],
+      records: [
+        record("set_rooms", [], [], "cmd-0"),
+        record(
+          "set_initiative",
+          [{ instanceId: "w1", before }],
+          [
+            {
+              type: "instance-changed",
+              id: "w1",
+              changes: { initiative: 20 },
+              origin: commandOrigin,
+            },
+          ],
+        ),
+      ],
+    });
+
+    const result = undoLastCommand(repo, undoOrigin);
+
+    expect(result).toMatchObject({
+      kind: "undone",
+      command: "set_initiative",
+      next: { command: "set_rooms", monsters: [], covered: false },
+    });
+  });
+
+  it("undoLastCommand at a map or room change reports the command before it as next", () => {
+    const before = makeTestInstance({ id: "w1", displayName: "Wolf 1" });
+    const { repo, writes } = fakeRepo({
+      live: [{ ...before, initiative: 20 }],
+      records: [
+        record(
+          "set_initiative",
+          [{ instanceId: "w1", before }],
+          [
+            {
+              type: "instance-changed",
+              id: "w1",
+              changes: { initiative: 20 },
+              origin: { source: "mcp", commandId: "cmd-0" },
+            },
+          ],
+          "cmd-0",
+        ),
+        record("use_map", [], []),
+      ],
+    });
+
+    const result = undoLastCommand(repo, undoOrigin);
+
+    expect(result).toEqual({
+      kind: "not-covered",
+      command: "use_map",
+      next: { command: "set_initiative", monsters: ["Wolf 1"], covered: true },
+    });
+    expect(writes()).toEqual([]);
   });
 });

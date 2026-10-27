@@ -34,6 +34,7 @@ import {
   type TableArtWait,
   type UndoChange,
   type UndoField,
+  type UndoNext,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolContext } from "./context.js";
@@ -65,9 +66,14 @@ export interface ToolDefinition {
   handler(ctx: ToolContext, args: unknown): ToolResult | Promise<ToolResult>;
 }
 
+/**
+ * A successful reply. The text is also the structured content's `summary`, so
+ * a client that forwards only structured content still gets the reply.
+ */
 function ok(text: string, structured?: Record<string, unknown>): ToolResult {
   const result: ToolResult = { content: [{ type: "text", text }] };
-  if (structured) result.structuredContent = structured;
+  // `summary` last, so a tool's own `summary` key can never replace the text.
+  if (structured) result.structuredContent = { ...structured, summary: text };
   return result;
 }
 
@@ -897,33 +903,62 @@ const undoTool = defineTool({
   name: "undo",
   annotations: { destructiveHint: true },
   description:
-    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms) are not undone: when one is the last change, undo says so and changes nothing, and a second undo reverses the encounter change before it.",
+    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
   inputSchema: {},
   run(ctx, _args, origin) {
+    const snapshot = ctx.repo.listInstances();
     const result = undoLastCommand(ctx.repo, origin());
+    const view: UndoView = {
+      before: snapshot,
+      after: ctx.repo.listInstances(),
+      monsterName: (key) => getMonsterByKey(ctx.monsters, key)?.name ?? key,
+    };
     switch (result.kind) {
       case "nothing":
         return ok(
           canRestoreEncounter(ctx.repo)
             ? "Nothing to undo. The last clear_encounter can be brought back with restore_encounter."
             : "Nothing to undo.",
-          { undone: null, changes: [] },
+          {
+            undone: null,
+            notCovered: null,
+            changes: [],
+            kept: [],
+            next: null,
+          },
         );
       case "not-covered":
         return ok(
-          `The last change was ${result.command ?? "a map or room change"}, which undo does not cover; say undo again to reverse the encounter change before it.`,
-          { undone: null, notCovered: result.command, changes: [] },
+          [
+            `The last change was ${result.command ?? "a map or room change"}, which undo does not cover; nothing was changed.`,
+            nextUndoLine(result.next),
+          ].join("\n"),
+          {
+            undone: null,
+            notCovered: result.command,
+            changes: [],
+            kept: [],
+            next: result.next,
+          },
         );
       case "undone": {
         const head = `Undid ${result.command ?? "the last change"}:`;
-        const lines = result.changes.map(undoLine);
-        const text =
+        const lines = result.changes.map((change) => undoLine(change, view));
+        const body =
           lines.length === 0
             ? `${head} nothing had changed.`
             : lines.length === 1
               ? `${head} ${lines[0] ?? ""}`
               : [head, ...lines].join("\n");
-        return ok(text, { undone: result.command, changes: result.changes });
+        return ok([body, nextUndoLine(result.next)].join("\n"), {
+          undone: result.command,
+          notCovered: null,
+          changes: result.changes.flatMap((change) =>
+            fieldChanges(change, view),
+          ),
+          kept: result.changes.flatMap(keptFields),
+          next: result.next,
+        });
       }
     }
   },
@@ -1248,15 +1283,221 @@ function typeChangeLine(from: MonsterInstance, to: MonsterInstance): string {
   return `${from.displayName} -> ${to.displayName}: HP ${String(from.currentHp)}/${String(from.maxHp)} -> ${String(to.currentHp)}/${String(to.maxHp)}, AC ${orNone(from.armorClass)} -> ${orNone(to.armorClass)}, initiative ${orNone(from.initiative)} -> ${orNone(to.initiative)}`;
 }
 
+/** A value an undo change writes back: a name, a number, a flag, the names of a group's other members, or none. */
+type UndoValue = string | number | boolean | string[] | null;
+
+/** One field an undo wrote back: the monster's name after the undo, and the field's value before and after it. */
+interface UndoFieldChange {
+  monster: string;
+  field: string;
+  before: UndoValue;
+  after: UndoValue;
+}
+
+/** One field an undo left alone, and why. */
+interface UndoKept {
+  monster: string;
+  field: UndoField;
+  reason: string;
+}
+
+/** The encounter an undo reply reads against: before the undo, after it, and monster names by key. */
+interface UndoView {
+  before: readonly MonsterInstance[];
+  after: readonly MonsterInstance[];
+  monsterName: (key: string) => string;
+}
+
+/** The names of the instances in `list` other than `id` that share `groupId`, in list order; none for no group. */
+function groupNames(
+  list: readonly MonsterInstance[],
+  id: string,
+  groupId: string | null,
+): string[] {
+  if (groupId === null) return [];
+  return list
+    .filter((i) => i.id !== id && i.groupId === groupId)
+    .map((i) => i.displayName);
+}
+
+/**
+ * The other members of `groupId` before the undo, named as they are after it
+ * (a member the undo removed keeps its name from before).
+ */
+function groupNamesBefore(
+  view: UndoView,
+  id: string,
+  groupId: string | null,
+): string[] {
+  if (groupId === null) return [];
+  return view.before
+    .filter((i) => i.id !== id && i.groupId === groupId)
+    .map(
+      (i) =>
+        view.after.find((a) => a.id === i.id)?.displayName ?? i.displayName,
+    );
+}
+
+/** The fields one undo change wrote back, with their values before and after. */
+function fieldChanges(change: UndoChange, view: UndoView): UndoFieldChange[] {
+  switch (change.kind) {
+    case "removed":
+      return [
+        {
+          monster: change.instance.displayName,
+          field: "existence",
+          before: "in the encounter",
+          after: "removed",
+        },
+      ];
+    case "restored":
+      return [
+        {
+          monster: change.instance.displayName,
+          field: "existence",
+          before: "removed",
+          after: "in the encounter",
+        },
+      ];
+    case "reverted":
+      return revertedFields(change.from, change.to, change.field, view);
+    case "kept-table":
+    case "kept-no-value":
+      return [];
+  }
+}
+
+/**
+ * The entries for one reverted field. A type change expands into the type and
+ * the values it carries (name, max HP, HP, AC, initiative), each only when it
+ * differs; HP is split into max HP and current HP the same way.
+ */
+function revertedFields(
+  from: MonsterInstance,
+  to: MonsterInstance,
+  field: Exclude<UndoField, "existence">,
+  view: UndoView,
+): UndoFieldChange[] {
+  const monster = to.displayName;
+  const entry = (
+    fieldName: string,
+    before: UndoValue,
+    after: UndoValue,
+  ): UndoFieldChange[] => [{ monster, field: fieldName, before, after }];
+  const type = (): UndoFieldChange[] =>
+    from.monsterKey === to.monsterKey
+      ? []
+      : entry(
+          "type",
+          view.monsterName(from.monsterKey),
+          view.monsterName(to.monsterKey),
+        );
+  const name = (): UndoFieldChange[] =>
+    from.displayName === to.displayName
+      ? []
+      : entry("name", from.displayName, to.displayName);
+  const maxHp = (): UndoFieldChange[] =>
+    from.maxHp === to.maxHp ? [] : entry("maxHp", from.maxHp, to.maxHp);
+  const hp = (): UndoFieldChange[] =>
+    from.currentHp === to.currentHp
+      ? []
+      : entry("hp", from.currentHp, to.currentHp);
+  const armorClass = (): UndoFieldChange[] =>
+    from.armorClass === to.armorClass
+      ? []
+      : entry("armorClass", from.armorClass, to.armorClass);
+  const initiative = (): UndoFieldChange[] =>
+    from.initiative === to.initiative
+      ? []
+      : entry("initiative", from.initiative, to.initiative);
+  switch (field) {
+    case "type":
+      return [
+        ...type(),
+        ...name(),
+        ...maxHp(),
+        ...hp(),
+        ...armorClass(),
+        ...initiative(),
+      ];
+    case "name":
+      return name();
+    case "hp":
+      return [...maxHp(), ...hp()];
+    case "armorClass":
+      return armorClass();
+    case "initiative":
+      return initiative();
+    case "group":
+      return from.groupId === to.groupId
+        ? []
+        : entry(
+            "group",
+            groupNamesBefore(view, from.id, from.groupId),
+            groupNames(view.after, to.id, to.groupId),
+          );
+    case "statsVisible":
+      return from.statsVisible === to.statsVisible
+        ? []
+        : entry("statsVisible", from.statsVisible, to.statsVisible);
+    case "position":
+      return entry("position", "moved", "moved back");
+  }
+}
+
+/** The fields one undo change left alone, each with its reason. */
+function keptFields(change: UndoChange): UndoKept[] {
+  switch (change.kind) {
+    case "removed":
+    case "restored":
+    case "reverted":
+      return [];
+    case "kept-table":
+      return [
+        {
+          monster: change.instance.displayName,
+          field: change.field,
+          reason:
+            change.field === "existence"
+              ? "removed at the table"
+              : "changed at the table",
+        },
+      ];
+    case "kept-no-value":
+      return [
+        {
+          monster: change.instance.displayName,
+          field: change.field,
+          reason: "no earlier value",
+        },
+      ];
+  }
+}
+
+/** The last line of an undo reply: what the next undo would reverse, or that nothing is left. */
+function nextUndoLine(next: UndoNext | null): string {
+  if (next === null) return "Nothing left to undo.";
+  if (!next.covered) {
+    return `Next undo would reach ${next.command ?? "a map or room change"}, which it does not cover.`;
+  }
+  const command = next.command ?? "an earlier change";
+  if (next.monsters.length === 0) return `Next undo would reverse ${command}.`;
+  const names =
+    next.monsters.length > 5
+      ? `${String(next.monsters.length)} monsters`
+      : next.monsters.join(", ");
+  return `Next undo would reverse ${command}: ${names}.`;
+}
+
 /** The undo reply line for one change; names are the display names after the undo. */
-function undoLine(change: UndoChange): string {
+function undoLine(change: UndoChange, view: UndoView): string {
   switch (change.kind) {
     case "removed":
       return `${change.instance.displayName} removed`;
     case "restored":
       return `${change.instance.displayName} restored`;
     case "reverted":
-      return revertedLine(change.field, change.from, change.to);
+      return revertedLine(change.field, change.from, change.to, view);
     case "kept-table":
       return keptTableLine(change.field, change.instance);
     case "kept-no-value": {
@@ -1277,6 +1518,7 @@ function revertedLine(
   field: Exclude<UndoField, "existence">,
   from: MonsterInstance,
   to: MonsterInstance,
+  view: UndoView,
 ): string {
   const name = to.displayName;
   switch (field) {
@@ -1292,8 +1534,12 @@ function revertedLine(
       return `${name} AC ${orNone(from.armorClass)} -> ${orNone(to.armorClass)}`;
     case "initiative":
       return `${name} initiative ${orNone(from.initiative)} -> ${orNone(to.initiative)}`;
-    case "group":
-      return `${name} back in its earlier initiative group`;
+    case "group": {
+      const members = groupNames(view.after, to.id, to.groupId);
+      const alone =
+        members.length === 0 ? "on its own" : `with ${members.join(", ")}`;
+      return `${name} back in its earlier initiative group, ${alone}`;
+    }
     case "statsVisible":
       return to.statsVisible
         ? `${name} stats revealed to players`

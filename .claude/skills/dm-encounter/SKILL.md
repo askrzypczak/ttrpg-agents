@@ -7,6 +7,8 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `table_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
+Each tool's reply lines come back as the `summary` of its result (the same lines as its text); "relay the tool's line" below means a line of that summary, copied as it is.
+
 ## Fewest calls
 
 - One `add_monsters` call for the whole sentence: "3 shadows and 2 wolves" is one call with two `groups`.
@@ -161,8 +163,8 @@ Removed monsters stay restorable until the next `clear_encounter` that clears mo
 
 - "Undo that", "take that back" or "undo the last change" is ONE `undo` call (no arguments). It reverses the agent's last encounter change; saying it again goes one change further back. Do not reverse the change yourself with `heal`, `set_hp` or another tool.
 - After a `clear_encounter`, use `restore_encounter` as above; `undo` does not reach past a clear.
-- After a map or room change (`use_map`, `set_rooms`, `remove_rooms`), `undo` says it does not cover it and changes nothing. Relay that, and call `undo` again only when the DM wants the encounter change before it.
-- Relay the tool's reply verbatim (for example "Undid apply_damage: Goblin Warrior 2 HP 0 -> 7/7"), including any value it left as set at the table.
+- After a map or room change (`use_map`, `set_rooms`, `remove_rooms`), `undo` says it does not cover it, changes nothing and names what the next undo would reach. Relay that, and call `undo` again only when the DM wants that change undone.
+- Relay the tool's reply verbatim, including any value it left as set at the table and its last line, which says what the next undo would reverse (for example "Undid apply_damage: Goblin Warrior 2 HP 0 -> 7/7" then "Next undo would reverse add_monsters: Goblin Warrior 1, Goblin Warrior 2, Goblin Warrior 3.").
 
 ## Correcting a monster's type
 

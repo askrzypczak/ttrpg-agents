@@ -35,10 +35,25 @@ export type UndoChange =
       instance: MonsterInstance;
     };
 
+/** What the next undo would reach: the newest remaining undo record. */
+export interface UndoNext {
+  /** The command's name (the MCP tool), or null when it had none. */
+  command: string | null;
+  /** The current names of the record's monsters, in record order. */
+  monsters: string[];
+  /** False for a map or room change, which undo does not reverse. */
+  covered: boolean;
+}
+
 export type UndoResult =
   | { kind: "nothing" }
-  | { kind: "not-covered"; command: string | null }
-  | { kind: "undone"; command: string | null; changes: UndoChange[] };
+  | { kind: "not-covered"; command: string | null; next: UndoNext | null }
+  | {
+      kind: "undone";
+      command: string | null;
+      changes: UndoChange[];
+      next: UndoNext | null;
+    };
 
 type ValueField = Exclude<UndoField, "existence">;
 
@@ -335,6 +350,28 @@ function revertFields(
 }
 
 /**
+ * What the next undo would reach, read after the undone command is forgotten.
+ * Each recorded monster is named as it is now: live, else removed, else as it
+ * was before the command; one with no name at all is left out.
+ */
+function nextUndo(repo: EncounterRepository): UndoNext | null {
+  const record = repo.latestUndoRecord();
+  if (record === undefined) return null;
+  const live = repo.listInstances();
+  const monsters = record.instances.flatMap(({ instanceId: id, before }) => {
+    const name =
+      live.find((i) => i.id === id)?.displayName ??
+      removedInstance(repo, id, before)?.displayName;
+    return name === undefined ? [] : [name];
+  });
+  return {
+    command: record.command,
+    covered: record.instances.length > 0,
+    monsters,
+  };
+}
+
+/**
  * Reverses the active encounter's newest undo record in one repository
  * transaction, writing under `origin`, then forgets the undone command and the
  * undo's own command.
@@ -347,6 +384,9 @@ function revertFields(
  * written back to its value before the command, unless the table changed it
  * since (`kept-table`), it already has that value (no change), or that value
  * was none and cannot be written (`kept-no-value`).
+ *
+ * The `not-covered` and `undone` results carry `next`: what the next undo would
+ * reach, read after this undo's forget, or null when no undo record is left.
  */
 export function undoLastCommand(
   repo: EncounterRepository,
@@ -357,7 +397,11 @@ export function undoLastCommand(
     if (record === undefined) return { kind: "nothing" };
     if (record.instances.length === 0) {
       repo.forgetCommands([record.commandId]);
-      return { kind: "not-covered", command: record.command };
+      return {
+        kind: "not-covered",
+        command: record.command,
+        next: nextUndo(repo),
+      };
     }
     const scope: UndoScope = {
       repo,
@@ -372,6 +416,11 @@ export function undoLastCommand(
       undoInstance(scope, entry),
     );
     repo.forgetCommands([record.commandId, origin.commandId]);
-    return { kind: "undone", command: record.command, changes };
+    return {
+      kind: "undone",
+      command: record.command,
+      changes,
+      next: nextUndo(repo),
+    };
   });
 }

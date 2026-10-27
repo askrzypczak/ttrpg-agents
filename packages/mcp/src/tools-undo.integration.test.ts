@@ -26,7 +26,7 @@ const GOBLIN = "srd-2024_goblin-warrior";
 const table: ChangeOrigin = { source: "table", commandId: "table" };
 
 const NOT_COVERED = (tool: string): string =>
-  `The last change was ${tool}, which undo does not cover; say undo again to reverse the encounter change before it.`;
+  `The last change was ${tool}, which undo does not cover; nothing was changed.`;
 
 /** Trollskull Manor: 3000x4000 px at 125 dpi on a 150-unit grid, rotated 270 (32 x 24 cells). */
 const trollskull: TableMapItem = {
@@ -269,7 +269,9 @@ describe("undo", () => {
     const r = await ok("undo");
 
     expect(byName("Wolf 1").currentHp).toBe(11);
-    expect(text(r)).toBe("Undid apply_damage: Wolf 1 HP 7 -> 11/11");
+    expect(text(r)).toBe(
+      "Undid apply_damage: Wolf 1 HP 7 -> 11/11\nNothing left to undo.",
+    );
     expect(r.structuredContent).toMatchObject({ undone: "apply_damage" });
     expect(r.structuredContent?.["changes"]).toHaveLength(1);
   });
@@ -497,7 +499,7 @@ describe("undo", () => {
     expect(byName("Wolf 1")).toMatchObject({ armorClass: 12, currentHp: 11 });
   });
 
-  it("undo after use_map, set_rooms or remove_rooms says the change is not covered and changes nothing, and a second undo reverses the encounter command before it", async () => {
+  it("undo after use_map, set_rooms or remove_rooms says the change is not covered and changes nothing, and the next undo reaches the encounter change before it", async () => {
     seed(wolf("Wolf 1"));
     const mapCalls: [string, unknown][] = [
       ["use_map", {}],
@@ -511,7 +513,12 @@ describe("undo", () => {
       const active = ctx.maps.getActiveMap();
 
       const notCovered = await ok("undo");
-      expect(text(notCovered), tool).toBe(NOT_COVERED(tool));
+      expect(text(notCovered), tool).toBe(
+        [
+          NOT_COVERED(tool),
+          "Next undo would reverse apply_damage: Wolf 1.",
+        ].join("\n"),
+      );
       expect(byName("Wolf 1").currentHp, tool).toBe(7);
       expect(ctx.maps.getRooms("map-1"), tool).toEqual(rooms);
       expect(ctx.maps.getActiveMap(), tool).toEqual(active);
@@ -533,7 +540,15 @@ describe("undo", () => {
     expect(text(r)).toBe(
       "Nothing to undo. The last clear_encounter can be brought back with restore_encounter.",
     );
-    expect(r.structuredContent).toEqual({ undone: null, changes: [] });
+    expect(r.structuredContent).toEqual({
+      undone: null,
+      notCovered: null,
+      changes: [],
+      kept: [],
+      next: null,
+      summary:
+        "Nothing to undo. The last clear_encounter can be brought back with restore_encounter.",
+    });
     expect(names()).toEqual([]);
     expect(ctx.repo.listRemovedInstances()).toEqual(removed);
   });

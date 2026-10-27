@@ -930,6 +930,7 @@ describe("table_status", () => {
     expect(out).not.toMatch(/out of sync|not in sync/i);
     expect(out).toMatch(/\b3\b/);
     expect(r.structuredContent).toEqual({
+      summary: out,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1070,6 +1071,8 @@ describe("table_status", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: true,
+      summary:
+        "Owlbear is in sync: scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
     });
   });
 });
