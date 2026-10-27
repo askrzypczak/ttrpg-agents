@@ -75,3 +75,4 @@ Dispatch, label setup (`setup-labels.sh`) and close-time label cleanup now live 
 - One commit per layer, contract commit first; no squashing before review.
 - Adapter tests prove translation only and do not re-test engine rules.
 - A plan whose Interfaces touch five or more packages is split into a prerequisite ticket and a feature ticket at the plan gate.
+- Rule pages (`docs/*.md`, the READMEs) state current rules in prose blocks of at most 1,000 characters (`scripts/docs.test.ts`); ticket history goes in the decision log. See `docs/reviewing.md`, section 6.
