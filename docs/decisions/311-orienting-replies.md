@@ -26,14 +26,14 @@ Issue: [#311](https://github.com/askrzypczak/ttrpg-agents/issues/311).
     - `group` is the names of the other members before and after (`[]` means on its own).
     - `position` is the words "moved" and "moved back".
 
-    `kept` holds `{ monster, field, reason }` for what undo left alone ("changed at the table", "removed at the table", "no earlier value"), with the engine's field name: an HP the table changed stays `hp`, not split, since the engine does not tell the table's max HP edit from its current HP edit (contract-writer). Group members are listed in encounter order. `next` is the engine's `UndoNext`.
+    `kept` holds `{ monster, field, reason }` for what undo left alone ("changed at the table", "removed at the table", "no earlier value"), with the engine's field name (an HP the table changed: see 311.5). Group members are listed in encounter order. `next` is the engine's `UndoNext`.
 
   - Group ids as the group's before and after: opaque to the agent.
   - Spawn coordinates as the position's before and after: excluded by the ticket, and cells would need the live map.
   - No structured content for `undo`: inconsistent with 311.1.
 - Where: `undoTool` and its view helpers in `packages/mcp/src/tools.ts`.
-- Supersedes: 283.12
 - Status: active
+- Supersedes: 283.12
 
 ## 311.3 The engine reports what the next undo would reach: `UndoResult.next`
 
@@ -53,5 +53,15 @@ Issue: [#311](https://github.com/askrzypczak/ttrpg-agents/issues/311).
   - Chosen: the barrier stays as 283.6 decided (`noteCommand`, `not-covered`, forgotten without a write). The reply is "The last change was <tool>, which undo does not cover; nothing was changed." followed by the next-undo line.
   - Keep 283.6's sentence and append the next-undo line: the reply would contradict itself when nothing is left.
 - Where: `undoTool` (`packages/mcp/src/tools.ts`); `.claude/skills/dm-encounter/SKILL.md` (Undoing the last change).
+- Status: active
 - Supersedes: 283.6
+
+## 311.5 An HP that the table changed since is one `kept` entry with field `hp`, not split into max HP and HP
+
+- Decided by: epic #280 orchestrator, 2026-10-26, PR review (the choice was first made in the contract tests); not human-approved.
+- Context: 311.2 splits a written-back HP into `maxHp` and `hp` entries. The engine reports an HP the table changed since the command as one `kept-table` change for its `hp` field, which covers both values.
+- Options:
+  - Chosen: one `kept` entry `{ monster, field: "hp", reason: "changed at the table" }`; the summary line gives both values ("HP 5/11 left as set at the table").
+  - Two entries, `maxHp` and `hp`: the engine does not say which of the two the table changed, so one of them would be reported as kept without having changed.
+- Where: `keptFields` in `packages/mcp/src/tools.ts`.
 - Status: active
