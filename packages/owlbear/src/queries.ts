@@ -62,6 +62,7 @@ export async function handleQuery(
           sceneReady,
           tokenCount,
           appliedInstanceCount: sync.appliedInstanceCount(),
+          artWaits: sync.artWaits(),
         },
       };
     }

@@ -51,10 +51,7 @@ export function restoreEncounter(
   deps: RestoreMonstersDeps,
   origin: ChangeOrigin,
 ): RestoredMonster[] {
-  const cleared = deps.repo
-    .listRemovedInstances()
-    .filter((r) => r.cleared)
-    .map((r) => r.instance);
+  const cleared = clearedNotRestored(deps.repo);
   if (cleared.length === 0) {
     throw new RestoreMonstersError(
       "nothing_cleared",
@@ -71,8 +68,17 @@ export function restoreEncounter(
 export function canRestoreEncounter(
   repo: Pick<EncounterRepository, "listRemovedInstances">,
 ): boolean {
-  void repo;
-  throw new Error("not implemented");
+  return clearedNotRestored(repo).length > 0;
+}
+
+/** The last clear's instances not restored since, in creation order. */
+function clearedNotRestored(
+  repo: Pick<EncounterRepository, "listRemovedInstances">,
+): MonsterInstance[] {
+  return repo
+    .listRemovedInstances()
+    .filter((r) => r.cleared)
+    .map((r) => r.instance);
 }
 
 /**

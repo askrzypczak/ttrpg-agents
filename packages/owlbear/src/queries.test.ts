@@ -315,7 +315,12 @@ describe("queryReply", () => {
   it("`queryReply` carries the query's id and result", () => {
     const result: QueryResult = {
       name: "scene-status",
-      result: { sceneReady: true, tokenCount: 4, appliedInstanceCount: 4 },
+      result: {
+        sceneReady: true,
+        tokenCount: 4,
+        appliedInstanceCount: 4,
+        artWaits: [],
+      },
     };
     expect(queryReply("c7", result)).toEqual({
       v: PROTOCOL_VERSION,

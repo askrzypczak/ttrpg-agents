@@ -5,7 +5,7 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `table_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 ## Fewest calls
 
@@ -84,6 +84,12 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 2. When a group had a room, the tool's "Placed in ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present; after a room was proposed live, also the one-line guess (see Proposing rooms).
 3. The statblock, once per NEW monster type: call `get_statblock` for each monster key newly added in this sentence that is not already in the encounter and has not been shown earlier in the conversation. `add_monsters` does not return a statblock. Do not fetch it again when adding more of a type that is already present.
 4. No extra commentary beyond the one-line notes above.
+
+## Token art waiting on the GM
+
+- After `restore_encounter` or `add_monsters`, when tokens are expected on the Owlbear table, call `table_status` once.
+- If it reports token art waiting on the GM, tell the DM in one line exactly what to click: relay its line verbatim (for example "Art for Wolf needs re-uploading: click Re-upload next to it in the extension panel, then Pick the uploaded image.").
+- Do not retry the restore or the add: the monsters are in the encounter, and their tokens are circles or wait for the GM's pick.
 
 ## Previewing an add
 

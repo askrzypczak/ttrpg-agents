@@ -31,7 +31,12 @@ describe("createBridgeTable", () => {
       ok: true,
       result: {
         name: "scene-status",
-        result: { sceneReady: true, tokenCount: 4, appliedInstanceCount: 3 },
+        result: {
+          sceneReady: true,
+          tokenCount: 4,
+          appliedInstanceCount: 3,
+          artWaits: [],
+        },
       },
     });
     const status = await createBridgeTable(client).sceneStatus();
@@ -150,7 +155,12 @@ describe("createBridgeTable", () => {
       ok: true,
       result: {
         name: "scene-status",
-        result: { sceneReady: true, tokenCount: 1, appliedInstanceCount: 1 },
+        result: {
+          sceneReady: true,
+          tokenCount: 1,
+          appliedInstanceCount: 1,
+          artWaits: [],
+        },
       },
     });
     let caught: unknown;
@@ -199,7 +209,12 @@ describe("createBridgeTable", () => {
     for (const result of [
       {
         name: "scene-status" as const,
-        result: { sceneReady: true, tokenCount: 1, appliedInstanceCount: 1 },
+        result: {
+          sceneReady: true,
+          tokenCount: 1,
+          appliedInstanceCount: 1,
+          artWaits: [],
+        },
       },
       {
         name: "scene-map" as const,

@@ -428,9 +428,9 @@ describe("createEncounterSync token replacement", () => {
     expect(late.log.indexOf(`note: ${replacedNote}`)).toBe(lateDeleted + 1);
   });
 
-  it("a circle token changed to a type whose stored art's url is gone has the art republished before it is replaced with an image", async () => {
+  it("a circle token changed to a type whose stored art's url is gone stays a circle, redrawn in place at the new footprint, and the type is listed for re-upload with no upload or picker", async () => {
     const ORC_SHA = "d4".repeat(32);
-    /** What the GM picks after the stored orc image is uploaded again. */
+    /** What the picker would answer, were it opened for the orc. */
     const picked: PublishedTokenArt = {
       url: "https://cdn.owlbear.rodeo/assets/ttrpg-art-d4d4d4d4d4d4d4d4.png",
       mime: "image/png",
@@ -448,7 +448,7 @@ describe("createEncounterSync token replacement", () => {
     let pickCalls = 0;
     const s = setup({
       imageAlive: false,
-      // The wolf's picker is cancelled; the republished orc is picked.
+      // The wolf's picker is cancelled; any later one would pick.
       pickImage: () => (pickCalls++ === 0 ? undefined : picked),
       loadImage: (sha256) => {
         loads.push(sha256);
@@ -480,17 +480,20 @@ describe("createEncounterSync token replacement", () => {
     );
     await settle();
 
-    expect(loads).toEqual([ORC_SHA]);
-    expect(s.fake.uploads()).toHaveLength(1);
+    expect(loads).toEqual([]);
+    expect(s.fake.uploads()).toEqual([]);
+    expect(pickCalls).toBe(1);
     expect(s.tokens()).toHaveLength(1);
     expect(s.token()).toMatchObject({
-      id: REPLACEMENT_ID,
-      type: "IMAGE",
+      id: FIRST_ID,
+      type: "SHAPE",
       name: "Orc 1",
-      image: picked,
-      grid: { dpi: 200, offset: { x: 200, y: 100 } },
+      shape: bigCircle,
       position: spawn,
     });
+    expect(s.sync.artWaits()).toEqual([
+      { monsterKey: "orc", monsterName: "Orc", step: "reupload" },
+    ]);
     expect(s.errors).toEqual([]);
   });
 });

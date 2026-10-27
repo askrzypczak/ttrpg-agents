@@ -104,10 +104,9 @@ export function createBridgeTable(
         throw new TableUnavailableError(
           `the table answered "${res.result.name}" to a "scene-status" query`,
         );
-      const { sceneReady, tokenCount, appliedInstanceCount } =
+      const { sceneReady, tokenCount, appliedInstanceCount, artWaits } =
         res.result.result;
-      // Contract stub: the art waits are not passed through yet.
-      return { sceneReady, tokenCount, appliedInstanceCount, artWaits: [] };
+      return { sceneReady, tokenCount, appliedInstanceCount, artWaits };
     },
     async sceneMap() {
       const res = await client.query({ name: "scene-map" });

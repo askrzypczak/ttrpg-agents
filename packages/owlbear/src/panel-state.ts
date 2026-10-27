@@ -117,7 +117,35 @@ export function panelView(input: PanelInput): PanelView {
     ...(input.overrides && input.overrides.length > 0
       ? { overrides: [...input.overrides] }
       : {}),
+    ...(input.artStep ? { prompt: artStepPrompt(input.artStep) } : {}),
+    ...(input.reuploads && input.reuploads.length > 0
+      ? { reuploads: reuploadRows(input.reuploads) }
+      : {}),
   };
+}
+
+/** What the GM is told while a fresh image picker is open. */
+function artStepPrompt({ monsterName, index, total }: ArtStep): string {
+  return `Art ${String(index)} of ${String(total)}: choose the token art for ${monsterName} in Owlbear's image picker, or cancel it to use circles.`;
+}
+
+/**
+ * One row per type to re-upload: its name and place in the list and, once
+ * its bytes were uploaded, what the GM does next and the pick it offers.
+ */
+function reuploadRows(
+  reuploads: readonly Reupload[],
+): NonNullable<PanelView["reuploads"]> {
+  return reuploads.map((row, i) => ({
+    monsterKey: row.monsterKey,
+    label: `${row.monsterName} (${String(i + 1)} of ${String(reuploads.length)})`,
+    ...(row.uploaded
+      ? {
+          hint: `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${row.assetName}.`,
+        }
+      : {}),
+    canPick: row.uploaded,
+  }));
 }
 
 function connectionView(input: PanelInput): PanelView {

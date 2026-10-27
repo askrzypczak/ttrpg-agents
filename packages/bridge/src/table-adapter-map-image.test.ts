@@ -68,7 +68,12 @@ describe("createBridgeTable mapImage", () => {
       ok: true,
       result: {
         name: "scene-status",
-        result: { sceneReady: true, tokenCount: 1, appliedInstanceCount: 1 },
+        result: {
+          sceneReady: true,
+          tokenCount: 1,
+          appliedInstanceCount: 1,
+          artWaits: [],
+        },
       },
     });
     const caught = await rejection(createBridgeTable(client).mapImage("m"));

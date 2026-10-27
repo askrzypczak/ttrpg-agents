@@ -113,7 +113,12 @@ async function extension(): Promise<{
 
 const statusResult = (n: number) => ({
   name: "scene-status" as const,
-  result: { sceneReady: true, tokenCount: n, appliedInstanceCount: n },
+  result: {
+    sceneReady: true,
+    tokenCount: n,
+    appliedInstanceCount: n,
+    artWaits: [],
+  },
 });
 
 describe("body cap", () => {

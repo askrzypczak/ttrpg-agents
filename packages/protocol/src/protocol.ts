@@ -97,10 +97,22 @@ export const querySchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("map-image"), itemId: z.string().min(1) }),
 ]);
 
+/**
+ * A monster type whose tokens wait on the GM for art: its fresh image picker
+ * is open or still to open (`pick`), or its stored art needs re-uploading
+ * from the panel (`reupload`).
+ */
+const artWaitSchema = z.object({
+  monsterKey: z.string().min(1),
+  monsterName: z.string().min(1),
+  step: z.enum(["pick", "reupload"]),
+});
+
 export const sceneStatusSchema = z.object({
   sceneReady: z.boolean(),
   tokenCount: z.number().int().min(0),
   appliedInstanceCount: z.number().int().min(0),
+  artWaits: z.array(artWaitSchema).default([]),
 });
 
 const vec2 = z.object({ x: z.number(), y: z.number() });
