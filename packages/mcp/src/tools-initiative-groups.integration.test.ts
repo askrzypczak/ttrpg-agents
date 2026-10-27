@@ -134,6 +134,7 @@ describe("split_initiative", () => {
       14,
     ]);
     expect(r.structuredContent).toEqual({
+      summary: text(r),
       instances: [
         { ...view(after1), before: 14 },
         { ...view(after2), before: null },
@@ -210,6 +211,7 @@ describe("merge_initiative", () => {
       ["Wolf 3", 14, "pack"],
     ]);
     expect(r.structuredContent).toEqual({
+      summary: text(r),
       instances: [
         { ...view(find("Goblin Warrior 1")), before: 12 },
         { ...view(find("Wolf 1")), before: 14 },

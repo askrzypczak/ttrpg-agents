@@ -221,6 +221,7 @@ describe("room tools", () => {
       "Proposed 2 rooms (not saved): Taproom U6:AA10, U13; Closet A1:B2.",
     );
     expect(r.structuredContent).toEqual({
+      summary: text(r),
       rooms: [
         { name: "Taproom", ranges: ["U6:AA10", "U13"] },
         { name: "Closet", ranges: ["A1:B2"] },

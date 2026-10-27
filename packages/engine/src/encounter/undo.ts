@@ -35,10 +35,25 @@ export type UndoChange =
       instance: MonsterInstance;
     };
 
+/** What the next undo would reach: the newest remaining undo record. */
+export interface UndoNext {
+  /** The command's name (the MCP tool), or null when it had none. */
+  command: string | null;
+  /** The current names of the record's monsters, in record order. */
+  monsters: string[];
+  /** False for a map or room change, which undo does not reverse. */
+  covered: boolean;
+}
+
 export type UndoResult =
   | { kind: "nothing" }
-  | { kind: "not-covered"; command: string | null }
-  | { kind: "undone"; command: string | null; changes: UndoChange[] };
+  | { kind: "not-covered"; command: string | null; next: UndoNext | null }
+  | {
+      kind: "undone";
+      command: string | null;
+      changes: UndoChange[];
+      next: UndoNext | null;
+    };
 
 type ValueField = Exclude<UndoField, "existence">;
 
@@ -334,6 +349,12 @@ function revertFields(
   return changes;
 }
 
+/** What the next undo would reach, read after the undone command is forgotten. */
+function nextUndo(repo: EncounterRepository): UndoNext | null {
+  void repo;
+  throw new Error("not implemented");
+}
+
 /**
  * Reverses the active encounter's newest undo record in one repository
  * transaction, writing under `origin`, then forgets the undone command and the
@@ -357,7 +378,11 @@ export function undoLastCommand(
     if (record === undefined) return { kind: "nothing" };
     if (record.instances.length === 0) {
       repo.forgetCommands([record.commandId]);
-      return { kind: "not-covered", command: record.command };
+      return {
+        kind: "not-covered",
+        command: record.command,
+        next: nextUndo(repo),
+      };
     }
     const scope: UndoScope = {
       repo,
@@ -372,6 +397,11 @@ export function undoLastCommand(
       undoInstance(scope, entry),
     );
     repo.forgetCommands([record.commandId, origin.commandId]);
-    return { kind: "undone", command: record.command, changes };
+    return {
+      kind: "undone",
+      command: record.command,
+      changes,
+      next: nextUndo(repo),
+    };
   });
 }

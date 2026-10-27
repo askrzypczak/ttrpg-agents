@@ -101,6 +101,7 @@ describe("restore_monsters", () => {
       "Restored 2: Wolf 2 (5/11 HP), Goblin Warrior 4 (7/7 HP, was Goblin Warrior 1)",
     );
     expect(r.structuredContent).toEqual({
+      summary: text(r),
       restored: [
         {
           id: wolf2.id,

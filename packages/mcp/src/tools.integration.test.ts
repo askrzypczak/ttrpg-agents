@@ -929,6 +929,7 @@ describe("table_status", () => {
     expect(out).not.toMatch(/out of sync|not in sync/i);
     expect(out).toMatch(/\b3\b/);
     expect(r.structuredContent).toEqual({
+      summary: out,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,

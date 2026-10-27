@@ -135,7 +135,11 @@ describe("clear_encounter", () => {
     expect(text(r)).toBe(
       "The encounter is already empty; nothing was cleared.",
     );
-    expect(r.structuredContent).toEqual({ removed: 0, cleared: [] });
+    expect(r.structuredContent).toEqual({
+      summary: "The encounter is already empty; nothing was cleared.",
+      removed: 0,
+      cleared: [],
+    });
     expect(restorable()).toEqual([
       ["Wolf 1", true],
       ["Wolf 2", true],
