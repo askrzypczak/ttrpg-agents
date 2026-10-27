@@ -349,10 +349,26 @@ function revertFields(
   return changes;
 }
 
-/** What the next undo would reach, read after the undone command is forgotten. */
+/**
+ * What the next undo would reach, read after the undone command is forgotten.
+ * Each recorded monster is named as it is now: live, else removed, else as it
+ * was before the command; one with no name at all is left out.
+ */
 function nextUndo(repo: EncounterRepository): UndoNext | null {
-  void repo;
-  throw new Error("not implemented");
+  const record = repo.latestUndoRecord();
+  if (record === undefined) return null;
+  const live = repo.listInstances();
+  const monsters = record.instances.flatMap(({ instanceId: id, before }) => {
+    const name =
+      live.find((i) => i.id === id)?.displayName ??
+      removedInstance(repo, id, before)?.displayName;
+    return name === undefined ? [] : [name];
+  });
+  return {
+    command: record.command,
+    covered: record.instances.length > 0,
+    monsters,
+  };
 }
 
 /**
@@ -368,6 +384,9 @@ function nextUndo(repo: EncounterRepository): UndoNext | null {
  * written back to its value before the command, unless the table changed it
  * since (`kept-table`), it already has that value (no change), or that value
  * was none and cannot be written (`kept-no-value`).
+ *
+ * The `not-covered` and `undone` results carry `next`: what the next undo would
+ * reach, read after this undo's forget, or null when no undo record is left.
  */
 export function undoLastCommand(
   repo: EncounterRepository,
