@@ -44,4 +44,4 @@ Issue: [#223](https://github.com/askrzypczak/ttrpg-agents/issues/223).
   - Draw URL-less art from the bridge's `GET /token-images/<sha256>`: works for the GM only (spike #182, answer 2).
 - Where: `usableArt`, `checkStoredArt` and the fresh-pick loop in `apply` (`packages/owlbear/src/encounter-sync.ts`); `planSync`, `SyncConfig.tokenKind` (`packages/owlbear/src/sync-plan.ts`).
 - Revisit if: art can change from another source during a session (#221 import while the extension runs): a type picked, checked for liveness, published or declined this session is not checked again, so art without a url arriving later for it stays circles until reload.
-- Status: active
+- Status: superseded by 310.3
