@@ -111,7 +111,7 @@ describe("get_map_image", () => {
       name: "Trollskull Manor",
       cols: 32,
       rows: 24,
-      moved: false,
+      mapMoved: false,
       width: 1600,
       height: 1200,
     });
@@ -132,6 +132,6 @@ describe("get_map_image", () => {
     expect(textBlocks(r)).toEqual([
       `Trollskull Manor: 64 x 48 cells, columns A-BL left to right, rows 1-48 top to bottom, labelled on the image's edges.\n\n${movedLine}`,
     ]);
-    expect(r.structuredContent).toMatchObject({ moved: true });
+    expect(r.structuredContent).toMatchObject({ mapMoved: true });
   });
 });

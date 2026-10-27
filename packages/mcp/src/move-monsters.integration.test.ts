@@ -153,7 +153,7 @@ describe("move_monsters", () => {
     ]);
     const [a, b] = placements.map((p) => p.cell);
     expect([a, b].sort()).toEqual(["A1", "C1"]);
-    expect(r.structuredContent?.["moved"]).toBe(false);
+    expect(r.structuredContent?.["mapMoved"]).toBe(false);
     expect(text(r)).toContain(
       `Moved into Kitchen: Goblin Warrior 1 at ${String(a)}, Goblin Warrior 2 at ${String(b)}.`,
     );

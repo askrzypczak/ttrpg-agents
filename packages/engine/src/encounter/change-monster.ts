@@ -31,6 +31,11 @@ export interface ChangedMonster {
   after: MonsterInstance;
   /** True when its footprint grew. */
   noLongerFits: boolean;
+  /**
+   * The kept d20 roll: the old initiative less the old monster's modifier;
+   * null when the target had no initiative.
+   */
+  initiativeRoll: number | null;
 }
 
 export interface ChangeMonsterTypeResult {
@@ -128,7 +133,12 @@ export function changeMonsterType(
         `Store changed ${String(written.length)} instances, expected ${String(targets.length)}`,
       );
     }
-    return { before, after, noLongerFits: after.footprint > before.footprint };
+    return {
+      before,
+      after,
+      noLongerFits: after.footprint > before.footprint,
+      initiativeRoll: null,
+    };
   });
   return { instances, rolls };
 }
