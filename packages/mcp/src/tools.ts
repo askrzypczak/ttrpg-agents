@@ -70,7 +70,8 @@ export interface ToolDefinition {
  */
 function ok(text: string, structured?: Record<string, unknown>): ToolResult {
   const result: ToolResult = { content: [{ type: "text", text }] };
-  if (structured) result.structuredContent = { summary: text, ...structured };
+  // `summary` last, so a tool's own `summary` key can never replace the text.
+  if (structured) result.structuredContent = { ...structured, summary: text };
   return result;
 }
 

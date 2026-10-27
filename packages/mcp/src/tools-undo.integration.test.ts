@@ -499,7 +499,7 @@ describe("undo", () => {
     expect(byName("Wolf 1")).toMatchObject({ armorClass: 12, currentHp: 11 });
   });
 
-  it("undo after use_map, set_rooms or remove_rooms says the change is not covered and changes nothing, and a second undo reverses the encounter command before it", async () => {
+  it("undo after use_map, set_rooms or remove_rooms says the change is not covered and changes nothing, and the next undo reaches the encounter change before it", async () => {
     seed(wolf("Wolf 1"));
     const mapCalls: [string, unknown][] = [
       ["use_map", {}],
