@@ -71,11 +71,12 @@ Issue: [#306](https://github.com/askrzypczak/ttrpg-agents/issues/306).
 
 ## 306.7 A fallback slot may change on the retry of a failed reconcile; accepted as a limitation
 
-- Decided by: work-ticket orchestrator (the #306 session of the epic #280 run), 2026-10-26, review round 1 (overrides a reviewer blocker); not human-approved.
+- Decided by: work-ticket orchestrator (the #306 session of the epic #280 run), 2026-10-26, review round 1 (overrides a reviewer blocker); not human-approved. Kept as accepted for now, with its options and revisit target corrected, by the epic #280 orchestrator, 2026-10-26, PR review; not human-approved.
 - Context: the reviewer found that the fallback slot (306.4) is not stable across a retry. A reconcile that writes the move and then fails before the synced record is written plans the slot again on the retry. When the row's new tokens now exist, or the viewport moved during the backoff, the slot differs, so the token moves a second time and the move note says it had been moved on the table. Moves to a spawn position and moves back to a recorded previous position have a fixed target and are not affected.
 - Options:
   - Chosen: accept it and say so in `planSync`'s doc. It needs the fallback path (a token with no previous position: created before 306.3, or a monster added and moved before the extension saw either), a write failure between the move and the record in the same reconcile, and a changed row or viewport. The cost is a second move within the default row and a misleading note.
-  - Record the slot as `previousPosition` first and move on the next reconcile, so the target is fixed: the sync ignores item changes caused by its own writes, so the next reconcile would wait for an unrelated change unless the sync triggers one itself. That is a new trigger and a contract amendment for a rare case.
+  - Write `previousPosition: <slot>` as a pre-move marker in the same reconcile, before the move, the way `plan.replace` writes its marker before the add: a failure after the marker leaves a fixed point that the move-back rule (306.3) already handles, with no second slot and no false note. The cheapest fix; not taken in this PR.
+  - Record the slot as `previousPosition` and move on the next reconcile: the sync ignores item changes caused by its own writes, so it would need to queue that reconcile itself (one `queueQuiet()` call), and the move would land one reconcile later.
 - Where: `planSync` (`packages/owlbear/src/sync-plan.ts`).
-- Revisit if: a token is seen moving twice, or with a false move note, after an undo.
+- Revisit if: a token is seen moving twice, or with a false move note, after an undo; then write the pre-move marker above.
 - Status: active
