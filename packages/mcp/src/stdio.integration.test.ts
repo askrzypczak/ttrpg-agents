@@ -15,11 +15,24 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   get_statblock: { readOnlyHint: true },
   list_encounter: { readOnlyHint: true },
   add_monsters: { destructiveHint: false },
+  preview_monsters: { readOnlyHint: true },
+  move_monsters: { destructiveHint: true },
   remove_monsters: { destructiveHint: true },
+  restore_monsters: { destructiveHint: false },
   rename_monster: { destructiveHint: true },
+  change_monster_type: { destructiveHint: true },
   set_initiative: { destructiveHint: true },
+  roll_initiative: { destructiveHint: true },
+  split_initiative: { destructiveHint: true },
+  merge_initiative: { destructiveHint: true },
+  set_hp: { destructiveHint: true },
+  set_max_hp: { destructiveHint: true },
+  reset_max_hp: { destructiveHint: true },
+  set_armor_class: { destructiveHint: true },
   set_stats_visibility: { destructiveHint: false },
   clear_encounter: { destructiveHint: true },
+  restore_encounter: { destructiveHint: false },
+  undo: { destructiveHint: true },
   apply_damage: undefined,
   heal: undefined,
   table_status: { readOnlyHint: true },
@@ -70,28 +83,41 @@ async function connect(): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all eighteen tools and serves a call", async () => {
+  it("lists all thirty-one tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
+      "change_monster_type",
       "clear_encounter",
       "get_map_image",
       "get_statblock",
       "heal",
       "list_encounter",
       "list_rooms",
+      "merge_initiative",
+      "move_monsters",
+      "preview_monsters",
       "propose_rooms",
       "remove_monsters",
       "remove_rooms",
       "rename_monster",
+      "reset_max_hp",
+      "restore_encounter",
+      "restore_monsters",
+      "roll_initiative",
       "search_monsters",
+      "set_armor_class",
+      "set_hp",
       "set_initiative",
+      "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "split_initiative",
       "table_status",
+      "undo",
       "use_map",
     ]);
 
@@ -104,11 +130,11 @@ describe("stdio server", () => {
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
   }, 30_000);
 
-  it("stdio server (spawned via `bin/stdio.mjs`) lists eighteen tools including `table_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
+  it("stdio server (spawned via `bin/stdio.mjs`) lists thirty-one tools including `table_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(18);
+    expect(tools).toHaveLength(31);
     const tableStatus = tools.find((t) => t.name === "table_status");
     expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });
 

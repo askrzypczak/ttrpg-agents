@@ -147,6 +147,47 @@ export const migrations: Migration[] = [
       ALTER TABLE monster_instances ADD COLUMN spawn_y REAL CHECK ((spawn_x IS NULL) = (spawn_y IS NULL));
     `,
   },
+  {
+    // A removed instance keeps its row, marked with the change that removed it:
+    // the seq of its `removed` event in the change log and the origin's source
+    // and command id. NULL in every column means the instance is in the encounter.
+    version: 12,
+    sql: `
+      ALTER TABLE monster_instances ADD COLUMN removed_seq INTEGER;
+      ALTER TABLE monster_instances ADD COLUMN removed_source TEXT CHECK (removed_source IN ('mcp', 'table'));
+      ALTER TABLE monster_instances ADD COLUMN removed_command_id TEXT CHECK ((removed_seq IS NULL) = (removed_source IS NULL) AND (removed_seq IS NULL) = (removed_command_id IS NULL));
+    `,
+  },
+  {
+    // The change-log seq of the encounter's last clear that cleared at least
+    // one instance. The instances whose removed_seq equals it are that clear's
+    // set. NULL: never cleared.
+    version: 13,
+    sql: "ALTER TABLE encounters ADD COLUMN cleared_seq INTEGER;",
+  },
+  {
+    // Undo records: one row per MCP command that wrote the encounter, in
+    // insert order, with its tool name and the change-log seq just before its
+    // first write; per command, each instance it wrote with the instance's
+    // state (MonsterInstance JSON) before the command's first write to it,
+    // NULL when the command added it. A clear that clears monsters deletes
+    // the encounter's records.
+    version: 14,
+    sql: `
+      CREATE TABLE undo_commands (
+        command_id TEXT PRIMARY KEY,
+        encounter_id TEXT NOT NULL REFERENCES encounters (id) ON DELETE CASCADE,
+        command TEXT,
+        base_seq INTEGER NOT NULL
+      );
+      CREATE TABLE undo_instances (
+        command_id TEXT NOT NULL REFERENCES undo_commands (command_id) ON DELETE CASCADE,
+        instance_id TEXT NOT NULL,
+        before TEXT CHECK (before IS NULL OR json_valid(before)),
+        PRIMARY KEY (command_id, instance_id)
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

@@ -112,14 +112,24 @@ export interface SceneItem {
   line?: LineSpec;
   /** Required by the real adapter when adding a CURVE item. */
   curve?: CurveSpec;
-  /** Whether the item is locked, when adding. */
+  /** Whether the item is locked, when adding. Default: false. Filled on read by the real adapter. */
   locked?: boolean;
   /** Whether the item ignores pointer hits, when adding. */
   disableHit?: boolean;
 }
 
 export type ItemPatch = Partial<
-  Pick<SceneItem, "name" | "visible" | "position" | "metadata">
+  Pick<
+    SceneItem,
+    | "name"
+    | "visible"
+    | "position"
+    | "metadata"
+    | "image"
+    | "grid"
+    | "shape"
+    | "scale"
+  >
 >;
 
 export type SceneChange =

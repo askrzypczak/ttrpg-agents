@@ -25,6 +25,7 @@ describe("getTableStatus (extra cases)", () => {
           sceneReady: true,
           tokenCount: 3,
           appliedInstanceCount: 2,
+          artWaits: [],
         }),
       sceneMap: () => Promise.reject(new Error("not stubbed")),
       sceneTokens: () => Promise.reject(new Error("not stubbed")),

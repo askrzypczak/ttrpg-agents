@@ -6,6 +6,8 @@ import {
   UnknownInstanceError,
   clampArmorClass,
   clampHp,
+  encounterEventSchema,
+  monsterInstanceSchema,
   resizeMaxHp,
   validateInstanceName,
 } from "@ttrpg-agents/engine";
@@ -16,7 +18,12 @@ import type {
   EncounterRepository,
   HpChange,
   InstanceBuilder,
+  MonsterChange,
   MonsterInstance,
+  Point,
+  RemovedInstance,
+  RestoreNamer,
+  UndoRecord,
 } from "@ttrpg-agents/engine";
 
 export interface RepositoryOptions {
@@ -41,8 +48,16 @@ interface InstanceRow {
   spawn_y: number | null;
 }
 
+interface RemovedRow extends InstanceRow {
+  removed_source: ChangeOrigin["source"];
+  removed_command_id: string;
+  /** 1 when the row's removal is the encounter's last clear; NULL reads as 0. */
+  cleared: number | null;
+}
+
+/** Live rows of the active encounter; removed rows are out of scope for every per-id mutation. */
 const ACTIVE_SCOPE =
-  "encounter_id IN (SELECT id FROM encounters WHERE active = 1)";
+  "removed_seq IS NULL AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)";
 
 function toInstance(row: InstanceRow): MonsterInstance {
   return {
@@ -166,6 +181,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
         );
         created.push(instance);
       }
+      this.recordBefore(
+        origin,
+        created.map((i) => ({ id: i.id, before: null })),
+      );
       this.record({ type: "added", instances: created, origin });
       return created;
     });
@@ -190,14 +209,75 @@ export class SqliteEncounterRepository implements EncounterRepository {
         if (!instance) throw new UnknownInstanceError(unknownMessage(id));
         return instance;
       });
-      const del = this.db.prepare(
-        `DELETE FROM monster_instances WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      const mark = this.db.prepare(
+        `UPDATE monster_instances
+         SET removed_seq = ?, removed_source = ?, removed_command_id = ?
+         WHERE id = ?`,
+      );
+      this.recordBefore(
+        origin,
+        removed.map((i) => ({ id: i.id, before: i })),
       );
       for (const instance of removed) {
-        del.run(instance.id);
-        this.record({ type: "removed", id: instance.id, origin });
+        const seq = this.record({ type: "removed", id: instance.id, origin });
+        mark.run(seq, origin.source, origin.commandId, instance.id);
       }
       return removed;
+    });
+  }
+
+  listRemovedInstances(): RemovedInstance[] {
+    const rows = this.db
+      .prepare(
+        `SELECT m.*, (m.removed_seq = e.cleared_seq) AS cleared FROM monster_instances m
+         JOIN encounters e ON e.id = m.encounter_id
+         WHERE e.active = 1 AND m.removed_seq IS NOT NULL
+         ORDER BY m.removed_seq DESC, m.created_at, m.rowid`,
+      )
+      .all() as unknown as RemovedRow[];
+    return rows.map((row) => ({
+      instance: toInstance(row),
+      removedBy: {
+        source: row.removed_source,
+        commandId: row.removed_command_id,
+      },
+      cleared: row.cleared === 1,
+    }));
+  }
+
+  restoreInstances(
+    ids: readonly string[],
+    name: RestoreNamer,
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    return this.transaction(() => {
+      const namesInUse = this.listInstances().map((i) => i.displayName);
+      const restored = ids.map((id) => {
+        const row = this.db
+          .prepare(
+            `SELECT * FROM monster_instances
+             WHERE id = ? AND removed_seq IS NOT NULL
+               AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
+          )
+          .get(id) as InstanceRow | undefined;
+        if (!row) throw new UnknownInstanceError(unknownMessage(id));
+        this.recordBefore(origin, [{ id, before: toInstance(row) }]);
+        const displayName = validateInstanceName(
+          name(toInstance(row), namesInUse),
+          namesInUse,
+        );
+        this.db
+          .prepare(
+            `UPDATE monster_instances
+             SET display_name = ?, removed_seq = NULL, removed_source = NULL, removed_command_id = NULL
+             WHERE id = ?`,
+          )
+          .run(displayName, id);
+        namesInUse.push(displayName);
+        return toInstance({ ...row, display_name: displayName });
+      });
+      this.record({ type: "added", instances: restored, origin });
+      return restored;
     });
   }
 
@@ -214,6 +294,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const others = this.listInstances()
         .filter((i) => i.id !== id)
         .map((i) => i.displayName);
@@ -249,6 +330,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       this.db
         .prepare("UPDATE monster_instances SET initiative = ? WHERE id = ?")
         .run(initiative, id);
@@ -262,6 +344,33 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
+  setGroupId(
+    id: string,
+    groupId: string,
+    origin: ChangeOrigin,
+  ): MonsterInstance {
+    return this.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT * FROM monster_instances
+           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+        )
+        .get(id) as InstanceRow | undefined;
+      if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
+      this.db
+        .prepare("UPDATE monster_instances SET group_id = ? WHERE id = ?")
+        .run(groupId, id);
+      this.record({
+        type: "instance-changed",
+        id,
+        changes: { groupId },
+        origin,
+      });
+      return toInstance({ ...row, group_id: groupId });
+    });
+  }
+
   setHp(id: string, hp: number, origin: ChangeOrigin): HpChange {
     return this.transaction(() => {
       const row = this.db
@@ -271,6 +380,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const currentHp = clampHp(hp, row.max_hp);
       this.db
         .prepare("UPDATE monster_instances SET current_hp = ? WHERE id = ?")
@@ -293,6 +403,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const resized = resizeMaxHp(row.current_hp, maxHp);
       this.db
         .prepare(
@@ -325,6 +436,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const value = clampArmorClass(armorClass);
       this.db
         .prepare("UPDATE monster_instances SET armor_class = ? WHERE id = ?")
@@ -352,6 +464,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const value = visible ? 1 : 0;
       this.db
         .prepare("UPDATE monster_instances SET stats_visible = ? WHERE id = ?")
@@ -366,15 +479,140 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  clearEncounter(origin: ChangeOrigin): void {
-    this.transaction(() => {
+  setSpawnPositions(
+    positions: readonly { id: string; spawnPosition: Point | null }[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    return this.transaction(() => {
+      const existing = this.listInstances();
+      const targets = positions.map(({ id, spawnPosition }) => {
+        const instance = existing.find((i) => i.id === id);
+        if (!instance) throw new UnknownInstanceError(unknownMessage(id));
+        return { instance, spawnPosition };
+      });
+      const update = this.db.prepare(
+        `UPDATE monster_instances SET spawn_x = ?, spawn_y = ?
+         WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      );
+      this.recordBefore(
+        origin,
+        targets.map(({ instance }) => ({ id: instance.id, before: instance })),
+      );
+      return targets.map(({ instance, spawnPosition }) => {
+        const point =
+          spawnPosition === null
+            ? null
+            : { x: spawnPosition.x, y: spawnPosition.y };
+        update.run(point?.x ?? null, point?.y ?? null, instance.id);
+        this.record({
+          type: "position-changed",
+          id: instance.id,
+          spawnPosition: point,
+          origin,
+        });
+        return { ...instance, spawnPosition: point };
+      });
+    });
+  }
+
+  changeMonsters(
+    changes: readonly MonsterChange[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[] {
+    return this.transaction(() => {
+      const existing = this.listInstances();
+      const given: string[] = [];
+      const targets = changes.map((change) => {
+        const instance = existing.find((i) => i.id === change.id);
+        if (!instance)
+          throw new UnknownInstanceError(unknownMessage(change.id));
+        const others = existing
+          .filter((i) => i.id !== change.id)
+          .map((i) => i.displayName);
+        const displayName = validateInstanceName(change.displayName, [
+          ...others,
+          ...given,
+        ]);
+        given.push(displayName);
+        return { instance, change: { ...change, displayName } };
+      });
+      const update = this.db.prepare(
+        `UPDATE monster_instances
+         SET monster_key = ?, display_name = ?, max_hp = ?, current_hp = ?,
+             armor_class = ?, initiative = ?, footprint = ?
+         WHERE id = ? AND ${ACTIVE_SCOPE}`,
+      );
+      this.recordBefore(
+        origin,
+        targets.map(({ instance }) => ({ id: instance.id, before: instance })),
+      );
+      return targets.map(({ instance, change }) => {
+        update.run(
+          change.monsterKey,
+          change.displayName,
+          change.maxHp,
+          change.currentHp,
+          change.armorClass,
+          change.initiative,
+          change.footprint,
+          change.id,
+        );
+        this.record({
+          type: "monster-changed",
+          id: change.id,
+          monsterKey: change.monsterKey,
+          displayName: change.displayName,
+          maxHp: change.maxHp,
+          currentHp: change.currentHp,
+          armorClass: change.armorClass,
+          initiative: change.initiative,
+          footprint: change.footprint,
+          origin,
+        });
+        return {
+          ...instance,
+          monsterKey: change.monsterKey,
+          displayName: change.displayName,
+          maxHp: change.maxHp,
+          currentHp: change.currentHp,
+          armorClass: change.armorClass,
+          initiative: change.initiative,
+          footprint: change.footprint,
+        };
+      });
+    });
+  }
+
+  clearEncounter(origin: ChangeOrigin): MonsterInstance[] {
+    return this.transaction(() => {
+      const cleared = this.listInstances();
+      const seq = this.record({ type: "cleared", origin });
+      if (cleared.length === 0) return [];
+      // Undo does not reach past a clear: the removals its records could
+      // restore are purged below.
+      this.deleteUndoRecords(
+        "encounter_id IN (SELECT id FROM encounters WHERE active = 1)",
+        [],
+      );
+      // Earlier removals, an earlier clear's set included, cannot be restored any more.
       this.db
         .prepare(
           `DELETE FROM monster_instances
-           WHERE encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
+           WHERE removed_seq IS NOT NULL
+             AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
         )
         .run();
-      this.record({ type: "cleared", origin });
+      this.db
+        .prepare(
+          `UPDATE monster_instances
+           SET removed_seq = ?, removed_source = ?, removed_command_id = ?
+           WHERE ${ACTIVE_SCOPE}`,
+        )
+        .run(seq, origin.source, origin.commandId);
+      this.db
+        .prepare("UPDATE encounters SET cleared_seq = ? WHERE active = 1")
+        .run(seq);
+      return cleared;
     });
   }
 
@@ -383,7 +621,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
       .prepare(
         `SELECT m.* FROM monster_instances m
          JOIN encounters e ON e.id = m.encounter_id
-         WHERE e.active = 1
+         WHERE e.active = 1 AND m.removed_seq IS NULL
          ORDER BY m.created_at, m.rowid`,
       )
       .all() as unknown as InstanceRow[];
@@ -409,6 +647,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         )
         .get(id) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
+      this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const hp = Math.min(
         row.max_hp,
         Math.max(0, row.current_hp + sign * amount),
@@ -425,11 +664,17 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
-  /** Appends an event to the change log; call it inside the mutation's transaction. */
-  private record(event: EncounterEvent): void {
-    this.db
+  /**
+   * Appends an event to the change log and returns its seq; call it inside the
+   * mutation's transaction. The origin is logged without its command name.
+   */
+  private record(event: EncounterEvent): number {
+    const { source, commandId } = event.origin;
+    const logged = { ...event, origin: { source, commandId } };
+    const { lastInsertRowid } = this.db
       .prepare("INSERT INTO encounter_events (event) VALUES (?)")
-      .run(JSON.stringify(event));
+      .run(JSON.stringify(logged));
+    return Number(lastInsertRowid);
   }
 
   /** Records the HP values an instance has after a change. */
@@ -443,8 +688,125 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
+  /**
+   * Keeps, for an `mcp` origin, the command's undo record (its name and the
+   * change-log seq before its first write) and each given instance's state
+   * before the command's first write to it (null: the command adds it).
+   * Insert-if-absent, so a later write in the same command keeps the first
+   * state. Call it inside the mutation's transaction, before its event.
+   */
+  private recordBefore(
+    origin: ChangeOrigin,
+    instances: readonly { id: string; before: MonsterInstance | null }[],
+  ): void {
+    if (origin.source !== "mcp") return;
+    const encounter = this.getOrCreateActiveEncounter();
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO undo_commands (command_id, encounter_id, command, base_seq)
+         VALUES (?, ?, ?, (SELECT COALESCE(MAX(seq), 0) FROM encounter_events))`,
+      )
+      .run(origin.commandId, encounter.id, origin.command ?? null);
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO undo_instances (command_id, instance_id, before)
+       VALUES (?, ?, ?)`,
+    );
+    for (const { id, before } of instances) {
+      insert.run(
+        origin.commandId,
+        id,
+        before === null ? null : JSON.stringify(before),
+      );
+    }
+  }
+
+  /** Deletes the undo records of the commands matching `where` (on undo_commands). */
+  private deleteUndoRecords(where: string, params: readonly string[]): void {
+    this.db
+      .prepare(
+        `DELETE FROM undo_instances WHERE command_id IN
+           (SELECT command_id FROM undo_commands WHERE ${where})`,
+      )
+      .run(...params);
+    this.db.prepare(`DELETE FROM undo_commands WHERE ${where}`).run(...params);
+  }
+
+  noteCommand(origin: ChangeOrigin): void {
+    this.transaction(() => {
+      this.recordBefore(origin, []);
+    });
+  }
+
+  latestUndoRecord(): UndoRecord | undefined {
+    const command = this.db
+      .prepare(
+        `SELECT c.command_id, c.command, c.base_seq FROM undo_commands c
+         JOIN encounters e ON e.id = c.encounter_id
+         WHERE e.active = 1
+         ORDER BY c.rowid DESC LIMIT 1`,
+      )
+      .get() as
+      | { command_id: string; command: string | null; base_seq: number }
+      | undefined;
+    if (!command) return undefined;
+    const instanceRows = this.db
+      .prepare(
+        `SELECT instance_id, before FROM undo_instances
+         WHERE command_id = ? ORDER BY rowid`,
+      )
+      .all(command.command_id) as unknown as {
+      instance_id: string;
+      before: string | null;
+    }[];
+    const instances: UndoRecord["instances"] = [];
+    for (const row of instanceRows) {
+      if (row.before === null) {
+        instances.push({ instanceId: row.instance_id, before: null });
+        continue;
+      }
+      const parsed = monsterInstanceSchema.safeParse(JSON.parse(row.before));
+      if (parsed.success) {
+        instances.push({ instanceId: row.instance_id, before: parsed.data });
+      }
+    }
+    // CASE guards json_extract from rows that are not valid JSON.
+    const eventRows = this.db
+      .prepare(
+        `SELECT event FROM (
+           SELECT seq, event,
+             CASE WHEN json_valid(event) THEN json_extract(event, '$.origin.source') END AS source,
+             CASE WHEN json_valid(event) THEN json_extract(event, '$.origin.commandId') END AS command_id
+           FROM encounter_events WHERE seq > ?
+         )
+         WHERE source = 'table' OR (source = 'mcp' AND command_id = ?)
+         ORDER BY seq`,
+      )
+      .all(command.base_seq, command.command_id) as unknown as {
+      event: string;
+    }[];
+    const events: EncounterEvent[] = [];
+    for (const row of eventRows) {
+      const parsed = encounterEventSchema.safeParse(JSON.parse(row.event));
+      if (parsed.success) events.push(parsed.data);
+    }
+    return {
+      commandId: command.command_id,
+      command: command.command,
+      instances,
+      events,
+    };
+  }
+
+  forgetCommands(commandIds: readonly string[]): void {
+    this.transaction(() => {
+      for (const id of commandIds) {
+        this.deleteUndoRecords("command_id = ?", [id]);
+      }
+    });
+  }
+
   /** Runs fn in a transaction; nests by joining an already-open one. */
-  private transaction<T>(fn: () => T): T {
+  transaction<T>(fn: () => T): T {
     if (this.db.isTransaction) return fn();
     this.db.exec("BEGIN IMMEDIATE");
     try {

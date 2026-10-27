@@ -14,7 +14,12 @@ import { startBridgeServer, type BridgeServer } from "./server.js";
 const AGENT_TOKEN = "c1".repeat(32);
 const RESULT = {
   name: "scene-status" as const,
-  result: { sceneReady: true, tokenCount: 3, appliedInstanceCount: 2 },
+  result: {
+    sceneReady: true,
+    tokenCount: 3,
+    appliedInstanceCount: 2,
+    artWaits: [],
+  },
 };
 
 let dir: string;

@@ -74,7 +74,7 @@ Issue: [#50](https://github.com/askrzypczak/ttrpg-agents/issues/50).
   - Chosen: a new token with a spawn position is created there. The row is built from the other new tokens only, so it stays compact and centred. An existing token is never moved (position stays create-only).
   - Keep every new token's slot in the row and leave the placed ones' slots empty: a row with gaps for no reason.
 - Where: `planSync` (`packages/owlbear/src/sync-plan.ts`).
-- Status: active
+- Status: active in part: its row clause is superseded by 306.4 (the row also holds a token moved back with no previous position recorded)
 
 ## 50.8 The reply has one "Placed in <Room>" line and one "No free cell left" line per group with a room
 

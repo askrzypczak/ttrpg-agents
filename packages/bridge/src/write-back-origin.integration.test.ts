@@ -44,10 +44,14 @@ function recordingRepo(inner: SqliteEncounterRepository): EncounterRepository {
       origins.push(origin),
       inner.removeInstances(ids, origin)
     ),
+    listRemovedInstances: () => inner.listRemovedInstances(),
+    restoreInstances: (ids, name, origin) =>
+      inner.restoreInstances(ids, name, origin),
     renameInstance: (id, name, origin) =>
       inner.renameInstance(id, name, origin),
     setInitiative: (id, initiative, origin) =>
       inner.setInitiative(id, initiative, origin),
+    setGroupId: (id, groupId, origin) => inner.setGroupId(id, groupId, origin),
     setHp: (id, hp, origin) => (
       origins.push(origin),
       inner.setHp(id, hp, origin)
@@ -57,7 +61,14 @@ function recordingRepo(inner: SqliteEncounterRepository): EncounterRepository {
       inner.setArmorClass(id, armorClass, origin),
     setStatsVisible: (id, visible, origin) =>
       inner.setStatsVisible(id, visible, origin),
+    setSpawnPositions: (positions, origin) =>
+      inner.setSpawnPositions(positions, origin),
+    changeMonsters: (changes, origin) => inner.changeMonsters(changes, origin),
     clearEncounter: (origin) => inner.clearEncounter(origin),
+    noteCommand: (origin) => inner.noteCommand(origin),
+    transaction: (fn) => inner.transaction(fn),
+    latestUndoRecord: () => inner.latestUndoRecord(),
+    forgetCommands: (ids) => inner.forgetCommands(ids),
   };
 }
 

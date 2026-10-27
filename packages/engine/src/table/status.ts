@@ -9,8 +9,10 @@ export interface TableStatus extends TableSceneStatus {
 
 /**
  * Asks the table for its scene status and compares it with the encounter.
- * `inSync` = scene ready and token, applied and encounter counts all equal.
- * The port's errors (`TableUnavailableError`) propagate.
+ * `inSync` = scene ready, token, applied and encounter counts all equal, and
+ * no art picker open or still to open (a `pick` wait holds tokens back; a
+ * `reupload` wait does not, its tokens are circles). The port's errors
+ * (`TableUnavailableError`) propagate.
  */
 export async function getTableStatus(
   repo: Pick<EncounterRepository, "listInstances">,
@@ -24,6 +26,7 @@ export async function getTableStatus(
     inSync:
       scene.sceneReady &&
       scene.tokenCount === scene.appliedInstanceCount &&
-      scene.tokenCount === encounterCount,
+      scene.tokenCount === encounterCount &&
+      !scene.artWaits.some((wait) => wait.step === "pick"),
   };
 }

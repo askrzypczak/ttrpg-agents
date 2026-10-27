@@ -45,6 +45,20 @@ describe("encounterEventSchema parse", () => {
     expect(result.data).toEqual(event);
   });
 
+  it("an instance-changed event carrying only a groupId parses and keeps it", () => {
+    const event = {
+      type: "instance-changed",
+      id: "i1",
+      changes: { groupId: "g7" },
+      origin,
+    };
+
+    const result = encounterEventSchema.safeParse(event);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(event);
+  });
+
   it("rejects an instance-changed event whose changes hold only unknown keys", () => {
     const result = encounterEventSchema.safeParse({
       type: "instance-changed",

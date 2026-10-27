@@ -5,10 +5,19 @@ import {
   type AddMonstersGroup,
   type AddMonstersOptions,
   type AddMonstersResult,
+  previewMonsters,
+  type MonstersPreview,
+  type PreviewMonstersDeps,
 } from "../encounter/add-monsters.js";
+import { UnknownInstanceError } from "../encounter/errors.js";
 import type { ChangeOrigin } from "../encounter/origin.js";
-import { validateAddMonsters } from "../encounter/validate-add-monsters.js";
+import type { EncounterRepository } from "../encounter/repository.js";
+import {
+  findJoinTargets,
+  validateAddMonsters,
+} from "../encounter/validate-add-monsters.js";
 import { footprintForSize } from "../monsters/footprint.js";
+import type { MonsterIndex } from "../monsters/types.js";
 import type { TablePort, TableToken } from "../table/port.js";
 import {
   displayGrid,
@@ -19,7 +28,7 @@ import { liveActiveMap, requireActiveMap } from "./live-map.js";
 import { pickFreeCells, type CellPick } from "./picker.js";
 import type { MapRepository } from "./repository.js";
 import { findRoom, type Room } from "./rooms.js";
-import type { Cell } from "./types.js";
+import type { Cell, MapPlacement } from "./types.js";
 
 /** A group of monsters to add, optionally placed in a saved room of the map in use. */
 export interface RoomGroup extends AddMonstersGroup {
@@ -74,6 +83,104 @@ export async function addMonstersInRooms(
     options.maxGroupCount ?? MAX_GROUP_COUNT,
     options.initiative ?? "group",
   );
+  findJoinTargets(deps.repo, groups);
+  const blocks = await pickRoomBlocks(deps, groups);
+
+  const result = addMonsters(
+    deps,
+    groups.map((g, i) => {
+      const plain = withoutRoom(g);
+      const groupPicks = blocks.picks[i];
+      return groupPicks === undefined
+        ? plain
+        : { ...plain, spawnPositions: groupPicks.map((p) => p.position) };
+    }),
+    origin,
+    options,
+  );
+
+  const cells = instanceCells(groups, blocks);
+  const placements: RoomPlacement[] = [];
+  cells.forEach((cell, n) => {
+    const instance = result.instances[n];
+    if (cell === undefined || instance === undefined) return;
+    placements.push({ id: instance.id, name: instance.name, ...cell });
+  });
+  return { ...result, placements, moved: blocks.moved };
+}
+
+/** Where a would-be monster of a group with a room would go; `cell` as in RoomPlacement, null when no free block is left. */
+export interface PreviewPlacement {
+  name: string;
+  room: string;
+  cell: string | null;
+}
+
+export interface RoomsPreview extends MonstersPreview {
+  placements: PreviewPlacement[];
+  moved: boolean;
+}
+
+/** Dry run of addMonstersInRooms: same checks in the same order, same placement; reads the store, the saved map and rooms and the table; writes nothing, rolls nothing. Without any room the table is not asked. */
+export async function previewMonstersInRooms(
+  deps: PreviewMonstersDeps & {
+    table: Pick<TablePort, "sceneMap" | "sceneTokens">;
+    maps: Pick<MapRepository, "getActiveMap" | "getRooms">;
+  },
+  groups: readonly RoomGroup[],
+  options: AddMonstersOptions = {},
+): Promise<RoomsPreview> {
+  if (groups.every((g) => g.room === undefined)) {
+    return {
+      ...previewMonsters(deps, groups.map(withoutRoom), options),
+      placements: [],
+      moved: false,
+    };
+  }
+  validateAddMonsters(
+    deps.monsters,
+    groups,
+    options.maxGroupCount ?? MAX_GROUP_COUNT,
+    options.initiative ?? "group",
+  );
+  findJoinTargets(deps.repo, groups);
+  const blocks = await pickRoomBlocks(deps, groups);
+
+  const preview = previewMonsters(deps, groups.map(withoutRoom), options);
+
+  const cells = instanceCells(groups, blocks);
+  const placements: PreviewPlacement[] = [];
+  cells.forEach((cell, n) => {
+    const instance = preview.instances[n];
+    if (cell === undefined || instance === undefined) return;
+    placements.push({ name: instance.name, ...cell });
+  });
+  return { ...preview, placements, moved: blocks.moved };
+}
+
+/** Each group's saved room and picked blocks, and the live map placement they are on. */
+interface RoomBlocks {
+  rooms: (Room | undefined)[];
+  /** Per group with a room, its free blocks in pick order; undefined for a group without one. */
+  picks: (CellPick[] | undefined)[];
+  placement: MapPlacement;
+  moved: boolean;
+}
+
+/**
+ * Finds the map in use and each group's saved room, reads the table's map and
+ * tokens, and picks free blocks of each group's footprint in its room, larger
+ * footprints first (ties in input order). A cell is occupied when its centre
+ * lies under a token on the table or it was picked for another group.
+ */
+async function pickRoomBlocks(
+  deps: {
+    monsters: MonsterIndex;
+    table: Pick<TablePort, "sceneMap" | "sceneTokens">;
+    maps: Pick<MapRepository, "getActiveMap" | "getRooms">;
+  },
+  groups: readonly RoomGroup[],
+): Promise<RoomBlocks> {
   const active = requireActiveMap(deps.maps);
   const saved = deps.maps.getRooms(active.itemId);
   const rooms: (Room | undefined)[] = groups.map((g) =>
@@ -108,39 +215,122 @@ export async function addMonstersInRooms(
     for (const p of picked) occupied.push(...p.cells);
     picks[i] = picked;
   }
+  return { rooms, picks, placement: live.placement, moved: live.moved };
+}
 
-  const result = addMonsters(
-    deps,
-    groups.map((g, i) => {
-      const plain = withoutRoom(g);
-      const groupPicks = picks[i];
-      return groupPicks === undefined
-        ? plain
-        : { ...plain, spawnPositions: groupPicks.map((p) => p.position) };
-    }),
-    origin,
-    options,
-  );
-
-  const grid = displayGrid(live.placement);
-  const placements: RoomPlacement[] = [];
-  let next = 0;
+/**
+ * Per instance of the groups, in input order, the room it goes to and its
+ * display cell label (`blockRange`), null when no free block was left;
+ * undefined for an instance of a group without a room.
+ */
+function instanceCells(
+  groups: readonly RoomGroup[],
+  blocks: RoomBlocks,
+): ({ room: string; cell: string | null } | undefined)[] {
+  const grid = displayGrid(blocks.placement);
+  const cells: ({ room: string; cell: string | null } | undefined)[] = [];
   groups.forEach((g, i) => {
-    const room = rooms[i];
-    const groupPicks = picks[i] ?? [];
+    const room = blocks.rooms[i];
+    const groupPicks = blocks.picks[i] ?? [];
     for (let n = 0; n < g.count; n++) {
-      const instance = result.instances[next++];
-      if (room === undefined || instance === undefined) continue;
+      if (room === undefined) {
+        cells.push(undefined);
+        continue;
+      }
       const pick = groupPicks[n];
-      placements.push({
-        id: instance.id,
-        name: instance.name,
+      cells.push({
         room: room.name,
         cell: pick === undefined ? null : blockRange(grid, pick),
       });
     }
   });
-  return { ...result, placements, moved: live.moved };
+  return cells;
+}
+
+/** Where each named monster was moved, in input order, and whether the map moved on the table. */
+export interface MoveIntoRoomResult {
+  placements: RoomPlacement[];
+  moved: boolean;
+}
+
+/**
+ * Moves existing instances of the active encounter into a saved room of the
+ * map in use, with the same placement as `addMonstersInRooms` (free blocks of
+ * each footprint, cells under the table's tokens occupied, largest footprint
+ * first, ties in input order). Checks every id (UnknownInstanceError), then
+ * the map in use and the room, before asking the table; stores the placed
+ * monsters' new spawn positions in at most one `setSpawnPositions` call (none
+ * when nothing fits). Placements are in input order; `cell` is null for a
+ * monster left without a free block, which keeps its spawn position.
+ */
+export async function moveMonstersIntoRoom(
+  deps: {
+    repo: Pick<EncounterRepository, "listInstances" | "setSpawnPositions">;
+    table: Pick<TablePort, "sceneMap" | "sceneTokens">;
+    maps: Pick<MapRepository, "getActiveMap" | "getRooms">;
+  },
+  ids: readonly string[],
+  room: string,
+  origin: ChangeOrigin,
+): Promise<MoveIntoRoomResult> {
+  const stored = deps.repo.listInstances();
+  const instances = ids.map((id) => {
+    const instance = stored.find((i) => i.id === id);
+    if (instance === undefined)
+      throw new UnknownInstanceError(`Unknown monster instance: ${id}`);
+    return instance;
+  });
+  const active = requireActiveMap(deps.maps);
+  const target = findRoom(deps.maps.getRooms(active.itemId), room);
+
+  const [live, tokens] = await Promise.all([
+    liveActiveMap(deps.table, deps.maps),
+    deps.table.sceneTokens(),
+  ]);
+  const dpi = live.placement.sceneDpi;
+  const occupied = tokens.tokens.flatMap((t) => cellsUnderBounds(t, dpi));
+
+  const classes = new Map<number, number[]>();
+  instances.forEach((instance, n) => {
+    const members = classes.get(instance.footprint);
+    if (members === undefined) classes.set(instance.footprint, [n]);
+    else members.push(n);
+  });
+  const picks: (CellPick | undefined)[] = instances.map(() => undefined);
+  for (const footprint of [...classes.keys()].sort((a, b) => b - a)) {
+    const members = classes.get(footprint) as number[];
+    const picked = pickFreeCells({
+      placement: live.placement,
+      room: target,
+      occupied,
+      count: members.length,
+      footprint,
+    });
+    picked.forEach((pick, k) => {
+      picks[members[k] as number] = pick;
+      occupied.push(...pick.cells);
+    });
+  }
+
+  const positions = instances.flatMap((instance, n) => {
+    const pick = picks[n];
+    return pick === undefined
+      ? []
+      : [{ id: instance.id, spawnPosition: pick.position }];
+  });
+  if (positions.length > 0) deps.repo.setSpawnPositions(positions, origin);
+
+  const grid = displayGrid(live.placement);
+  const placements = instances.map((instance, n): RoomPlacement => {
+    const pick = picks[n];
+    return {
+      id: instance.id,
+      name: instance.displayName,
+      room: target.name,
+      cell: pick === undefined ? null : blockRange(grid, pick),
+    };
+  });
+  return { placements, moved: live.moved };
 }
 
 /** The display label of a block: "A1" for one cell, "A1:B2" for more. */

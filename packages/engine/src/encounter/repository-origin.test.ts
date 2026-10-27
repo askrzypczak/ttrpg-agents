@@ -15,13 +15,22 @@ function recordingRepository(received: unknown[]): EncounterRepository {
     applyDamage: (_id, _amount, origin) => record(origin),
     applyHealing: (_id, _amount, origin) => record(origin),
     removeInstances: (_ids, origin) => record(origin),
+    listRemovedInstances: () => [],
+    restoreInstances: (_ids, _name, origin) => record(origin),
     renameInstance: (_id, _name, origin) => record(origin),
     setInitiative: (_id, _initiative, origin) => record(origin),
+    setGroupId: (_id, _groupId, origin) => record(origin),
     setHp: (_id, _hp, origin) => record(origin),
     setMaxHp: (_id, _maxHp, origin) => record(origin),
     setArmorClass: (_id, _armorClass, origin) => record(origin),
     setStatsVisible: (_id, _visible, origin) => record(origin),
-    clearEncounter: (origin) => void record(origin),
+    setSpawnPositions: (_positions, origin) => record(origin),
+    changeMonsters: (_changes, origin) => record(origin),
+    clearEncounter: (origin) => record(origin),
+    noteCommand: (origin) => record(origin),
+    transaction: (fn) => fn(),
+    latestUndoRecord: () => undefined,
+    forgetCommands: () => undefined,
   };
 }
 
@@ -30,6 +39,17 @@ describe("EncounterRepository mutations", () => {
     const received: unknown[] = [];
     const repo = recordingRepository(received);
     const origin: ChangeOrigin = { source: "mcp", commandId: "c1" };
+    const spawnAt = { id: "i1", spawnPosition: { x: 250, y: 150 } };
+    const change = {
+      id: "i1",
+      monsterKey: "wolf",
+      displayName: "Wolf 1",
+      maxHp: 11,
+      currentHp: 11,
+      armorClass: 13,
+      initiative: null,
+      footprint: 1,
+    };
 
     // The type half is checked by `npm run typecheck`: each call below must
     // be rejected by the compiler (an unused directive is itself an error).
@@ -43,9 +63,13 @@ describe("EncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.removeInstances(["i1"]),
       // @ts-expect-error origin is required
+      () => repo.restoreInstances(["i1"], (i) => i.displayName),
+      // @ts-expect-error origin is required
       () => repo.renameInstance("i1", "Boss"),
       // @ts-expect-error origin is required
       () => repo.setInitiative("i1", 5),
+      // @ts-expect-error origin is required
+      () => repo.setGroupId("i1", "g1"),
       // @ts-expect-error origin is required
       () => repo.setHp("i1", 5),
       // @ts-expect-error origin is required
@@ -55,23 +79,31 @@ describe("EncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.setStatsVisible("i1", true),
       // @ts-expect-error origin is required
+      () => repo.setSpawnPositions([spawnAt]),
+      // @ts-expect-error origin is required
+      () => repo.changeMonsters([change]),
+      // @ts-expect-error origin is required
       () => repo.clearEncounter(),
     ];
-    expect(withoutOrigin).toHaveLength(11);
+    expect(withoutOrigin).toHaveLength(15);
 
     // Runtime half: with an origin, every mutation hands it on unchanged.
     repo.addInstances(() => [], origin);
     repo.applyDamage("i1", 1, origin);
     repo.applyHealing("i1", 1, origin);
     repo.removeInstances(["i1"], origin);
+    repo.restoreInstances(["i1"], (i) => i.displayName, origin);
     repo.renameInstance("i1", "Boss", origin);
     repo.setInitiative("i1", 5, origin);
+    repo.setGroupId("i1", "g1", origin);
     repo.setHp("i1", 5, origin);
     repo.setMaxHp("i1", 5, origin);
     repo.setArmorClass("i1", 5, origin);
     repo.setStatsVisible("i1", true, origin);
+    repo.setSpawnPositions([spawnAt], origin);
+    repo.changeMonsters([change], origin);
     repo.clearEncounter(origin);
-    expect(received).toEqual(Array<ChangeOrigin>(11).fill(origin));
+    expect(received).toEqual(Array<ChangeOrigin>(15).fill(origin));
     expect(changeOriginSchema.safeParse(received[0]).success).toBe(true);
   });
 });

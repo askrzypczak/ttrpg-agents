@@ -110,8 +110,7 @@ function editAtTable(
 function setup(
   options: {
     pickImage?: FakePick;
-    imageAlive?: boolean;
-    awaitUploadConfirmed?: () => Promise<void>;
+    imageAlive?: boolean | ((url: string) => boolean | Promise<boolean>);
   } = {},
 ) {
   const fake = createFakeObr(undefined, undefined, {
@@ -128,7 +127,6 @@ function setup(
   };
   const sent: BridgeMessage[] = [];
   const errors: unknown[] = [];
-  const confirm = options.awaitUploadConfirmed;
   const sync = createEncounterSync(
     obr,
     (e) => errors.push(e),
@@ -140,8 +138,6 @@ function setup(
         return true;
       },
       loadImage,
-      awaitUploadConfirmed: () =>
-        confirm === undefined ? Promise.resolve() : confirm(),
     },
   );
   const resetReads = () => {
@@ -180,43 +176,6 @@ describe("createEncounterSync scene reads around art dialogs", () => {
     );
     await settle();
 
-    expect(s.fake.pickImageCalls()).toBe(1);
-    expect(bubblesOf(s.scene, "goblin-1")).toMatchObject({
-      health: 7,
-      "armor class": 15,
-    });
-  });
-
-  it("a Stat Bubbles edit made on the table while a republish waits for the GM is not overwritten by that reconcile's writes", async () => {
-    const feed = createMessageFeed();
-    let editWhileWaiting = (): void => {};
-    const s = setup({
-      imageAlive: false,
-      pickImage: pickedShadowArt,
-      awaitUploadConfirmed: () => {
-        editWhileWaiting();
-        return Promise.resolve();
-      },
-    });
-    await s.sync.handleMessage(
-      feed.snapshot([goblin()], { art: { goblin: goblinArt } }),
-    );
-    await settle();
-    expect(bubblesOf(s.scene, "goblin-1")).toMatchObject({
-      "armor class": 12,
-    });
-
-    editWhileWaiting = () =>
-      editAtTable(s.scene, "goblin-1", { "armor class": 15 });
-    await s.sync.handleMessage(helloAck);
-    await s.sync.handleMessage(
-      feed.snapshot([goblin(7), shadow()], {
-        art: { goblin: goblinArt, shadow: storedShadowArt },
-      }),
-    );
-    await settle();
-
-    expect(s.fake.uploads()).toHaveLength(1);
     expect(s.fake.pickImageCalls()).toBe(1);
     expect(bubblesOf(s.scene, "goblin-1")).toMatchObject({
       health: 7,
@@ -269,23 +228,26 @@ describe("createEncounterSync scene reads around art dialogs", () => {
     });
     expect(picked.fake.pickImageCalls()).toBe(1);
 
-    // A liveness check that finds the stored art alive.
-    const alive = setup({ imageAlive: true });
+    // A pending liveness check the reconcile waits for, whatever it finds.
+    const answerLater = (answer: boolean) => () =>
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(answer), 5));
+    const alive = setup({ imageAlive: answerLater(true) });
     expect(await readsForShadow(alive, { shadow: storedShadowArt })).toEqual({
       items: 2,
       placed: 2,
     });
     expect(alive.fake.pickImageCalls()).toBe(0);
 
-    // A republish: dead url, stored bytes.
-    const republished = setup({
-      imageAlive: false,
+    const gone = setup({
+      imageAlive: answerLater(false),
       pickImage: pickedShadowArt,
     });
-    expect(
-      await readsForShadow(republished, { shadow: storedShadowArt }),
-    ).toEqual({ items: 2, placed: 2 });
-    expect(republished.fake.uploads()).toHaveLength(1);
+    expect(await readsForShadow(gone, { shadow: storedShadowArt })).toEqual({
+      items: 2,
+      placed: 2,
+    });
+    expect(gone.fake.uploads()).toEqual([]);
+    expect(gone.fake.pickImageCalls()).toBe(0);
   });
 
   it("a scene switched while the picker is open gets its tokens and reports no instance deleted", async () => {
@@ -318,20 +280,5 @@ describe("createEncounterSync scene reads around art dialogs", () => {
     expect(tokenOf(s.scene, "goblin-1")).toBeDefined();
     expect(tokenOf(s.scene, "shadow-1")).toBeDefined();
     expect(s.sent.filter((m) => m.type === "token-deleted")).toEqual([]);
-  });
-
-  it("art without a url published on first use also reads the scene again", async () => {
-    const feed = createMessageFeed();
-    const s = setup({ pickImage: pickedShadowArt });
-    await s.sync.handleMessage(
-      feed.snapshot([shadow()], {
-        art: { shadow: { sha256: "c3".repeat(32) } },
-      }),
-    );
-    await settle();
-
-    expect(tokenOf(s.scene, "shadow-1")).toBeDefined();
-    expect(s.reads).toEqual({ items: 2, placed: 2 });
-    expect(s.fake.uploads()).toHaveLength(1);
   });
 });

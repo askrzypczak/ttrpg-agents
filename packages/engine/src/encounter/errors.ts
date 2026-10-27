@@ -19,6 +19,14 @@ export class UnknownInstanceError extends DomainError {
   }
 }
 
+/** No monster with that key in the monster index. */
+export class UnknownMonsterError extends DomainError {
+  constructor(message: string) {
+    super("unknown_monster", message);
+    this.name = "UnknownMonsterError";
+  }
+}
+
 /** A display name that is empty or already used by another instance. */
 export class InvalidNameError extends DomainError {
   constructor(message: string) {
@@ -40,5 +48,13 @@ export class InvalidArmorClassError extends DomainError {
   constructor(message: string) {
     super("invalid_armor_class", message);
     this.name = "InvalidArmorClassError";
+  }
+}
+
+/** A target that already is the requested monster. */
+export class SameMonsterError extends DomainError {
+  constructor(message: string) {
+    super("same_monster", message);
+    this.name = "SameMonsterError";
   }
 }

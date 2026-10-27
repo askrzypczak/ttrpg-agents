@@ -51,6 +51,11 @@ function recordingRepo(
       record("removeInstances", origin),
       inner.removeInstances(ids, origin)
     ),
+    listRemovedInstances: () => inner.listRemovedInstances(),
+    restoreInstances: (ids, name, origin) => (
+      record("restoreInstances", origin),
+      inner.restoreInstances(ids, name, origin)
+    ),
     renameInstance: (id, name, origin) => (
       record("renameInstance", origin),
       inner.renameInstance(id, name, origin)
@@ -58,6 +63,10 @@ function recordingRepo(
     setInitiative: (id, initiative, origin) => (
       record("setInitiative", origin),
       inner.setInitiative(id, initiative, origin)
+    ),
+    setGroupId: (id, groupId, origin) => (
+      record("setGroupId", origin),
+      inner.setGroupId(id, groupId, origin)
     ),
     setHp: (id, hp, origin) => (
       record("setHp", origin),
@@ -75,10 +84,25 @@ function recordingRepo(
       record("setStatsVisible", origin),
       inner.setStatsVisible(id, visible, origin)
     ),
-    clearEncounter: (origin) => {
-      record("clearEncounter", origin);
-      inner.clearEncounter(origin);
-    },
+    setSpawnPositions: (positions, origin) => (
+      record("setSpawnPositions", origin),
+      inner.setSpawnPositions(positions, origin)
+    ),
+    changeMonsters: (changes, origin) => (
+      record("changeMonsters", origin),
+      inner.changeMonsters(changes, origin)
+    ),
+    clearEncounter: (origin) => (
+      record("clearEncounter", origin),
+      inner.clearEncounter(origin)
+    ),
+    noteCommand: (origin) => (
+      record("noteCommand", origin),
+      inner.noteCommand(origin)
+    ),
+    transaction: (fn) => inner.transaction(fn),
+    latestUndoRecord: () => inner.latestUndoRecord(),
+    forgetCommands: (ids) => inner.forgetCommands(ids),
   };
 }
 
@@ -139,17 +163,28 @@ describe("tool write origin", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0]).toEqual({
       method: "addInstances",
-      origin: { source: "mcp", commandId: issuedCommandIds[0] },
+      origin: {
+        source: "mcp",
+        commandId: issuedCommandIds[0],
+        command: "add_monsters",
+      },
     });
     expect(issuedCommandIds).toHaveLength(1);
   });
 
-  it("apply_damage, heal, remove_monsters, rename_monster, set_initiative, set_stats_visibility and clear_encounter each pass source mcp to the repository", async () => {
+  it("apply_damage, heal, set_hp, set_max_hp, set_armor_class, remove_monsters, rename_monster, set_initiative, set_stats_visibility and clear_encounter each pass source mcp to the repository", async () => {
     seed("Shadow 1", "Shadow 2");
 
     const calls: [string, unknown, string][] = [
       ["apply_damage", { target: "Shadow 1", amount: 3 }, "applyDamage"],
       ["heal", { target: "Shadow 1", amount: 1 }, "applyHealing"],
+      ["set_hp", { target: "Shadow 1", hp: 12 }, "setHp"],
+      ["set_max_hp", { target: "Shadow 1", maxHp: 25 }, "setMaxHp"],
+      [
+        "set_armor_class",
+        { target: "Shadow 1", armorClass: 14 },
+        "setArmorClass",
+      ],
       [
         "rename_monster",
         { target: "Shadow 1", name: "Boss" },
@@ -178,6 +213,52 @@ describe("tool write origin", () => {
     }
   });
 
+  it("restore_monsters passes source mcp and a fresh commandId to the repository", async () => {
+    seed("Shadow 1", "Shadow 2");
+    const removed = await call("remove_monsters", { targets: ["Shadow 2"] });
+    expect(removed.isError).toBeUndefined();
+    writes.length = 0;
+    issuedCommandIds.length = 0;
+
+    const result = await call("restore_monsters", { targets: ["Shadow 2"] });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes).toEqual([
+      {
+        method: "restoreInstances",
+        origin: {
+          source: "mcp",
+          commandId: issuedCommandIds[0],
+          command: "restore_monsters",
+        },
+      },
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+  });
+
+  it("restore_encounter passes source mcp and a fresh commandId to the repository", async () => {
+    seed("Shadow 1", "Shadow 2");
+    const cleared = await call("clear_encounter");
+    expect(cleared.isError).toBeUndefined();
+    writes.length = 0;
+    issuedCommandIds.length = 0;
+
+    const result = await call("restore_encounter");
+
+    expect(result.isError).toBeUndefined();
+    expect(writes).toEqual([
+      {
+        method: "restoreInstances",
+        origin: {
+          source: "mcp",
+          commandId: issuedCommandIds[0],
+          command: "restore_encounter",
+        },
+      },
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+  });
+
   it("two tool calls get different command ids", async () => {
     seed("Shadow 1");
 
@@ -201,5 +282,142 @@ describe("tool write origin", () => {
     expect(writes).toHaveLength(3);
     expect(writes[0]?.origin.source).toBe("mcp");
     expect(new Set(writes.map((w) => w.origin.commandId)).size).toBe(1);
+  });
+
+  it("roll_initiative passes source mcp and one command id to every setInitiative write", async () => {
+    seed("Shadow 1", "Shadow 2", "Shadow 3");
+
+    const result = await call("roll_initiative", {
+      targets: ["Shadow 1", "Shadow 2", "Shadow 3"],
+      mode: "each",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes.map((w) => w.method)).toEqual([
+      "setInitiative",
+      "setInitiative",
+      "setInitiative",
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+    for (const write of writes) {
+      expect(write.origin).toEqual({
+        source: "mcp",
+        commandId: issuedCommandIds[0],
+        command: "roll_initiative",
+      });
+    }
+  });
+
+  it("split_initiative and merge_initiative pass source mcp and one command id to every setGroupId and setInitiative write", async () => {
+    seed("Shadow 1", "Shadow 2");
+    const cases: [string, Record<string, unknown>, string[]][] = [
+      [
+        "split_initiative",
+        { targets: ["Shadow 1", "Shadow 2"], roll: true },
+        ["setGroupId", "setInitiative", "setGroupId", "setInitiative"],
+      ],
+      [
+        "merge_initiative",
+        { targets: ["Shadow 1", "Shadow 2"] },
+        ["setGroupId", "setGroupId", "setInitiative"],
+      ],
+    ];
+    for (const [name, args, methods] of cases) {
+      if (name === "merge_initiative") {
+        const [, second] = ctx.repo.listInstances();
+        ctx.repo.setInitiative(second?.id ?? "", 1, seedOrigin);
+      }
+      writes.length = 0;
+      issuedCommandIds.length = 0;
+
+      const result = await call(name, args);
+
+      expect(result.isError, name).toBeUndefined();
+      expect(
+        writes.map((w) => w.method),
+        name,
+      ).toEqual(methods);
+      expect(issuedCommandIds, name).toHaveLength(1);
+      for (const write of writes) {
+        expect(write.origin, name).toEqual({
+          source: "mcp",
+          commandId: issuedCommandIds[0],
+          command: name,
+        });
+      }
+    }
+  });
+
+  it("reset_max_hp passes source mcp and one command id to every setMaxHp and setHp write", async () => {
+    // At full HP with a max below the Shadow's average, so each reset raises
+    // the max and then refills the HP.
+    seed("Shadow 1", "Shadow 2");
+
+    const result = await call("reset_max_hp", {
+      targets: ["Shadow 1", "Shadow 2"],
+      hp: "average",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(writes.map((w) => w.method).sort()).toEqual([
+      "setHp",
+      "setHp",
+      "setMaxHp",
+      "setMaxHp",
+    ]);
+    expect(issuedCommandIds).toHaveLength(1);
+    for (const write of writes) {
+      expect(write.origin).toEqual({
+        source: "mcp",
+        commandId: issuedCommandIds[0],
+        command: "reset_max_hp",
+      });
+    }
+  });
+
+  it("every mutating tool passes its own name as the origin's command", async () => {
+    seed("Shadow 1", "Shadow 2", "Shadow 3");
+    const [, , third] = ctx.repo.listInstances();
+    ctx.repo.setInitiative(third?.id ?? "", 1, seedOrigin);
+
+    const calls: [string, unknown][] = [
+      ["add_monsters", { groups: [{ monster: SHADOW, count: 1 }] }],
+      ["apply_damage", { target: "Shadow 1", amount: 3 }],
+      ["heal", { target: "Shadow 1", amount: 1 }],
+      ["set_hp", { target: "Shadow 1", hp: 12 }],
+      ["set_max_hp", { target: "Shadow 1", maxHp: 15 }],
+      ["reset_max_hp", { targets: ["Shadow 1"], hp: "average" }],
+      ["set_armor_class", { target: "Shadow 1", armorClass: 14 }],
+      ["rename_monster", { target: "Shadow 1", name: "Boss" }],
+      [
+        "change_monster_type",
+        { targets: ["Shadow 4"], monster: "srd-2024_wolf" },
+      ],
+      ["set_initiative", { target: "Boss", initiative: 15 }],
+      ["roll_initiative", { targets: ["Boss"] }],
+      ["split_initiative", { targets: ["Shadow 2", "Shadow 3"] }],
+      ["merge_initiative", { targets: ["Shadow 2", "Shadow 3"] }],
+      ["set_stats_visibility", { targets: ["Boss"], visible: true }],
+      ["remove_monsters", { targets: ["Boss"] }],
+      ["restore_monsters", { targets: ["Boss"] }],
+      ["clear_encounter", {}],
+      ["restore_encounter", {}],
+    ];
+    for (const [name, args] of calls) {
+      writes.length = 0;
+      issuedCommandIds.length = 0;
+
+      const result = await call(name, args);
+
+      expect(result.isError, name).toBeUndefined();
+      expect(writes.length, name).toBeGreaterThan(0);
+      for (const write of writes) {
+        expect(write.origin, `${name} ${write.method}`).toEqual({
+          source: "mcp",
+          commandId: issuedCommandIds[0],
+          command: name,
+        });
+      }
+    }
   });
 });

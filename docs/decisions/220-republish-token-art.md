@@ -12,7 +12,7 @@ Issue: [#220](https://github.com/askrzypczak/ttrpg-agents/issues/220).
   - A live check in the test room first: interactive, and leaves test assets in the maintainer's library; the chosen option works either way.
 - Where: option `awaitUploadConfirmed` (`packages/owlbear/src/encounter-sync.ts`); `ObrAdapter.openPanel` (`packages/owlbear/src/obr-adapter.ts`); `PanelInput.artPrompt`, `PanelView.prompt` (`packages/owlbear/src/panel-state.ts`); `#art-prompt`, `#pick-art` (`packages/owlbear/index.html`, `packages/owlbear/src/main.ts`).
 - Revisit if: Owlbear is observed to accept the picker right after `uploadImages`, or the maintainer prefers two dialogs with no panel step.
-- Status: active
+- Status: superseded by 310.1
 
 ## 220.2 A stored url is dead when a revalidating GET answers 4xx; anything but 2xx or 4xx cannot tell and keeps the stored art
 
@@ -33,7 +33,7 @@ Issue: [#220](https://github.com/askrzypczak/ttrpg-agents/issues/220).
   - Chosen: circle tokens, not asked again this session, and `Could not republish the token art for <monsterKey>: <reason>` in the panel's art error slot until the panel reloads (the lifetime of 219.4).
   - A silent circle: the GM would not know why the art went missing.
 - Where: option `onArtRepublishFailed` (`packages/owlbear/src/encounter-sync.ts`); `artError` in `packages/owlbear/src/main.ts`.
-- Status: active
+- Status: superseded by 310.4
 
 ## 220.4 The re-picked asset is trusted as the re-uploaded image and keeps the stored hash
 
@@ -54,7 +54,7 @@ Issue: [#220](https://github.com/askrzypczak/ttrpg-agents/issues/220).
   - On every reconcile that adds tokens of the type: one revalidating fetch per such reconcile, for a rare event.
 - Where: the `checked` set in `createEncounterSync` (`packages/owlbear/src/encounter-sync.ts`).
 - Revisit if: #250 needs a different cadence for art without stored bytes.
-- Status: active
+- Status: superseded by 310.2
 
 ## 220.6 The bridge serves stored bytes at `GET /token-images/<sha256>`, authenticated like the upload route
 

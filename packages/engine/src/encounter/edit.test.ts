@@ -31,13 +31,18 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
     applyDamage: unexpected,
     applyHealing: unexpected,
     removeInstances: unexpected,
+    listRemovedInstances: unexpected,
+    restoreInstances: unexpected,
     renameInstance: unexpected,
     setInitiative: (id, initiative) => {
       const after = { ...find(id), initiative };
       byId.set(id, after);
       return after;
     },
+    setGroupId: unexpected,
     setStatsVisible: unexpected,
+    setSpawnPositions: unexpected,
+    changeMonsters: unexpected,
     clearEncounter: unexpected,
     setHp: (id, hp) => {
       const before = find(id);
@@ -57,6 +62,10 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
       return after;
     },
     listInstances: () => [...byId.values()].map((i) => ({ ...i })),
+    noteCommand: unexpected,
+    transaction: (fn) => fn(),
+    latestUndoRecord: unexpected,
+    forgetCommands: unexpected,
     snapshot: () => [...byId.values()].map((i) => ({ ...i })),
   };
 }

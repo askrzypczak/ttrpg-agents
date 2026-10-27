@@ -1,4 +1,5 @@
 export type {
+  TableArtWait,
   TableMapImage,
   TableMapItem,
   TablePort,

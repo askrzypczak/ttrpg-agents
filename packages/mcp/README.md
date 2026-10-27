@@ -25,16 +25,29 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `search_monsters`      | Name search (top 10) with keys                                                                                                             |
 | `get_statblock`        | Markdown statblock by key                                                                                                                  |
-| `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init                                                                           |
-| `list_encounter`       | Encounter in initiative order with HP                                                                                                      |
+| `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init; `join` (id or exact name) adds to that monster's group and initiative    |
+| `preview_monsters`     | Dry run of `add_monsters` (same arguments and checks): names, AC, average HP and dice, init modifier, footprint, room cells; adds nothing  |
+| `move_monsters`        | Move monsters (ids or exact names, all-or-nothing) into a saved room, keeping their state; one already in that room avoids its own cells   |
+| `list_encounter`       | Encounter in initiative order with AC and HP, and the removed monsters that can be restored                                                |
 | `apply_damage`         | Damage by instance id or exact name (clamped at 0)                                                                                         |
 | `heal`                 | Heal by instance id or exact name (clamped at max)                                                                                         |
+| `set_hp`               | Set an exact current HP by id or exact name (clamped to 0..max); reports before/after and any clamp                                        |
+| `set_max_hp`           | Set an exact max HP by id or exact name; HP is lowered if above it, never raised; reports before/after and any clamp                       |
+| `reset_max_hp`         | Reset max HP (by id or exact name, all-or-nothing) to the statblock average or a new roll; full HP stays full; reports before and after    |
+| `set_armor_class`      | Set an exact armor class by id or exact name; reports before/after and any clamp                                                           |
 | `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                     |
+| `restore_monsters`     | Bring back removed monsters by instance id or exact name, all-or-nothing, with HP and initiative; a taken name gets a new number           |
 | `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                     |
+| `change_monster_type`  | Change monsters (id or exact name, all-or-nothing) to another type: new name, HP, AC, size; keeps damage, initiative roll, group, place    |
 | `set_initiative`       | Set an exact initiative by instance id or exact name; reports before and after                                                             |
+| `roll_initiative`      | Roll initiative for several monsters by id or exact name (one roll per group, or each); reports roll, modifier, before and after           |
+| `split_initiative`     | Give several monsters their own initiative group each, by id or exact name; keeps each value, or rolls each with `roll`                    |
+| `merge_initiative`     | Put several monsters in one initiative group by id or exact name; each takes the first named monster's initiative, no roll                 |
 | `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                     |
-| `clear_encounter`      | Remove every monster                                                                                                                       |
-| `table_status`         | Ask the Owlbear tab for its scene status; reports in sync or not                                                                           |
+| `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                |
+| `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number           |
+| `undo`                 | Undo the agent's last encounter change, again the one before; table edits since stay; not clears, map or room changes; names the next undo |
+| `table_status`         | Owlbear scene status, in sync or not; any art the GM must pick (out of sync) or re-upload, as text lines and `waitingOnGm` (only if any)   |
 | `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                            |
 | `set_rooms`            | Name rooms on the map in use by display-cell ranges (confirmed, or proposed); a room named like a saved one replaces it                    |
 | `list_rooms`           | The saved rooms of the map in use with their status and ranges where the map sits now                                                      |
@@ -42,8 +55,8 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `get_map_image`        | Gridded image of the map in use as the DM sees it (an image block) and its grid size; needs the bridge                                     |
 | `propose_rooms`        | Room proposals from ranges read on the map image: each range shrunk by one cell where the room is at least three cells wide; saves nothing |
 
-`table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`, and
-`add_monsters` with a `room` need the bridge running (`npm run bridge`) and a GM
+`table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`,
+`move_monsters`, and `add_monsters` or `preview_monsters` with a `room`, need the bridge running (`npm run bridge`) and a GM
 tab open: they ask the table through the engine's `TablePort` (wired to the bridge
 client in `src/stdio.ts`), and a stopped bridge, no tab or a slow tab come back as
 `isError` results. `remove_rooms` and `propose_rooms` do not ask the table.

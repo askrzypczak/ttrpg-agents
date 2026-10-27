@@ -1,5 +1,6 @@
 import {
   TableUnavailableError,
+  applyInstanceEdit,
   type EncounterRepository,
   type MonsterInstance,
   type NewMonsterInstance,
@@ -96,15 +97,25 @@ function wrapRepo(
     applyDamage: (id, amount) => inner.applyDamage(id, amount, origin),
     applyHealing: (id, amount) => inner.applyHealing(id, amount, origin),
     removeInstances: (ids) => inner.removeInstances(ids, origin),
+    listRemovedInstances: () => inner.listRemovedInstances(),
+    restoreInstances: (ids, name) => inner.restoreInstances(ids, name, origin),
     renameInstance: (id, name) => inner.renameInstance(id, name, origin),
     setInitiative: (id, n) => inner.setInitiative(id, n, origin),
+    setGroupId: (id, groupId) => inner.setGroupId(id, groupId, origin),
     setHp: (id, hp) => inner.setHp(id, hp, origin),
     setMaxHp: (id, maxHp) => inner.setMaxHp(id, maxHp, origin),
     setArmorClass: (id, ac) => inner.setArmorClass(id, ac, origin),
     setStatsVisible: (id, visible) =>
       inner.setStatsVisible(id, visible, origin),
+    setSpawnPositions: (positions) =>
+      inner.setSpawnPositions(positions, origin),
+    changeMonsters: (changes) => inner.changeMonsters(changes, origin),
     clearEncounter: () => inner.clearEncounter(origin),
     listInstances: () => inner.listInstances(),
+    noteCommand: () => inner.noteCommand(origin),
+    transaction: (fn) => inner.transaction(fn),
+    latestUndoRecord: () => inner.latestUndoRecord(),
+    forgetCommands: (ids) => inner.forgetCommands(ids),
     ...over,
   };
 }
@@ -132,25 +143,38 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the eighteen tools", () => {
+  it("exposes the thirty-one tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
+      "change_monster_type",
       "clear_encounter",
       "get_map_image",
       "get_statblock",
       "heal",
       "list_encounter",
       "list_rooms",
+      "merge_initiative",
+      "move_monsters",
+      "preview_monsters",
       "propose_rooms",
       "remove_monsters",
       "remove_rooms",
       "rename_monster",
+      "reset_max_hp",
+      "restore_encounter",
+      "restore_monsters",
+      "roll_initiative",
       "search_monsters",
+      "set_armor_class",
+      "set_hp",
       "set_initiative",
+      "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "split_initiative",
       "table_status",
+      "undo",
       "use_map",
     ]);
   });
@@ -324,6 +348,78 @@ describe("list_encounter", () => {
     ).map((i) => i.name);
     expect(order).toEqual(["High", "TieA", "TieB", "Low", "None"]);
     expect(text(r)).toContain("10/10");
+  });
+
+  it("list_encounter shows each monster's armor class in an AC column and in its structured instances, including one set by set_armor_class and one edited at the table", async () => {
+    seed(
+      { ...item("Shadow 1", 15), armorClass: 12 },
+      { ...item("Shadow 2", 8), armorClass: 12 },
+    );
+    const [first, second] = ctx.repo.listInstances();
+    const firstId = first?.id ?? "";
+    const secondId = second?.id ?? "";
+    const set = await call("set_armor_class", {
+      target: firstId,
+      armorClass: 15,
+    });
+    expect(set.isError).toBeUndefined();
+    applyInstanceEdit(
+      ctx.repo,
+      { instanceId: secondId, armorClass: 17 },
+      { source: "table", commandId: "table-edit" },
+    );
+
+    const r = await call("list_encounter");
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      [
+        "| id | name | AC | HP | initiative |",
+        "| --- | --- | --- | --- | --- |",
+        `| ${firstId} | Shadow 1 | 15 | 10/10 | 15 |`,
+        `| ${secondId} | Shadow 2 | 17 | 10/10 | 8 |`,
+      ].join("\n"),
+    );
+    expect(r.structuredContent?.["instances"]).toEqual([
+      {
+        id: firstId,
+        name: "Shadow 1",
+        monsterKey: SHADOW,
+        hp: 10,
+        maxHp: 10,
+        initiative: 15,
+        armorClass: 15,
+      },
+      {
+        id: secondId,
+        name: "Shadow 2",
+        monsterKey: SHADOW,
+        hp: 10,
+        maxHp: 10,
+        initiative: 8,
+        armorClass: 17,
+      },
+    ]);
+  });
+
+  it("list_encounter shows - in the AC column and armorClass null for a monster without an armor class", async () => {
+    seed(item("Shadow 1", 5));
+    const id = ctx.repo.listInstances()[0]?.id ?? "";
+
+    const r = await call("list_encounter");
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      [
+        "| id | name | AC | HP | initiative |",
+        "| --- | --- | --- | --- | --- |",
+        `| ${id} | Shadow 1 | - | 10/10 | 5 |`,
+      ].join("\n"),
+    );
+    const instances = r.structuredContent?.["instances"] as {
+      armorClass: unknown;
+    }[];
+    expect(instances[0]?.armorClass).toBeNull();
   });
 });
 
@@ -574,6 +670,174 @@ describe("set_initiative", () => {
   });
 });
 
+describe("roll_initiative", () => {
+  const OGRE = "srd-2024_ogre";
+  const initiatives = () =>
+    ctx.repo.listInstances().map((i) => [i.displayName, i.initiative]);
+  const listedOrder = async () =>
+    (
+      (await call("list_encounter")).structuredContent?.["instances"] as {
+        name: string;
+      }[]
+    ).map((i) => i.name);
+  const grouped = (
+    displayName: string,
+    initiative: number | null,
+  ): NewMonsterInstance => ({
+    ...item(displayName, initiative),
+    groupId: "g1",
+  });
+
+  it("roll_initiative by id and by exact name writes the rolled values and reports roll, modifier, before and after for each", async () => {
+    seed(item("Shadow 1", 5), {
+      monsterKey: OGRE,
+      displayName: "Ogre 1",
+      maxHp: 68,
+      initiative: 4,
+    });
+    const shadowId = ctx.repo.listInstances()[0]?.id ?? "";
+    const ogreId = ctx.repo.listInstances()[1]?.id ?? "";
+    ctx.rng = cycleRng(12, 6);
+
+    const r = await call("roll_initiative", {
+      targets: [shadowId, "Ogre 1"],
+    });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain(
+      "Shadow 1: initiative 5 -> 15 (d20 13, modifier +2)",
+    );
+    expect(text(r)).toContain("Ogre 1: initiative 4 -> 6 (d20 7, modifier -1)");
+    expect(r.structuredContent?.["instances"]).toEqual([
+      {
+        id: shadowId,
+        name: "Shadow 1",
+        monsterKey: SHADOW,
+        hp: 10,
+        maxHp: 10,
+        initiative: 15,
+        armorClass: null,
+        before: 5,
+        roll: 13,
+        modifier: 2,
+      },
+      {
+        id: ogreId,
+        name: "Ogre 1",
+        monsterKey: OGRE,
+        hp: 68,
+        maxHp: 68,
+        initiative: 6,
+        armorClass: null,
+        before: 4,
+        roll: 7,
+        modifier: -1,
+      },
+    ]);
+    expect(r.structuredContent?.["rolls"]).toHaveLength(2);
+    expect(initiatives()).toEqual([
+      ["Shadow 1", 15],
+      ["Ogre 1", 6],
+    ]);
+  });
+
+  it("roll_initiative reports unset as the before value for a monster with no initiative", async () => {
+    seed(item("Shadow 1", null));
+    ctx.rng = cycleRng(9);
+
+    const r = await call("roll_initiative", { targets: ["Shadow 1"] });
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toContain(
+      "Shadow 1: initiative unset -> 12 (d20 10, modifier +2)",
+    );
+    expect(r.structuredContent?.["instances"]).toEqual([
+      expect.objectContaining({
+        name: "Shadow 1",
+        before: null,
+        initiative: 12,
+      }),
+    ]);
+    expect(initiatives()).toEqual([["Shadow 1", 12]]);
+  });
+
+  it("roll_initiative shares one roll within a group by default and rolls each monster with mode each", async () => {
+    seed(
+      grouped("Shadow 1", 1),
+      grouped("Shadow 2", 2),
+      grouped("Shadow 3", 3),
+    );
+    const targets = ["Shadow 1", "Shadow 2", "Shadow 3"];
+    ctx.rng = cycleRng(10, 4, 16);
+
+    const shared = await call("roll_initiative", { targets });
+    expect(shared.isError).toBeUndefined();
+    expect(text(shared)).toContain(
+      "Shadow 1: initiative 1 -> 13 (d20 11, modifier +2)",
+    );
+    expect(text(shared)).toContain(
+      "Shadow 2: initiative 2 -> 13 (d20 11, modifier +2)",
+    );
+    expect(text(shared)).toContain(
+      "Shadow 3: initiative 3 -> 13 (d20 11, modifier +2)",
+    );
+    expect(shared.structuredContent?.["rolls"]).toHaveLength(1);
+    expect(initiatives()).toEqual([
+      ["Shadow 1", 13],
+      ["Shadow 2", 13],
+      ["Shadow 3", 13],
+    ]);
+
+    ctx.rng = cycleRng(10, 4, 16);
+    const each = await call("roll_initiative", { targets, mode: "each" });
+    expect(each.isError).toBeUndefined();
+    expect(text(each)).toContain(
+      "Shadow 1: initiative 13 -> 13 (d20 11, modifier +2)",
+    );
+    expect(text(each)).toContain(
+      "Shadow 2: initiative 13 -> 7 (d20 5, modifier +2)",
+    );
+    expect(text(each)).toContain(
+      "Shadow 3: initiative 13 -> 19 (d20 17, modifier +2)",
+    );
+    expect(each.structuredContent?.["rolls"]).toHaveLength(3);
+    expect(initiatives()).toEqual([
+      ["Shadow 1", 13],
+      ["Shadow 2", 7],
+      ["Shadow 3", 19],
+    ]);
+  });
+
+  it("roll_initiative fails and changes nothing when a target is unknown or ambiguous", async () => {
+    seed(item("A", 1), item("Twin", 2), item("Twin", 3));
+    const before = initiatives();
+
+    const unknown = await call("roll_initiative", { targets: ["A", "Ghost"] });
+    expect(unknown.isError).toBe(true);
+    expect(text(unknown)).toContain('Unknown target "Ghost"');
+    expect(text(unknown)).toContain("Nothing was changed.");
+    expect(initiatives()).toEqual(before);
+
+    const ambiguous = await call("roll_initiative", { targets: ["A", "Twin"] });
+    expect(ambiguous.isError).toBe(true);
+    expect(text(ambiguous)).toContain("Ambiguous");
+    expect(text(ambiguous)).toContain("Nothing was changed.");
+    expect(initiatives()).toEqual(before);
+  });
+
+  it("roll_initiative changes the list_encounter order to the rolled values", async () => {
+    seed(item("Shadow 1", 15), item("Shadow 2", 8));
+    expect(await listedOrder()).toEqual(["Shadow 1", "Shadow 2"]);
+    ctx.rng = cycleRng(19);
+
+    const r = await call("roll_initiative", { targets: ["Shadow 2"] });
+    expect(r.isError).toBeUndefined();
+    expect(initiatives()).toEqual([
+      ["Shadow 1", 15],
+      ["Shadow 2", 22],
+    ]);
+    expect(await listedOrder()).toEqual(["Shadow 2", "Shadow 1"]);
+  });
+});
+
 describe("set_stats_visibility", () => {
   const visibility = () =>
     ctx.repo.listInstances().map((i) => [i.displayName, i.statsVisible]);
@@ -637,7 +901,9 @@ describe("set_stats_visibility", () => {
 describe("clear_encounter", () => {
   it("uses singular for one monster", async () => {
     seed(item("A", 1));
-    expect(text(await call("clear_encounter"))).toContain("Cleared 1 monster.");
+    expect(text(await call("clear_encounter"))).toContain(
+      "Cleared 1 monster: A.",
+    );
   });
 
   it("removes every monster", async () => {
@@ -655,6 +921,7 @@ describe("table_status", () => {
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
+      artWaits: [],
     });
     const r = await call("table_status");
     expect(r.isError).toBeFalsy();
@@ -663,6 +930,7 @@ describe("table_status", () => {
     expect(out).not.toMatch(/out of sync|not in sync/i);
     expect(out).toMatch(/\b3\b/);
     expect(r.structuredContent).toEqual({
+      summary: out,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -678,6 +946,7 @@ describe("table_status", () => {
       sceneReady: true,
       tokenCount: 7,
       appliedInstanceCount: 8,
+      artWaits: [],
     });
     const r = await call("table_status");
     expect(r.isError).toBeFalsy();
@@ -698,5 +967,112 @@ describe("table_status", () => {
     const r = await call("table_status");
     expect(r.isError).toBe(true);
     expect(text(r)).toContain(message);
+  });
+
+  it("table_status names the types whose art is being picked and says tokens wait on the GM, in its text and structured result", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [
+        { monsterKey: "srd-2024_ogre", monsterName: "Ogre", step: "pick" },
+      ],
+    });
+    const r = await call("table_status");
+    expect(r.isError).toBeFalsy();
+    const line =
+      "Tokens are waiting on the GM: art for Ogre is being chosen in Owlbear's image picker; cancelling it gives circles.";
+    const lines = text(r).split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^Owlbear is out of sync: /);
+    expect(lines[1]).toBe(line);
+    expect(r.structuredContent).toMatchObject({
+      inSync: false,
+      waitingOnGm: [line],
+    });
+  });
+
+  it("table_status names the types whose art needs re-uploading and what the GM presses, in its text and structured result", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    const reupload = (monsterKey: string, monsterName: string) => ({
+      monsterKey,
+      monsterName,
+      step: "reupload" as const,
+    });
+
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [
+        reupload("srd-2024_wolf", "Wolf"),
+        reupload("srd-2024_owlbear", "Owlbear"),
+      ],
+    });
+    const two = await call("table_status");
+    expect(two.isError).toBeFalsy();
+    const twoLine =
+      "Art for Wolf and Owlbear needs re-uploading: click Re-upload next to each in the extension panel, then Pick the uploaded image.";
+    const twoLines = text(two).split("\n");
+    expect(twoLines).toHaveLength(2);
+    // A re-upload alone leaves the verdict to the counts.
+    expect(twoLines[0]).toMatch(/^Owlbear is in sync: /);
+    expect(twoLines[1]).toBe(twoLine);
+    expect(two.structuredContent).toMatchObject({
+      inSync: true,
+      waitingOnGm: [twoLine],
+    });
+
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [reupload("srd-2024_wolf", "Wolf")],
+    });
+    const one = await call("table_status");
+    const oneLine =
+      "Art for Wolf needs re-uploading: click Re-upload next to it in the extension panel, then Pick the uploaded image.";
+    expect(text(one).split("\n")[1]).toBe(oneLine);
+    expect(one.structuredContent).toMatchObject({ waitingOnGm: [oneLine] });
+
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [
+        reupload("srd-2024_wolf", "Wolf"),
+        reupload("srd-2024_owlbear", "Owlbear"),
+        reupload("srd-2024_ogre", "Ogre"),
+      ],
+    });
+    const three = await call("table_status");
+    expect(text(three).split("\n")[1]).toBe(
+      "Art for Wolf, Owlbear and Ogre needs re-uploading: click Re-upload next to each in the extension panel, then Pick the uploaded image.",
+    );
+  });
+
+  it("table_status adds nothing when no art wait is open", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [],
+    });
+    const r = await call("table_status");
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toBe(
+      "Owlbear is in sync: scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+    );
+    expect(r.structuredContent).toEqual({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      encounterCount: 3,
+      inSync: true,
+      summary:
+        "Owlbear is in sync: scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+    });
   });
 });

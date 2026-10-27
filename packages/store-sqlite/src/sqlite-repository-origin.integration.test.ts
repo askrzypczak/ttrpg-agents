@@ -25,6 +25,8 @@ describe("SqliteEncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.setInitiative("i1", 5),
       // @ts-expect-error origin is required
+      () => repo.setGroupId("i1", "g1"),
+      // @ts-expect-error origin is required
       () => repo.setHp("i1", 5),
       // @ts-expect-error origin is required
       () => repo.setMaxHp("i1", 5),
@@ -35,7 +37,7 @@ describe("SqliteEncounterRepository mutations", () => {
       // @ts-expect-error origin is required
       () => repo.clearEncounter(),
     ];
-    expect(withoutOrigin).toHaveLength(11);
+    expect(withoutOrigin).toHaveLength(12);
 
     // Runtime half: the origin a caller passes is a valid one, and the store
     // accepts a mutation that carries it.

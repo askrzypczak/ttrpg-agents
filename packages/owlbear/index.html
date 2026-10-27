@@ -21,8 +21,20 @@
         color: #f85149;
       }
       #hint,
-      #edit-note {
+      #edit-note,
+      .reupload-hint {
         color: #9da7b3;
+      }
+      #art-prompt {
+        color: #d29922;
+      }
+      #reupload {
+        border: 1px solid #d29922;
+        border-radius: 4px;
+        padding: 0 8px;
+      }
+      #reupload-list {
+        padding-left: 16px;
       }
     </style>
   </head>
@@ -30,16 +42,25 @@
     <h3>ttrpg-agents</h3>
     <p id="status">Starting...</p>
     <p id="art-prompt"></p>
-    <button id="pick-art" hidden>Pick the uploaded image</button>
+    <div id="reupload" hidden>
+      <p>
+        <strong>Token art to re-upload.</strong> These monster types are drawn
+        as circles until their art is re-uploaded:
+      </p>
+      <ul id="reupload-list"></ul>
+    </div>
     <p id="hint"></p>
     <button id="use-this-tab" hidden>Use this tab</button>
     <p id="sync-error"></p>
     <p id="edit-note"></p>
     <div id="overrides" hidden>
       <p>
-        Store values written over the table by a snapshot (connect, reconnect or
-        a skipped change); a snapshot cannot tell an MCP change made meanwhile
-        from a clamped value:
+        Table values written over: by a snapshot (connect, reconnect or a
+        skipped change), which cannot tell an MCP change made meanwhile from a
+        clamped value, by an agent move of a token that had been moved on the
+        table, or by a redraw (for an agent's monster change, or with art you
+        re-uploaded) of a token whose art or size had been changed on the table
+        or that had to be replaced with a new token (its attachments deleted):
       </p>
       <ul id="overrides-list"></ul>
       <button id="dismiss-overrides">Dismiss</button>

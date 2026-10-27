@@ -1,3 +1,5 @@
+import type { Point } from "../map/types.js";
+import type { EncounterEvent } from "./events.js";
 import type { ChangeOrigin } from "./origin.js";
 import type {
   Encounter,
@@ -11,9 +13,56 @@ export interface HpChange {
   after: MonsterInstance;
 }
 
+/** One instance's new monster type and the values that come with it. */
+export interface MonsterChange {
+  id: string;
+  monsterKey: string;
+  displayName: string;
+  maxHp: number;
+  currentHp: number;
+  armorClass: number;
+  initiative: number | null;
+  footprint: number;
+}
+
 /** Builds the items to insert from the display names already in the active encounter. */
 export type InstanceBuilder = (existingNames: string[]) => NewMonsterInstance[];
 
+/** A removed instance kept for restoring, with the change that removed it. */
+export interface RemovedInstance {
+  instance: MonsterInstance;
+  /** Who removed it, in which command. */
+  removedBy: ChangeOrigin;
+  /** True when the last clear removed it (clearEncounter keeps only its own set). */
+  cleared: boolean;
+}
+
+/** Picks a restored instance's display name from the names in use. */
+export type RestoreNamer = (
+  instance: MonsterInstance,
+  namesInUse: readonly string[],
+) => string;
+
+/** An MCP command still undoable, with what undo needs to reverse it. */
+export interface UndoRecord {
+  commandId: string;
+  /** The command's name (the MCP tool), or null when it had none. */
+  command: string | null;
+  /** In first-write order; `before` is null when the command added the instance. */
+  instances: { instanceId: string; before: MonsterInstance | null }[];
+  /**
+   * Change-log events after the command's first write that the command made or
+   * whose origin is `table`, oldest first.
+   */
+  events: EncounterEvent[];
+}
+
+/**
+ * Every mutation with an `mcp` origin stores, in its transaction, each written
+ * instance's state before the command's first write to it; `clearEncounter`
+ * stores none and, when it clears at least one instance, deletes the active
+ * encounter's undo records.
+ */
 export interface EncounterRepository {
   /** Returns the single active encounter, creating it if none exists. */
   getOrCreateActiveEncounter(): Encounter;
@@ -36,6 +85,24 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance[];
   /**
+   * Removed instances of the active encounter not restored since, newest
+   * removal first, a clear's set in creation order; kept until the next clear
+   * that clears at least one instance.
+   */
+  listRemovedInstances(): RemovedInstance[];
+  /**
+   * In one transaction puts removed instances of the active encounter back with the state they had when removed,
+   * each named by `name` from the names in use (the encounter's plus those restored before it in this call),
+   * records one `added` event for them and returns them in the order given. Throws UnknownInstanceError for an id
+   * that is not a removed instance of the active encounter, InvalidNameError for a picked name that is empty or in
+   * use; nothing changes on a throw.
+   */
+  restoreInstances(
+    ids: readonly string[],
+    name: RestoreNamer,
+    origin: ChangeOrigin,
+  ): MonsterInstance[];
+  /**
    * Renames an instance of the active encounter in one transaction and returns
    * it updated; the name is trimmed. Throws UnknownInstanceError for an id not
    * in the active encounter, InvalidNameError for an empty name or one another
@@ -55,6 +122,16 @@ export interface EncounterRepository {
   setInitiative(
     id: string,
     initiative: number | null,
+    origin: ChangeOrigin,
+  ): MonsterInstance;
+  /**
+   * Sets the initiative group of an instance of the active encounter in one
+   * transaction and returns it updated. Throws UnknownInstanceError for an id
+   * not in the active encounter; nothing changes on a throw.
+   */
+  setGroupId(
+    id: string,
+    groupId: string,
     origin: ChangeOrigin,
   ): MonsterInstance;
   /**
@@ -92,8 +169,56 @@ export interface EncounterRepository {
     visible: boolean,
     origin: ChangeOrigin,
   ): MonsterInstance;
-  /** Deletes all instances of the active encounter. */
-  clearEncounter(origin: ChangeOrigin): void;
+  /**
+   * Sets the spawn position of each given instance of the active encounter in
+   * one transaction, appending one `position-changed` event per entry, and
+   * returns the instances updated, in input order. The only way an existing
+   * instance's spawn position changes (the move tool and undo); null clears
+   * it. Throws
+   * UnknownInstanceError, changing nothing, if any id is not in the active
+   * encounter.
+   */
+  setSpawnPositions(
+    positions: readonly { id: string; spawnPosition: Point | null }[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[];
+  /**
+   * Changes the monster type of each given live instance of the active
+   * encounter in one transaction: writes the monster key, display name, max
+   * HP, current HP, armor class, initiative and footprint as given, keeping
+   * id, group, stats visibility, spawn position and creation time; appends one
+   * `monster-changed` event per entry and returns the instances updated, in
+   * input order. Throws UnknownInstanceError for an id that is not a live
+   * instance of the active encounter, InvalidNameError for a name that is
+   * empty or used by another instance (or given earlier in the call); nothing
+   * changes on a throw.
+   */
+  changeMonsters(
+    changes: readonly MonsterChange[],
+    origin: ChangeOrigin,
+  ): MonsterInstance[];
+  /**
+   * Marks every live instance of the active encounter removed by this clear
+   * and returns them in creation order. When it clears at least one, the
+   * instances removed before (an earlier clear's included) are deleted; with
+   * no live instance it changes nothing but the change log.
+   */
+  clearEncounter(origin: ChangeOrigin): MonsterInstance[];
   /** Instances of the active encounter, ordered by creation. */
   listInstances(): MonsterInstance[];
+  /**
+   * Records a command that changed nothing undo can reverse (a map or room
+   * change) as the newest undo record, with its name and no instances;
+   * insert-if-absent.
+   */
+  noteCommand(origin: ChangeOrigin): void;
+  /**
+   * Runs `fn` in one write transaction; repository calls inside it join it; a
+   * throw rolls them all back and is rethrown.
+   */
+  transaction<T>(fn: () => T): T;
+  /** The active encounter's newest undo record. */
+  latestUndoRecord(): UndoRecord | undefined;
+  /** Deletes those commands' undo records; unknown ids are ignored. */
+  forgetCommands(commandIds: readonly string[]): void;
 }

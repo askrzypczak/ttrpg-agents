@@ -9,6 +9,7 @@ import OBR, {
   buildShape,
   buildText,
   isImage,
+  isShape,
   type Item,
 } from "@owlbear-rodeo/sdk";
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
@@ -32,6 +33,10 @@ export interface ObrAdapter {
   onItemsChange(callback: () => void): () => void;
   addItems(items: SceneItem[]): Promise<void>;
   getItems(filter?: (item: SceneItem) => boolean): Promise<SceneItem[]>;
+  /**
+   * Writes the given top-level fields; `image` and `grid` apply to IMAGE
+   * items only, `shape` to SHAPE items only.
+   */
   updateItems(ids: string[], patch: Omit<ItemPatch, "metadata">): Promise<void>;
   /**
    * Key-level item metadata write: sets `key` on item `id` and keeps its other
@@ -109,6 +114,7 @@ function toItem(item: SceneItem): Item {
       position(position: Vec2): B;
       metadata(metadata: Metadata): B;
       layer(layer: NonNullable<SceneItem["layer"]>): B;
+      rotation(rotation: number): B;
       locked(locked: boolean): B;
       disableHit(disableHit: boolean): B;
     },
@@ -122,6 +128,7 @@ function toItem(item: SceneItem): Item {
       .position(item.position)
       .metadata(item.metadata)
       .layer(item.layer ?? "CHARACTER")
+      .rotation(item.rotation ?? 0)
       .locked(item.locked ?? false)
       .disableHit(item.disableHit ?? false);
   switch (item.type) {
@@ -200,6 +207,7 @@ function fromItem(item: Item): SceneItem {
     layer: item.layer,
     rotation: item.rotation,
     scale: item.scale,
+    locked: item.locked,
   };
   if (isImage(item)) {
     read.image = item.image;
@@ -233,6 +241,16 @@ export function createObrAdapter(): ObrAdapter {
             if (patch.name !== undefined) draft.name = patch.name;
             if (patch.visible !== undefined) draft.visible = patch.visible;
             if (patch.position !== undefined) draft.position = patch.position;
+            if (patch.scale !== undefined) draft.scale = patch.scale;
+            if (isImage(draft)) {
+              if (patch.image !== undefined) draft.image = patch.image;
+              if (patch.grid !== undefined) draft.grid = patch.grid;
+            }
+            if (isShape(draft) && patch.shape !== undefined) {
+              draft.shapeType = patch.shape.shapeType;
+              draft.width = patch.shape.width;
+              draft.height = patch.shape.height;
+            }
           }
         },
       ),

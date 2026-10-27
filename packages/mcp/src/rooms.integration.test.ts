@@ -115,7 +115,7 @@ describe("room tools", () => {
         { name: "Taproom", status: "confirmed", ranges: ["T5:AB11"] },
         { name: "Kitchen", status: "confirmed", ranges: ["A1:C3", "D1:D2"] },
       ],
-      moved: false,
+      mapMoved: false,
     });
     expect(
       ctx.maps.getRooms("map-1").map((room) => [room.name, room.status]),
@@ -178,7 +178,7 @@ describe("room tools", () => {
         { name: "Kitchen", status: "confirmed", ranges: ["A1:C3", "D1:D2"] },
         { name: "Taproom", status: "proposed", ranges: ["T5:AB11"] },
       ],
-      moved: false,
+      mapMoved: false,
     });
   });
 
@@ -221,6 +221,7 @@ describe("room tools", () => {
       "Proposed 2 rooms (not saved): Taproom U6:AA10, U13; Closet A1:B2.",
     );
     expect(r.structuredContent).toEqual({
+      summary: text(r),
       rooms: [
         { name: "Taproom", ranges: ["U6:AA10", "U13"] },
         { name: "Closet", ranges: ["A1:B2"] },
@@ -320,7 +321,7 @@ describe("add_monsters in a room", () => {
     ]);
     const [first, second] = placements.map((p) => p.cell);
     expect([first, second].sort()).toEqual(["A1", "C1"]);
-    expect(r.structuredContent?.["moved"]).toBe(false);
+    expect(r.structuredContent?.["mapMoved"]).toBe(false);
     expectInOrder(text(r), [
       "| Goblin Warrior 2 |",
       `Placed in Kitchen: Goblin Warrior 1 at ${String(first)}, Goblin Warrior 2 at ${String(second)}.`,
@@ -417,6 +418,46 @@ describe("add_monsters in a room", () => {
       movedLine,
       "Rolls:",
     ]);
-    expect(r.structuredContent?.["moved"]).toBe(true);
+    expect(r.structuredContent?.["mapMoved"]).toBe(true);
+  });
+});
+
+describe("map-moved flag", () => {
+  it("every tool that reports the map-moved flag names it mapMoved and has no moved key", async () => {
+    const ctx = contextWith(
+      () => Promise.resolve(scene({ ...trollskull, scale: { x: 2, y: 2 } })),
+      registered,
+      () => Promise.resolve({ tokens: [] }),
+    );
+    ctx.table.mapImage = () =>
+      Promise.resolve({
+        mimeType: "image/jpeg",
+        data: "/9j/4AAQSkZJRg==",
+        width: 1600,
+        height: 1200,
+      });
+    const goblins = {
+      groups: [{ monster: "srd-2024_goblin-warrior", count: 1, room: "Attic" }],
+    };
+
+    const calls: [string, unknown][] = [
+      ["set_rooms", { rooms: [{ name: "Attic", ranges: ["A1:C3"] }] }],
+      ["list_rooms", {}],
+      ["preview_monsters", goblins],
+      ["add_monsters", goblins],
+      ["move_monsters", { targets: ["Goblin Warrior 1"], room: "Attic" }],
+      ["get_map_image", {}],
+    ];
+    for (const [name, args] of calls) {
+      const r = await call(ctx, name, args);
+      expect(r.isError, name).toBeFalsy();
+      expect(r.structuredContent?.["mapMoved"], name).toBe(true);
+      expect(r.structuredContent, name).not.toHaveProperty("moved");
+    }
+
+    // use_map registers where the map is now, so it has no moved key either.
+    const used = await call(ctx, "use_map");
+    expect(used.isError).toBeFalsy();
+    expect(used.structuredContent).not.toHaveProperty("moved");
   });
 });
