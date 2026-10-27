@@ -89,7 +89,7 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 
 ## Token art waiting on the GM
 
-- After `restore_encounter` or `add_monsters`, when tokens are expected on the Owlbear table, call `table_status` once.
+- After `restore_encounter` or `add_monsters`, when the Owlbear table is in use (the DM has said so, or an earlier `table_status`, `use_map` or other table tool answered this session), call `table_status` once.
 - If it reports token art waiting on the GM, tell the DM in one line exactly what to click: relay its line verbatim (for example "Art for Wolf needs re-uploading: click Re-upload next to it in the extension panel, then Pick the uploaded image.").
 - Do not retry the restore or the add: the monsters are in the encounter, and their tokens are circles or wait for the GM's pick.
 

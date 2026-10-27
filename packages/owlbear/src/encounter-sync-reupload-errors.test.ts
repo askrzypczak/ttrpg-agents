@@ -34,6 +34,23 @@ const idleTimers: Timers = {
 /** Lets pending promise chains run. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
+/** A promise the test settles by hand. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/** The image the GM picks after the upload. */
+const uploadedArt: PublishedTokenArt = {
+  url: "https://cdn.owlbear.rodeo/assets/ttrpg-art-c3c3c3c3c3c3c3c3.png",
+  mime: "image/png",
+  width: 300,
+  height: 280,
+};
+
 describe("createEncounterSync re-upload errors", () => {
   it("a failed upload is reported through onArtRepublishFailed and keeps the type listed", async () => {
     const failures: string[] = [];
@@ -85,5 +102,50 @@ describe("createEncounterSync re-upload errors", () => {
       .getItems()
       .find((item) => instanceIdOf(item) === "shadow-1");
     expect(token).toMatchObject({ type: "SHAPE" });
+  });
+
+  it("a second press of Re-upload or Pick for a type whose re-upload or pick is still running is ignored", async () => {
+    const upload = deferred<void>();
+    const pick = deferred<PublishedTokenArt | undefined>();
+    const fake = createFakeObr(undefined, undefined, {
+      imageAlive: false,
+      uploadImage: () => upload.promise,
+      pickImage: () => pick.promise,
+    });
+    const sync = createEncounterSync(
+      fake.obr,
+      () => {},
+      () => {},
+      {
+        timers: idleTimers,
+        loadImage: () =>
+          Promise.resolve({
+            bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+            mime: "image/png",
+          }),
+      },
+    );
+    await sync.handleMessage(
+      createMessageFeed().snapshot([shadow], { art: { shadow: storedArt } }),
+    );
+    await settle();
+
+    const first = sync.reuploadArt("shadow");
+    await settle();
+    await sync.reuploadArt("shadow");
+    expect(fake.uploads()).toHaveLength(1);
+    upload.resolve();
+    await first;
+
+    const firstPick = sync.pickUploadedArt("shadow");
+    await settle();
+    await sync.pickUploadedArt("shadow");
+    await sync.reuploadArt("shadow");
+    expect(fake.pickImageCalls()).toBe(1);
+    expect(fake.uploads()).toHaveLength(1);
+    pick.resolve(uploadedArt);
+    await firstPick;
+
+    expect(sync.artWaits()).toEqual([]);
   });
 });

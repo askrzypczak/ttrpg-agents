@@ -313,6 +313,7 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * (see planSync's `reskins`). Bytes that cannot be loaded or uploaded
  * (reported through `onArtRepublishFailed`), or a cancelled, failed or
  * unusable pick, leave the type listed; the GM can try again.
+ * A call for a type whose re-upload or pick is still running is ignored.
  * `onReuploadsChange` hears the whole list whenever it changes, and
  * `artWaits` names the pickers open or still to open in the current
  * reconcile, then the listed types. Without `options.loadImage` stored art is
@@ -442,6 +443,10 @@ export function createEncounterSync(
   // Listed monster types whose stored bytes were uploaded to Owlbear this
   // session.
   const uploaded = new Set<string>();
+  // Listed types whose re-upload or pick of the uploaded image is running: a
+  // second press for the same type is ignored until it ends, so a double click
+  // opens one Owlbear dialog and uploads one copy.
+  const inflight = new Set<string>();
   // The re-upload list as last reported to onReuploadsChange.
   let reportedReuploads = "[]";
   // The fresh pickers of the current reconcile still open or to open, in order.
@@ -1320,25 +1325,35 @@ export function createEncounterSync(
       const row = reuploadList().find((r) => r.monsterKey === monsterKey);
       const sha256 = art[monsterKey]?.sha256;
       const { loadImage } = options;
-      if (row === undefined || sha256 === undefined || loadImage === undefined)
+      if (
+        row === undefined ||
+        sha256 === undefined ||
+        loadImage === undefined ||
+        inflight.has(monsterKey)
+      )
         return;
-      let image: StoredTokenImage;
+      inflight.add(monsterKey);
       try {
-        image = await loadImage(sha256);
-      } catch (error) {
-        reportRepublishFailed(monsterKey, error);
-        return;
-      }
-      try {
-        // Resolves once handed to Owlbear, before the GM confirms the folder.
-        await obr.uploadImage({
-          bytes: image.bytes,
-          mime: image.mime,
-          name: row.assetName,
-        });
-      } catch (error) {
-        reportRepublishFailed(monsterKey, error);
-        return;
+        let image: StoredTokenImage;
+        try {
+          image = await loadImage(sha256);
+        } catch (error) {
+          reportRepublishFailed(monsterKey, error);
+          return;
+        }
+        try {
+          // Resolves once handed to Owlbear, before the GM confirms the folder.
+          await obr.uploadImage({
+            bytes: image.bytes,
+            mime: image.mime,
+            name: row.assetName,
+          });
+        } catch (error) {
+          reportRepublishFailed(monsterKey, error);
+          return;
+        }
+      } finally {
+        inflight.delete(monsterKey);
       }
       uploaded.add(monsterKey);
       reportReuploads();
@@ -1346,8 +1361,19 @@ export function createEncounterSync(
     async pickUploadedArt(monsterKey) {
       const row = reuploadList().find((r) => r.monsterKey === monsterKey);
       const sha256 = art[monsterKey]?.sha256;
-      if (row?.uploaded !== true || sha256 === undefined) return;
-      const picked = await pickArt(row.assetName);
+      if (
+        row?.uploaded !== true ||
+        sha256 === undefined ||
+        inflight.has(monsterKey)
+      )
+        return;
+      inflight.add(monsterKey);
+      let picked: PublishedTokenArt | undefined;
+      try {
+        picked = await pickArt(row.assetName);
+      } finally {
+        inflight.delete(monsterKey);
+      }
       // A cancel, an error or an unusable pick leaves the type listed; so
       // does a pick made after another one took it off the list.
       if (
