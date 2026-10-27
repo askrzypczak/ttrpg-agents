@@ -120,6 +120,7 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 - When the DM gives both max HP and HP ("the wolf has 15 max HP and is at 12"), call `set_max_hp` first and `set_hp` after it, never in parallel: HP is clamped to the max HP at the time of the call.
 - `set_max_hp` lowers HP above the new max but never raises it. If the DM says the monster is at full HP, call `set_hp` after `set_max_hp`, using the max HP from its reply.
 - Do not call `list_encounter` after the calls. Relay each tool's line verbatim (for example "Goblin Warrior 2: HP 9 -> 4/9", "Wolf 1: max HP 11 -> 15, HP 11 -> 11/15", "Shadow 1: AC 12 -> 15").
+- A line may end with a clamp note, such as "(asked 25, lowered to max HP 10)" or "(asked -3, raised to 0)". Relay the note verbatim with the line, and tell the DM the value was changed to the one in the line, not the one they gave.
 
 ## Average or re-rolled max HP
 
@@ -172,6 +173,8 @@ Removed monsters stay restorable until the next `clear_encounter` that clears mo
 - Omit `hp` (the new max HP is rolled) unless the DM asks for average HP.
 - Never remove the monster and add it again: the change keeps its id, damage taken, initiative roll, group and token place.
 - Do not call `list_encounter` after the call. Relay the tool's lines verbatim (for example "Goblin Warrior 2 -> Goblin Boss 1: HP 5/11 -> 15/21, AC 15 -> 17, initiative 12 -> 12"), with its Rolls lines.
+- A line whose initiative changed ends with "(kept roll R, modifier M)": relay that too; it says why the initiative moved.
 - When a line says the monster no longer fits its cell, offer `move_monsters` to place it in a room.
+- The reply's `noLongerFits` lists the new names of those monsters; name them when you make that offer.
 - A target that already is that monster fails the whole call: call it again without that target.
 - Give the statblock with `get_statblock` if the new monster type is new to the encounter, as after `add_monsters`.

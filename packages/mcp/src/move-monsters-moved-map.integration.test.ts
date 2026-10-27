@@ -103,6 +103,6 @@ describe("move_monsters on a moved map", () => {
     expect(r.isError).toBeFalsy();
     expect(text(r)).toContain("Moved into Attic: Goblin Warrior 1 at A1.");
     expect(text(r)).toContain(movedLine);
-    expect(r.structuredContent?.["moved"]).toBe(true);
+    expect(r.structuredContent?.["mapMoved"]).toBe(true);
   });
 });

@@ -17,12 +17,14 @@ const origin: ChangeOrigin = { source: "table", commandId: "seed" };
 
 // SRD 5.2 values: Wolf medium, AC 12, HP 11 (2d8 + 2), initiative +2;
 // Shadow medium, AC 12, HP 27, +2; Goblin Boss small, AC 17, HP 21, +2;
-// Dire Wolf large, AC 14, HP 22 (3d10 + 6), +2; Owlbear large, AC 13, HP 59, +1.
+// Dire Wolf large, AC 14, HP 22 (3d10 + 6), +2; Owlbear large, AC 13, HP 59, +1;
+// Zombie medium, AC 8, HP 15, -2.
 const WOLF = "srd-2024_wolf";
 const SHADOW = "srd-2024_shadow";
 const DIRE_WOLF = "srd-2024_dire-wolf";
 const GOBLIN_BOSS = "srd-2024_goblin-boss";
 const OWLBEAR = "srd-2024_owlbear";
+const ZOMBIE = "srd-2024_zombie";
 
 let ctx: ToolContext;
 
@@ -153,15 +155,83 @@ describe("change_monster_type", () => {
     expect(r.isError).toBeUndefined();
     expect(text(r)).toBe(
       [
-        "Wolf 1 -> Owlbear 1: HP 5/11 -> 53/59, AC 12 -> 13, initiative 15 -> 14; no longer fits its cell (now 2x2 cells)",
-        "Dire Wolf 1 -> Owlbear 2: HP 22/22 -> 59/59, AC 14 -> 13, initiative 10 -> 9",
+        "Wolf 1 -> Owlbear 1: HP 5/11 -> 53/59, AC 12 -> 13, initiative 15 -> 14 (kept roll 13, modifier +1); no longer fits its cell (now 2x2 cells)",
+        "Dire Wolf 1 -> Owlbear 2: HP 22/22 -> 59/59, AC 14 -> 13, initiative 10 -> 9 (kept roll 8, modifier +1)",
       ].join("\n"),
     );
-    expect(r.structuredContent?.noLongerFits).toEqual([hurt.id]);
+    expect(r.structuredContent?.noLongerFits).toEqual(["Owlbear 1"]);
     expect(stored()).toEqual([
       ["Owlbear 1", OWLBEAR, 53, 59, 13, 14, 2],
       ["Owlbear 2", OWLBEAR, 59, 59, 13, 9, 2],
     ]);
+  });
+
+  it("change_monster_type names the monsters that no longer fit", async () => {
+    seed(
+      wolf("Wolf 1"),
+      {
+        monsterKey: DIRE_WOLF,
+        displayName: "Dire Wolf 1",
+        maxHp: 22,
+        armorClass: 14,
+        initiative: 10,
+        footprint: 2,
+      },
+      wolf("Wolf 2"),
+    );
+
+    const r = await call("change_monster_type", {
+      targets: ["Wolf 1", "Dire Wolf 1", "Wolf 2"],
+      monster: OWLBEAR,
+      hp: "average",
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(r.structuredContent?.noLongerFits).toEqual([
+      "Owlbear 1",
+      "Owlbear 3",
+    ]);
+  });
+
+  it("change_monster_type states the kept roll and modifier when initiative changed", async () => {
+    // Wolf +2 -> Zombie -2: kept roll 15 - 2 = 13, new initiative 13 - 2 = 11.
+    seed(wolf("Wolf 1"));
+
+    const r = await call("change_monster_type", {
+      targets: ["Wolf 1"],
+      monster: ZOMBIE,
+      hp: "average",
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      "Wolf 1 -> Zombie 1: HP 11/11 -> 15/15, AC 12 -> 8, initiative 15 -> 11 (kept roll 13, modifier -2)",
+    );
+  });
+
+  it("change_monster_type says nothing about initiative when it did not change", async () => {
+    // Wolf +2 -> Goblin Boss +2 keeps 15; no initiative stays none.
+    seed(wolf("Wolf 1"), {
+      monsterKey: SHADOW,
+      displayName: "Shadow 1",
+      maxHp: 27,
+      armorClass: null,
+      initiative: null,
+    });
+
+    const r = await call("change_monster_type", {
+      targets: ["Wolf 1", "Shadow 1"],
+      monster: GOBLIN_BOSS,
+      hp: "average",
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      [
+        "Wolf 1 -> Goblin Boss 1: HP 11/11 -> 21/21, AC 12 -> 17, initiative 15 -> 15",
+        "Shadow 1 -> Goblin Boss 2: HP 27/27 -> 21/21, AC none -> 17, initiative none -> none",
+      ].join("\n"),
+    );
   });
 
   it("change_monster_type with hp rolled adds a Rolls line per HP roll", async () => {

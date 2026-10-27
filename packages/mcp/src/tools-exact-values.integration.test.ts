@@ -132,7 +132,9 @@ describe("set_hp", () => {
     const r = await call("set_hp", { target: "Shadow 1", hp: 25 });
 
     expect(r.isError).toBeUndefined();
-    expect(text(r)).toBe("Shadow 1: HP 6 -> 10/10");
+    expect(text(r)).toBe(
+      "Shadow 1: HP 6 -> 10/10 (asked 25, lowered to max HP 10)",
+    );
     expect(ctx.repo.listInstances()[0]?.currentHp).toBe(10);
   });
 
@@ -149,6 +151,33 @@ describe("set_hp", () => {
     expect(r.isError).toBeUndefined();
     expect(text(r)).toBe("Shadow 1: HP 7 -> 4/10");
     expect(inner.listInstances()[0]?.currentHp).toBe(4);
+  });
+
+  it("set_hp says the value was lowered or raised, and says nothing extra when not clamped", async () => {
+    const [shadow] = seed(item("Shadow 1", 10));
+    if (!shadow) throw new Error("seed failed");
+    ctx.repo.applyDamage(shadow.id, 4, origin);
+
+    const lowered = await call("set_hp", { target: "Shadow 1", hp: 25 });
+    expect(lowered.isError).toBeUndefined();
+    expect(text(lowered)).toBe(
+      "Shadow 1: HP 6 -> 10/10 (asked 25, lowered to max HP 10)",
+    );
+    expect(lowered.structuredContent).toEqual({
+      summary: "Shadow 1: HP 6 -> 10/10 (asked 25, lowered to max HP 10)",
+      instance: { ...view(shadow), hp: 10 },
+      before: { ...view(shadow), hp: 6 },
+    });
+
+    const raised = await call("set_hp", { target: "Shadow 1", hp: -3 });
+    expect(raised.isError).toBeUndefined();
+    expect(text(raised)).toBe(
+      "Shadow 1: HP 10 -> 0/10 (asked -3, raised to 0)",
+    );
+
+    const exact = await call("set_hp", { target: "Shadow 1", hp: 7 });
+    expect(exact.isError).toBeUndefined();
+    expect(text(exact)).toBe("Shadow 1: HP 0 -> 7/10");
   });
 });
 
@@ -167,6 +196,18 @@ describe("set_max_hp", () => {
       instance: { ...view(wolf), hp: 12, maxHp: 12 },
       before: view(wolf),
     });
+  });
+
+  it("set_max_hp says the value was raised when below 1", async () => {
+    seed(item("Wolf 1", 20));
+
+    const r = await call("set_max_hp", { target: "Wolf 1", maxHp: 0 });
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(
+      "Wolf 1: max HP 20 -> 1, HP 20 -> 1/1 (asked 0, raised to 1)",
+    );
+    expect(stored()).toEqual([["Wolf 1", 1, 1, null]]);
   });
 });
 
@@ -318,6 +359,20 @@ describe("set_armor_class", () => {
     expect(r.structuredContent?.["before"]).toBeNull();
     expect(r.structuredContent?.["armorClass"]).toBe(14);
     expect(ctx.repo.listInstances()[0]?.armorClass).toBe(14);
+  });
+
+  it("set_armor_class says the value was raised when negative", async () => {
+    seed(item("Shadow 1", 10, 12));
+
+    const r = await call("set_armor_class", {
+      target: "Shadow 1",
+      armorClass: -2,
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe("Shadow 1: AC 12 -> 0 (asked -2, raised to 0)");
+    expect(r.structuredContent?.["armorClass"]).toBe(0);
+    expect(ctx.repo.listInstances()[0]?.armorClass).toBe(0);
   });
 });
 

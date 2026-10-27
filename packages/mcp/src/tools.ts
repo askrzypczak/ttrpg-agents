@@ -294,7 +294,7 @@ const addMonstersTool = defineTool({
       instances: result.instances,
       rolls: result.rolls,
       placements: result.placements,
-      moved: result.moved,
+      mapMoved: result.moved,
     });
   },
 });
@@ -339,7 +339,7 @@ const previewMonstersTool = defineTool({
     return ok(text, {
       instances: preview.instances,
       placements: preview.placements,
-      moved: preview.moved,
+      mapMoved: preview.moved,
     });
   },
 });
@@ -374,7 +374,7 @@ const moveMonstersTool = defineTool({
     );
     return ok(
       withMovedLine(moveLines(result.placements).join("\n\n"), result.moved),
-      { placements: result.placements, moved: result.moved },
+      { placements: result.placements, mapMoved: result.moved },
     );
   },
 });
@@ -452,7 +452,7 @@ const setHpTool = defineTool({
     if (!instance) return fail(`Unknown target "${target}"`);
     const { before, after } = ctx.repo.setHp(instance.id, hp, origin());
     return ok(
-      `${after.displayName}: HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+      `${after.displayName}: HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}${clampNote(hp, after.currentHp, "lowered to max HP")}`,
       { instance: instanceView(after), before: instanceView(before) },
     );
   },
@@ -470,7 +470,7 @@ const setMaxHpTool = defineTool({
     if (!instance) return fail(`Unknown target "${target}"`);
     const { before, after } = ctx.repo.setMaxHp(instance.id, maxHp, origin());
     return ok(
-      `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}`,
+      `${after.displayName}: max HP ${String(before.maxHp)} -> ${String(after.maxHp)}, HP ${String(before.currentHp)} -> ${String(after.currentHp)}/${String(after.maxHp)}${clampNote(maxHp, after.maxHp)}`,
       { instance: instanceView(after), before: instanceView(before) },
     );
   },
@@ -534,7 +534,7 @@ const setArmorClassTool = defineTool({
     const before = instance.armorClass;
     const updated = ctx.repo.setArmorClass(instance.id, armorClass, origin());
     return ok(
-      `${updated.displayName}: AC ${String(before ?? "unset")} -> ${String(updated.armorClass)}`,
+      `${updated.displayName}: AC ${String(before ?? "unset")} -> ${String(updated.armorClass)}${clampNote(armorClass, updated.armorClass)}`,
       {
         instance: instanceView(updated),
         armorClass: updated.armorClass,
@@ -654,12 +654,20 @@ const changeMonsterTypeTool = defineTool({
       hp ?? "rolled",
       origin(),
     );
-    const lines = result.instances.map(({ before, after, noLongerFits }) => {
-      const line = typeChangeLine(before, after);
-      return noLongerFits
-        ? `${line}; no longer fits its cell (now ${String(after.footprint)}x${String(after.footprint)} cells)`
-        : line;
-    });
+    const lines = result.instances.map(
+      ({ before, after, noLongerFits, initiativeRoll }) => {
+        const kept =
+          initiativeRoll !== null &&
+          after.initiative !== null &&
+          after.initiative !== before.initiative
+            ? ` (kept roll ${String(initiativeRoll)}, modifier ${signed(after.initiative - initiativeRoll)})`
+            : "";
+        const line = `${typeChangeLine(before, after)}${kept}`;
+        return noLongerFits
+          ? `${line}; no longer fits its cell (now ${String(after.footprint)}x${String(after.footprint)} cells)`
+          : line;
+      },
+    );
     const rollLines = result.rolls.map(
       (r) =>
         `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
@@ -673,7 +681,7 @@ const changeMonsterTypeTool = defineTool({
       before: result.instances.map((c) => instanceView(c.before)),
       noLongerFits: result.instances
         .filter((c) => c.noLongerFits)
-        .map((c) => c.after.id),
+        .map((c) => c.after.displayName),
       rolls: result.rolls,
     });
   },
@@ -1061,7 +1069,11 @@ const setRoomsTool = defineTool({
       .map((room) => `${room.name} ${room.ranges.join(", ")}`)
       .join("; ");
     const text = `Saved ${roomCount(result.rooms.length)} on ${result.map.name} (${result.rooms[0]?.status ?? ""}): ${saved}.`;
-    return ok(withMovedLine(text, result.moved), { ...result });
+    return ok(withMovedLine(text, result.moved), {
+      map: result.map,
+      rooms: result.rooms,
+      mapMoved: result.moved,
+    });
   },
 });
 
@@ -1084,7 +1096,11 @@ const listRoomsTool = defineTool({
               room.ranges.length === 0 ? null : room.ranges.join(", "),
             ]),
           )}`;
-    return ok(withMovedLine(text, result.moved), { ...result });
+    return ok(withMovedLine(text, result.moved), {
+      map: result.map,
+      rooms: result.rooms,
+      mapMoved: result.moved,
+    });
   },
 });
 
@@ -1129,7 +1145,7 @@ const getMapImageTool = defineTool({
         name: map.name,
         cols,
         rows,
-        moved,
+        mapMoved: moved,
         width: image.width,
         height: image.height,
       },
@@ -1272,6 +1288,21 @@ function moveLines(placements: readonly RoomPlacement[]): string[] {
 
 function withMovedLine(text: string, moved: boolean): string {
   return moved ? `${text}\n\n${movedLine}` : text;
+}
+
+/**
+ * Notes a value the repo applied other than the one asked for, such as
+ * " (asked 25, lowered to max HP 10)"; empty when they match or there is no
+ * applied value to compare.
+ */
+function clampNote(
+  asked: number,
+  applied: number | null,
+  loweredTo = "lowered to",
+): string {
+  if (applied === null || applied === asked) return "";
+  const direction = applied < asked ? loweredTo : "raised to";
+  return ` (asked ${String(asked)}, ${direction} ${String(applied)})`;
 }
 
 function orNone(value: number | null): string {

@@ -246,7 +246,7 @@ describe("preview_monsters", () => {
     expect(text(r)).toContain(
       "The map moved since it was registered; cells are read where it is now.",
     );
-    expect(r.structuredContent?.["moved"]).toBe(true);
+    expect(r.structuredContent?.["mapMoved"]).toBe(true);
   });
 
   it("preview_monsters gives each group with a room its own placement line", async () => {
