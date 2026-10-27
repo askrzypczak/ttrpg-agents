@@ -311,6 +311,33 @@ describe("planSync previous position", () => {
     }
   });
 
+  it("a move of a token created at its spawn position records no previous position", () => {
+    const plan = planSync(
+      [inst(1, { spawnPosition: target })],
+      [tokenOf(1, placed, { position: placed })],
+      config,
+      ctx({ moves: ["i1"] }),
+    );
+
+    expect(plan.move).toEqual([{ id: "token-1", position: target }]);
+    const record = syncedWrite(plan, "token-1");
+    expect(record && Object.hasOwn(record, PREVIOUS_POSITION_KEY)).toBe(false);
+  });
+
+  it("a token whose previous position is unreadable moves to a fresh default-row slot when an mcp change clears its spawn position", () => {
+    const token = tokenOf(1, target, { position: target });
+    (token.metadata[SYNCED_METADATA_KEY] as Record<string, unknown>)[
+      PREVIOUS_POSITION_KEY
+    ] = "garbage";
+
+    const plan = planSync([inst(1)], [token], config, ctx({ moves: ["i1"] }));
+
+    expect(plan.move).toEqual([{ id: "token-1", position: center }]);
+    const record = syncedWrite(plan, "token-1");
+    expect(record?.[POSITION_BASELINE_KEY]).toEqual(center);
+    expect(record?.[PREVIOUS_POSITION_KEY]).toBeNull();
+  });
+
   it("a token whose record holds a null previous position is not moved when an mcp change clears its spawn position", () => {
     const plan = planSync(
       [inst(1), clearedSibling.instance],
