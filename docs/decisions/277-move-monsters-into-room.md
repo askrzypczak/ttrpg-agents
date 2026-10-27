@@ -52,7 +52,7 @@ Issue: [#277](https://github.com/askrzypczak/ttrpg-agents/issues/277).
   - Events only, no snapshot fallback: a move made while the extension was offline never reaches the token.
 - Where: `planSync` (`packages/owlbear/src/sync-plan.ts`); `createEncounterSync` (`packages/owlbear/src/encounter-sync.ts`).
 - Revisit if: a move made while offline sets the same position again (the snapshot cannot see it).
-- Status: active
+- Status: superseded by 306.5
 
 ## 277.6 A move over a token that is off its recorded position, or has none, is listed in the panel's override list
 
