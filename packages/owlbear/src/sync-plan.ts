@@ -20,7 +20,10 @@ export const POSITION_BASELINE_KEY = "position";
 /**
  * Reserved key in the synced record: where the token stood before the
  * extension first moved it to a spawn position (`{ x, y }`), or null when its
- * instance had no spawn position when the token was last placed.
+ * instance had no spawn position when the token was last placed (a token
+ * created in the default row, or moved back). Absent when unknown (a token
+ * created at a spawn position, or before this key existed); an absent value is
+ * never adopted.
  */
 export const PREVIOUS_POSITION_KEY = "previousPosition";
 /**
@@ -57,7 +60,8 @@ function cellsGrid(
 /**
  * One position per token, side by side: each token is centred in a slot as
  * wide as its footprint in cells, and the whole row is centred on `center`.
- * Only new tokens without a spawn position go in the row.
+ * Only new tokens without a spawn position, and existing tokens moving back
+ * with no previous position recorded, go in the row.
  */
 function rowPositions(footprints: readonly number[], center: Vec2): Vec2[] {
   const total = footprints.reduce((sum, cells) => sum + cells * TOKEN_SIZE, 0);
@@ -201,8 +205,9 @@ export type SyncPlan = {
   /** Token renames (a top-level item field, not metadata). */
   rename: { id: string; name: string }[];
   /**
-   * Existing tokens moved to their instance's new spawn position (a top-level
-   * item field); only tokens not already there.
+   * Existing tokens moved to their instance's new spawn position, or back
+   * when it was cleared (to their previous position, else to a default-row
+   * slot) (a top-level item field); only tokens not already there.
    */
   move: { id: string; position: Vec2 }[];
   /**
@@ -425,6 +430,17 @@ function asPosition(value: unknown): Vec2 | undefined {
 
 const samePosition = (a: Vec2, b: Vec2): boolean => a.x === b.x && a.y === b.y;
 
+/**
+ * The previous position in a synced record (see PREVIOUS_POSITION_KEY): a
+ * point, null, or undefined when absent or not readable (unknown).
+ */
+function previousPosition(
+  record: Record<string, unknown>,
+): Vec2 | null | undefined {
+  const value = record[PREVIOUS_POSITION_KEY];
+  return value === null ? null : asPosition(value);
+}
+
 const omitKeys = (
   value: Record<string, unknown>,
   keys: readonly string[],
@@ -588,7 +604,7 @@ function movesEditField(
  * NAME_BASELINE_KEY in the synced record.
  * `create-only` keys and visibility are set at creation only.
  * A new token is created at its instance's spawn position when it has one;
- * the others of the batch sit in a row at the viewport centre. The created
+ * the others of the batch sit in the default row at the viewport centre. The created
  * position is recorded under POSITION_BASELINE_KEY in the synced record.
  * An existing token whose instance has a spawn position is moved there when
  * the instance is in `context.moves` (an `mcp` change set it) or when its
@@ -597,8 +613,26 @@ function movesEditField(
  * the recorded position becomes the spawn position either way. A planned move
  * of a token that is not at its recorded position, or has none (a token
  * created before positions were recorded), is reported in `overrides`. No
- * position is ever recorded for an older token without a move, and otherwise
- * an existing token is never moved.
+ * position is ever recorded for an older token without a move.
+ * The previous position (PREVIOUS_POSITION_KEY) records where a token stood
+ * before the extension first moved it: a new token without a spawn position
+ * records null, one created at its spawn position records none. A planned
+ * move of a token whose record holds null records the token's position (its
+ * recorded position when it already stands at the target, a retry after the
+ * move was written but not the record); a recorded point is kept on later
+ * moves, and an absent one stays absent.
+ * An existing token whose instance has no spawn position moves back: to its
+ * recorded previous point on any reconcile, or, with no previous position
+ * recorded and the instance in `context.moves`, to a fresh slot in the default
+ * row; with a null previous position it is never moved. The move is planned
+ * only when the token is not already there; either way the recorded position
+ * becomes that position and the previous position null. A planned move back
+ * is reported in `overrides` like a move. The default row holds, in encounter
+ * order, the new tokens without a spawn position and the tokens moving back
+ * to a slot. A slot is not stable across a retry: when a reconcile fails
+ * after the move is written but before the record, the retry may plan another
+ * slot (the row's new tokens now exist, or the viewport moved), and moves the
+ * token again with a move note. Otherwise an existing token is never moved.
  * A new token records the look it is created with under LOOK_BASELINE_KEY:
  * its instance's monster key and its picture's url (null for a circle). An
  * existing token is redrawn when its instance is in `context.restyles` (an
@@ -726,6 +760,31 @@ export function planSync(
   // Ids a replacement may not take: those on the scene and those planned.
   const takenIds = new Set(observed.map((item) => item.id));
 
+  for (const instance of desired)
+    if (!tokens.has(instance.id) && context.placed.has(instance.id))
+      plan.deleted.push(instance.id);
+
+  const missing = desired.filter(
+    (i) => !tokens.has(i.id) && !context.placed.has(i.id),
+  );
+  // The default row: new tokens without a spawn position, and existing tokens
+  // moving back with no previous position recorded, in encounter order.
+  const inRow = desired.filter((i) => {
+    if (i.spawnPosition != null) return false;
+    const token = tokens.get(i.id);
+    if (token === undefined) return !context.placed.has(i.id);
+    return (
+      context.moves?.has(i.id) === true &&
+      previousPosition(asRecord(token.metadata[SYNCED_METADATA_KEY])) ===
+        undefined
+    );
+  });
+  const row = rowPositions(
+    inRow.map((i) => i.footprint),
+    context.viewportCenter,
+  );
+  const slots = new Map(inRow.map((i, n) => [i.id, row[n]!]));
+
   const owned = config.projectors.filter((p) => p.mode === "owned");
   for (const [id, token] of tokens) {
     const instance = wanted.get(id)!;
@@ -819,25 +878,45 @@ export function planSync(
       next[NAME_BASELINE_KEY] = d;
     }
     const spawn = instance.spawnPosition;
+    const recorded = asPosition(baseline[POSITION_BASELINE_KEY]);
+    const previous = previousPosition(baseline);
+    // Plans a move to `target` unless the token is there already, with an
+    // override note when the token is not where it was last placed.
+    const moveTo = (target: Vec2): void => {
+      if (samePosition(token.position, target)) return;
+      move = target;
+      if (recorded === undefined || !samePosition(token.position, recorded))
+        plan.overrides.push({
+          instanceId: id,
+          message: moveOverrideNote(
+            instance.displayName,
+            recorded !== undefined,
+          ),
+        });
+    };
     if (spawn) {
-      const recorded = asPosition(baseline[POSITION_BASELINE_KEY]);
       const target = { x: spawn.x, y: spawn.y };
       if (
         context.moves?.has(id) === true ||
         (recorded !== undefined && !samePosition(recorded, target))
       ) {
-        if (!samePosition(token.position, target)) {
-          move = target;
-          if (recorded === undefined || !samePosition(token.position, recorded))
-            plan.overrides.push({
-              instanceId: id,
-              message: moveOverrideNote(
-                instance.displayName,
-                recorded !== undefined,
-              ),
-            });
+        if (previous === null) {
+          const before =
+            samePosition(token.position, target) && recorded !== undefined
+              ? recorded
+              : token.position;
+          next[PREVIOUS_POSITION_KEY] = { x: before.x, y: before.y };
         }
+        moveTo(target);
         next[POSITION_BASELINE_KEY] = target;
+      }
+    } else if (previous !== null) {
+      const back = previous ?? slots.get(id);
+      if (back !== undefined) {
+        const target = { x: back.x, y: back.y };
+        moveTo(target);
+        next[POSITION_BASELINE_KEY] = target;
+        next[PREVIOUS_POSITION_KEY] = null;
       }
     }
     const look = asLook(baseline[LOOK_BASELINE_KEY]);
@@ -934,22 +1013,10 @@ export function planSync(
       plan.update.push({ id: token.id, key: SYNCED_METADATA_KEY, value: next });
   }
 
-  for (const instance of desired)
-    if (!tokens.has(instance.id) && context.placed.has(instance.id))
-      plan.deleted.push(instance.id);
-
-  const missing = desired.filter(
-    (i) => !tokens.has(i.id) && !context.placed.has(i.id),
-  );
-  const row = rowPositions(
-    missing.filter((i) => i.spawnPosition == null).map((i) => i.footprint),
-    context.viewportCenter,
-  );
-  let slot = 0;
   missing.forEach((instance) => {
     const position = instance.spawnPosition
       ? { x: instance.spawnPosition.x, y: instance.spawnPosition.y }
-      : row[slot++]!;
+      : slots.get(instance.id)!;
     const metadata: Record<string, unknown> = {};
     const synced: Record<string, unknown> = {};
     for (const p of config.projectors) {
@@ -960,6 +1027,7 @@ export function planSync(
     }
     synced[NAME_BASELINE_KEY] = instance.displayName;
     synced[POSITION_BASELINE_KEY] = { x: position.x, y: position.y };
+    if (!instance.spawnPosition) synced[PREVIOUS_POSITION_KEY] = null;
     const art = Object.hasOwn(context.art, instance.monsterKey)
       ? context.art[instance.monsterKey]
       : undefined;
