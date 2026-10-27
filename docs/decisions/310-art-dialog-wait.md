@@ -124,3 +124,13 @@ Issue: [#310](https://github.com/askrzypczak/ttrpg-agents/issues/310).
 - Where: `pickUploadedArt`, the re-upload list (`packages/owlbear/src/encounter-sync.ts`).
 - Revisit if: duplicate assets in the GM's library become a nuisance.
 - Status: active
+
+## 310.12 A second press of Re-upload or Pick for a type whose re-upload or pick is still running is ignored
+
+- Decided by: epic #280 orchestrator, 2026-10-26, PR review (#315), not human-approved.
+- Context: the panel rows redraw only when the list changes, so a double click on Re-upload stacked two Owlbear folder dialogs and two asset copies, and a double click on Pick could open two pickers.
+- Options:
+  - Chosen: an in-flight set keyed by monster key in the sync covers both `reuploadArt` and `pickUploadedArt`; a call for a type with one running returns at once.
+  - Disable the buttons in `main.ts`: the rows redraw only on a list change, so the button would not reflect the running call.
+- Where: `inflight`, `reuploadArt`, `pickUploadedArt` (`packages/owlbear/src/encounter-sync.ts`); test in `packages/owlbear/src/encounter-sync-reupload-errors.test.ts`.
+- Status: active
