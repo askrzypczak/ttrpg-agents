@@ -90,6 +90,11 @@ export function changeMonsterType(
     }
     return old.initiativeModifier;
   });
+  const keptRolls = targets.map((instance, n) =>
+    instance.initiative === null
+      ? null
+      : instance.initiative - (oldModifiers[n] ?? 0),
+  );
   for (const instance of targets) {
     if (instance.monsterKey === monster.key) {
       throw new SameMonsterError(
@@ -108,6 +113,7 @@ export function changeMonsterType(
     const hp = rollMaxHp({ rng, now }, monster.hp, mode, displayName);
     if (hp.roll !== null) rolls.push(hp.roll);
     const damageTaken = instance.maxHp - instance.currentHp;
+    const keptRoll = keptRolls[n] ?? null;
     return {
       id: instance.id,
       monsterKey: monster.key,
@@ -116,11 +122,7 @@ export function changeMonsterType(
       currentHp: Math.max(0, hp.maxHp - damageTaken),
       armorClass: monster.ac,
       initiative:
-        instance.initiative === null
-          ? null
-          : instance.initiative -
-            (oldModifiers[n] ?? 0) +
-            monster.initiativeModifier,
+        keptRoll === null ? null : keptRoll + monster.initiativeModifier,
       footprint,
     };
   });
@@ -137,7 +139,7 @@ export function changeMonsterType(
       before,
       after,
       noLongerFits: after.footprint > before.footprint,
-      initiativeRoll: null,
+      initiativeRoll: keptRolls[n] ?? null,
     };
   });
   return { instances, rolls };
