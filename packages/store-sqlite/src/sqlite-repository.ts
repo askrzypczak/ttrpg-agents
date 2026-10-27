@@ -484,12 +484,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance[] {
     return this.transaction(() => {
-      const points = positions.map(({ id, spawnPosition }) => {
-        if (spawnPosition === null) throw new Error("not implemented");
-        return { id, spawnPosition };
-      });
       const existing = this.listInstances();
-      const targets = points.map(({ id, spawnPosition }) => {
+      const targets = positions.map(({ id, spawnPosition }) => {
         const instance = existing.find((i) => i.id === id);
         if (!instance) throw new UnknownInstanceError(unknownMessage(id));
         return { instance, spawnPosition };
@@ -503,17 +499,18 @@ export class SqliteEncounterRepository implements EncounterRepository {
         targets.map(({ instance }) => ({ id: instance.id, before: instance })),
       );
       return targets.map(({ instance, spawnPosition }) => {
-        update.run(spawnPosition.x, spawnPosition.y, instance.id);
+        const point =
+          spawnPosition === null
+            ? null
+            : { x: spawnPosition.x, y: spawnPosition.y };
+        update.run(point?.x ?? null, point?.y ?? null, instance.id);
         this.record({
           type: "position-changed",
           id: instance.id,
-          spawnPosition: { x: spawnPosition.x, y: spawnPosition.y },
+          spawnPosition: point,
           origin,
         });
-        return {
-          ...instance,
-          spawnPosition: { x: spawnPosition.x, y: spawnPosition.y },
-        };
+        return { ...instance, spawnPosition: point };
       });
     });
   }

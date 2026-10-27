@@ -42,12 +42,7 @@ export const encounterEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("position-changed"),
     id: z.string(),
-    spawnPosition: z
-      .object({ x: z.number(), y: z.number() })
-      .nullable()
-      .refine((position): boolean => position !== null, {
-        message: "not implemented",
-      }),
+    spawnPosition: z.object({ x: z.number(), y: z.number() }).nullable(),
     origin: changeOriginSchema,
   }),
   z.object({

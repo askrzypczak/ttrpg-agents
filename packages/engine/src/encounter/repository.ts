@@ -173,7 +173,8 @@ export interface EncounterRepository {
    * Sets the spawn position of each given instance of the active encounter in
    * one transaction, appending one `position-changed` event per entry, and
    * returns the instances updated, in input order. The only way an existing
-   * instance's spawn position changes (the move tool). Throws
+   * instance's spawn position changes (the move tool and undo); null clears
+   * it. Throws
    * UnknownInstanceError, changing nothing, if any id is not in the active
    * encounter.
    */
