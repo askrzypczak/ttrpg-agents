@@ -98,7 +98,7 @@ Issue: [#283](https://github.com/askrzypczak/ttrpg-agents/issues/283).
   - Chosen: write nothing for it and report `kept-no-value` ("<Name> token not moved back: it had no spawn position"). The same applies to a null group or a null armor class, which the setters cannot write either; undoing a type change whose earlier AC was null keeps the current AC and reports it `kept-no-value` (implementer, rather than refusing the undo). Follow-up #306 moves such a token back.
   - A nullable `position-changed` and the extension's default-row slot in this ticket: a wire, store and extension change for one case of one tool.
 - Where: `undoLastCommand` (`packages/engine/src/encounter/undo.ts`).
-- Status: active
+- Status: active in part: its position clause is superseded by 306.2
 
 ## 283.10 Undo removes a monster the command added even when the table edited it since
 

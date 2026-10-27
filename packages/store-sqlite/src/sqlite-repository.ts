@@ -480,7 +480,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
   }
 
   setSpawnPositions(
-    positions: readonly { id: string; spawnPosition: Point }[],
+    positions: readonly { id: string; spawnPosition: Point | null }[],
     origin: ChangeOrigin,
   ): MonsterInstance[] {
     return this.transaction(() => {
@@ -499,17 +499,18 @@ export class SqliteEncounterRepository implements EncounterRepository {
         targets.map(({ instance }) => ({ id: instance.id, before: instance })),
       );
       return targets.map(({ instance, spawnPosition }) => {
-        update.run(spawnPosition.x, spawnPosition.y, instance.id);
+        const point =
+          spawnPosition === null
+            ? null
+            : { x: spawnPosition.x, y: spawnPosition.y };
+        update.run(point?.x ?? null, point?.y ?? null, instance.id);
         this.record({
           type: "position-changed",
           id: instance.id,
-          spawnPosition: { x: spawnPosition.x, y: spawnPosition.y },
+          spawnPosition: point,
           origin,
         });
-        return {
-          ...instance,
-          spawnPosition: { x: spawnPosition.x, y: spawnPosition.y },
-        };
+        return { ...instance, spawnPosition: point };
       });
     });
   }

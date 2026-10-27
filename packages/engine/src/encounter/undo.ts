@@ -28,10 +28,10 @@ export type UndoChange =
     }
   /** Left alone: changed (or, for `existence`, removed) at the table after the command. */
   | { kind: "kept-table"; field: UndoField; instance: MonsterInstance }
-  /** Left alone: its before value was none, which cannot be written back. */
+  /** Left alone: its before value (a group or armor class) was none, which cannot be written back. */
   | {
       kind: "kept-no-value";
-      field: "position" | "group" | "armorClass";
+      field: "group" | "armorClass";
       instance: MonsterInstance;
     };
 
@@ -235,7 +235,7 @@ function revertFields(
     changes.push({ kind: "kept-table", field, instance });
   };
   const keptNoValue = (
-    field: "position" | "group" | "armorClass",
+    field: "group" | "armorClass",
     instance: MonsterInstance,
   ): void => {
     reported.add(field);
@@ -333,10 +333,6 @@ function revertFields(
         );
         break;
       case "position": {
-        if (before.spawnPosition === null) {
-          keptNoValue("position", current);
-          break;
-        }
         const [to] = repo.setSpawnPositions(
           [{ id, spawnPosition: before.spawnPosition }],
           origin,
@@ -383,7 +379,8 @@ function nextUndo(repo: EncounterRepository): UndoNext | null {
  * is left removed. On a live instance each field the command changed is
  * written back to its value before the command, unless the table changed it
  * since (`kept-table`), it already has that value (no change), or that value
- * was none and cannot be written (`kept-no-value`).
+ * was none and cannot be written (`kept-no-value`; group and armor class
+ * only, since a spawn position of none is written back, clearing it).
  *
  * The `not-covered` and `undone` results carry `next`: what the next undo would
  * reach, read after this undo's forget, or null when no undo record is left.

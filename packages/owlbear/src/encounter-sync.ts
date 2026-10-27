@@ -120,18 +120,20 @@ function fold(
           ? { ...i, currentHp: event.currentHp, maxHp: event.maxHp }
           : i,
       );
-    case "position-changed":
+    case "position-changed": {
+      const spawnPosition = event.spawnPosition;
       return desired.map((i) =>
         i.id === event.id
           ? {
               ...i,
-              spawnPosition: {
-                x: event.spawnPosition.x,
-                y: event.spawnPosition.y,
-              },
+              spawnPosition:
+                spawnPosition === null
+                  ? null
+                  : { x: spawnPosition.x, y: spawnPosition.y },
             }
           : i,
       );
+    }
     case "monster-changed":
       return desired.map((i) =>
         i.id === event.id
@@ -338,7 +340,10 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * spawn position in the next reconcile, once (a token not created yet is
  * created there); a reconcile that fails keeps the move for the retry. A
  * snapshot whose spawn position differs from the position a token was last
- * placed at moves it the same way (see planSync). A move over a token that
+ * placed at moves it the same way (see planSync). An `mcp` event that clears
+ * the spawn position (an undo) moves the token back: to where it stood before
+ * the extension first moved it, or else to a fresh slot in the default row
+ * (see planSync). A move or move back over a token that
  * was not where it was last placed, or has no recorded position, is reported
  * through `onOverride`, as is a snapshot that pushes a Stat Bubbles field over
  * a different token value.

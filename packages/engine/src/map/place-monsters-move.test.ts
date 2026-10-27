@@ -154,7 +154,8 @@ class MemoryEncounter implements Pick<
       return instance;
     });
     positions.forEach(({ spawnPosition }, n) => {
-      (found[n] as MonsterInstance).spawnPosition = { ...spawnPosition };
+      (found[n] as MonsterInstance).spawnPosition =
+        spawnPosition === null ? null : { ...spawnPosition };
     });
     return structuredClone(found);
   }
