@@ -2,6 +2,7 @@ import {
   publishedTokenArtSchema,
   type InstanceEdit,
   type PublishedTokenArt,
+  type TableArtWait,
   type TokenArt,
 } from "@ttrpg-agents/engine";
 import type {
@@ -49,11 +50,34 @@ export const isOurs = (item: SceneItem): boolean =>
 /** How long a table edit must stay unchanged before it is written back to the store. */
 export const EDIT_SETTLE_MS = 1500;
 
+/** A fresh image picker about to open: its monster type and its place among the reconcile's picks (1-based). */
+export type ArtStep = { monsterName: string; index: number; total: number };
+
+/** A monster type whose stored art needs re-uploading, as the panel lists it. */
+export type Reupload = {
+  monsterKey: string;
+  monsterName: string;
+  /** The Owlbear asset name its stored bytes are uploaded under. */
+  assetName: string;
+  /** Whether its stored bytes were uploaded to Owlbear this session. */
+  uploaded: boolean;
+};
+
 export interface EncounterSync {
   /** Resolves once the message is applied, or deferred until the scene is ready. */
   handleMessage(message: BridgeMessage): Promise<void>;
   /** How many instances the successfully applied messages account for (held or failed ones do not count). */
   appliedInstanceCount(): number;
+  /**
+   * The monster types whose art waits on the GM: those whose fresh picker is
+   * open or still to open in the current reconcile (`pick`), then those
+   * listed for re-upload (`reupload`).
+   */
+  artWaits(): TableArtWait[];
+  /** Uploads the stored bytes of a listed type's art to the GM's Owlbear library; opens no picker. */
+  reuploadArt(monsterKey: string): Promise<void>;
+  /** Opens the picker on a listed type's uploaded image; a valid pick becomes its art. */
+  pickUploadedArt(monsterKey: string): Promise<void>;
 }
 
 // Real timers are only used in the browser; tests inject Timers.
@@ -145,11 +169,6 @@ function writeNoteKind(
   )
     return "restyle";
   return undefined;
-}
-
-/** What the GM is told to do while a token image uploaded again waits for them. */
-function republishPrompt(monsterKey: string, assetName: string): string {
-  return `Confirm the folder for the ${monsterKey} token art in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${assetName}.`;
 }
 
 /**
@@ -368,10 +387,12 @@ export function createEncounterSync(
      * to Owlbear.
      */
     loadImage?: (sha256: string) => Promise<StoredTokenImage>;
-    /** Shows the GM `prompt` and resolves when they confirm the upload. Default: resolves at once. */
-    awaitUploadConfirmed?: (prompt: string) => Promise<void>;
     /** Called once per type whose stored bytes could not be loaded, with the text to show. */
     onArtRepublishFailed?: (text: string) => void;
+    /** Called before each fresh picker opens, and with `undefined` once it resolves. */
+    onArtStep?: (step: ArtStep | undefined) => void;
+    /** Called with the whole re-upload list whenever it changes. */
+    onReuploadsChange?: (reuploads: Reupload[]) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
@@ -783,9 +804,6 @@ export function createEncounterSync(
     const name = republishName(sha256);
     try {
       await obr.uploadImage({ bytes: image.bytes, mime: image.mime, name });
-      await (options.awaitUploadConfirmed ?? (() => Promise.resolve()))(
-        republishPrompt(monsterKey, name),
-      );
     } catch {
       // A failed upload (or a confirmation that failed) is the same as no pick.
       declined.add(monsterKey);
@@ -1202,6 +1220,17 @@ export function createEncounterSync(
     },
     appliedInstanceCount() {
       return appliedCount;
+    },
+    artWaits() {
+      throw new Error("not implemented");
+    },
+    reuploadArt(monsterKey) {
+      void monsterKey;
+      return Promise.reject(new Error("not implemented"));
+    },
+    pickUploadedArt(monsterKey) {
+      void monsterKey;
+      return Promise.reject(new Error("not implemented"));
     },
   };
 }

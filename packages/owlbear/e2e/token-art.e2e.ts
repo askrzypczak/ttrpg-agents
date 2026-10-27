@@ -214,7 +214,49 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
   const imageRequests = (page: Page) =>
     page.evaluate(() => window.__host!.imageRequests);
 
-  test("stored art whose Owlbear asset is gone is uploaded again, picked with its name as the search, and the art row takes the new url with the same hash", async ({
+  /** The panel's re-upload row of a monster type. */
+  const reuploadRow = (page: Page, monsterKey: string) =>
+    page
+      .frameLocator("#extension")
+      .locator(`#reupload-list li[data-monster-key="${monsterKey}"]`);
+
+  /** The stored url answers 404, as for an asset deleted from the library. */
+  const storedUrlGone = (page: Page) =>
+    page.route(storedImage.url, (route) =>
+      route.fulfill({
+        status: 404,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: "not found",
+      }),
+    );
+
+  async function expectShadowCircles(page: Page): Promise<void> {
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({ type: "SHAPE" });
+  }
+
+  test("a type whose art is gone is listed in the panel on connect with no Owlbear dialog", async ({
+    page,
+  }) => {
+    seedE2eTokenArt(workerDir(), "shadow", storedImage, SHADOW_PNG);
+    await storedUrlGone(page);
+    await openHarness(page, { role: "gm" });
+
+    const panel = page.frameLocator("#extension");
+    await expect(panel.locator("#reupload")).toBeVisible();
+    await expect(reuploadRow(page, "shadow")).toContainText("Shadow (1 of 1)");
+    await expect(
+      reuploadRow(page, "shadow").getByRole("button", { name: "Re-upload" }),
+    ).toBeVisible();
+    await expectShadowCircles(page);
+    await page.waitForTimeout(500);
+    expect(await uploads(page)).toEqual([]);
+    expect(await pickerOpens(page)).toBe(0);
+    await expect(syncError(page)).toHaveText("");
+  });
+
+  test("re-uploading from the panel, then picking the uploaded image, stores the art with the same hash and redraws the type's circles with it", async ({
     page,
   }) => {
     const sha256 = seedE2eTokenArt(
@@ -224,13 +266,7 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
       SHADOW_PNG,
     );
     const name = `ttrpg-art-${sha256.slice(0, 16)}`;
-    await page.route(storedImage.url, (route) =>
-      route.fulfill({
-        status: 404,
-        headers: { "Access-Control-Allow-Origin": "*" },
-        body: "not found",
-      }),
-    );
+    await storedUrlGone(page);
     // What the GM picks once the upload is in their library.
     const republishedDownload = {
       ...shadowDownload,
@@ -246,6 +282,10 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
       role: "gm",
       pickedImages: [republishedDownload],
     });
+    await expectShadowCircles(page);
+    const row = reuploadRow(page, "shadow");
+
+    await row.getByRole("button", { name: "Re-upload" }).click();
 
     await expect.poll(() => uploads(page)).toHaveLength(1);
     expect((await uploads(page))[0]).toEqual({
@@ -254,19 +294,11 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
       type: "image/png",
       size: SHADOW_PNG.length,
     });
-    // The picker waits for the GM's go-ahead in the panel, which names the asset.
-    const panel = page.frameLocator("#extension");
-    await expect(panel.locator("body")).toContainText(name);
+    await expect(row).toContainText(name);
     expect(await pickerOpens(page)).toBe(0);
 
-    await panel.locator("#pick-art").click();
+    await row.getByRole("button", { name: "Pick the uploaded image" }).click();
 
-    await expect.poll(async () => (await readItems(page)).length).toBe(5);
-    for (const item of await readItems(page))
-      expect(item).toMatchObject({
-        type: "IMAGE",
-        image: republishedDownload.image,
-      });
     await expect
       .poll(() => storedShadowArt()?.url)
       .toBe(republishedDownload.image.url);
@@ -277,11 +309,29 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
     const requests = await imageRequests(page);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ defaultSearch: name });
+    // The circles are replaced with image tokens drawn with the pick.
+    await expect
+      .poll(async () =>
+        (await readItems(page)).filter((item) => item.type === "IMAGE"),
+      )
+      .toHaveLength(5);
+    const items = await readItems(page);
+    expect(items).toHaveLength(5);
+    for (const item of items)
+      expect(item).toMatchObject({
+        type: "IMAGE",
+        image: republishedDownload.image,
+      });
+    const panel = page.frameLocator("#extension");
+    await expect(panel.locator("#overrides-list")).toContainText(
+      "Shadow 1's token was replaced with a new one drawn with the art uploaded for its monster type",
+    );
+    await expect(panel.locator("#reupload")).toBeHidden();
     expect(await uploads(page)).toHaveLength(1);
     await expect(syncError(page)).toHaveText("");
   });
 
-  test("stored art without a url is uploaded when its type gets its first tokens, picked with its name as the search, and the art row takes the picked url with the same hash", async ({
+  test("stored art without a url is listed in the panel, and re-uploading and picking it stores the picked url with the same hash", async ({
     page,
   }) => {
     const sha256 = seedE2eTokenArt(workerDir(), "shadow", null, SHADOW_PNG);
@@ -302,35 +352,28 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
       role: "gm",
       pickedImages: [uploadedDownload],
     });
-
-    await expect.poll(() => uploads(page)).toHaveLength(1);
-    expect((await uploads(page))[0]).toEqual({
-      name,
-      typeHint: "CHARACTER",
-      type: "image/png",
-      size: SHADOW_PNG.length,
-    });
-    // The picker waits for the GM's go-ahead in the panel, which names the asset.
-    const panel = page.frameLocator("#extension");
-    await expect(panel.locator("body")).toContainText(name);
+    await expectShadowCircles(page);
+    const row = reuploadRow(page, "shadow");
+    await expect(row).toContainText("Shadow (1 of 1)");
+    expect(await uploads(page)).toEqual([]);
     expect(await pickerOpens(page)).toBe(0);
 
-    await panel.locator("#pick-art").click();
+    await row.getByRole("button", { name: "Re-upload" }).click();
+    await expect.poll(() => uploads(page)).toHaveLength(1);
+    await row.getByRole("button", { name: "Pick the uploaded image" }).click();
 
-    await expect.poll(async () => (await readItems(page)).length).toBe(5);
-    for (const item of await readItems(page))
-      expect(item).toMatchObject({
-        type: "IMAGE",
-        image: uploadedDownload.image,
-      });
     await expect
       .poll(() => storedShadowArt()?.url)
       .toBe(uploadedDownload.image.url);
     expect(storedShadowArt()).toEqual({ ...uploadedDownload.image, sha256 });
+    await expect
+      .poll(async () =>
+        (await readItems(page)).filter((item) => item.type === "IMAGE"),
+      )
+      .toHaveLength(5);
     const requests = await imageRequests(page);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ defaultSearch: name });
-    expect(await uploads(page)).toHaveLength(1);
     await expect(syncError(page)).toHaveText("");
   });
 
@@ -404,7 +447,7 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
     await expect(syncError(page)).toHaveText("");
   });
 
-  test("stored bytes the bridge cannot serve leave the circle and show the failure in the panel", async ({
+  test("stored bytes the bridge cannot serve show the failure in the panel when Re-upload is pressed, and leave the type listed with circle tokens", async ({
     page,
   }) => {
     const sha256 = seedE2eTokenArt(
@@ -413,13 +456,7 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
       storedImage,
       SHADOW_PNG,
     );
-    await page.route(storedImage.url, (route) =>
-      route.fulfill({
-        status: 404,
-        headers: { "Access-Control-Allow-Origin": "*" },
-        body: "not found",
-      }),
-    );
+    await storedUrlGone(page);
     // Registered after the page fixture's route for the bridge origin, so it
     // answers the extension's read first.
     let reads = 0;
@@ -438,16 +475,99 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
       });
     });
     await openHarness(page, { role: "gm" });
+    await expectShadowCircles(page);
+    const row = reuploadRow(page, "shadow");
+    await expect(row).toContainText("Shadow (1 of 1)");
+    expect(reads).toBe(0);
+
+    await row.getByRole("button", { name: "Re-upload" }).click();
 
     await expect(syncError(page)).toContainText(
       "Could not republish the token art for shadow",
     );
-    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    expect(reads).toBe(1);
+    await expect(row).toContainText("Shadow (1 of 1)");
     for (const item of await readItems(page))
       expect(item).toMatchObject({ type: "SHAPE" });
-    expect(reads).toBe(1);
     expect(await uploads(page)).toEqual([]);
     expect(await pickerOpens(page)).toBe(0);
     expect(storedShadowArt()).toEqual({ ...storedImage, sha256 });
+  });
+});
+
+test.describe("art steps named in the panel", () => {
+  test("the panel names the monster type and the step count while the fresh picker is open", async ({
+    page,
+    bridge,
+  }) => {
+    // An empty encounter, so no picker opens on connect.
+    const db = openDatabase(bridge.dbPath);
+    try {
+      new SqliteEncounterRepository(db).clearEncounter(origin);
+    } finally {
+      db.close();
+    }
+    await openHarness(page, { role: "gm" });
+    const panel = page.frameLocator("#extension");
+    await expect(panel.locator("#status")).toHaveText(
+      "Connected to the local bridge.",
+    );
+
+    // Hold each picker answer until the test releases it, as a GM who has
+    // not chosen yet.
+    await page.evaluate(() => {
+      type Reply = (
+        message: { id: string },
+        kind: string,
+        data: unknown,
+      ) => void;
+      const host = window.__host as unknown as { reply: Reply };
+      const reply = host.reply.bind(host);
+      const held: (() => void)[] = [];
+      (window as unknown as { __releasePick: () => void }).__releasePick = () =>
+        held.shift()?.();
+      host.reply = (message, kind, data) => {
+        if (message.id === "OBR_ASSETS_DOWNLOAD_IMAGES")
+          held.push(() => reply(message, kind, data));
+        else reply(message, kind, data);
+      };
+    });
+    const releasePick = () =>
+      page.evaluate(() =>
+        (window as unknown as { __releasePick: () => void }).__releasePick(),
+      );
+
+    // Two types with no art arrive in one change.
+    const add = openDatabase(bridge.dbPath);
+    try {
+      new SqliteEncounterRepository(add).addInstances(
+        () => [
+          { monsterKey: "ogre", displayName: "Ogre 1", maxHp: 59 },
+          { monsterKey: "wolf", displayName: "Wolf 1", maxHp: 11 },
+        ],
+        origin,
+      );
+    } finally {
+      add.close();
+    }
+
+    const prompt = panel.locator("#art-prompt");
+    await expect(prompt).toHaveText(
+      "Art 1 of 2: choose the token art for Ogre in Owlbear's image picker, or cancel it to use circles.",
+    );
+    expect(await pickerOpens(page)).toBe(1);
+    await releasePick();
+
+    await expect(prompt).toHaveText(
+      "Art 2 of 2: choose the token art for Wolf in Owlbear's image picker, or cancel it to use circles.",
+    );
+    expect(await pickerOpens(page)).toBe(2);
+    await releasePick();
+
+    await expect(prompt).toHaveText("");
+    await expect.poll(async () => (await readItems(page)).length).toBe(2);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({ type: "SHAPE" });
+    await expect(syncError(page)).toHaveText("");
   });
 });

@@ -921,6 +921,7 @@ describe("table_status", () => {
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
+      artWaits: [],
     });
     const r = await call("table_status");
     expect(r.isError).toBeFalsy();
@@ -944,6 +945,7 @@ describe("table_status", () => {
       sceneReady: true,
       tokenCount: 7,
       appliedInstanceCount: 8,
+      artWaits: [],
     });
     const r = await call("table_status");
     expect(r.isError).toBeFalsy();
@@ -964,5 +966,110 @@ describe("table_status", () => {
     const r = await call("table_status");
     expect(r.isError).toBe(true);
     expect(text(r)).toContain(message);
+  });
+
+  it("table_status names the types whose art is being picked and says tokens wait on the GM, in its text and structured result", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [
+        { monsterKey: "srd-2024_ogre", monsterName: "Ogre", step: "pick" },
+      ],
+    });
+    const r = await call("table_status");
+    expect(r.isError).toBeFalsy();
+    const line =
+      "Tokens are waiting on the GM: art for Ogre is being chosen in Owlbear's image picker; cancelling it gives circles.";
+    const lines = text(r).split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^Owlbear is out of sync: /);
+    expect(lines[1]).toBe(line);
+    expect(r.structuredContent).toMatchObject({
+      inSync: false,
+      waitingOnGm: [line],
+    });
+  });
+
+  it("table_status names the types whose art needs re-uploading and what the GM presses, in its text and structured result", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    const reupload = (monsterKey: string, monsterName: string) => ({
+      monsterKey,
+      monsterName,
+      step: "reupload" as const,
+    });
+
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [
+        reupload("srd-2024_wolf", "Wolf"),
+        reupload("srd-2024_owlbear", "Owlbear"),
+      ],
+    });
+    const two = await call("table_status");
+    expect(two.isError).toBeFalsy();
+    const twoLine =
+      "Art for Wolf and Owlbear needs re-uploading: click Re-upload next to each in the extension panel, then Pick the uploaded image.";
+    const twoLines = text(two).split("\n");
+    expect(twoLines).toHaveLength(2);
+    // A re-upload alone leaves the verdict to the counts.
+    expect(twoLines[0]).toMatch(/^Owlbear is in sync: /);
+    expect(twoLines[1]).toBe(twoLine);
+    expect(two.structuredContent).toMatchObject({
+      inSync: true,
+      waitingOnGm: [twoLine],
+    });
+
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [reupload("srd-2024_wolf", "Wolf")],
+    });
+    const one = await call("table_status");
+    const oneLine =
+      "Art for Wolf needs re-uploading: click Re-upload next to it in the extension panel, then Pick the uploaded image.";
+    expect(text(one).split("\n")[1]).toBe(oneLine);
+    expect(one.structuredContent).toMatchObject({ waitingOnGm: [oneLine] });
+
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [
+        reupload("srd-2024_wolf", "Wolf"),
+        reupload("srd-2024_owlbear", "Owlbear"),
+        reupload("srd-2024_ogre", "Ogre"),
+      ],
+    });
+    const three = await call("table_status");
+    expect(text(three).split("\n")[1]).toBe(
+      "Art for Wolf, Owlbear and Ogre needs re-uploading: click Re-upload next to each in the extension panel, then Pick the uploaded image.",
+    );
+  });
+
+  it("table_status adds nothing when no art wait is open", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [],
+    });
+    const r = await call("table_status");
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toBe(
+      "Owlbear is in sync: scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+    );
+    expect(r.structuredContent).toEqual({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      encounterCount: 3,
+      inSync: true,
+    });
   });
 });

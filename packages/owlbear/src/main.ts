@@ -42,8 +42,6 @@ obr.onReady(async () => {
   // republish. Kept until the panel reloads (no store change clears it); a
   // later failure replaces it.
   let artError: string | undefined;
-  // What the GM must do while a token art republish waits on them.
-  let artPrompt: string | undefined;
   let waitingCommands = 0;
   // Store values a snapshot wrote over the table's, until the DM dismisses
   // them. In memory only: a reload starts with its own.
@@ -60,7 +58,6 @@ obr.onReady(async () => {
       ...(removeError !== undefined ? { removeError } : {}),
       ...(editError !== undefined ? { editError } : {}),
       ...(artError !== undefined ? { artError } : {}),
-      ...(artPrompt !== undefined ? { artPrompt } : {}),
       ...(editNote !== undefined ? { editNote } : {}),
       waitingCommands,
       overrides,
@@ -100,25 +97,6 @@ obr.onReady(async () => {
   overlayToggle.addEventListener("change", () => {
     void overlay.setEnabled(overlayToggle.checked);
   });
-
-  // Shows the republish prompt with its button and opens the panel; resolves
-  // when the GM presses the button, which clears the prompt. The sync waits
-  // on one prompt at a time.
-  const awaitUploadConfirmed = (prompt: string): Promise<void> =>
-    new Promise((resolve) => {
-      el("pick-art").addEventListener(
-        "click",
-        () => {
-          artPrompt = undefined;
-          render();
-          resolve();
-        },
-        { once: true },
-      );
-      artPrompt = prompt;
-      render();
-      void obr.openPanel();
-    });
 
   // The socket is created after the sync, which reports deletions and gaps through it.
   let sendToBridge: (message: BridgeMessage) => boolean = () => false;
@@ -164,7 +142,6 @@ obr.onReady(async () => {
         render();
       },
       loadImage: (sha256) => downloadTokenImage(sha256, token),
-      awaitUploadConfirmed,
       onArtRepublishFailed: (text) => {
         artError = text;
         render();

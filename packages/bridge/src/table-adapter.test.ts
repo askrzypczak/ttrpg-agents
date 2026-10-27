@@ -1,6 +1,7 @@
 import { TableUnavailableError } from "@ttrpg-agents/engine";
 import {
   agentErrorCodeSchema,
+  agentQueryResponseSchema,
   type AgentQueryResponse,
   type Query,
 } from "@ttrpg-agents/protocol";
@@ -38,8 +39,38 @@ describe("createBridgeTable", () => {
       sceneReady: true,
       tokenCount: 4,
       appliedInstanceCount: 3,
+      artWaits: [],
     });
     expect(queries).toEqual([{ name: "scene-status" }]);
+  });
+
+  it("sceneStatus passes the table's art waits through", async () => {
+    const artWaits = [
+      { monsterKey: "srd-2024_ogre", monsterName: "Ogre", step: "pick" },
+      { monsterKey: "srd-2024_wolf", monsterName: "Wolf", step: "reupload" },
+    ];
+    // Decoded as the bridge client decodes the bridge's answer.
+    const { client } = clientAnswering(
+      agentQueryResponseSchema.parse({
+        ok: true,
+        result: {
+          name: "scene-status",
+          result: {
+            sceneReady: true,
+            tokenCount: 2,
+            appliedInstanceCount: 2,
+            artWaits,
+          },
+        },
+      }),
+    );
+    const status = await createBridgeTable(client).sceneStatus();
+    expect(status).toEqual({
+      sceneReady: true,
+      tokenCount: 2,
+      appliedInstanceCount: 2,
+      artWaits,
+    });
   });
 
   it("throws `TableUnavailableError` carrying the bridge's message for any `{ ok: false }` response, each error code", async () => {

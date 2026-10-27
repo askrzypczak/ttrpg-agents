@@ -1,10 +1,23 @@
 import type { Point } from "../map/types.js";
 
+/**
+ * A monster type whose tokens wait on the GM for art: its fresh image picker
+ * is open or still to open (`pick`), or its stored art needs re-uploading
+ * (`reupload`).
+ */
+export interface TableArtWait {
+  monsterKey: string;
+  monsterName: string;
+  step: "pick" | "reupload";
+}
+
 /** What the table reports about its scene. */
 export interface TableSceneStatus {
   sceneReady: boolean;
   tokenCount: number;
   appliedInstanceCount: number;
+  /** The monster types whose art waits on the GM. */
+  artWaits: TableArtWait[];
 }
 
 /** One map image on the table, with its image grid and transform. */

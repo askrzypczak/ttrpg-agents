@@ -106,7 +106,8 @@ export function createBridgeTable(
         );
       const { sceneReady, tokenCount, appliedInstanceCount } =
         res.result.result;
-      return { sceneReady, tokenCount, appliedInstanceCount };
+      // Contract stub: the art waits are not passed through yet.
+      return { sceneReady, tokenCount, appliedInstanceCount, artWaits: [] };
     },
     async sceneMap() {
       const res = await client.query({ name: "scene-map" });

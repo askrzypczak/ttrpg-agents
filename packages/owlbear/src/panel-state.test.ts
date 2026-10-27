@@ -197,19 +197,30 @@ describe("panelView art error", () => {
   });
 });
 
-describe("panelView art prompt", () => {
-  it("panelView shows the art prompt while a republish waits on the GM", () => {
-    const artPrompt =
-      'Confirm the folder for the shadow token art in Owlbear, then press "Pick the uploaded image" and pick ttrpg-art-c3c3c3c3c3c3c3c3.';
+describe("panelView art steps", () => {
+  it("the art step prompt names the monster and its step count", () => {
+    const artStep = { monsterName: "Ogre", index: 1, total: 2 };
     for (const socketState of ["open", "connecting"] as const) {
       const v = panelView({
         role: "gm",
         socketState,
         disconnectedMs: 0,
-        artPrompt,
+        artStep,
       });
-      expect(v.prompt).toBe(artPrompt);
+      expect(v.prompt).toBe(
+        "Art 1 of 2: choose the token art for Ogre in Owlbear's image picker, or cancel it to use circles.",
+      );
     }
+    expect(
+      panelView({
+        role: "gm",
+        socketState: "open",
+        disconnectedMs: 0,
+        artStep: { monsterName: "Wolf", index: 2, total: 2 },
+      }).prompt,
+    ).toBe(
+      "Art 2 of 2: choose the token art for Wolf in Owlbear's image picker, or cancel it to use circles.",
+    );
 
     const none = panelView({
       role: "gm",
@@ -222,10 +233,67 @@ describe("panelView art prompt", () => {
       role: "player",
       socketState: "open",
       disconnectedMs: 0,
-      artPrompt,
+      artStep,
     });
     expect(player.kind).toBe("gm-only");
     expect(player.prompt).toBeUndefined();
+  });
+
+  it("each type to re-upload is listed with its monster name and count, and once uploaded tells the GM to confirm the folder and pick the named image, and offers the pick", () => {
+    const wolfName = `ttrpg-art-${"c3".repeat(8)}`;
+    const owlbearName = `ttrpg-art-${"d4".repeat(8)}`;
+    const v = panelView({
+      role: "gm",
+      socketState: "open",
+      disconnectedMs: 0,
+      reuploads: [
+        {
+          monsterKey: "wolf",
+          monsterName: "Wolf",
+          assetName: wolfName,
+          uploaded: false,
+        },
+        {
+          monsterKey: "owlbear",
+          monsterName: "Owlbear",
+          assetName: owlbearName,
+          uploaded: true,
+        },
+      ],
+    });
+
+    expect(v.reuploads).toEqual([
+      { monsterKey: "wolf", label: "Wolf (1 of 2)", canPick: false },
+      {
+        monsterKey: "owlbear",
+        label: "Owlbear (2 of 2)",
+        hint: `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${owlbearName}.`,
+        canPick: true,
+      },
+    ]);
+
+    const none = panelView({
+      role: "gm",
+      socketState: "open",
+      disconnectedMs: 0,
+      reuploads: [],
+    });
+    expect(none.reuploads ?? []).toEqual([]);
+
+    const player = panelView({
+      role: "player",
+      socketState: "open",
+      disconnectedMs: 0,
+      reuploads: [
+        {
+          monsterKey: "wolf",
+          monsterName: "Wolf",
+          assetName: wolfName,
+          uploaded: true,
+        },
+      ],
+    });
+    expect(player.reuploads).toBeUndefined();
   });
 });
 

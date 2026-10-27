@@ -46,7 +46,12 @@ describe("handleQuery scene-status", () => {
 
     expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
       name: "scene-status",
-      result: { sceneReady: true, tokenCount: 3, appliedInstanceCount: 2 },
+      result: {
+        sceneReady: true,
+        tokenCount: 3,
+        appliedInstanceCount: 2,
+        artWaits: [],
+      },
     });
   });
 
@@ -56,7 +61,34 @@ describe("handleQuery scene-status", () => {
 
     expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
       name: "scene-status",
-      result: { sceneReady: false, tokenCount: 0, appliedInstanceCount: 0 },
+      result: {
+        sceneReady: false,
+        tokenCount: 0,
+        appliedInstanceCount: 0,
+        artWaits: [],
+      },
+    });
+  });
+
+  it("scene-status reports the sync's art waits", async () => {
+    const { obr } = createFakeObr();
+    const artWaits = [
+      { monsterKey: "ogre", monsterName: "Ogre", step: "pick" as const },
+      { monsterKey: "wolf", monsterName: "Wolf", step: "reupload" as const },
+    ];
+    const sync = {
+      appliedInstanceCount: () => 0,
+      artWaits: () => artWaits.map((wait) => ({ ...wait })),
+    };
+
+    expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
+      name: "scene-status",
+      result: {
+        sceneReady: true,
+        tokenCount: 0,
+        appliedInstanceCount: 0,
+        artWaits,
+      },
     });
   });
 });

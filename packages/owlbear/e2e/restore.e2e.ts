@@ -4,8 +4,9 @@ import {
   SqliteEncounterRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
+import { dirname } from "node:path";
 import type { SceneItem } from "../src/scene-model.js";
-import { SHADOW_IDS } from "./db.js";
+import { SHADOW_IDS, seedE2eTokenArt } from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems } from "./helpers.js";
 
@@ -17,6 +18,12 @@ const INSTANCE_KEY = "com.ttrpg-agents/instance";
 const PLACED_KEY = "com.ttrpg-agents/placed";
 
 const keepName = (i: MonsterInstance): string => i.displayName;
+
+/** A 1x1 PNG, as stored token art bytes. */
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 const instanceIdOf = (item: SceneItem): string | undefined =>
   (item.metadata[INSTANCE_KEY] as { instanceId?: string } | undefined)
@@ -154,6 +161,92 @@ test.describe("restoring a cleared encounter", () => {
       ["Shadow 4"],
       ["Shadow 5"],
     ]);
+    await expect(
+      page.frameLocator("#extension").locator("#sync-error"),
+    ).toHaveText("");
+  });
+
+  test("after a clear and a restore, with one type without art and one whose art is gone, cancelling the picker places every token at once and scene-status reports the re-upload and no pick", async ({
+    page,
+    bridge,
+  }) => {
+    // The shadows' stored art is gone from the library; the wolves have none.
+    const storedImage = {
+      url: "https://cdn.owlbear.rodeo/e2e/shadow-old.png",
+      mime: "image/png",
+      width: 1,
+      height: 1,
+    };
+    seedE2eTokenArt(dirname(bridge.dbPath), "shadow", storedImage, PNG);
+    await page.route(storedImage.url, (route) =>
+      route.fulfill({
+        status: 404,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: "not found",
+      }),
+    );
+    await withRepo(bridge.dbPath, (repo) => {
+      repo.addInstances(
+        () => [
+          { monsterKey: "wolf", displayName: "Wolf 1", maxHp: 11 },
+          { monsterKey: "wolf", displayName: "Wolf 2", maxHp: 11 },
+        ],
+        clearOrigin,
+      );
+      repo.clearEncounter(clearOrigin);
+    });
+    // The picker answers nothing: the GM cancels it.
+    await openHarness(page, { role: "gm" });
+    await expect(page.frameLocator("#extension").locator("#status")).toHaveText(
+      "Connected to the local bridge.",
+    );
+    expect(await readItems(page)).toEqual([]);
+
+    const clearedIds = await withRepo(bridge.dbPath, (repo) =>
+      repo
+        .listRemovedInstances()
+        .filter((r) => r.cleared)
+        .map((r) => r.instance.id),
+    );
+    expect(clearedIds).toHaveLength(7);
+    await withRepo(bridge.dbPath, (repo) =>
+      repo.restoreInstances(clearedIds, keepName, restoreOrigin),
+    );
+
+    await expect.poll(async () => (await readItems(page)).length).toBe(7);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({ type: "SHAPE" });
+    // One picker, for the wolves; no upload dialog for the shadows.
+    expect(await page.evaluate(() => window.__host!.imageRequests.length)).toBe(
+      1,
+    );
+    expect(await page.evaluate(() => window.__host!.uploads)).toEqual([]);
+
+    const sceneStatus = async () => {
+      const res = await fetch(`${bridge.origin}/agent/query`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${bridge.agentToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "scene-status" }),
+      });
+      return (await res.json()) as unknown;
+    };
+    await expect.poll(sceneStatus).toEqual({
+      ok: true,
+      result: {
+        name: "scene-status",
+        result: {
+          sceneReady: true,
+          tokenCount: 7,
+          appliedInstanceCount: 7,
+          artWaits: [
+            { monsterKey: "shadow", monsterName: "Shadow", step: "reupload" },
+          ],
+        },
+      },
+    });
     await expect(
       page.frameLocator("#extension").locator("#sync-error"),
     ).toHaveText("");

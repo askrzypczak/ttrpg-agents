@@ -65,6 +65,17 @@ export function restoreEncounter(
 }
 
 /**
+ * Whether restoreEncounter has something to bring back: the last clear's
+ * instances not restored since.
+ */
+export function canRestoreEncounter(
+  repo: Pick<EncounterRepository, "listRemovedInstances">,
+): boolean {
+  void repo;
+  throw new Error("not implemented");
+}
+
+/**
  * Puts the resolved removed instances back in one write, each under its name
  * or, when that is taken, the next free number; checks every monster type
  * first so an unknown one restores nothing.

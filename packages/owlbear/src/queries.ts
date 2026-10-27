@@ -48,7 +48,7 @@ function isTokenItem(item: SceneItem): boolean {
 /** Answers a bridge `query` from the scene and the encounter sync state. */
 export async function handleQuery(
   obr: ObrReader,
-  sync: Pick<EncounterSync, "appliedInstanceCount">,
+  sync: Pick<EncounterSync, "appliedInstanceCount" | "artWaits">,
   query: Query,
   draw: DrawMapImage = drawMapImageOnCanvas,
 ): Promise<QueryResult> {
@@ -124,7 +124,7 @@ export function queryReply(id: string, result: QueryResult): BridgeMessage {
  */
 export async function replyToQuery(
   obr: ObrReader,
-  sync: Pick<EncounterSync, "appliedInstanceCount">,
+  sync: Pick<EncounterSync, "appliedInstanceCount" | "artWaits">,
   id: string,
   query: Query,
   draw: DrawMapImage = drawMapImageOnCanvas,

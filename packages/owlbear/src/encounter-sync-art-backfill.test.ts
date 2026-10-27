@@ -89,7 +89,7 @@ function setup(
   const uploads: Uint8Array[] = [];
   const failures: string[] = [];
   const republishFailures: string[] = [];
-  const prompts: string[] = [];
+  const prompts: unknown[] = [];
   const loads: string[] = [];
   const reported: [string, PublishedTokenArt][] = [];
   const errors: unknown[] = [];
@@ -130,9 +130,10 @@ function setup(
       },
       onArtStoreFailed: (text) => failures.push(text),
       onArtRepublishFailed: (text) => republishFailures.push(text),
-      awaitUploadConfirmed: (prompt) => {
-        prompts.push(prompt);
-        return Promise.resolve();
+      // What the GM is asked: an art step, or a type listed for re-upload.
+      onArtStep: (step) => prompts.push(step),
+      onReuploadsChange: (list) => {
+        if (list.length > 0) prompts.push(list);
       },
       ...(options.withLoadImage === true ? { loadImage } : {}),
     },

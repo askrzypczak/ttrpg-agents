@@ -294,6 +294,26 @@ export function replaceOverrideNote(name: string): string {
   return `${name}'s token was replaced with a new one for its new monster type at the agent's request; any attachments on the old token were deleted with it.`;
 }
 
+/**
+ * The override note for a redraw with the art re-uploaded for its monster
+ * type, over a token whose art or size had been changed on the table
+ * (`recorded`), or that has no recorded look.
+ */
+export function reskinOverrideNote(name: string, recorded: boolean): string {
+  void name;
+  void recorded;
+  throw new Error("not implemented");
+}
+
+/**
+ * The override note for a token replaced with a new one drawn with the art
+ * re-uploaded for its monster type.
+ */
+export function reskinReplaceNote(name: string): string {
+  void name;
+  throw new Error("not implemented");
+}
+
 /** A token's look as recorded under LOOK_BASELINE_KEY. */
 type Look = { monsterKey: string; image: string | null };
 
@@ -622,6 +642,8 @@ export function planSync(
     moves?: ReadonlySet<string>;
     /** Instance ids an `mcp` monster-changed event named since the last reconcile. */
     restyles?: ReadonlySet<string>;
+    /** Instance ids whose tokens are redrawn with the art re-uploaded for their type. */
+    reskins?: ReadonlySet<string>;
   },
 ): SyncPlan {
   const plan: SyncPlan = {

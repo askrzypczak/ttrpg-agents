@@ -456,7 +456,7 @@ describe("undo", () => {
     expect(text(r)).toContain("Wolf 1 stats hidden from players");
   });
 
-  it('undo with nothing to undo replies "Nothing to undo." and changes nothing', async () => {
+  it('undo with nothing to undo and nothing cleared replies only "Nothing to undo."', async () => {
     seed(wolf("Wolf 1"));
     const before = ctx.repo.listInstances();
     writes.length = 0;
@@ -522,7 +522,7 @@ describe("undo", () => {
     }
   });
 
-  it('undo after a clear_encounter that cleared monsters replies "Nothing to undo." and changes nothing', async () => {
+  it("undo right after a clear names restore_encounter in its reply text", async () => {
     await ok("add_monsters", { groups: [{ monster: WOLF, count: 2 }] });
     await ok("apply_damage", { target: "Wolf 1", amount: 2 });
     await ok("clear_encounter");
@@ -530,7 +530,10 @@ describe("undo", () => {
 
     const r = await ok("undo");
 
-    expect(text(r)).toBe("Nothing to undo.");
+    expect(text(r)).toBe(
+      "Nothing to undo. The last clear_encounter can be brought back with restore_encounter.",
+    );
+    expect(r.structuredContent).toEqual({ undone: null, changes: [] });
     expect(names()).toEqual([]);
     expect(ctx.repo.listRemovedInstances()).toEqual(removed);
   });

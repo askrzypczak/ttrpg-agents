@@ -16,7 +16,12 @@ describe("replyToQuery", () => {
       id: "c1",
       payload: {
         name: "scene-status",
-        result: { sceneReady: true, tokenCount: 0, appliedInstanceCount: 0 },
+        result: {
+          sceneReady: true,
+          tokenCount: 0,
+          appliedInstanceCount: 0,
+          artWaits: [],
+        },
       },
     });
   });
