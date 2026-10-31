@@ -68,7 +68,7 @@ describe("snapshotMessage", () => {
     });
   });
 
-  it("snapshotMessage carries the log's latest seq, read before the instances", () => {
+  it("snapshotMessage carries the log's latest seq, read before the instances, and reads the restore seqs after them", () => {
     const { log, calls } = stubLog([
       { seq: 4, event: { type: "cleared", origin } },
     ]);
@@ -77,7 +77,7 @@ describe("snapshotMessage", () => {
       "listInstances" | "listRestoreSeqs"
     > = {
       listInstances: () => (calls.push("listInstances"), []),
-      listRestoreSeqs: () => ({}),
+      listRestoreSeqs: () => (calls.push("listRestoreSeqs"), {}),
     };
 
     const message = snapshotMessage(
@@ -91,7 +91,7 @@ describe("snapshotMessage", () => {
       type: "encounter-snapshot",
       payload: { instances: [], seq: 4 },
     });
-    expect(calls).toEqual(["latestSeq", "listInstances"]);
+    expect(calls).toEqual(["latestSeq", "listInstances", "listRestoreSeqs"]);
   });
 
   it("snapshotMessage carries the restore seq of each restored instance and leaves the field out when none was restored", () => {
