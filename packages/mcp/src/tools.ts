@@ -1140,15 +1140,6 @@ const getMapImageTool = defineTool({
         { type: "image", data: image.data, mimeType: image.mimeType },
         { type: "text", text },
       ],
-      structuredContent: {
-        itemId: map.itemId,
-        name: map.name,
-        cols,
-        rows,
-        mapMoved: moved,
-        width: image.width,
-        height: image.height,
-      },
     };
   },
 });
