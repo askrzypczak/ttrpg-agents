@@ -231,6 +231,13 @@ listed for re-upload and left out of the plan's art, so its tokens are circles;
 the fresh picker never opens for a type with stored art. Without
 `options.loadImage`, stored art is used as it is and nothing is listed.
 
+A deleted asset is seen late: its url can keep answering 200 for hours after
+the GM deletes it from the library, and its art still draws until then. The
+no-cache fetch gets past the browser's own 3-day cache but stops at the CDN's
+edge; it does not reach Owlbear's origin. A gone asset answers HTTP 400 with a
+JSON body whose `code` is `NoSuchKey`, as a url that never existed does, so it
+reads as gone.
+
 `options.onReuploadsChange` hears the list (`Reupload`: monster key, name via `monsterTypeName`, asset name `ttrpg-art-<first 16 hex of the hash>` via `republishName`, uploaded this session or not); `main.ts` shows it in `#reupload` near the top of the
 panel, one row per type, and opens the panel when a type joins.
 
@@ -372,7 +379,8 @@ Chromium. First time: `npx playwright install chromium`. Not part of `npm run ch
   end. `token-art.e2e.ts` routes the picked image's CDN URL (`page.route`) to
   an inline 1x1 PNG (a 404 for the failure test), seeds stored art with
   `seedE2eTokenArt` (art `null` seeds the image hash alone) and routes its url
-  to a 404 or the PNG, and reads the rows through `e2e/db.ts`.
+  to a 400 (the CDN's answer for a deleted asset) or the PNG, and reads the
+  rows through `e2e/db.ts`.
   `overlay.e2e.ts` seeds an active map and a room with `seedE2eMap`
   (`clearE2eMap` after) and checks the overlay's local items and the panel
   toggle. `map-image.e2e.ts` serves a map image cross-origin with CORS, posts `map-image` to the bridge, and checks the real extension's WEBP answer.
