@@ -199,9 +199,10 @@ step): `options.onArtStep` hears the monster name and its place among the
 reconcile's picks (`main.ts` shows "Art 1 of 2: ..." in `#art-prompt` and
 opens the panel). A valid pick (`publishedTokenArtSchema`) is sent as a
 `token-art-set` (no envelope id, no answer) and re-planned; a cancel, a picker
-error or an invalid image creates a circle, shows nothing, and is not asked
-again this session. After an art step the reconcile reads the scene items and
-`placed` again before it writes, so a table edit made meanwhile is kept.
+error or an invalid image creates a circle, shows nothing, and the reconcile
+does not ask again this session; the panel's Token art list does (below).
+After an art step the reconcile reads the scene items and `placed` again
+before it writes, so a table edit made meanwhile is kept.
 
 Published art is a VTT-neutral `{ url, mime, width, height }`; `pickImage`
 ignores the SDK's own grid, and the token's Owlbear grid is derived at
@@ -254,6 +255,27 @@ republish the token art for ..."); that, or a cancelled, failed or invalid
 pick, leaves the type listed, and the GM can press again. A second press while
 one runs is ignored.
 
+**Pick art.** `options.onTypeArtChange` hears the Token art list whenever it
+changes (`TypeArt`: monster key, name via `monsterTypeName`, state): each
+monster type with an instance in the encounter, once, in encounter order, as
+`reupload` (on the re-upload list), `art` (usable art), `declined` (its fresh
+pick was cancelled, failed or invalid this session) or `none`. `main.ts`
+shows it in `#type-art`, below the overrides, with a "Pick art" button per
+row, and does not open the panel for it. The re-upload box stays as it is; a
+type on it is also in this list, so its art can be replaced too.
+
+"Pick art" calls `sync.repickArt(monsterKey)`, which opens the picker with no
+search, outside the reconcile chain. A press is ignored for a type not in the
+list, one whose re-upload or pick is running, or one whose fresh picker is open
+or queued. A cancel, an error or an invalid image changes nothing. A valid
+pick, even one made after the type left the encounter, goes through
+`takePanelPick`, as the re-upload pick does: it becomes the type's art, is sent
+and stored as a fresh pick is (replacing any stored art), wins over a later
+snapshot's art for the session, takes the type off the re-upload list and
+redraws its tokens (`reskins`, below). The reconcile opens no fresh picker for
+a type whose Pick art picker is open. Neither the list nor an open Pick art
+picker is an art wait.
+
 `EncounterSync.artWaits()` names the types whose fresh picker is open or still
 to open (`pick`), then the listed types (`reupload`), with their monster names;
 the `scene-status` answer carries it (`src/queries.ts`).
@@ -282,8 +304,13 @@ token. A failure in between fails the reconcile, and the retry finishes it: a
 marked token whose replacement is not on the scene is replaced again, and one
 whose replacement is on the scene is deleted first. The instance always keeps
 a linked token, so no `token-deleted` is sent. Every replacement is reported in
-`plan.overrides`. A pick of re-uploaded art redraws every token of its type
-the same way (`reskins`; a monster change wins over it).
+`plan.overrides`.
+
+Any panel pick (Pick art or a re-upload pick) redraws every token of its type
+the same way (`reskins`; a monster change wins over it), and every in-place
+redraw from a panel pick is reported: with the table-change note as above, else
+with `reskinNote`; a token already drawn with the pick is not written and gets
+no note.
 
 ## Map overlay
 
