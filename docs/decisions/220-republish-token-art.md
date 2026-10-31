@@ -23,7 +23,7 @@ Issue: [#220](https://github.com/askrzypczak/ttrpg-agents/issues/220).
   - HEAD: no body, but HEAD support on the CDN is unverified, and a 405 would read as dead and prompt for nothing.
   - Any non-2xx answer or network error as dead: prompts the GM on a flaky network.
 - Where: `ObrAdapter.isImageAlive` (`packages/owlbear/src/obr-adapter.ts`); the check in `createEncounterSync` (`packages/owlbear/src/encounter-sync.ts`).
-- Status: active
+- Status: superseded by 323.1
 
 ## 220.3 Stored bytes that cannot be loaded from the bridge give the circle and a panel error until reload
 
