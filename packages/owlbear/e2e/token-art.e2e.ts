@@ -174,7 +174,7 @@ test.describe("token art from the Owlbear asset library", () => {
 
     await expectShadowArtTokens(page);
     const failure =
-      "Could not store the image of the token art for shadow; it is kept as a link";
+      "Could not store the image of the token art for Shadow; it is kept as a link";
     await expect(syncError(page)).toContainText(failure);
     await expect(syncError(page)).toContainText("HTTP 404");
     await expect
@@ -410,6 +410,35 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
     await expect(syncError(page)).toHaveText("");
   });
 
+  test("a liveness check that never answers counts as cannot tell: once it times out the stored art's image tokens are drawn and nothing is listed", async ({
+    page,
+  }) => {
+    const sha256 = seedE2eTokenArt(
+      workerDir(),
+      "shadow",
+      storedImage,
+      SHADOW_PNG,
+    );
+    // The request is left hanging: the url neither answers nor fails.
+    let checks = 0;
+    await page.route(storedImage.url, () => {
+      checks += 1;
+    });
+    await openHarness(page, { role: "gm" });
+
+    await expect.poll(() => checks).toBeGreaterThan(0);
+    await expect
+      .poll(async () => (await readItems(page)).length, { timeout: 15_000 })
+      .toBe(5);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({ type: "IMAGE", image: storedImage });
+    await expect(reuploadRow(page, "shadow")).toHaveCount(0);
+    expect(await uploads(page)).toEqual([]);
+    expect(await pickerOpens(page)).toBe(0);
+    expect(storedShadowArt()).toEqual({ ...storedImage, sha256 });
+    await expect(syncError(page)).toHaveText("");
+  });
+
   test("stored art without stored bytes whose url is alive gets its bytes stored and the art row takes their hash, with no upload dialog and no picker", async ({
     page,
   }) => {
@@ -483,7 +512,7 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
     await row.getByRole("button", { name: "Re-upload" }).click();
 
     await expect(syncError(page)).toContainText(
-      "Could not republish the token art for shadow",
+      "Could not republish the token art for Shadow",
     );
     expect(reads).toBe(1);
     await expect(row).toContainText("Shadow (1 of 1)");

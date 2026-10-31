@@ -41,8 +41,8 @@ const stored: TokenImageUploadResponse = {
   image: { sha256: SHA256, mime: "image/png", width: 300, height: 280 },
 };
 
-const failureText = (monsterKey: string, reason: string): string =>
-  `Could not store the image of the token art for ${monsterKey}; it is kept as a link: ${reason}`;
+const failureText = (monsterName: string, reason: string): string =>
+  `Could not store the image of the token art for ${monsterName}; it is kept as a link: ${reason}`;
 
 /** Timers that never fire, so a failed reconcile is not retried behind the test's back. */
 const idleTimers: Timers = {
@@ -218,6 +218,21 @@ describe("createEncounterSync token art upload", () => {
     await settle();
     expect(uploads).toHaveLength(1);
     expect(reported).toEqual([["shadow", shadowArt]]);
+  });
+
+  it("a failed store of a picked image names the monster by its instance name", async () => {
+    const feed = createMessageFeed();
+    const { sync, failures } = setup({
+      fetchImage: BYTES,
+      storeImage: () => Promise.reject(new Error("bridge unreachable")),
+    });
+
+    await sync.handleMessage(
+      feed.snapshot([{ ...inst(1), displayName: "Shadow 1" }]),
+    );
+
+    await vi.waitFor(() => expect(failures).toHaveLength(1));
+    expect(failures).toEqual([failureText("Shadow", "bridge unreachable")]);
   });
 
   it("a failed upload is not tried again by later reconciles", async () => {

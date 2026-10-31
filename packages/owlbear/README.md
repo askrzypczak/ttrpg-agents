@@ -224,12 +224,12 @@ is, silently.
 `GET /token-images/<sha256>`), stored art is checked on each snapshot, once
 per type per session, for every row with a hash and a url not picked this
 session: `isImageAlive` makes a no-cache fetch (2xx alive, 4xx gone, anything
-else cannot tell and keeps the art). A reconcile about to draw a type whose
-check is pending waits for it. A type whose url is gone, or whose art has no
-url while the encounter has an instance of it, is listed for re-upload and
-left out of the plan's art, so its tokens are circles; the fresh picker never
-opens for a type with stored art. Without `options.loadImage`, stored art is
-used as it is and nothing is listed.
+else, or no answer within 5 s, cannot tell and keeps the art). A reconcile
+about to draw a type whose check is pending waits for it. A type whose url is
+gone, or whose art has no url while the encounter has an instance of it, is
+listed for re-upload and left out of the plan's art, so its tokens are circles;
+the fresh picker never opens for a type with stored art. Without
+`options.loadImage`, stored art is used as it is and nothing is listed.
 
 `options.onReuploadsChange` hears the list (`Reupload`: monster key, name via `monsterTypeName`, asset name `ttrpg-art-<first 16 hex of the hash>` via `republishName`, uploaded this session or not); `main.ts` shows it in `#reupload` near the top of the
 panel, one row per type, and opens the panel when a type joins.

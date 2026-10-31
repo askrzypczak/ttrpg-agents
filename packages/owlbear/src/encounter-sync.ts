@@ -800,7 +800,7 @@ export function createEncounterSync(
   function reportRepublishFailed(monsterKey: string, error: unknown): void {
     try {
       options.onArtRepublishFailed?.(
-        `Could not republish the token art for ${monsterKey}: ${describeError(error)}`,
+        `Could not republish the token art for ${monsterTypeName(desired ?? [], monsterKey)}: ${describeError(error)}`,
       );
     } catch {
       // A throwing handler must not leave an unhandled rejection.
@@ -878,7 +878,7 @@ export function createEncounterSync(
     }
     try {
       options.onArtStoreFailed?.(
-        `Could not store the image of the token art for ${monsterKey}; it is kept as a link: ${reason}`,
+        `Could not store the image of the token art for ${monsterTypeName(desired ?? [], monsterKey)}; it is kept as a link: ${reason}`,
       );
     } catch {
       // A throwing handler must not leave an unhandled rejection.
@@ -1390,6 +1390,7 @@ export function createEncounterSync(
       const restored = { ...picked, sha256 };
       art = { ...art, [monsterKey]: restored };
       republished[monsterKey] = restored;
+      checked.add(monsterKey);
       outbox?.submit(tokenArtMessage(monsterKey, restored));
       for (const instance of desired ?? [])
         if (instance.monsterKey === monsterKey) reskins.add(instance.id);

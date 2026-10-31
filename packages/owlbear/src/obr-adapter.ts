@@ -23,6 +23,9 @@ import type {
   Vec2,
 } from "./scene-model.js";
 
+/** A liveness check unanswered for this long counts as cannot tell. */
+const IMAGE_ALIVE_TIMEOUT_MS = 5000;
+
 export interface ObrAdapter {
   onReady(callback: () => void | Promise<void>): void;
   getRole(): Promise<PlayerRole>;
@@ -74,7 +77,8 @@ export interface ObrAdapter {
   fetchImage(url: string): Promise<Uint8Array>;
   /**
    * Whether an image url still answers: true on 2xx, false on 4xx; rejects
-   * on a network error or any other status (cannot tell).
+   * on a network error, any other status, or no answer within the timeout
+   * (cannot tell).
    */
   isImageAlive(url: string): Promise<boolean>;
   /**
@@ -322,7 +326,10 @@ export function createObrAdapter(): ObrAdapter {
       return new Uint8Array(await response.arrayBuffer());
     },
     isImageAlive: async (url) => {
-      const response = await fetch(url, { cache: "no-cache" });
+      const response = await fetch(url, {
+        cache: "no-cache",
+        signal: AbortSignal.timeout(IMAGE_ALIVE_TIMEOUT_MS),
+      });
       // Only the status matters: do not download the whole image.
       void response.body?.cancel();
       const { status } = response;

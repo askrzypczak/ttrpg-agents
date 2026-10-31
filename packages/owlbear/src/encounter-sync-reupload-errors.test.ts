@@ -84,7 +84,7 @@ describe("createEncounterSync re-upload errors", () => {
 
     expect(fake.uploads()).toHaveLength(1);
     expect(failures).toEqual([
-      "Could not republish the token art for shadow: upload failed",
+      "Could not republish the token art for Shadow: upload failed",
     ]);
     expect(reuploads.at(-1)).toEqual([
       {
