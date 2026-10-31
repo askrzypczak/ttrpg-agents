@@ -725,7 +725,7 @@ describe("createEncounterSync re-upload list", () => {
 
     expect(s.loads).toEqual([STORED_SHA]);
     expect(s.failures).toEqual([
-      `Could not republish the token art for shadow: ${reason}`,
+      `Could not republish the token art for Shadow: ${reason}`,
     ]);
     expect(s.fake.uploads()).toEqual([]);
     expect(s.fake.pickImageCalls()).toBe(0);
@@ -734,6 +734,49 @@ describe("createEncounterSync re-upload list", () => {
       { monsterKey: "shadow", monsterName: "Shadow", step: "reupload" },
     ]);
     expectCircles(s.tokenOf, ["shadow-1", "shadow-2"]);
+    expect(s.errors).toEqual([]);
+  });
+
+  it("a failed republish names the monster by its instance name, and by its key when no instance names it", async () => {
+    const reason = "no token image with that hash";
+    const loadImage = () => Promise.reject(new Error(reason));
+
+    const named = await listedShadow({ loadImage });
+    await named.sync.reuploadArt("shadow");
+    expect(named.failures).toEqual([
+      `Could not republish the token art for Shadow: ${reason}`,
+    ]);
+
+    const unnamed = await listedShadow({ loadImage }, []);
+    await unnamed.sync.reuploadArt("shadow");
+    expect(unnamed.failures).toEqual([
+      `Could not republish the token art for shadow: ${reason}`,
+    ]);
+  });
+
+  it("after a valid pick of the uploaded image a later snapshot carrying that art runs no liveness check for the type", async () => {
+    const feed = createMessageFeed();
+    const unpublished = { sha256: STORED_SHA } as TokenArt;
+    const s = setup({ pickImage: republished });
+    await s.sync.handleMessage(
+      feed.snapshot([inst(1)], { art: { shadow: unpublished } }),
+    );
+    await settle();
+    await s.sync.reuploadArt("shadow");
+    await s.sync.pickUploadedArt("shadow");
+    await settle();
+
+    await s.sync.handleMessage(helloAck);
+    await s.sync.handleMessage(
+      feed.snapshot([inst(1)], {
+        art: { shadow: { ...republished, sha256: STORED_SHA } },
+      }),
+    );
+    await settle();
+
+    expect(s.alive).toEqual([]);
+    expectImages(s.tokenOf, ["shadow-1"], republished);
+    expect(s.listed()).toEqual([]);
     expect(s.errors).toEqual([]);
   });
 
