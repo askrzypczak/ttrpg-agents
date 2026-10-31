@@ -220,13 +220,22 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
       .frameLocator("#extension")
       .locator(`#reupload-list li[data-monster-key="${monsterKey}"]`);
 
-  /** The stored url answers 404, as for an asset deleted from the library. */
+  /**
+   * The stored url answers 400 with the CDN's NoSuchKey body, as for an asset
+   * deleted from the library.
+   */
   const storedUrlGone = (page: Page) =>
     page.route(storedImage.url, (route) =>
       route.fulfill({
-        status: 404,
+        status: 400,
+        contentType: "application/json; charset=utf-8",
         headers: { "Access-Control-Allow-Origin": "*" },
-        body: "not found",
+        body: JSON.stringify({
+          statusCode: "404",
+          error: "not_found",
+          message: "Object not found",
+          code: "NoSuchKey",
+        }),
       }),
     );
 

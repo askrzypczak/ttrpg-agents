@@ -178,11 +178,18 @@ test.describe("restoring a cleared encounter", () => {
       height: 1,
     };
     seedE2eTokenArt(dirname(bridge.dbPath), "shadow", storedImage, PNG);
+    // The CDN's answer for an asset deleted from the library.
     await page.route(storedImage.url, (route) =>
       route.fulfill({
-        status: 404,
+        status: 400,
+        contentType: "application/json; charset=utf-8",
         headers: { "Access-Control-Allow-Origin": "*" },
-        body: "not found",
+        body: JSON.stringify({
+          statusCode: "404",
+          error: "not_found",
+          message: "Object not found",
+          code: "NoSuchKey",
+        }),
       }),
     );
     await withRepo(bridge.dbPath, (repo) => {
