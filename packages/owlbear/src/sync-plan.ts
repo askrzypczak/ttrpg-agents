@@ -307,22 +307,22 @@ export function replaceOverrideNote(name: string): string {
 }
 
 /**
- * The override note for a redraw with the art re-uploaded for its monster
- * type, over a token whose art or size had been changed on the table
- * (`recorded`), or that has no recorded look.
+ * The override note for a redraw with the art picked again for its monster
+ * type (in the panel), over a token whose art or size had been changed on the
+ * table (`recorded`), or that has no recorded look.
  */
 export function reskinOverrideNote(name: string, recorded: boolean): string {
   return recorded
-    ? `${name}'s token was redrawn with the art uploaded for its monster type; its art or size had been changed on the table, and was overwritten.`
-    : `${name}'s token was redrawn with the art uploaded for its monster type; its art or size may have been changed on the table, and was overwritten.`;
+    ? `${name}'s token was redrawn with the art picked for its monster type; its art or size had been changed on the table, and was overwritten.`
+    : `${name}'s token was redrawn with the art picked for its monster type; its art or size may have been changed on the table, and was overwritten.`;
 }
 
 /**
  * The override note for a token replaced with a new one drawn with the art
- * re-uploaded for its monster type.
+ * picked again for its monster type (in the panel).
  */
 export function reskinReplaceNote(name: string): string {
-  return `${name}'s token was replaced with a new one drawn with the art uploaded for its monster type; any attachments on the old token were deleted with it.`;
+  return `${name}'s token was replaced with a new one drawn with the art picked for its monster type; any attachments on the old token were deleted with it.`;
 }
 
 /**
@@ -330,8 +330,7 @@ export function reskinReplaceNote(name: string): string {
  * monster type, over a token still drawn as recorded.
  */
 export function reskinNote(name: string): string {
-  void name;
-  throw new Error("not implemented");
+  return `${name}'s token was redrawn with the art picked for its monster type.`;
 }
 
 /** A token's look as recorded under LOOK_BASELINE_KEY. */
@@ -664,13 +663,16 @@ function movesEditField(
  * the scene. The old token's record, as read, is marked with that id under
  * REPLACED_BY_KEY. Every replacement is reported in `overrides` (a folded
  * move keeps its own note).
- * A token whose instance is in `context.reskins` (the GM picked the art
- * re-uploaded for its type) and whose type has art in `context.art` is
- * redrawn the same way, in place or replaced, with the re-skin notes
- * (reskinOverrideNote, reskinReplaceNote) in place of the monster change ones;
- * a redraw for a new monster type wins over it. A token with no recorded look
- * and no `restyles` or `reskins` entry is never redrawn and gets no record;
- * other item types are left alone.
+ * A token whose instance is in `context.reskins` (the GM picked art for its
+ * type again in the panel) and whose type has art in `context.art` is
+ * redrawn the same way, in place or replaced, with the re-skin notes in
+ * place of the monster change ones: every in-place redraw is reported, with
+ * reskinOverrideNote over a token whose picture or scale had changed or that
+ * has no recorded look and reskinNote otherwise, and every replacement with
+ * reskinReplaceNote; a token already drawn with the art is not written and
+ * gets no note. A redraw for a new monster type wins over it. A token with no
+ * recorded look and no `restyles` or `reskins` entry is never redrawn and gets
+ * no record; other item types are left alone.
  * The first linked token seen is an instance's token (others are duplicates,
  * left alone), except after a half-done replacement: a linked token whose
  * record names another linked token of its instance on the scene under
@@ -954,18 +956,25 @@ export function planSync(
           const picture =
             token.type === "IMAGE" ? (token.image?.url ?? null) : null;
           const scale = token.scale ?? UNIT_SCALE;
-          if (
+          const changed =
             look === undefined ||
             picture !== look.image ||
             scale.x !== 1 ||
-            scale.y !== 1
-          )
+            scale.y !== 1;
+          // A monster change's redraw is noted only over a table change; a
+          // re-skin's, which the GM asked for in the panel, always is.
+          if (changed)
             plan.overrides.push({
               instanceId: id,
               message: (reskinned ? reskinOverrideNote : restyleOverrideNote)(
                 instance.displayName,
                 look !== undefined,
               ),
+            });
+          else if (reskinned)
+            plan.overrides.push({
+              instanceId: id,
+              message: reskinNote(instance.displayName),
             });
         }
         next[LOOK_BASELINE_KEY] = {
