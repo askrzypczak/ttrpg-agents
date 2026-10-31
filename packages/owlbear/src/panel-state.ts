@@ -1,4 +1,9 @@
-import type { ArtStep, Reupload, TypeArt } from "./encounter-sync.js";
+import type {
+  ArtStep,
+  Reupload,
+  TypeArt,
+  TypeArtState,
+} from "./encounter-sync.js";
 import type { RejectionCode, SocketState } from "./reconnecting-socket.js";
 
 import type { PlayerRole } from "./scene-model.js";
@@ -125,8 +130,24 @@ export function panelView(input: PanelInput): PanelView {
     ...(input.reuploads && input.reuploads.length > 0
       ? { reuploads: reuploadRows(input.reuploads) }
       : {}),
+    ...(input.typeArt && input.typeArt.length > 0
+      ? {
+          typeArt: input.typeArt.map(({ monsterKey, monsterName, state }) => ({
+            monsterKey,
+            label: `${monsterName}: ${TYPE_ART_TEXT[state]}`,
+          })),
+        }
+      : {}),
   };
 }
+
+/** What a Token art row says about its type's art. */
+const TYPE_ART_TEXT: Record<TypeArtState, string> = {
+  art: "has token art",
+  none: "no token art yet",
+  declined: "circles, no art picked",
+  reupload: "circles until its art is re-uploaded (above)",
+};
 
 /** What the GM is told while a fresh image picker is open. */
 function artStepPrompt({ monsterName, index, total }: ArtStep): string {

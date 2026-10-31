@@ -10,6 +10,7 @@ import {
   createEncounterSync,
   type ArtStep,
   type Reupload,
+  type TypeArt,
 } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
@@ -50,6 +51,8 @@ obr.onReady(async () => {
   let artStep: ArtStep | undefined;
   // The monster types whose stored art needs re-uploading.
   let reuploads: Reupload[] = [];
+  // The encounter's monster types, with their art state.
+  let typeArt: TypeArt[] = [];
   let waitingCommands = 0;
   // Store values a snapshot wrote over the table's, until the DM dismisses
   // them. In memory only: a reload starts with its own.
@@ -85,6 +88,29 @@ obr.onReady(async () => {
     );
   };
 
+  // The Token art rows as last drawn, drawn again only when they change, like
+  // the re-upload rows.
+  let drawnTypeArt = "";
+  const drawTypeArt = (rows: PanelView["typeArt"]) => {
+    const drawn = JSON.stringify(rows ?? []);
+    if (drawn === drawnTypeArt) return;
+    drawnTypeArt = drawn;
+    el("type-art").hidden = rows === undefined;
+    el("type-art-list").replaceChildren(
+      ...(rows ?? []).map((row) => {
+        const item = document.createElement("li");
+        item.dataset.monsterKey = row.monsterKey;
+        const label = document.createElement("span");
+        label.textContent = row.label;
+        const pick = document.createElement("button");
+        pick.dataset.action = "pick-art";
+        pick.textContent = "Pick art";
+        item.append(label, " ", pick);
+        return item;
+      }),
+    );
+  };
+
   let rejection: RejectionCode | undefined;
   const render = () => {
     const view = panelView({
@@ -98,6 +124,7 @@ obr.onReady(async () => {
       ...(artError !== undefined ? { artError } : {}),
       ...(artStep !== undefined ? { artStep } : {}),
       reuploads,
+      typeArt,
       ...(editNote !== undefined ? { editNote } : {}),
       waitingCommands,
       overrides,
@@ -109,6 +136,7 @@ obr.onReady(async () => {
     el("hint").textContent = view.hint ?? "";
     el("art-prompt").textContent = view.prompt ?? "";
     drawReuploads(view.reuploads);
+    drawTypeArt(view.typeArt);
     el("use-this-tab").hidden = view.action !== "use-this-tab";
     el("sync-error").textContent = view.error ?? "";
     el("edit-note").textContent = view.note ?? "";
@@ -202,6 +230,11 @@ obr.onReady(async () => {
         render();
         if (joined) void obr.openPanel();
       },
+      // Unlike the re-upload list, this one never opens the panel.
+      onTypeArtChange: (list) => {
+        typeArt = list;
+        render();
+      },
       // The override list stays: only the DM dismisses it.
       onStoreChange: () => {
         removeError = undefined;
@@ -274,6 +307,16 @@ obr.onReady(async () => {
     if (button.dataset.action === "reupload") void sync.reuploadArt(monsterKey);
     else if (button.dataset.action === "pick")
       void sync.pickUploadedArt(monsterKey);
+  });
+  // The Token art rows' buttons; nothing in the sync waits on them either.
+  el("type-art-list").addEventListener("click", (event) => {
+    const button =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("button[data-action]")
+        : null;
+    const monsterKey = button?.closest<HTMLElement>("li")?.dataset.monsterKey;
+    if (button === null || monsterKey === undefined) return;
+    if (button.dataset.action === "pick-art") void sync.repickArt(monsterKey);
   });
   socket.start();
   // Re-render periodically so the stalled hint appears without a state change.
