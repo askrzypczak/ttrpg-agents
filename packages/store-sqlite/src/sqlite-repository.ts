@@ -616,6 +616,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
     });
   }
 
+  listRestoreSeqs(): Record<string, number> {
+    throw new Error("not implemented");
+  }
+
   listInstances(): MonsterInstance[] {
     const rows = this.db
       .prepare(

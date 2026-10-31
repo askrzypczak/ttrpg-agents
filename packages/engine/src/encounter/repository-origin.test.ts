@@ -16,6 +16,7 @@ function recordingRepository(received: unknown[]): EncounterRepository {
     applyHealing: (_id, _amount, origin) => record(origin),
     removeInstances: (_ids, origin) => record(origin),
     listRemovedInstances: () => [],
+    listRestoreSeqs: () => ({}),
     restoreInstances: (_ids, _name, origin) => record(origin),
     renameInstance: (_id, _name, origin) => record(origin),
     setInitiative: (_id, _initiative, origin) => record(origin),

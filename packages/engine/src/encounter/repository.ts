@@ -207,6 +207,12 @@ export interface EncounterRepository {
   /** Instances of the active encounter, ordered by creation. */
   listInstances(): MonsterInstance[];
   /**
+   * For each live instance of the active encounter that a restore put back,
+   * the change-log seq of the `added` event of its last restore. An instance
+   * never restored (or restored before migration 15) is left out.
+   */
+  listRestoreSeqs(): Record<string, number>;
+  /**
    * Records a command that changed nothing undo can reverse (a map or room
    * change) as the newest undo record, with its name and no instances;
    * insert-if-absent.
