@@ -173,6 +173,9 @@ class MemoryEncounter implements EncounterRepository {
   removeInstances(): MonsterInstance[] {
     throw new Error("unused");
   }
+  listRestoreSeqs(): Record<string, number> {
+    return {};
+  }
   listRemovedInstances(): RemovedInstance[] {
     throw new Error("unused");
   }

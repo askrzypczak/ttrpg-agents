@@ -61,6 +61,11 @@ const encounterSnapshotPayload = z.object({
   instances: z.array(monsterInstanceSchema),
   /** Monster key -> the art new tokens of that type are created with. */
   art: z.record(z.string(), tokenArtSchema).optional(),
+  /**
+   * Instance id -> the change-log seq of its last restore, for each instance a
+   * restore put back; left out when there is none, and absent from an older bridge.
+   */
+  restoreSeqs: z.record(z.string(), z.number().int().min(1)).optional(),
   /** The change-log position this snapshot is current as of (0 for an empty log). */
   seq: z.number().int().min(0),
 });

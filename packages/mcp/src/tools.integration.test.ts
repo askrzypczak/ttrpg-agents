@@ -98,6 +98,7 @@ function wrapRepo(
     applyHealing: (id, amount) => inner.applyHealing(id, amount, origin),
     removeInstances: (ids) => inner.removeInstances(ids, origin),
     listRemovedInstances: () => inner.listRemovedInstances(),
+    listRestoreSeqs: () => inner.listRestoreSeqs(),
     restoreInstances: (ids, name) => inner.restoreInstances(ids, name, origin),
     renameInstance: (id, name) => inner.renameInstance(id, name, origin),
     setInitiative: (id, n) => inner.setInitiative(id, n, origin),

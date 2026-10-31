@@ -73,6 +73,7 @@ One SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DATA_HOME/ttrpg-agent
 Invariants the processes rely on:
 
 - A removed instance keeps its row, marked removed, so `restore_monsters` puts it back with its id and state. A clear keeps the set it removed for `restore_encounter` and deletes the instances removed before it: only the last clear's set is restorable.
+- A restore records, on each instance it puts back, the `seq` of the `added` event it logs. It is kept while the instance stays in the encounter and replaced by a later restore; snapshots carry it.
 - An undo record holds each instance's state before the command's first write to it. A map or room change leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes every record.
 - Token art is a VTT-neutral reference `{ url, mime, width, height }` with an optional `sha256` link to stored bytes. The reference is all present or all absent, and art without one (bytes never published to Owlbear, such as the library import's) must link an image. Stored bytes carry no monster key.
 
@@ -99,7 +100,7 @@ The bridge's agent channel lets the agent ask the table something. It carries qu
 
 ## What reaches the table
 
-The bridge polls the change log every 250 ms and broadcasts each new event to authenticated clients as an `encounter-event` carrying its `seq`, oldest first. A client that connects gets an `encounter-snapshot` (instances, art and the `seq` it is current as of) after the `hello-ack`; a snapshot is also sent in place of a change-log row the bridge cannot parse. There is no resume: a reconnecting client gets a new snapshot. The extension's own commands get no reply of their own: the `table` events of an accepted edit or removal carry its command id and are its answer, a refusal is a non-fatal `error` with that id, and an art pick (`token-art-set`) gets no answer at all.
+The bridge polls the change log every 250 ms and broadcasts each new event to authenticated clients as an `encounter-event` carrying its `seq`, oldest first. A client that connects gets an `encounter-snapshot` (instances, art, the `seq` it is current as of and, per instance a restore put back, the `seq` of its last restore) after the `hello-ack`; a snapshot is also sent in place of a change-log row the bridge cannot parse. There is no resume: a reconnecting client gets a new snapshot. The extension's own commands get no reply of their own: the `table` events of an accepted edit or removal carry its command id and are its answer, a refusal is a non-fatal `error` with that id, and an art pick (`token-art-set`) gets no answer at all.
 
 The extension (GM role only) reconciles the scene against the encounter: the last snapshot folded with later events of both origins in `seq` order. It reconciles on every snapshot, applied event, scene-ready change and retry after a failure, ignores an event it already has, and reconnects for a snapshot when an event skips a `seq`. Nothing touches the scene until it is ready, and nothing without our metadata key `com.ttrpg-agents/instance` is ever touched. The mechanics are in [`packages/owlbear/README.md`](../packages/owlbear/README.md), Encounter sync. The rules:
 

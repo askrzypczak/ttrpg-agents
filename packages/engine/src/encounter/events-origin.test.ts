@@ -129,6 +129,7 @@ type MutationName = Exclude<
   | "getOrCreateActiveEncounter"
   | "listInstances"
   | "listRemovedInstances"
+  | "listRestoreSeqs"
   | "noteCommand"
   | "transaction"
   | "latestUndoRecord"
