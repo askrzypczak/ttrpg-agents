@@ -628,4 +628,38 @@ describe("createEncounterSync repickArt", () => {
     expect(s.fake.pickImageCalls()).toBe(2);
     expect(s.errors).toEqual([]);
   });
+
+  it("the reconcile opens no fresh picker for a type whose Pick art picker is open, and draws its tokens as circles until the pick redraws them", async () => {
+    const s = setup();
+    s.fake.scene.setReady(false);
+    await s.sync.handleMessage(
+      createMessageFeed().snapshot([inst(1, "goblin")]),
+    );
+    await settle();
+    expect(s.stateOf("goblin")).toBe("none");
+    expect(s.fake.pickImageCalls()).toBe(0);
+
+    const pick = deferred<PublishedTokenArt | undefined>();
+    s.answer(() => pick.promise);
+    const repick = s.sync.repickArt("goblin");
+    await settle();
+    expect(s.fake.pickImageCalls()).toBe(1);
+
+    s.fake.scene.setReady(true);
+    await settle();
+
+    expect(s.fake.pickImageCalls()).toBe(1);
+    expectCircles(s.tokenOf, ["goblin-1"]);
+    const circleId = s.tokenOf("goblin-1")?.id;
+
+    pick.resolve(structuredClone(repicked));
+    await repick;
+    await settle();
+
+    expect(s.reported).toEqual([["goblin", repicked]]);
+    expectImages(s.tokenOf, ["goblin-1"], repicked);
+    expect(s.tokenOf("goblin-1")?.id).not.toBe(circleId);
+    expect(s.fake.pickImageCalls()).toBe(1);
+    expect(s.errors).toEqual([]);
+  });
 });
