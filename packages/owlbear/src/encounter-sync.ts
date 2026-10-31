@@ -66,6 +66,17 @@ export type Reupload = {
   uploaded: boolean;
 };
 
+/** A monster type's art as the panel's Token art list shows it. */
+export type TypeArtState = "art" | "none" | "declined" | "reupload";
+
+/** One row of the Token art list: a monster type with an instance in the encounter. */
+export type TypeArt = {
+  monsterKey: string;
+  /** Via monsterTypeName (310.8). */
+  monsterName: string;
+  state: TypeArtState;
+};
+
 export interface EncounterSync {
   /** Resolves once the message is applied, or deferred until the scene is ready. */
   handleMessage(message: BridgeMessage): Promise<void>;
@@ -81,6 +92,12 @@ export interface EncounterSync {
   reuploadArt(monsterKey: string): Promise<void>;
   /** Opens the picker on a listed type's uploaded image; a valid pick becomes its art. */
   pickUploadedArt(monsterKey: string): Promise<void>;
+  /**
+   * Opens the image picker for a type in the Token art list; a valid pick
+   * becomes its art (stored like a fresh pick) and redraws the type's tokens
+   * with it. Ignored while the type's pick, re-upload or fresh picker runs.
+   */
+  repickArt(monsterKey: string): Promise<void>;
 }
 
 // Real timers are only used in the browser; tests inject Timers.
@@ -420,6 +437,8 @@ export function createEncounterSync(
     onArtStep?: (step: ArtStep | undefined) => void;
     /** Called with the whole re-upload list whenever it changes. */
     onReuploadsChange?: (reuploads: Reupload[]) => void;
+    /** Called with the whole Token art list whenever it changes. */
+    onTypeArtChange?: (types: TypeArt[]) => void;
   } = {},
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
@@ -1396,6 +1415,10 @@ export function createEncounterSync(
         if (instance.monsterKey === monsterKey) reskins.add(instance.id);
       reportReuploads();
       await enqueue(reconcile);
+    },
+    repickArt(monsterKey) {
+      void monsterKey;
+      throw new Error("not implemented");
     },
   };
 }

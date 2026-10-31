@@ -847,8 +847,10 @@ describe("createEncounterSync re-upload list", () => {
       x: 1,
       y: 1,
     });
+    // Every redraw from a panel pick is listed: the in-place one first.
     expect(s.overrides).toEqual([
-      "Shadow 2's token was replaced with a new one drawn with the art uploaded for its monster type; any attachments on the old token were deleted with it.",
+      "Shadow 1's token was redrawn with the art picked for its monster type.",
+      "Shadow 2's token was replaced with a new one drawn with the art picked for its monster type; any attachments on the old token were deleted with it.",
     ]);
     expect(s.errors).toEqual([]);
   });

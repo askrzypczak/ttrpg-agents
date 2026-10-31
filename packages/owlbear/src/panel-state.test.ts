@@ -394,3 +394,37 @@ describe("panelView waiting edits and overrides", () => {
     expect(panelView(connected).overrides).toBeUndefined();
   });
 });
+
+describe("panelView token art", () => {
+  const connected: PanelInput = {
+    role: "gm",
+    socketState: "open",
+    disconnectedMs: 0,
+  };
+
+  it("each monster type in the Token art list is a row with its name and art state, and an empty list renders no rows", () => {
+    const view = panelView({
+      ...connected,
+      typeArt: [
+        { monsterKey: "wolf", monsterName: "Wolf", state: "art" },
+        { monsterKey: "goblin", monsterName: "Goblin", state: "none" },
+        { monsterKey: "orc", monsterName: "Orc", state: "declined" },
+        { monsterKey: "shadow", monsterName: "Shadow", state: "reupload" },
+      ],
+    });
+
+    expect(view.typeArt).toEqual([
+      { monsterKey: "wolf", label: "Wolf: has token art" },
+      { monsterKey: "goblin", label: "Goblin: no token art yet" },
+      { monsterKey: "orc", label: "Orc: circles, no art picked" },
+      {
+        monsterKey: "shadow",
+        label: "Shadow: circles until its art is re-uploaded (above)",
+      },
+    ]);
+
+    const empty = panelView({ ...connected, typeArt: [] });
+    expect(empty).not.toHaveProperty("typeArt");
+    expect(panelView(connected)).not.toHaveProperty("typeArt");
+  });
+});

@@ -1,4 +1,4 @@
-import type { ArtStep, Reupload } from "./encounter-sync.js";
+import type { ArtStep, Reupload, TypeArt } from "./encounter-sync.js";
 import type { RejectionCode, SocketState } from "./reconnecting-socket.js";
 
 import type { PlayerRole } from "./scene-model.js";
@@ -26,6 +26,8 @@ export interface PanelInput {
   artStep?: ArtStep;
   /** The monster types whose stored art needs re-uploading, in list order. */
   reuploads?: Reupload[];
+  /** The encounter's monster types, with their art state. */
+  typeArt?: TypeArt[];
   /** A note on the latest write-back answer that differs from the table, if any. */
   editNote?: string;
   /** How many table edits, token deletions and token art picks wait for the bridge (see outbox.ts). */
@@ -70,6 +72,8 @@ export interface PanelView {
     hint?: string;
     canPick: boolean;
   }[];
+  /** One row per type in the Token art list; present only when there are any. */
+  typeArt?: { monsterKey: string; label: string }[];
 }
 
 /**

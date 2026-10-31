@@ -325,6 +325,15 @@ export function reskinReplaceNote(name: string): string {
   return `${name}'s token was replaced with a new one drawn with the art uploaded for its monster type; any attachments on the old token were deleted with it.`;
 }
 
+/**
+ * The override note for an in-place redraw with the art picked again for its
+ * monster type, over a token still drawn as recorded.
+ */
+export function reskinNote(name: string): string {
+  void name;
+  throw new Error("not implemented");
+}
+
 /** A token's look as recorded under LOOK_BASELINE_KEY. */
 type Look = { monsterKey: string; image: string | null };
 
