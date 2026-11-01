@@ -77,8 +77,16 @@ export interface PanelView {
     hint?: string;
     canPick: boolean;
   }[];
-  /** One row per type in the Token art list; present only when there are any. */
-  typeArt?: { monsterKey: string; label: string }[];
+  /**
+   * One row per type in the Token art list, with the hint and the pick once
+   * an image file was uploaded for it; present only when there are any.
+   */
+  typeArt?: {
+    monsterKey: string;
+    label: string;
+    hint?: string;
+    canPick: boolean;
+  }[];
 }
 
 /**
@@ -132,10 +140,16 @@ export function panelView(input: PanelInput): PanelView {
       : {}),
     ...(input.typeArt && input.typeArt.length > 0
       ? {
-          typeArt: input.typeArt.map(({ monsterKey, monsterName, state }) => ({
-            monsterKey,
-            label: `${monsterName}: ${TYPE_ART_TEXT[state]}`,
-          })),
+          typeArt: input.typeArt.map(
+            ({ monsterKey, monsterName, state, uploadedAs }) => ({
+              monsterKey,
+              label: `${monsterName}: ${TYPE_ART_TEXT[state]}`,
+              ...(uploadedAs === undefined
+                ? {}
+                : { hint: uploadedHint(uploadedAs) }),
+              canPick: uploadedAs !== undefined,
+            }),
+          ),
         }
       : {}),
   };
@@ -155,6 +169,14 @@ function artStepPrompt({ monsterName, index, total }: ArtStep): string {
 }
 
 /**
+ * What the GM does once an image was uploaded under an asset name: confirm
+ * Owlbear's folder dialog, then pick the named image.
+ */
+function uploadedHint(assetName: string): string {
+  return `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${assetName}.`;
+}
+
+/**
  * One row per type to re-upload: its name and place in the list and, once
  * its bytes were uploaded, what the GM does next and the pick it offers.
  */
@@ -164,11 +186,7 @@ function reuploadRows(
   return reuploads.map((row, i) => ({
     monsterKey: row.monsterKey,
     label: `${row.monsterName} (${String(i + 1)} of ${String(reuploads.length)})`,
-    ...(row.uploaded
-      ? {
-          hint: `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${row.assetName}.`,
-        }
-      : {}),
+    ...(row.uploaded ? { hint: uploadedHint(row.assetName) } : {}),
     canPick: row.uploaded,
   }));
 }

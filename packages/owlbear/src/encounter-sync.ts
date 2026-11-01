@@ -79,6 +79,12 @@ export type TypeArt = {
   /** Via monsterTypeName (310.8). */
   monsterName: string;
   state: TypeArtState;
+  /**
+   * The Owlbear asset name an image file chosen in the panel for the type was
+   * uploaded under this session; absent before such an upload and after a
+   * valid panel pick for the type.
+   */
+  uploadedAs?: string;
 };
 
 export interface EncounterSync {
@@ -102,6 +108,21 @@ export interface EncounterSync {
    * with it. Ignored while the type's pick, re-upload or fresh picker runs.
    */
   repickArt(monsterKey: string): Promise<void>;
+  /**
+   * Uploads an image file chosen in the panel to the GM's Owlbear library for
+   * a type in the Token art list, under `ttrpg-art-` and the first 16 hex
+   * characters of the SHA-256 of its bytes; opens no picker. Ignored while the
+   * type's upload, pick, re-upload, Pick art or fresh picker runs. A file that
+   * cannot be read or uploaded is reported through `onArtRepublishFailed`.
+   */
+  uploadArtFile(monsterKey: string, file: Blob): Promise<void>;
+  /**
+   * Opens the picker on the image file uploaded for a listed type this
+   * session, with its asset name as the search; a valid pick becomes the
+   * type's art as a Pick art pick does (stored like a fresh pick). Ignored as
+   * `uploadArtFile` is, and for a type with no upload this session.
+   */
+  pickUploadedFile(monsterKey: string): Promise<void>;
 }
 
 // Real timers are only used in the browser; tests inject Timers.
@@ -217,6 +238,12 @@ function samePicture(a: TokenArt, b: PublishedTokenArt): boolean {
     a.width === b.width &&
     a.height === b.height
   );
+}
+
+/** The SHA-256 of some bytes as lowercase hex. */
+async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 const EDIT_FIELDS: readonly EditField[] = [
@@ -358,6 +385,12 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * reconcile, then the listed types. Without `options.loadImage` stored art is
  * used as it is, and art without a url never draws.
  *
+ * An image file chosen in the panel (`uploadArtFile`) is uploaded under the
+ * name of its hash, outside the reconcile chain, and remembered for the
+ * session until a valid panel pick for its type: `pickUploadedFile` opens the
+ * picker on that name, and a valid pick is taken as a `repickArt` pick is.
+ * Neither is an art wait, and neither blocks a reconcile.
+ *
  * After an art step (a picker, or a wait for a pending check) the scene items
  * and the placed record are read again before the writes are planned, so a
  * table change made meanwhile is kept; a reconcile with no art step reads them
@@ -459,7 +492,7 @@ export function createEncounterSync(
      * for re-upload to Owlbear.
      */
     loadImage?: (sha256: string) => Promise<StoredTokenImage>;
-    /** Called once per re-upload whose stored bytes could not be loaded or uploaded, with the text to show. */
+    /** Called once per re-upload whose stored bytes could not be loaded or uploaded, or per image file chosen in the panel that could not be read or uploaded, with the text to show. */
     onArtRepublishFailed?: (text: string) => void;
     /** Called before each fresh picker opens, and with `undefined` once it resolves. */
     onArtStep?: (step: ArtStep | undefined) => void;
@@ -503,6 +536,9 @@ export function createEncounterSync(
   // Listed monster types whose stored bytes were uploaded to Owlbear this
   // session.
   const uploaded = new Set<string>();
+  // Monster key -> the asset name of the image file the GM uploaded from the
+  // panel for the type this session, until a valid panel pick for the type.
+  const fileUploads = new Map<string, string>();
   // Types whose re-upload, pick of the uploaded image or Pick art is running:
   // a second press for the same type is ignored until it ends, so a double
   // click opens one Owlbear dialog and uploads one copy.
@@ -851,10 +887,12 @@ export function createEncounterSync(
           : declined.has(monsterKey)
             ? "declined"
             : "none";
+      const uploadedAs = fileUploads.get(monsterKey);
       list.push({
         monsterKey,
         monsterName: monsterTypeName(instances, monsterKey),
         state,
+        ...(uploadedAs === undefined ? {} : { uploadedAs }),
       });
     }
     return list;
@@ -901,6 +939,17 @@ export function createEncounterSync(
     try {
       options.onArtRepublishFailed?.(
         `Could not republish the token art for ${monsterTypeName(desired ?? [], monsterKey)}: ${describeError(error)}`,
+      );
+    } catch {
+      // A throwing handler must not leave an unhandled rejection.
+    }
+  }
+
+  /** Reports an image file chosen in the panel that could not be read or uploaded. */
+  function reportUploadFailed(monsterKey: string, error: unknown): void {
+    try {
+      options.onArtRepublishFailed?.(
+        `Could not upload the new token art for ${monsterTypeName(desired ?? [], monsterKey)}: ${describeError(error)}`,
       );
     } catch {
       // A throwing handler must not leave an unhandled rejection.
@@ -1028,6 +1077,7 @@ export function createEncounterSync(
       void storePicked(monsterKey, picked, options.storeImage);
     for (const instance of desired ?? [])
       if (instance.monsterKey === monsterKey) reskins.add(instance.id);
+    fileUploads.delete(monsterKey);
     reportArtLists();
     await enqueue(reconcile);
   }
@@ -1599,6 +1649,54 @@ export function createEncounterSync(
         inflight.delete(monsterKey);
       }
       // A cancel, an error or an unusable pick changes nothing.
+      if (picked === undefined) return;
+      await takePanelPick(monsterKey, picked);
+    },
+    async uploadArtFile(monsterKey, file) {
+      if (
+        !typeArtList().some((row) => row.monsterKey === monsterKey) ||
+        inflight.has(monsterKey) ||
+        picking.some((p) => p.monsterKey === monsterKey)
+      )
+        return;
+      inflight.add(monsterKey);
+      let name: string;
+      try {
+        const bytes = await file.arrayBuffer();
+        name = republishName(await sha256Hex(bytes));
+        // Resolves once handed to Owlbear, before the GM confirms the folder.
+        await obr.uploadImage({
+          bytes: new Uint8Array(bytes),
+          mime: file.type,
+          name,
+        });
+      } catch (error) {
+        reportUploadFailed(monsterKey, error);
+        return;
+      } finally {
+        inflight.delete(monsterKey);
+      }
+      fileUploads.set(monsterKey, name);
+      reportArtLists();
+    },
+    async pickUploadedFile(monsterKey) {
+      const name = fileUploads.get(monsterKey);
+      if (
+        name === undefined ||
+        !typeArtList().some((row) => row.monsterKey === monsterKey) ||
+        inflight.has(monsterKey) ||
+        picking.some((p) => p.monsterKey === monsterKey)
+      )
+        return;
+      inflight.add(monsterKey);
+      let picked: PublishedTokenArt | undefined;
+      try {
+        picked = await pickArt(name);
+      } finally {
+        inflight.delete(monsterKey);
+      }
+      // A cancel, an error or an unusable pick changes nothing; the upload
+      // stays pending, so a later press opens the picker again.
       if (picked === undefined) return;
       await takePanelPick(monsterKey, picked);
     },

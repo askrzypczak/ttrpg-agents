@@ -287,6 +287,20 @@ redraws its tokens (`reskins`, below). The reconcile opens no fresh picker for
 a type whose Pick art picker is open. Neither the list nor an open Pick art
 picker is an art wait.
 
+**Upload new art.** Each Token art row has "Upload new art", which calls
+`sync.uploadArtFile(monsterKey, file)` with the file the GM chose in the hidden
+`#art-file` input. The sync hashes the bytes (SHA-256, `crypto.subtle`) and
+uploads them with `ObrAdapter.uploadImage` under `republishName(hash)`, the
+name a re-upload uses, before the GM confirms the folder. The row then offers
+"Pick the uploaded image" (`sync.pickUploadedFile(monsterKey)`): the picker
+opens with that name, and a valid pick goes through `takePanelPick`. Any valid
+panel pick for the type takes the name off the row. The upload is kept for the
+session only, and a pick needs one. A file that cannot be read or uploaded is
+reported through `options.onArtRepublishFailed` ("Could not upload the new token
+art for ...") and changes nothing else. Both calls share the `inflight` guard:
+they are ignored while another art call for the type runs or its fresh picker
+is open or queued. Neither is an art wait.
+
 `EncounterSync.artWaits()` names the types whose fresh picker is open or still
 to open (`pick`), then the listed types (`reupload`), with their monster names;
 the `scene-status` answer carries it (`src/queries.ts`).
@@ -317,11 +331,11 @@ whose replacement is on the scene is deleted first. The instance always keeps
 a linked token, so no `token-deleted` is sent. Every replacement is reported in
 `plan.overrides`.
 
-Any panel pick (Pick art or a re-upload pick) redraws every token of its type
-the same way (`reskins`; a monster change wins over it), and every in-place
-redraw from a panel pick is reported: with the table-change note as above, else
-with `reskinNote`; a token already drawn with the pick is not written and gets
-no note.
+Any panel pick (Pick art, a re-upload pick or the pick of an uploaded file)
+redraws every token of its type the same way (`reskins`; a monster change wins
+over it), and every in-place redraw from a panel pick is reported: with the
+table-change note as above, else with `reskinNote`; a token already drawn with
+the pick is not written and gets no note.
 
 ## Map overlay
 
@@ -418,7 +432,9 @@ Chromium. First time: `npx playwright install chromium`. Not part of `npm run ch
   an inline 1x1 PNG (a 404 for the failure test), seeds stored art with
   `seedE2eTokenArt` (art `null` seeds the image hash alone) and routes its url
   to a 400 (the CDN's answer for a deleted asset) or the PNG, and reads the
-  rows through `e2e/db.ts`.
+  rows through `e2e/db.ts`. Its upload tests answer the file chooser
+  (Playwright's `filechooser`) with a PNG, cancelled or chosen, and read the
+  uploads the fake host records.
   `overlay.e2e.ts` seeds an active map and a room with `seedE2eMap`
   (`clearE2eMap` after) and checks the overlay's local items and the panel
   toggle. `map-image.e2e.ts` serves a map image cross-origin with CORS, posts `map-image` to the bridge, and checks the real extension's WEBP answer.
