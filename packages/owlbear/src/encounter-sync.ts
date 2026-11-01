@@ -1034,7 +1034,9 @@ export function createEncounterSync(
     taken: Facts,
     takenMoves: ReadonlySet<string>,
     takenRestyles: ReadonlySet<string>,
-    takenReskins: ReadonlySet<string>,
+    // Not read-only: a fresh pick adds its type's instances, so a reconcile
+    // that fails afterwards restores them for the retry.
+    takenReskins: Set<string>,
     takenLeft: ReadonlySet<string>,
     snapshot: boolean,
   ): Promise<SyncPlan> {
@@ -1092,6 +1094,10 @@ export function createEncounterSync(
         // Not awaited: the tokens do not wait for the bytes.
         if (options.storeImage !== undefined)
           void storePicked(monsterKey, chosen, options.storeImage);
+        // Circles the type already has (drawn while its Pick art picker was
+        // open) take the art too.
+        for (const instance of wanted)
+          if (instance.monsterKey === monsterKey) takenReskins.add(instance.id);
       }
     } finally {
       picking = [];

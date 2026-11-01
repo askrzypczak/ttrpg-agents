@@ -662,4 +662,45 @@ describe("createEncounterSync repickArt", () => {
     expect(s.fake.pickImageCalls()).toBe(1);
     expect(s.errors).toEqual([]);
   });
+
+  it("a valid fresh pick for a type whose tokens are circles without declined art replaces its circles with image tokens, each with the re-skin replacement note", async () => {
+    const feed = createMessageFeed();
+    const s = setup();
+    s.fake.scene.setReady(false);
+    await s.sync.handleMessage(
+      feed.snapshot([inst(1, "goblin"), inst(2, "goblin")]),
+    );
+    await settle();
+
+    // The Pick art picker is open while the reconcile draws circles, then
+    // the GM cancels it.
+    const pick = deferred<PublishedTokenArt | undefined>();
+    s.answer(() => pick.promise);
+    const repick = s.sync.repickArt("goblin");
+    await settle();
+    s.fake.scene.setReady(true);
+    await settle();
+    pick.resolve(undefined);
+    await repick;
+    await settle();
+    expectCircles(s.tokenOf, ["goblin-1", "goblin-2"]);
+    expect(s.stateOf("goblin")).toBe("none");
+    expect(s.fake.pickImageCalls()).toBe(1);
+
+    // A new goblin opens the reconcile's fresh picker; the GM picks art.
+    s.answer(() => structuredClone(repicked));
+    await s.sync.handleMessage(
+      feed.event({ type: "added", instances: [inst(3, "goblin")] }),
+    );
+    await settle();
+
+    expect(s.fake.pickImageCalls()).toBe(2);
+    expectImages(s.tokenOf, ["goblin-1", "goblin-2", "goblin-3"], repicked);
+    expect(s.overrides).toEqual([
+      "Goblin 1's token was replaced with a new one drawn with the art picked for its monster type; any attachments on the old token were deleted with it.",
+      "Goblin 2's token was replaced with a new one drawn with the art picked for its monster type; any attachments on the old token were deleted with it.",
+    ]);
+    expect(s.stateOf("goblin")).toBe("art");
+    expect(s.errors).toEqual([]);
+  });
 });
