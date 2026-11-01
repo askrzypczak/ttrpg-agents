@@ -105,7 +105,18 @@ obr.onReady(async () => {
         const pick = document.createElement("button");
         pick.dataset.action = "pick-art";
         pick.textContent = "Pick art";
-        item.append(label, " ", pick);
+        const upload = document.createElement("button");
+        upload.dataset.action = "upload-art";
+        upload.textContent = "Upload new art";
+        const pickUpload = document.createElement("button");
+        pickUpload.dataset.action = "pick-upload";
+        pickUpload.textContent = "Pick the uploaded image";
+        pickUpload.hidden = !row.canPick;
+        const hint = document.createElement("p");
+        hint.className = "type-art-hint";
+        hint.textContent = row.hint ?? "";
+        hint.hidden = row.hint === undefined;
+        item.append(label, " ", pick, " ", upload, " ", pickUpload, hint);
         return item;
       }),
     );
@@ -309,6 +320,9 @@ obr.onReady(async () => {
       void sync.pickUploadedArt(monsterKey);
   });
   // The Token art rows' buttons; nothing in the sync waits on them either.
+  // The file chooser of "Upload new art" answers for the row that opened it.
+  const artFile = el("art-file") as HTMLInputElement;
+  let uploadFor: string | undefined;
   el("type-art-list").addEventListener("click", (event) => {
     const button =
       event.target instanceof Element
@@ -317,6 +331,20 @@ obr.onReady(async () => {
     const monsterKey = button?.closest<HTMLElement>("li")?.dataset.monsterKey;
     if (button === null || monsterKey === undefined) return;
     if (button.dataset.action === "pick-art") void sync.repickArt(monsterKey);
+    else if (button.dataset.action === "upload-art") {
+      uploadFor = monsterKey;
+      artFile.click();
+    } else if (button.dataset.action === "pick-upload")
+      void sync.pickUploadedFile(monsterKey);
+  });
+  artFile.addEventListener("change", () => {
+    const file = artFile.files?.[0];
+    // Cleared so that the same file can be chosen again.
+    artFile.value = "";
+    const monsterKey = uploadFor;
+    uploadFor = undefined;
+    if (file !== undefined && monsterKey !== undefined)
+      void sync.uploadArtFile(monsterKey, file);
   });
   socket.start();
   // Re-render periodically so the stalled hint appears without a state change.

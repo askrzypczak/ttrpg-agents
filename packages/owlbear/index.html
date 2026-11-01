@@ -22,7 +22,8 @@
       }
       #hint,
       #edit-note,
-      .reupload-hint {
+      .reupload-hint,
+      .type-art-hint {
         color: #9da7b3;
       }
       #art-prompt {
@@ -70,9 +71,17 @@
     <div id="type-art" hidden>
       <p>
         <strong>Token art.</strong> Pick art opens Owlbear's image picker for a
-        monster type; a pick redraws its tokens with the new art.
+        monster type; Upload new art adds an image file to Owlbear's library,
+        and Pick the uploaded image then picks it. A pick redraws the type's
+        tokens with the new art.
       </p>
       <ul id="type-art-list"></ul>
+      <input
+        type="file"
+        id="art-file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+      />
     </div>
     <p id="scene"></p>
     <label id="overlay" hidden
