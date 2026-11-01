@@ -52,6 +52,7 @@ function recordingRepo(
       inner.removeInstances(ids, origin)
     ),
     listRemovedInstances: () => inner.listRemovedInstances(),
+    listRestoreSeqs: () => inner.listRestoreSeqs(),
     restoreInstances: (ids, name, origin) => (
       record("restoreInstances", origin),
       inner.restoreInstances(ids, name, origin)

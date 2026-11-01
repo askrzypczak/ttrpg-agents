@@ -9,6 +9,7 @@ import {
   SYNCED_METADATA_KEY,
   defaultSyncConfig,
   planSync,
+  reskinNote,
   reskinOverrideNote,
   reskinReplaceNote,
   type EncounterInstance,
@@ -165,7 +166,7 @@ describe("planSync re-skin with re-uploaded art", () => {
       {
         instanceId: "i1",
         message:
-          "Wolf 1's token was replaced with a new one drawn with the art uploaded for its monster type; any attachments on the old token were deleted with it.",
+          "Wolf 1's token was replaced with a new one drawn with the art picked for its monster type; any attachments on the old token were deleted with it.",
       },
     ]);
     expect(reskinReplaceNote("Wolf 1")).toBe(plan.overrides[0]?.message);
@@ -173,9 +174,9 @@ describe("planSync re-skin with re-uploaded art", () => {
     expect(plan.needsArt).toEqual([]);
   });
 
-  it("a reskinned image token is redrawn in place with the type's art at scale 1, with a note only when its art or size had been changed on the table", () => {
+  it("a reskinned image token is redrawn in place with the type's art at scale 1, with the table-change note when its art or size had been changed on the table or it has no recorded look", () => {
     const tokens = [
-      // Drawn with the gone art, as recorded: no note.
+      // Drawn with the gone art, as recorded: the plain redraw note.
       imageToken(1, goneImage, goneGrid, goneImage.url),
       // Its art changed on the table since it was drawn.
       imageToken(
@@ -211,17 +212,21 @@ describe("planSync re-skin with re-uploaded art", () => {
       expect(patch.grid).toEqual(reuploadedGrid);
       expect(patch.scale ?? { x: 1, y: 1 }).toEqual({ x: 1, y: 1 });
     }
+    const redrawn =
+      "Wolf 1's token was redrawn with the art picked for its monster type.";
     const changed =
-      "Wolf 2's token was redrawn with the art uploaded for its monster type; its art or size had been changed on the table, and was overwritten.";
+      "Wolf 2's token was redrawn with the art picked for its monster type; its art or size had been changed on the table, and was overwritten.";
     const resized =
-      "Wolf 3's token was redrawn with the art uploaded for its monster type; its art or size had been changed on the table, and was overwritten.";
+      "Wolf 3's token was redrawn with the art picked for its monster type; its art or size had been changed on the table, and was overwritten.";
     const unrecorded =
-      "Wolf 4's token was redrawn with the art uploaded for its monster type; its art or size may have been changed on the table, and was overwritten.";
+      "Wolf 4's token was redrawn with the art picked for its monster type; its art or size may have been changed on the table, and was overwritten.";
     expect(plan.overrides).toEqual([
+      { instanceId: "i1", message: redrawn },
       { instanceId: "i2", message: changed },
       { instanceId: "i3", message: resized },
       { instanceId: "i4", message: unrecorded },
     ]);
+    expect(reskinNote("Wolf 1")).toBe(redrawn);
     expect(reskinOverrideNote("Wolf 2", true)).toBe(changed);
     expect(reskinOverrideNote("Wolf 4", false)).toBe(unrecorded);
     // Each redrawn token records the look it is now drawn with.

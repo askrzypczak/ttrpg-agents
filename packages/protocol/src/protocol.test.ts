@@ -388,6 +388,28 @@ describe("protocol", () => {
     });
   });
 
+  it("an encounter-snapshot with the restore seqs of restored instances round-trips, and one without them still decodes", () => {
+    const withSeqs = {
+      v: 1,
+      type: "encounter-snapshot",
+      payload: { instances: [instance], restoreSeqs: { i1: 5 }, seq: 7 },
+    };
+    expect(decodeMessage(JSON.stringify(withSeqs))).toEqual({
+      ok: true,
+      message: withSeqs,
+    });
+
+    const withoutSeqs = {
+      v: 1,
+      type: "encounter-snapshot",
+      payload: { instances: [instance], seq: 7 },
+    };
+    expect(decodeMessage(JSON.stringify(withoutSeqs))).toStrictEqual({
+      ok: true,
+      message: withoutSeqs,
+    });
+  });
+
   it("an encounter-snapshot whose instances have no spawnPosition decodes them with none", () => {
     const withoutSpawn: Record<string, unknown> = { ...instance };
     delete withoutSpawn.spawnPosition;

@@ -190,18 +190,30 @@ change and not again while one is in flight; the `table` event of the removal
 acknowledges it, and a bridge refusal shows in `#sync-error` until the next
 store change.
 
+The record keeps the change-log seq it is current as of in
+`com.ttrpg-agents/placed-seq`, written with the ids. An id whose last restore
+(a snapshot's `restoreSeqs` or an `added` event) is newer than that seq is
+dropped before the plan too, so a removal missed while disconnected followed by
+a restore gets a new token, and a token kept through both stays. The record is
+then written with the newest seq the encounter reflects, so a later deletion of
+that token is reported. A record without a seq (an older extension's) drops
+nothing that way and is given one; a deletion the store never applied is
+reported again.
+
 ### Token art
 
 `planSync` returns `needsArt`: the monster keys of instances about to get a
 token with no usable art. `createEncounterSync` then calls
 `ObrAdapter.pickImage()` once per such type, inside the reconcile (an art
 step): `options.onArtStep` hears the monster name and its place among the
-reconcile's picks (`main.ts` shows "Art 1 of 2: ..." in `#art-prompt` and
-opens the panel). A valid pick (`publishedTokenArtSchema`) is sent as a
-`token-art-set` (no envelope id, no answer) and re-planned; a cancel, a picker
-error or an invalid image creates a circle, shows nothing, and is not asked
-again this session. After an art step the reconcile reads the scene items and
-`placed` again before it writes, so a table edit made meanwhile is kept.
+reconcile's picks (`main.ts` shows "Art 1 of 2: ..." in `#art-prompt` and opens
+the panel). A valid pick (`publishedTokenArtSchema`) is sent as a
+`token-art-set` (no envelope id, no answer) and re-planned, and the type's
+existing circles are replaced with image tokens (`reskins`, below); a cancel, a
+picker error or an invalid image creates a circle, shows nothing, and the
+reconcile does not ask again this session; the panel's Token art list does
+(below). After an art step the reconcile reads the scene items and `placed`
+again before it writes, so a table edit made meanwhile is kept.
 
 Published art is a VTT-neutral `{ url, mime, width, height }`; `pickImage`
 ignores the SDK's own grid, and the token's Owlbear grid is derived at
@@ -254,6 +266,41 @@ republish the token art for ..."); that, or a cancelled, failed or invalid
 pick, leaves the type listed, and the GM can press again. A second press while
 one runs is ignored.
 
+**Pick art.** `options.onTypeArtChange` hears the Token art list whenever it
+changes (`TypeArt`: monster key, name via `monsterTypeName`, state): each
+monster type with an instance in the encounter, once, in encounter order, as
+`reupload` (on the re-upload list), `art` (usable art), `declined` (its fresh
+pick was cancelled, failed or invalid this session) or `none`. `main.ts`
+shows it in `#type-art`, below the overrides, with a "Pick art" button per
+row, and does not open the panel for it. The re-upload box stays as it is; a
+type on it is also in this list, so its art can be replaced too.
+
+"Pick art" calls `sync.repickArt(monsterKey)`, which opens the picker with no
+search, outside the reconcile chain. A press is ignored for a type not in the
+list, one whose re-upload or pick is running, or one whose fresh picker is open
+or queued. A cancel, an error or an invalid image changes nothing. A valid
+pick, even one made after the type left the encounter, goes through
+`takePanelPick`, as the re-upload pick does: it becomes the type's art, is sent
+and stored as a fresh pick is (replacing any stored art), wins over a later
+snapshot's art for the session, takes the type off the re-upload list and
+redraws its tokens (`reskins`, below). The reconcile opens no fresh picker for
+a type whose Pick art picker is open. Neither the list nor an open Pick art
+picker is an art wait.
+
+**Upload new art.** Each Token art row has "Upload new art", which calls
+`sync.uploadArtFile(monsterKey, file)` with the file the GM chose in the hidden
+`#art-file` input. The sync hashes the bytes (SHA-256, `crypto.subtle`) and
+uploads them with `ObrAdapter.uploadImage` under `republishName(hash)`, the
+name a re-upload uses, before the GM confirms the folder. The row then offers
+"Pick the uploaded image" (`sync.pickUploadedFile(monsterKey)`): the picker
+opens with that name, and a valid pick goes through `takePanelPick`. Any valid
+panel pick for the type takes the name off the row. The upload is kept for the
+session only, and a pick needs one. A file that cannot be read or uploaded is
+reported through `options.onArtRepublishFailed` ("Could not upload the new token
+art for ...") and changes nothing else. Both calls share the `inflight` guard:
+they are ignored while another art call for the type runs or its fresh picker
+is open or queued. Neither is an art wait.
+
 `EncounterSync.artWaits()` names the types whose fresh picker is open or still
 to open (`pick`), then the listed types (`reupload`), with their monster names;
 the `scene-status` answer carries it (`src/queries.ts`).
@@ -282,8 +329,13 @@ token. A failure in between fails the reconcile, and the retry finishes it: a
 marked token whose replacement is not on the scene is replaced again, and one
 whose replacement is on the scene is deleted first. The instance always keeps
 a linked token, so no `token-deleted` is sent. Every replacement is reported in
-`plan.overrides`. A pick of re-uploaded art redraws every token of its type
-the same way (`reskins`; a monster change wins over it).
+`plan.overrides`.
+
+Any panel pick (Pick art, a re-upload pick or the pick of an uploaded file)
+redraws every token of its type the same way (`reskins`; a monster change wins
+over it), and every in-place redraw from a panel pick is reported: with the
+table-change note as above, else with `reskinNote`; a token already drawn with
+the pick is not written and gets no note.
 
 ## Map overlay
 
@@ -380,7 +432,9 @@ Chromium. First time: `npx playwright install chromium`. Not part of `npm run ch
   an inline 1x1 PNG (a 404 for the failure test), seeds stored art with
   `seedE2eTokenArt` (art `null` seeds the image hash alone) and routes its url
   to a 400 (the CDN's answer for a deleted asset) or the PNG, and reads the
-  rows through `e2e/db.ts`.
+  rows through `e2e/db.ts`. Its upload tests answer the file chooser
+  (Playwright's `filechooser`) with a PNG, cancelled or chosen, and read the
+  uploads the fake host records.
   `overlay.e2e.ts` seeds an active map and a room with `seedE2eMap`
   (`clearE2eMap` after) and checks the overlay's local items and the panel
   toggle. `map-image.e2e.ts` serves a map image cross-origin with CORS, posts `map-image` to the bridge, and checks the real extension's WEBP answer.

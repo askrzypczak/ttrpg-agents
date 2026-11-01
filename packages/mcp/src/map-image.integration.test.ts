@@ -95,7 +95,7 @@ function textBlocks(r: ToolResult): string[] {
 }
 
 describe("get_map_image", () => {
-  it("get_map_image returns an image content block with the table's data and mime type, and a text line with the grid size", async () => {
+  it("get_map_image returns an image content block with the table's data and mime type, and a text line with the grid size, and no structured content", async () => {
     const { ctx, imageCalls } = contextWith(scene(trollskull));
     const r = await getMapImage(ctx);
     expect(r.isError).toBeFalsy();
@@ -106,19 +106,11 @@ describe("get_map_image", () => {
         text: "Trollskull Manor: 32 x 24 cells, columns A-AF left to right, rows 1-24 top to bottom, labelled on the image's edges.",
       },
     ]);
-    expect(r.structuredContent).toEqual({
-      itemId: "map-1",
-      name: "Trollskull Manor",
-      cols: 32,
-      rows: 24,
-      mapMoved: false,
-      width: 1600,
-      height: 1200,
-    });
+    expect(r.structuredContent).toBeUndefined();
     expect(imageCalls).toEqual(["map-1"]);
   });
 
-  it("get_map_image adds the moved line when the map moved since it was registered", async () => {
+  it("get_map_image adds the moved line when the map moved since it was registered, still with no structured content", async () => {
     const { ctx } = contextWith(
       scene({ ...trollskull, scale: { x: 2, y: 2 } }),
     );
@@ -132,6 +124,6 @@ describe("get_map_image", () => {
     expect(textBlocks(r)).toEqual([
       `Trollskull Manor: 64 x 48 cells, columns A-BL left to right, rows 1-48 top to bottom, labelled on the image's edges.\n\n${movedLine}`,
     ]);
-    expect(r.structuredContent).toMatchObject({ mapMoved: true });
+    expect(r.structuredContent).toBeUndefined();
   });
 });

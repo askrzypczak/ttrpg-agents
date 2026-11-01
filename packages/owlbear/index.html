@@ -22,7 +22,8 @@
       }
       #hint,
       #edit-note,
-      .reupload-hint {
+      .reupload-hint,
+      .type-art-hint {
         color: #9da7b3;
       }
       #art-prompt {
@@ -33,7 +34,8 @@
         border-radius: 4px;
         padding: 0 8px;
       }
-      #reupload-list {
+      #reupload-list,
+      #type-art-list {
         padding-left: 16px;
       }
     </style>
@@ -58,12 +60,28 @@
         Table values written over: by a snapshot (connect, reconnect or a
         skipped change), which cannot tell an MCP change made meanwhile from a
         clamped value, by an agent move of a token that had been moved on the
-        table, or by a redraw (for an agent's monster change, or with art you
-        re-uploaded) of a token whose art or size had been changed on the table
-        or that had to be replaced with a new token (its attachments deleted):
+        table, by a redraw for an agent's monster change of a token whose art or
+        size had been changed on the table or that had to be replaced with a new
+        token (its attachments deleted), or by any redraw of a token with art
+        you picked again in this panel:
       </p>
       <ul id="overrides-list"></ul>
       <button id="dismiss-overrides">Dismiss</button>
+    </div>
+    <div id="type-art" hidden>
+      <p>
+        <strong>Token art.</strong> Pick art opens Owlbear's image picker for a
+        monster type; Upload new art adds an image file to Owlbear's library,
+        and Pick the uploaded image then picks it. A pick redraws the type's
+        tokens with the new art.
+      </p>
+      <ul id="type-art-list"></ul>
+      <input
+        type="file"
+        id="art-file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+      />
     </div>
     <p id="scene"></p>
     <label id="overlay" hidden

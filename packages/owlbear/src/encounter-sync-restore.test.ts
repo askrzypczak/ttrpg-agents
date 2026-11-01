@@ -271,4 +271,33 @@ describe("createEncounterSync restore after deletion", () => {
     expect(tokenOf(s.scene, "i1")).toBeDefined();
     expect(s.reported()).toEqual(["i1"]);
   });
+
+  it("a removal and a restore folded into the reconcile of a ready flip record the restore, so the GM's later deletion of the new token is reported once and not recreated", async () => {
+    const s = setup();
+    await start(s);
+    const commandId = await gmDeletes(s, "i1");
+    expect(s.reported()).toEqual(["i1"]);
+
+    s.scene.setReady(false);
+    await fold(
+      s,
+      s.feed.event({
+        type: "removed",
+        id: "i1",
+        origin: { source: "table", commandId },
+      }),
+      s.feed.event({ type: "added", instances: [inst(1)] }),
+    );
+    s.scene.setReady(true);
+    await settle();
+    expect(tokenOf(s.scene, "i1")).toBeDefined();
+    expect(s.reported()).toEqual(["i1"]);
+
+    await gmDeletes(s, "i1");
+    expect(s.reported()).toEqual(["i1", "i1"]);
+    s.scene.addItems([foreign]);
+    await settle();
+    expect(s.reported()).toEqual(["i1", "i1"]);
+    expect(tokenOf(s.scene, "i1")).toBeUndefined();
+  });
 });

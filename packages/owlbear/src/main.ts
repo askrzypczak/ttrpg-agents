@@ -10,6 +10,7 @@ import {
   createEncounterSync,
   type ArtStep,
   type Reupload,
+  type TypeArt,
 } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
@@ -50,6 +51,8 @@ obr.onReady(async () => {
   let artStep: ArtStep | undefined;
   // The monster types whose stored art needs re-uploading.
   let reuploads: Reupload[] = [];
+  // The encounter's monster types, with their art state.
+  let typeArt: TypeArt[] = [];
   let waitingCommands = 0;
   // Store values a snapshot wrote over the table's, until the DM dismisses
   // them. In memory only: a reload starts with its own.
@@ -85,6 +88,40 @@ obr.onReady(async () => {
     );
   };
 
+  // The Token art rows as last drawn, drawn again only when they change, like
+  // the re-upload rows.
+  let drawnTypeArt = "";
+  const drawTypeArt = (rows: PanelView["typeArt"]) => {
+    const drawn = JSON.stringify(rows ?? []);
+    if (drawn === drawnTypeArt) return;
+    drawnTypeArt = drawn;
+    el("type-art").hidden = rows === undefined;
+    el("type-art-list").replaceChildren(
+      ...(rows ?? []).map((row) => {
+        const item = document.createElement("li");
+        item.dataset.monsterKey = row.monsterKey;
+        const label = document.createElement("span");
+        label.textContent = row.label;
+        const pick = document.createElement("button");
+        pick.dataset.action = "pick-art";
+        pick.textContent = "Pick art";
+        const upload = document.createElement("button");
+        upload.dataset.action = "upload-art";
+        upload.textContent = "Upload new art";
+        const pickUpload = document.createElement("button");
+        pickUpload.dataset.action = "pick-upload";
+        pickUpload.textContent = "Pick the uploaded image";
+        pickUpload.hidden = !row.canPick;
+        const hint = document.createElement("p");
+        hint.className = "type-art-hint";
+        hint.textContent = row.hint ?? "";
+        hint.hidden = row.hint === undefined;
+        item.append(label, " ", pick, " ", upload, " ", pickUpload, hint);
+        return item;
+      }),
+    );
+  };
+
   let rejection: RejectionCode | undefined;
   const render = () => {
     const view = panelView({
@@ -98,6 +135,7 @@ obr.onReady(async () => {
       ...(artError !== undefined ? { artError } : {}),
       ...(artStep !== undefined ? { artStep } : {}),
       reuploads,
+      typeArt,
       ...(editNote !== undefined ? { editNote } : {}),
       waitingCommands,
       overrides,
@@ -109,6 +147,7 @@ obr.onReady(async () => {
     el("hint").textContent = view.hint ?? "";
     el("art-prompt").textContent = view.prompt ?? "";
     drawReuploads(view.reuploads);
+    drawTypeArt(view.typeArt);
     el("use-this-tab").hidden = view.action !== "use-this-tab";
     el("sync-error").textContent = view.error ?? "";
     el("edit-note").textContent = view.note ?? "";
@@ -202,6 +241,11 @@ obr.onReady(async () => {
         render();
         if (joined) void obr.openPanel();
       },
+      // Unlike the re-upload list, this one never opens the panel.
+      onTypeArtChange: (list) => {
+        typeArt = list;
+        render();
+      },
       // The override list stays: only the DM dismisses it.
       onStoreChange: () => {
         removeError = undefined;
@@ -274,6 +318,33 @@ obr.onReady(async () => {
     if (button.dataset.action === "reupload") void sync.reuploadArt(monsterKey);
     else if (button.dataset.action === "pick")
       void sync.pickUploadedArt(monsterKey);
+  });
+  // The Token art rows' buttons; nothing in the sync waits on them either.
+  // The file chooser of "Upload new art" answers for the row that opened it.
+  const artFile = el("art-file") as HTMLInputElement;
+  let uploadFor: string | undefined;
+  el("type-art-list").addEventListener("click", (event) => {
+    const button =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("button[data-action]")
+        : null;
+    const monsterKey = button?.closest<HTMLElement>("li")?.dataset.monsterKey;
+    if (button === null || monsterKey === undefined) return;
+    if (button.dataset.action === "pick-art") void sync.repickArt(monsterKey);
+    else if (button.dataset.action === "upload-art") {
+      uploadFor = monsterKey;
+      artFile.click();
+    } else if (button.dataset.action === "pick-upload")
+      void sync.pickUploadedFile(monsterKey);
+  });
+  artFile.addEventListener("change", () => {
+    const file = artFile.files?.[0];
+    // Cleared so that the same file can be chosen again.
+    artFile.value = "";
+    const monsterKey = uploadFor;
+    uploadFor = undefined;
+    if (file !== undefined && monsterKey !== undefined)
+      void sync.uploadArtFile(monsterKey, file);
   });
   socket.start();
   // Re-render periodically so the stalled hint appears without a state change.

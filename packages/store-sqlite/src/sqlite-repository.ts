@@ -276,7 +276,11 @@ export class SqliteEncounterRepository implements EncounterRepository {
         namesInUse.push(displayName);
         return toInstance({ ...row, display_name: displayName });
       });
-      this.record({ type: "added", instances: restored, origin });
+      const seq = this.record({ type: "added", instances: restored, origin });
+      const mark = this.db.prepare(
+        "UPDATE monster_instances SET restored_seq = ? WHERE id = ?",
+      );
+      for (const instance of restored) mark.run(seq, instance.id);
       return restored;
     });
   }
@@ -614,6 +618,16 @@ export class SqliteEncounterRepository implements EncounterRepository {
         .run(seq);
       return cleared;
     });
+  }
+
+  listRestoreSeqs(): Record<string, number> {
+    const rows = this.db
+      .prepare(
+        `SELECT id, restored_seq FROM monster_instances
+         WHERE restored_seq IS NOT NULL AND ${ACTIVE_SCOPE}`,
+      )
+      .all() as unknown as { id: string; restored_seq: number }[];
+    return Object.fromEntries(rows.map((row) => [row.id, row.restored_seq]));
   }
 
   listInstances(): MonsterInstance[] {
