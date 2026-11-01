@@ -196,13 +196,14 @@ store change.
 token with no usable art. `createEncounterSync` then calls
 `ObrAdapter.pickImage()` once per such type, inside the reconcile (an art
 step): `options.onArtStep` hears the monster name and its place among the
-reconcile's picks (`main.ts` shows "Art 1 of 2: ..." in `#art-prompt` and
-opens the panel). A valid pick (`publishedTokenArtSchema`) is sent as a
-`token-art-set` (no envelope id, no answer) and re-planned; a cancel, a picker
-error or an invalid image creates a circle, shows nothing, and the reconcile
-does not ask again this session; the panel's Token art list does (below).
-After an art step the reconcile reads the scene items and `placed` again
-before it writes, so a table edit made meanwhile is kept.
+reconcile's picks (`main.ts` shows "Art 1 of 2: ..." in `#art-prompt` and opens
+the panel). A valid pick (`publishedTokenArtSchema`) is sent as a
+`token-art-set` (no envelope id, no answer) and re-planned, and the type's
+existing circles are replaced with image tokens (`reskins`, below); a cancel, a
+picker error or an invalid image creates a circle, shows nothing, and the
+reconcile does not ask again this session; the panel's Token art list does
+(below). After an art step the reconcile reads the scene items and `placed`
+again before it writes, so a table edit made meanwhile is kept.
 
 Published art is a VTT-neutral `{ url, mime, width, height }`; `pickImage`
 ignores the SDK's own grid, and the token's Owlbear grid is derived at
