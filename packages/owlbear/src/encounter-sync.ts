@@ -51,6 +51,9 @@ export type EncounterEventPayload = Extract<
 export const isOurs = (item: SceneItem): boolean =>
   instanceIdOf(item) !== undefined;
 
+/** Scene metadata: the change-log seq the placed record is current as of. */
+export const PLACED_SEQ_METADATA_KEY = "com.ttrpg-agents/placed-seq";
+
 /** How long a table edit must stay unchanged before it is written back to the store. */
 export const EDIT_SETTLE_MS = 1500;
 
