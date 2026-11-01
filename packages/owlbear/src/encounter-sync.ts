@@ -76,6 +76,12 @@ export type TypeArt = {
   /** Via monsterTypeName (310.8). */
   monsterName: string;
   state: TypeArtState;
+  /**
+   * The Owlbear asset name an image file chosen in the panel for the type was
+   * uploaded under this session; absent before such an upload and after a
+   * valid panel pick for the type.
+   */
+  uploadedAs?: string;
 };
 
 export interface EncounterSync {
@@ -99,6 +105,21 @@ export interface EncounterSync {
    * with it. Ignored while the type's pick, re-upload or fresh picker runs.
    */
   repickArt(monsterKey: string): Promise<void>;
+  /**
+   * Uploads an image file chosen in the panel to the GM's Owlbear library for
+   * a type in the Token art list, under `ttrpg-art-` and the first 16 hex
+   * characters of the SHA-256 of its bytes; opens no picker. Ignored while the
+   * type's upload, pick, re-upload, Pick art or fresh picker runs. A file that
+   * cannot be read or uploaded is reported through `onArtRepublishFailed`.
+   */
+  uploadArtFile(monsterKey: string, file: Blob): Promise<void>;
+  /**
+   * Opens the picker on the image file uploaded for a listed type this
+   * session, with its asset name as the search; a valid pick becomes the
+   * type's art as a Pick art pick does (stored like a fresh pick). Ignored as
+   * `uploadArtFile` is, and for a type with no upload this session.
+   */
+  pickUploadedFile(monsterKey: string): Promise<void>;
 }
 
 // Real timers are only used in the browser; tests inject Timers.
@@ -1527,6 +1548,12 @@ export function createEncounterSync(
       // A cancel, an error or an unusable pick changes nothing.
       if (picked === undefined) return;
       await takePanelPick(monsterKey, picked);
+    },
+    uploadArtFile() {
+      return Promise.reject(new Error("not implemented"));
+    },
+    pickUploadedFile() {
+      return Promise.reject(new Error("not implemented"));
     },
   };
 }

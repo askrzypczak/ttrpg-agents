@@ -77,8 +77,16 @@ export interface PanelView {
     hint?: string;
     canPick: boolean;
   }[];
-  /** One row per type in the Token art list; present only when there are any. */
-  typeArt?: { monsterKey: string; label: string }[];
+  /**
+   * One row per type in the Token art list, with the hint and the pick once
+   * an image file was uploaded for it; present only when there are any.
+   */
+  typeArt?: {
+    monsterKey: string;
+    label: string;
+    hint?: string;
+    canPick: boolean;
+  }[];
 }
 
 /**
@@ -135,6 +143,7 @@ export function panelView(input: PanelInput): PanelView {
           typeArt: input.typeArt.map(({ monsterKey, monsterName, state }) => ({
             monsterKey,
             label: `${monsterName}: ${TYPE_ART_TEXT[state]}`,
+            canPick: false,
           })),
         }
       : {}),
