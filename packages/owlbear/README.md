@@ -190,6 +190,16 @@ change and not again while one is in flight; the `table` event of the removal
 acknowledges it, and a bridge refusal shows in `#sync-error` until the next
 store change.
 
+The record keeps the change-log seq it is current as of in
+`com.ttrpg-agents/placed-seq`, written with the ids. An id whose last restore
+(a snapshot's `restoreSeqs` or an `added` event) is newer than that seq is
+dropped before the plan too, so a removal missed while disconnected followed by
+a restore gets a new token, and a token kept through both stays. The record is
+then written with the newest seq the encounter reflects, so a later deletion of
+that token is reported. A record without a seq (an older extension's) drops
+nothing that way and is given one; a deletion the store never applied is
+reported again.
+
 ### Token art
 
 `planSync` returns `needsArt`: the monster keys of instances about to get a
