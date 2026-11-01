@@ -405,7 +405,14 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * An instance that leaves the encounter (a `removed` or `cleared` event) is
  * dropped from the placed record before the next reconcile plans, so one that
  * comes back before then (a restore) gets a new token instead of being reported
- * deleted; a reconcile that fails keeps it for the retry.
+ * deleted; a reconcile that fails keeps it for the retry. The record keeps the
+ * change-log seq it is current as of (`PLACED_SEQ_METADATA_KEY`). An instance
+ * whose last restore (from a snapshot's restore seqs or an `added` event) is
+ * newer than that seq is dropped from the record the same way, so a removal
+ * missed while disconnected and a restore after it give a new token; the
+ * record is then written with the newer seq, so a later deletion of that token
+ * is reported. A record without a seq (an older extension's) drops nothing
+ * that way and is given one.
  */
 export function createEncounterSync(
   obr: ObrAdapter,
@@ -467,6 +474,14 @@ export function createEncounterSync(
   // Log position of the last snapshot or applied event. Null before the first
   // snapshot and after a gap, when events are ignored until the next snapshot.
   let seq: number | null = null;
+  // The log position `desired` is current as of: the last snapshot's seq, then
+  // each applied event's. Unlike `seq`, a gap does not clear it.
+  let desiredSeq = 0;
+  // Instance id -> log position of its last restore (an `added` event): from
+  // the last snapshot's restore seqs, then each applied `added` event. One
+  // restored after the scene's placed record gets a new token instead of
+  // being reported deleted.
+  let restoredAt = new Map<string, number>();
   let appliedCount = 0;
   let tail: Promise<void> = Promise.resolve();
   let retry: unknown = null;
@@ -1017,19 +1032,32 @@ export function createEncounterSync(
     await enqueue(reconcile);
   }
 
-  /** The scene's items and the ids in its placed record, read together. */
+  /**
+   * The scene's items, the ids in its placed record and the seq the record is
+   * current as of (undefined when missing or not a non-negative integer), read
+   * together.
+   */
   async function readScene(): Promise<{
     items: SceneItem[];
     placed: Set<string>;
+    placedSeq: number | undefined;
   }> {
     const items = await obr.getItems();
-    const stored = (await obr.getSceneMetadata())[PLACED_METADATA_KEY];
+    const metadata = await obr.getSceneMetadata();
+    const stored = metadata[PLACED_METADATA_KEY];
     const placed = new Set(
       Array.isArray(stored)
         ? stored.filter((id): id is string => typeof id === "string")
         : [],
     );
-    return { items, placed };
+    const storedSeq = metadata[PLACED_SEQ_METADATA_KEY];
+    const placedSeq =
+      typeof storedSeq === "number" &&
+      Number.isInteger(storedSeq) &&
+      storedSeq >= 0
+        ? storedSeq
+        : undefined;
+    return { items, placed, placedSeq };
   }
 
   async function apply(
@@ -1042,13 +1070,32 @@ export function createEncounterSync(
     takenReskins: Set<string>,
     takenLeft: ReadonlySet<string>,
     snapshot: boolean,
+    // The seq `wanted` is current as of, and each instance's last restore.
+    wantedSeq: number,
+    restores: ReadonlyMap<string, number>,
   ): Promise<SyncPlan> {
     artStepRan = false;
-    // The record without the instances that left: they are planned as new.
-    const withoutLeft = (record: ReadonlySet<string>): Set<string> =>
-      new Set([...record].filter((id) => !takenLeft.has(id)));
-    let { items, placed: stored } = await readScene();
-    let placed = withoutLeft(stored);
+    // Whether an id of the record was left out for a restore newer than it,
+    // including one that also left the encounter.
+    let droppedForRestore = false;
+    // The record without the instances that left, nor (when it has a seq)
+    // those restored after it: they are planned as new.
+    const withoutLeft = (
+      record: ReadonlySet<string>,
+      recordSeq: number | undefined,
+    ): Set<string> => {
+      droppedForRestore = false;
+      return new Set(
+        [...record].filter((id) => {
+          const restoredAfter =
+            recordSeq !== undefined && (restores.get(id) ?? -1) > recordSeq;
+          if (restoredAfter) droppedForRestore = true;
+          return !takenLeft.has(id) && !restoredAfter;
+        }),
+      );
+    };
+    let { items, placed: stored, placedSeq } = await readScene();
+    let placed = withoutLeft(stored, placedSeq);
     const context = {
       viewportCenter: await obr.getViewportCenter(),
       snapshot,
@@ -1133,7 +1180,8 @@ export function createEncounterSync(
       const fresh = await readScene();
       items = fresh.items;
       stored = fresh.placed;
-      placed = withoutLeft(stored);
+      placedSeq = fresh.placedSeq;
+      placed = withoutLeft(stored, placedSeq);
     }
     const plan = planSync(wanted, items, defaultSyncConfig, {
       ...context,
@@ -1223,8 +1271,22 @@ export function createEncounterSync(
         (id): id is string => id !== undefined && wantedIds.has(id),
       ),
     );
-    if (next.size !== stored.size || [...next].some((id) => !stored.has(id)))
-      await obr.setSceneMetadata({ [PLACED_METADATA_KEY]: [...next] });
+    // The record keeps the newest change the applied encounter reflects: a
+    // snapshot's restore seqs, read after its seq, may be newer than it.
+    const nextSeq = Math.max(
+      wantedSeq,
+      ...wanted.map((i) => restores.get(i.id) ?? wantedSeq),
+    );
+    if (
+      next.size !== stored.size ||
+      [...next].some((id) => !stored.has(id)) ||
+      (stored.size > 0 && placedSeq === undefined) ||
+      droppedForRestore
+    )
+      await obr.setSceneMetadata({
+        [PLACED_METADATA_KEY]: [...next],
+        [PLACED_SEQ_METADATA_KEY]: nextSeq,
+      });
     return plan;
   }
 
@@ -1242,6 +1304,8 @@ export function createEncounterSync(
     const takenReskins = reskins;
     const takenLeft = left;
     const snapshot = afterSnapshot;
+    const applyingSeq = desiredSeq;
+    const restores = new Map(restoredAt);
     facts = new Map();
     moves = new Set();
     restyles = new Set();
@@ -1258,6 +1322,8 @@ export function createEncounterSync(
         takenReskins,
         takenLeft,
         snapshot,
+        applyingSeq,
+        restores,
       );
     } catch (error) {
       restore(
@@ -1372,6 +1438,8 @@ export function createEncounterSync(
               );
             }
         seq = message.payload.seq;
+        desiredSeq = message.payload.seq;
+        restoredAt = new Map(Object.entries(message.payload.restoreSeqs ?? {}));
         afterSnapshot = true;
         reported.clear();
         rejectedReported.clear();
@@ -1389,7 +1457,10 @@ export function createEncounterSync(
           return Promise.resolve();
         }
         seq = eventSeq;
+        desiredSeq = eventSeq;
         const event = message.payload;
+        if (event.type === "added")
+          for (const i of event.instances) restoredAt.set(i.id, eventSeq);
         if (event.type === "removed") left.add(event.id);
         if (event.type === "cleared") for (const i of desired) left.add(i.id);
         if (event.origin.source === "table") {
