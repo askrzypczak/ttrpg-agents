@@ -1,4 +1,9 @@
-import type { ArtStep, Reupload } from "./encounter-sync.js";
+import type {
+  ArtStep,
+  Reupload,
+  TypeArt,
+  TypeArtState,
+} from "./encounter-sync.js";
 import type { RejectionCode, SocketState } from "./reconnecting-socket.js";
 
 import type { PlayerRole } from "./scene-model.js";
@@ -26,6 +31,8 @@ export interface PanelInput {
   artStep?: ArtStep;
   /** The monster types whose stored art needs re-uploading, in list order. */
   reuploads?: Reupload[];
+  /** The encounter's monster types, with their art state. */
+  typeArt?: TypeArt[];
   /** A note on the latest write-back answer that differs from the table, if any. */
   editNote?: string;
   /** How many table edits, token deletions and token art picks wait for the bridge (see outbox.ts). */
@@ -70,6 +77,8 @@ export interface PanelView {
     hint?: string;
     canPick: boolean;
   }[];
+  /** One row per type in the Token art list; present only when there are any. */
+  typeArt?: { monsterKey: string; label: string }[];
 }
 
 /**
@@ -121,8 +130,24 @@ export function panelView(input: PanelInput): PanelView {
     ...(input.reuploads && input.reuploads.length > 0
       ? { reuploads: reuploadRows(input.reuploads) }
       : {}),
+    ...(input.typeArt && input.typeArt.length > 0
+      ? {
+          typeArt: input.typeArt.map(({ monsterKey, monsterName, state }) => ({
+            monsterKey,
+            label: `${monsterName}: ${TYPE_ART_TEXT[state]}`,
+          })),
+        }
+      : {}),
   };
 }
+
+/** What a Token art row says about its type's art. */
+const TYPE_ART_TEXT: Record<TypeArtState, string> = {
+  art: "has token art",
+  none: "no token art yet",
+  declined: "circles, no art picked",
+  reupload: "circles until its art is re-uploaded (above)",
+};
 
 /** What the GM is told while a fresh image picker is open. */
 function artStepPrompt({ monsterName, index, total }: ArtStep): string {
