@@ -73,6 +73,7 @@ function staleRepo(
     applyHealing: (id, amount, o) => inner.applyHealing(id, amount, o),
     removeInstances: (ids, o) => inner.removeInstances(ids, o),
     listRemovedInstances: () => inner.listRemovedInstances(),
+    listRestoreSeqs: () => inner.listRestoreSeqs(),
     restoreInstances: (ids, name, o) => inner.restoreInstances(ids, name, o),
     renameInstance: (id, name, o) => inner.renameInstance(id, name, o),
     setInitiative: (id, n, o) => inner.setInitiative(id, n, o),

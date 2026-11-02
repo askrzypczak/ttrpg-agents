@@ -45,6 +45,7 @@ function recordingRepo(inner: SqliteEncounterRepository): EncounterRepository {
       inner.removeInstances(ids, origin)
     ),
     listRemovedInstances: () => inner.listRemovedInstances(),
+    listRestoreSeqs: () => inner.listRestoreSeqs(),
     restoreInstances: (ids, name, origin) =>
       inner.restoreInstances(ids, name, origin),
     renameInstance: (id, name, origin) =>

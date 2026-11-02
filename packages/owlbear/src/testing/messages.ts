@@ -15,12 +15,17 @@ export type TestEvent = EncounterEvent extends infer T
 
 /**
  * Builds `encounter-snapshot` and `encounter-event` messages with the `seq`
- * filled in, so tests do not number the change log by hand.
+ * filled in, so tests do not number the change log by hand. A snapshot's
+ * `art` and `restoreSeqs` are put in its payload only when given.
  */
 export interface MessageFeed {
   snapshot(
     instances: MonsterInstance[],
-    options?: { art?: Record<string, TokenArt>; seq?: number },
+    options?: {
+      art?: Record<string, TokenArt>;
+      seq?: number;
+      restoreSeqs?: Record<string, number>;
+    },
   ): Extract<BridgeMessage, { type: "encounter-snapshot" }>;
   event(
     event: TestEvent,
@@ -34,12 +39,17 @@ export function createMessageFeed(): MessageFeed {
   let position = 0;
   return {
     snapshot(instances, options = {}) {
-      const { art, seq = position } = options;
+      const { art, restoreSeqs, seq = position } = options;
       position = seq;
       return {
         v: 1,
         type: "encounter-snapshot",
-        payload: { instances, ...(art === undefined ? {} : { art }), seq },
+        payload: {
+          instances,
+          ...(art === undefined ? {} : { art }),
+          ...(restoreSeqs === undefined ? {} : { restoreSeqs }),
+          seq,
+        },
       };
     },
     event(event, options = {}) {

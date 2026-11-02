@@ -58,7 +58,7 @@ Issue: [#310](https://github.com/askrzypczak/ttrpg-agents/issues/310).
   - No redraw: the art applies to tokens created afterwards; existing circles stay until #274.
 - Where: `planSync` context `reskins`, `reskinOverrideNote`, `reskinReplaceNote` (`packages/owlbear/src/sync-plan.ts`); `pickUploadedArt` (`packages/owlbear/src/encounter-sync.ts`).
 - Revisit if: #274 adds a general re-pick or art change, which can reuse the same set.
-- Status: active
+- Status: superseded by 274.3 (the in-place note rule only; the redraw stands)
 
 ## 310.6 The fresh picker stays in the reconcile and is announced with the monster name and "art k of n"
 

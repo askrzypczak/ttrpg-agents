@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import {
@@ -200,6 +201,260 @@ test.describe("token art from the Owlbear asset library", () => {
   });
 });
 
+test.describe("picking token art again from the panel", () => {
+  /** A second image the GM picks for the shadow, with the same 1x1 PNG bytes. */
+  const otherDownload = {
+    ...shadowDownload,
+    name: "Shadow (other)",
+    image: {
+      url: "https://cdn.owlbear.rodeo/e2e/shadow-other.png",
+      mime: "image/png",
+      width: 300,
+      height: 280,
+    },
+  };
+
+  test.beforeEach(async ({ page }) => {
+    for (const url of [shadowDownload.image.url, otherDownload.image.url])
+      await page.route(url, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "image/png",
+          headers: { "Access-Control-Allow-Origin": "*" },
+          body: SHADOW_PNG,
+        }),
+      );
+  });
+
+  /**
+   * From now on, the asset picker answers with `images` (an empty list is a
+   * cancel), whatever the harness was opened with.
+   */
+  const answerPicksWith = (page: Page, images: unknown[]) =>
+    page.evaluate((next) => {
+      type Reply = (
+        message: { id: string },
+        kind: string,
+        data: unknown,
+      ) => void;
+      const host = window.__host as unknown as {
+        reply: Reply;
+        __originalReply?: Reply;
+      };
+      const reply = (host.__originalReply ??= host.reply.bind(host));
+      host.reply = (message, kind, data) => {
+        if (message.id === "OBR_ASSETS_DOWNLOAD_IMAGES" && kind === "RESPONSE")
+          reply(message, kind, { images: structuredClone(next) });
+        else reply(message, kind, data);
+      };
+    }, images);
+
+  /** The panel's Token art row of a monster type. */
+  const typeArtRow = (page: Page, monsterKey: string) =>
+    page
+      .frameLocator("#extension")
+      .locator(`#type-art-list li[data-monster-key="${monsterKey}"]`);
+
+  const pickArtButton = (page: Page, monsterKey: string) =>
+    typeArtRow(page, monsterKey).locator('button[data-action="pick-art"]');
+
+  const tokenIdOf = async (page: Page, instanceId: string) =>
+    (await readItems(page)).find(
+      (i) =>
+        (i.metadata[INSTANCE_KEY] as { instanceId?: string } | undefined)
+          ?.instanceId === instanceId,
+    )?.id;
+
+  test("after a cancelled picker the panel lists the type as circles, and Pick art opens the picker again, stores the pick and replaces the circles with image tokens", async ({
+    page,
+  }) => {
+    await openHarness(page, { role: "gm" });
+    await expect.poll(() => pickerOpens(page)).toBe(1);
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({ type: "SHAPE" });
+    await expect(typeArtRow(page, "shadow")).toContainText(
+      "Shadow: circles, no art picked",
+    );
+
+    await answerPicksWith(page, [shadowDownload]);
+    await pickArtButton(page, "shadow").click();
+
+    await expect.poll(() => pickerOpens(page)).toBe(2);
+    await expect
+      .poll(() => storedShadowArt()?.sha256, { timeout: 10_000 })
+      .toMatch(/^[0-9a-f]{64}$/);
+    expect(storedShadowArt()).toMatchObject({ url: shadowDownload.image.url });
+    const image = readE2eTokenImage(workerDir(), storedShadowArt()!.sha256!);
+    expect(Buffer.from(image?.bytes ?? [])).toEqual(SHADOW_PNG);
+    await expectShadowArtTokens(page);
+    const panel = page.frameLocator("#extension");
+    await expect(panel.locator("#overrides-list")).toContainText(
+      "Shadow 1's token was replaced with a new one drawn with the art picked for its monster type",
+    );
+    await expect(typeArtRow(page, "shadow")).toContainText(
+      "Shadow: has token art",
+    );
+    await page.waitForTimeout(500);
+    expect(await pickerOpens(page)).toBe(2);
+    await expect(syncError(page)).toHaveText("");
+  });
+
+  test("Pick art on a type with art stores the new pick and redraws its image tokens in place with it, listing each under the overrides", async ({
+    page,
+  }) => {
+    await openHarness(page, { role: "gm", pickedImages: [shadowDownload] });
+    await expectShadowArtTokens(page);
+    await expect(typeArtRow(page, "shadow")).toContainText(
+      "Shadow: has token art",
+    );
+    const ids = await Promise.all(
+      SHADOW_IDS.map((instanceId) => tokenIdOf(page, instanceId)),
+    );
+
+    await answerPicksWith(page, [otherDownload]);
+    await pickArtButton(page, "shadow").click();
+
+    await expect.poll(() => pickerOpens(page)).toBe(2);
+    await expect
+      .poll(() => storedShadowArt()?.url, { timeout: 10_000 })
+      .toBe(otherDownload.image.url);
+    await expect
+      .poll(() => storedShadowArt()?.sha256, { timeout: 10_000 })
+      .toMatch(/^[0-9a-f]{64}$/);
+    await expect
+      .poll(async () =>
+        (await readItems(page)).filter(
+          (item) => item.image?.url === otherDownload.image.url,
+        ),
+      )
+      .toHaveLength(5);
+    // Redrawn in place: the same tokens.
+    expect(
+      await Promise.all(
+        SHADOW_IDS.map((instanceId) => tokenIdOf(page, instanceId)),
+      ),
+    ).toEqual(ids);
+    for (const item of await readItems(page))
+      expect(item).toMatchObject({
+        type: "IMAGE",
+        image: otherDownload.image,
+        grid: { dpi: 300, offset: { x: 150, y: 140 } },
+      });
+    const overrides = page
+      .frameLocator("#extension")
+      .locator("#overrides-list");
+    for (let n = 1; n <= SHADOW_IDS.length; n++)
+      await expect(overrides).toContainText(
+        `Shadow ${String(n)}'s token was redrawn with the art picked for its monster type.`,
+      );
+    await expect(syncError(page)).toHaveText("");
+  });
+
+  test.describe("uploading new token art from the panel", () => {
+    /** The asset name a chosen file with SHADOW_PNG's bytes is uploaded under. */
+    const uploadName = `ttrpg-art-${createHash("sha256").update(SHADOW_PNG).digest("hex").slice(0, 16)}`;
+
+    const uploads = (page: Page) => page.evaluate(() => window.__host!.uploads);
+
+    const imageRequests = (page: Page) =>
+      page.evaluate(() => window.__host!.imageRequests);
+
+    const rowButton = (page: Page, action: string) =>
+      typeArtRow(page, "shadow").locator(`button[data-action="${action}"]`);
+
+    /** Presses Upload new art on the shadow's row and answers the file chooser with `files`. */
+    async function chooseFile(
+      page: Page,
+      files: { name: string; mimeType: string; buffer: Buffer }[],
+    ): Promise<void> {
+      const chooser = page.waitForEvent("filechooser");
+      await rowButton(page, "upload-art").click();
+      await (await chooser).setFiles(files);
+    }
+
+    test("Upload new art on a declined type uploads the chosen file under its hash-derived name, and picking the uploaded image stores it and replaces the circles with image tokens", async ({
+      page,
+    }) => {
+      await openHarness(page, { role: "gm" });
+      await expect.poll(() => pickerOpens(page)).toBe(1);
+      await expect.poll(async () => (await readItems(page)).length).toBe(5);
+      await expect(typeArtRow(page, "shadow")).toContainText(
+        "Shadow: circles, no art picked",
+      );
+      await expect(rowButton(page, "pick-upload")).toBeHidden();
+
+      await chooseFile(page, [
+        { name: "shadow.png", mimeType: "image/png", buffer: SHADOW_PNG },
+      ]);
+
+      await expect.poll(() => uploads(page)).toHaveLength(1);
+      expect((await uploads(page))[0]).toEqual({
+        name: uploadName,
+        typeHint: "CHARACTER",
+        type: "image/png",
+        size: SHADOW_PNG.length,
+      });
+      await expect(
+        typeArtRow(page, "shadow").locator(".type-art-hint"),
+      ).toHaveText(
+        `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${uploadName}.`,
+      );
+      expect(await pickerOpens(page)).toBe(1);
+
+      // What the GM picks once the upload is in their library.
+      await answerPicksWith(page, [{ ...shadowDownload, name: uploadName }]);
+      await rowButton(page, "pick-upload").click();
+
+      await expect.poll(() => pickerOpens(page)).toBe(2);
+      expect((await imageRequests(page))[1]).toMatchObject({
+        defaultSearch: uploadName,
+      });
+      await expect
+        .poll(() => storedShadowArt()?.sha256, { timeout: 10_000 })
+        .toMatch(/^[0-9a-f]{64}$/);
+      expect(storedShadowArt()).toMatchObject({
+        url: shadowDownload.image.url,
+      });
+      const image = readE2eTokenImage(workerDir(), storedShadowArt()!.sha256!);
+      expect(Buffer.from(image?.bytes ?? [])).toEqual(SHADOW_PNG);
+      await expectShadowArtTokens(page);
+      await expect(
+        page.frameLocator("#extension").locator("#overrides-list"),
+      ).toContainText(
+        "Shadow 1's token was replaced with a new one drawn with the art picked for its monster type",
+      );
+      await expect(typeArtRow(page, "shadow")).toContainText(
+        "Shadow: has token art",
+      );
+      await expect(rowButton(page, "pick-upload")).toBeHidden();
+      expect(await uploads(page)).toHaveLength(1);
+      await expect(syncError(page)).toHaveText("");
+    });
+
+    test("a cancelled file chooser uploads nothing and leaves the Token art row as it was", async ({
+      page,
+    }) => {
+      await openHarness(page, { role: "gm" });
+      await expect.poll(() => pickerOpens(page)).toBe(1);
+      await expect(typeArtRow(page, "shadow")).toContainText(
+        "Shadow: circles, no art picked",
+      );
+      await expect(rowButton(page, "upload-art")).toBeVisible();
+      const before = await typeArtRow(page, "shadow").innerText();
+
+      await chooseFile(page, []);
+      await page.waitForTimeout(500);
+
+      expect(await uploads(page)).toEqual([]);
+      expect(await typeArtRow(page, "shadow").innerText()).toBe(before);
+      await expect(rowButton(page, "pick-upload")).toBeHidden();
+      expect(await pickerOpens(page)).toBe(1);
+      await expect(syncError(page)).toHaveText("");
+    });
+  });
+});
+
 test.describe("stored token art whose Owlbear asset may be gone", () => {
   /** The stored art's url; each test decides whether it still answers. */
   const storedImage = {
@@ -333,7 +588,7 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
       });
     const panel = page.frameLocator("#extension");
     await expect(panel.locator("#overrides-list")).toContainText(
-      "Shadow 1's token was replaced with a new one drawn with the art uploaded for its monster type",
+      "Shadow 1's token was replaced with a new one drawn with the art picked for its monster type",
     );
     await expect(panel.locator("#reupload")).toBeHidden();
     expect(await uploads(page)).toHaveLength(1);

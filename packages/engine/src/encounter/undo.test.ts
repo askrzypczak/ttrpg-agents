@@ -77,6 +77,7 @@ function fakeRepo(state: {
     clearEncounter: unexpected,
     noteCommand: unexpected,
     listInstances: () => [...live.values()].map((i) => structuredClone(i)),
+    listRestoreSeqs: () => ({}),
     listRemovedInstances: () =>
       [...removed.values()].map((i) => ({
         instance: structuredClone(i),

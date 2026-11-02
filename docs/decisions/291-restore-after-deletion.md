@@ -26,7 +26,7 @@ Issue: [#291](https://github.com/askrzypczak/ttrpg-agents/issues/291). Part of E
   - Accept it with no ticket: leaves a silent removal unrecorded.
 - Where: `createEncounterSync` in `packages/owlbear/src/encounter-sync.ts`; `createOutbox` in `packages/owlbear/src/outbox.ts`; `docs/architecture.md` ("Deleted tokens stay deleted"); #298.
 - Revisit if: #298 lands, or a GM hits the race.
-- Status: active
+- Status: superseded by 298.1
 
 ## 291.3 AC4: a clear and a restore folded into one reconcile get their own acceptance criterion
 

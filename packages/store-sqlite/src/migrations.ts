@@ -188,6 +188,12 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    // The change-log seq of the `added` event of the restore that last put the
+    // instance back. NULL: never restored (or restored before this migration).
+    version: 15,
+    sql: "ALTER TABLE monster_instances ADD COLUMN restored_seq INTEGER;",
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

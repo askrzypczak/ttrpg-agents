@@ -32,6 +32,7 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
     applyHealing: unexpected,
     removeInstances: unexpected,
     listRemovedInstances: unexpected,
+    listRestoreSeqs: unexpected,
     restoreInstances: unexpected,
     renameInstance: unexpected,
     setInitiative: (id, initiative) => {

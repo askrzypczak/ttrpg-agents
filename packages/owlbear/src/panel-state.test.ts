@@ -394,3 +394,72 @@ describe("panelView waiting edits and overrides", () => {
     expect(panelView(connected).overrides).toBeUndefined();
   });
 });
+
+describe("panelView token art", () => {
+  const connected: PanelInput = {
+    role: "gm",
+    socketState: "open",
+    disconnectedMs: 0,
+  };
+
+  it("each monster type in the Token art list is a row with its name and art state, and an empty list renders no rows", () => {
+    const view = panelView({
+      ...connected,
+      typeArt: [
+        { monsterKey: "wolf", monsterName: "Wolf", state: "art" },
+        { monsterKey: "goblin", monsterName: "Goblin", state: "none" },
+        { monsterKey: "orc", monsterName: "Orc", state: "declined" },
+        { monsterKey: "shadow", monsterName: "Shadow", state: "reupload" },
+      ],
+    });
+
+    expect(view.typeArt).toEqual([
+      { monsterKey: "wolf", label: "Wolf: has token art", canPick: false },
+      {
+        monsterKey: "goblin",
+        label: "Goblin: no token art yet",
+        canPick: false,
+      },
+      {
+        monsterKey: "orc",
+        label: "Orc: circles, no art picked",
+        canPick: false,
+      },
+      {
+        monsterKey: "shadow",
+        label: "Shadow: circles until its art is re-uploaded (above)",
+        canPick: false,
+      },
+    ]);
+
+    const empty = panelView({ ...connected, typeArt: [] });
+    expect(empty).not.toHaveProperty("typeArt");
+    expect(panelView(connected)).not.toHaveProperty("typeArt");
+  });
+
+  it("a Token art row with an uploaded asset name tells the GM to confirm the folder and pick the named image, and offers the pick of the uploaded image; a row without one offers neither", () => {
+    const view = panelView({
+      ...connected,
+      typeArt: [
+        {
+          monsterKey: "orc",
+          monsterName: "Orc",
+          state: "declined",
+          uploadedAs: "ttrpg-art-ba7816bf8f01cfea",
+        },
+        { monsterKey: "wolf", monsterName: "Wolf", state: "art" },
+      ],
+    });
+
+    expect(view.typeArt).toEqual([
+      {
+        monsterKey: "orc",
+        label: "Orc: circles, no art picked",
+        hint: `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ttrpg-art-ba7816bf8f01cfea.`,
+        canPick: true,
+      },
+      { monsterKey: "wolf", label: "Wolf: has token art", canPick: false },
+    ]);
+    expect(view.typeArt?.[1]).not.toHaveProperty("hint");
+  });
+});

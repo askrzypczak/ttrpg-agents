@@ -56,7 +56,9 @@ export function editInstance(
  * plus the log position it is current as of. The position is read before the
  * instances, so a commit in between makes the snapshot newer than its `seq`
  * and the client sees that event again as a duplicate or a harmless re-fold,
- * never misses it.
+ * never misses it. Each instance a restore put back is listed in `restoreSeqs`
+ * with the seq of its last restore, read after the instances so every restore
+ * they reflect is listed; like an empty art map, an empty list is left out.
  */
 export function snapshotMessage(
   repo: EncounterRepository,
@@ -65,13 +67,16 @@ export function snapshotMessage(
 ): BridgeMessage {
   const seq = log.latestSeq();
   const art = artRepo.listTokenArt();
+  const instances = repo.listInstances();
+  const restoreSeqs = repo.listRestoreSeqs();
   return {
     v: 1,
     type: "encounter-snapshot",
     // An empty map is left out, so a store with no art sends what it always did.
     payload: {
-      instances: repo.listInstances(),
+      instances,
       ...(Object.keys(art).length > 0 ? { art } : {}),
+      ...(Object.keys(restoreSeqs).length > 0 ? { restoreSeqs } : {}),
       seq,
     },
   };

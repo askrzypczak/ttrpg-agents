@@ -8,6 +8,7 @@ import {
   type UnreadableLogEntry,
 } from "@ttrpg-agents/engine";
 import {
+  SqliteEncounterLog,
   SqliteEncounterRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -67,12 +68,16 @@ describe("snapshotMessage", () => {
     });
   });
 
-  it("snapshotMessage carries the log's latest seq, read before the instances", () => {
+  it("snapshotMessage carries the log's latest seq, read before the instances, and reads the restore seqs after them", () => {
     const { log, calls } = stubLog([
       { seq: 4, event: { type: "cleared", origin } },
     ]);
-    const repoStub: Pick<EncounterRepository, "listInstances"> = {
+    const repoStub: Pick<
+      EncounterRepository,
+      "listInstances" | "listRestoreSeqs"
+    > = {
       listInstances: () => (calls.push("listInstances"), []),
+      listRestoreSeqs: () => (calls.push("listRestoreSeqs"), {}),
     };
 
     const message = snapshotMessage(
@@ -86,7 +91,46 @@ describe("snapshotMessage", () => {
       type: "encounter-snapshot",
       payload: { instances: [], seq: 4 },
     });
-    expect(calls).toEqual(["latestSeq", "listInstances"]);
+    expect(calls).toEqual(["latestSeq", "listInstances", "listRestoreSeqs"]);
+  });
+
+  it("snapshotMessage carries the restore seq of each restored instance and leaves the field out when none was restored", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteEncounterRepository(db);
+    const log = new SqliteEncounterLog(db);
+    const [, second, third] = repo.addInstances(
+      () => [
+        { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
+        { monsterKey: "shadow", displayName: "Shadow 2", maxHp: 16 },
+        { monsterKey: "shadow", displayName: "Shadow 3", maxHp: 16 },
+      ],
+      origin,
+    );
+
+    expect(snapshotMessage(repo, noArt, log)).toStrictEqual({
+      v: 1,
+      type: "encounter-snapshot",
+      payload: { instances: repo.listInstances(), seq: log.latestSeq() },
+    });
+
+    repo.removeInstances([second!.id, third!.id], origin);
+    repo.restoreInstances([second!.id], (i) => i.displayName, origin);
+    const secondRestore = log.latestSeq();
+    repo.restoreInstances([third!.id], (i) => i.displayName, origin);
+    const thirdRestore = log.latestSeq();
+
+    expect(snapshotMessage(repo, noArt, log)).toEqual({
+      v: 1,
+      type: "encounter-snapshot",
+      payload: {
+        instances: repo.listInstances(),
+        restoreSeqs: {
+          [second!.id]: secondRestore,
+          [third!.id]: thirdRestore,
+        },
+        seq: thirdRestore,
+      },
+    });
   });
 });
 

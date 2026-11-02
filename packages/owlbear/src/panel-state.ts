@@ -1,4 +1,9 @@
-import type { ArtStep, Reupload } from "./encounter-sync.js";
+import type {
+  ArtStep,
+  Reupload,
+  TypeArt,
+  TypeArtState,
+} from "./encounter-sync.js";
 import type { RejectionCode, SocketState } from "./reconnecting-socket.js";
 
 import type { PlayerRole } from "./scene-model.js";
@@ -26,6 +31,8 @@ export interface PanelInput {
   artStep?: ArtStep;
   /** The monster types whose stored art needs re-uploading, in list order. */
   reuploads?: Reupload[];
+  /** The encounter's monster types, with their art state. */
+  typeArt?: TypeArt[];
   /** A note on the latest write-back answer that differs from the table, if any. */
   editNote?: string;
   /** How many table edits, token deletions and token art picks wait for the bridge (see outbox.ts). */
@@ -65,6 +72,16 @@ export interface PanelView {
    * uploaded, and whether its uploaded image can be picked.
    */
   reuploads?: {
+    monsterKey: string;
+    label: string;
+    hint?: string;
+    canPick: boolean;
+  }[];
+  /**
+   * One row per type in the Token art list, with the hint and the pick once
+   * an image file was uploaded for it; present only when there are any.
+   */
+  typeArt?: {
     monsterKey: string;
     label: string;
     hint?: string;
@@ -121,12 +138,42 @@ export function panelView(input: PanelInput): PanelView {
     ...(input.reuploads && input.reuploads.length > 0
       ? { reuploads: reuploadRows(input.reuploads) }
       : {}),
+    ...(input.typeArt && input.typeArt.length > 0
+      ? {
+          typeArt: input.typeArt.map(
+            ({ monsterKey, monsterName, state, uploadedAs }) => ({
+              monsterKey,
+              label: `${monsterName}: ${TYPE_ART_TEXT[state]}`,
+              ...(uploadedAs === undefined
+                ? {}
+                : { hint: uploadedHint(uploadedAs) }),
+              canPick: uploadedAs !== undefined,
+            }),
+          ),
+        }
+      : {}),
   };
 }
+
+/** What a Token art row says about its type's art. */
+const TYPE_ART_TEXT: Record<TypeArtState, string> = {
+  art: "has token art",
+  none: "no token art yet",
+  declined: "circles, no art picked",
+  reupload: "circles until its art is re-uploaded (above)",
+};
 
 /** What the GM is told while a fresh image picker is open. */
 function artStepPrompt({ monsterName, index, total }: ArtStep): string {
   return `Art ${String(index)} of ${String(total)}: choose the token art for ${monsterName} in Owlbear's image picker, or cancel it to use circles.`;
+}
+
+/**
+ * What the GM does once an image was uploaded under an asset name: confirm
+ * Owlbear's folder dialog, then pick the named image.
+ */
+function uploadedHint(assetName: string): string {
+  return `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${assetName}.`;
 }
 
 /**
@@ -139,11 +186,7 @@ function reuploadRows(
   return reuploads.map((row, i) => ({
     monsterKey: row.monsterKey,
     label: `${row.monsterName} (${String(i + 1)} of ${String(reuploads.length)})`,
-    ...(row.uploaded
-      ? {
-          hint: `Confirm the folder in Owlbear's upload dialog, then press "Pick the uploaded image" and pick ${row.assetName}.`,
-        }
-      : {}),
+    ...(row.uploaded ? { hint: uploadedHint(row.assetName) } : {}),
     canPick: row.uploaded,
   }));
 }

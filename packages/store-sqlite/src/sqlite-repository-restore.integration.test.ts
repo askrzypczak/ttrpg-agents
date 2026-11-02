@@ -230,6 +230,44 @@ describe("restoreInstances", () => {
   });
 });
 
+describe("listRestoreSeqs", () => {
+  it("listRestoreSeqs lists a restored instance with the seq of the added event its restore recorded", () => {
+    const [, b] = seed(shadow("Shadow 1"), shadow("Shadow 2"));
+    repo.removeInstances([b!.id], removeOrigin);
+    const before = log.latestSeq();
+
+    repo.restoreInstances([b!.id], keepName, restoreOrigin);
+
+    const [added] = log.eventsSince(before);
+    expect(added).toMatchObject({ event: { type: "added" } });
+    expect(repo.listRestoreSeqs()).toEqual({ [b!.id]: added!.seq });
+  });
+
+  it("listRestoreSeqs leaves out an instance never restored and one removed again after its restore, and a later restore replaces the seq", () => {
+    const [, b, c] = seed(
+      shadow("Shadow 1"),
+      shadow("Shadow 2"),
+      shadow("Shadow 3"),
+    );
+    repo.removeInstances([b!.id, c!.id], removeOrigin);
+    repo.restoreInstances([b!.id, c!.id], keepName, restoreOrigin);
+    const firstRestore = log.latestSeq();
+    repo.removeInstances([c!.id], { source: "mcp", commandId: "remove-2" });
+
+    expect(repo.listRestoreSeqs()).toEqual({ [b!.id]: firstRestore });
+
+    repo.removeInstances([b!.id], { source: "mcp", commandId: "remove-3" });
+    repo.restoreInstances([b!.id], keepName, {
+      source: "mcp",
+      commandId: "restore-2",
+    });
+    const secondRestore = log.latestSeq();
+
+    expect(secondRestore).toBeGreaterThan(firstRestore);
+    expect(repo.listRestoreSeqs()).toEqual({ [b!.id]: secondRestore });
+  });
+});
+
 describe("migration", () => {
   it("a row stored before migration 12 reads as in the encounter", () => {
     const old = new DatabaseSync(":memory:");

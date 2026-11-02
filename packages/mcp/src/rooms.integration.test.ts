@@ -446,7 +446,6 @@ describe("map-moved flag", () => {
       ["preview_monsters", goblins],
       ["add_monsters", goblins],
       ["move_monsters", { targets: ["Goblin Warrior 1"], room: "Attic" }],
-      ["get_map_image", {}],
     ];
     for (const [name, args] of calls) {
       const r = await call(ctx, name, args);

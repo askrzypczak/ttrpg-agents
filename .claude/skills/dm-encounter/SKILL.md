@@ -7,7 +7,7 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `table_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
-Each tool's reply lines come back as the `summary` of its result (the same lines as its text); "relay the tool's line" below means a line of that summary, copied as it is.
+Each tool's reply lines come back as the `summary` of its result (the same lines as its text); "relay the tool's line" below means a line of that summary, copied as it is. `get_map_image` is the exception: its result is an image block plus one text line, with no `summary`.
 
 ## Fewest calls
 
@@ -60,7 +60,7 @@ Rooms are named on the map in use by its display cells (columns A, B, ... left t
 
 ## Proposing rooms
 
-`get_map_image` returns the map in use as the DM sees it, with column letters on its top and bottom edges and row numbers on its left and right edges, and a line with its grid size. Read cells from those labels. `propose_rooms` turns the ranges you read into proposals: it shrinks each range by one cell on every side where the room is at least three cells wide, and saves nothing. Show and save its ranges exactly as it returns them; never shrink or adjust a range yourself.
+`get_map_image` returns the map in use as the DM sees it, with column letters on its top and bottom edges and row numbers on its left and right edges. Its result is an image block plus one text line (map name, grid size, and a moved line when the map moved), with no `summary`. Read cells from those labels. `propose_rooms` turns the ranges you read into proposals: it shrinks each range by one cell on every side where the room is at least three cells wide, and saves nothing. Show and save its ranges exactly as it returns them; never shrink or adjust a range yourself.
 
 To propose a room, find its printed name on the image and read the cells of its interior: one range, or several for an L-shaped room. Read each arm of an L-shaped room as a full rectangle that runs to the room's outer walls, so the arms overlap where they meet (`T5:AB11` and `T5:V14`, not `T5:AB11` and `T12:V14`); the shrunk arms then still touch.
 
