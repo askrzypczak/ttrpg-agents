@@ -58,6 +58,7 @@ const children: ChildProcess[] = [];
 const servers: Server[] = [];
 const sockets: WebSocket[] = [];
 const bridgePids = new Set<number>();
+const standIns: ChildProcess[] = [];
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "bridge-lifecycle-"));
@@ -85,6 +86,13 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  // Stand-ins first: one of them ignores SIGTERM.
+  for (const child of standIns.splice(0)) {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGKILL");
+      await exited(child);
+    }
+  }
   for (const ws of sockets.splice(0)) ws.terminate();
   const record = await rawRecord();
   if (typeof record?.pid === "number") bridgePids.add(record.pid);
@@ -242,6 +250,46 @@ function signalsSentTo(
   return spy.mock.calls.filter(
     ([target, signal]) => target === pid && signal !== 0,
   );
+}
+
+// Code for stand-in processes, which name `cli.js` on their command line as a
+// bridge does.
+const IDLE = "setInterval(() => {}, 1000)";
+const IGNORES_SIGTERM =
+  "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); console.log('ready')";
+
+/** A node process running `code`, with `cli.js` among its arguments. */
+async function standIn(code: string): Promise<ChildProcess> {
+  const child = spawn(process.execPath, ["-e", code, "cli.js"], {
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  standIns.push(child);
+  await new Promise<void>((done, fail) => {
+    child.once("spawn", () => done());
+    child.once("error", fail);
+  });
+  return child;
+}
+
+function readyLine(child: ChildProcess): Promise<void> {
+  return new Promise((done) => {
+    let text = "";
+    child.stdout?.on("data", (d: Buffer) => {
+      text += d.toString();
+      if (text.includes("ready")) done();
+    });
+  });
+}
+
+/** Pids of live processes whose command line contains `text`. */
+function pidsRunning(text: string): number[] {
+  const ps = spawnSync("ps", ["-e", "-o", "pid=", "-o", "args="], {
+    encoding: "utf8",
+  });
+  return ps.stdout
+    .split("\n")
+    .filter((line) => line.includes(text) && !line.includes("<defunct>"))
+    .map((line) => Number(line.trim().split(/\s+/)[0]));
 }
 
 const warningLines = (lines: string[]): string[] =>
@@ -437,6 +485,18 @@ describe("bridge lifecycle: start", () => {
     },
     TIMEOUT,
   );
+
+  it("start gives up on a bridge that never listens, stops it and exits non-zero", async () => {
+    const checkout = join(dir, "checkout");
+    const cli = join(checkout, "packages", "bridge", "dist", "cli.js");
+    await mkdir(dirname(cli), { recursive: true });
+    await writeFile(cli, IDLE + ";\n");
+
+    expect(await startBridge(options({ checkout }))).toBe(1);
+
+    expect(pidsRunning(cli)).toEqual([]);
+    expect(await readStateFile(statePath)).toBeNull();
+  }, 30_000);
 });
 
 describe("bridge lifecycle: stop", () => {
@@ -527,6 +587,30 @@ describe("bridge lifecycle: stop", () => {
     },
     TIMEOUT,
   );
+
+  it(
+    "stop sends no signal to a process running cli.js that started at another time than the record says",
+    async () => {
+      const other = await standIn(IDLE);
+      const pid = other.pid!;
+      await writeStateFile(statePath, {
+        pid,
+        port: 1,
+        checkout: REPO,
+        commit: null,
+        startedAt: new Date(Date.now() - 3_600_000).toISOString(),
+      });
+      const kill = vi.spyOn(process, "kill");
+
+      expect(await stopBridge(options())).toBe(0);
+
+      expect(signalsSentTo(kill, pid)).toEqual([]);
+      expect(alive(pid)).toBe(true);
+      expect(other.exitCode).toBeNull();
+      expect(printed()).toMatch(/no bridge is running/i);
+    },
+    TIMEOUT,
+  );
 });
 
 describe("bridge lifecycle: restart", () => {
@@ -555,6 +639,29 @@ describe("bridge lifecycle: restart", () => {
     },
     TIMEOUT,
   );
+
+  it("restart gives up when the bridge outlives SIGTERM, builds nothing and leaves it running without SIGKILL", async () => {
+    const startedAt = new Date().toISOString();
+    const stubborn = await standIn(IGNORES_SIGTERM);
+    await readyLine(stubborn);
+    const pid = stubborn.pid!;
+    await writeStateFile(statePath, {
+      pid,
+      port: 1,
+      checkout: REPO,
+      commit: null,
+      startedAt,
+    });
+    const kill = vi.spyOn(process, "kill");
+
+    expect(await restartBridge(options())).toBe(1);
+
+    expect(builds).toBe(0);
+    expect(alive(pid)).toBe(true);
+    expect(stubborn.exitCode).toBeNull();
+    expect(signalsSentTo(kill, pid)).toEqual([[pid, "SIGTERM"]]);
+    expect((await readStateFile(statePath))?.pid).toBe(pid);
+  }, 30_000);
 });
 
 describe("bridge lifecycle: status", () => {
@@ -716,6 +823,75 @@ describe("bridge lifecycle: status", () => {
       const line = [...out, ...err].find((l) => l.includes(`port ${port}`));
       expect(line).toBeDefined();
       expect(line).toMatch(/accept/i);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "status with an agent token file holding several lines reports the GM tab as unknown without printing any of it",
+    async () => {
+      await started();
+      out = [];
+      err = [];
+      const bad = join(dir, "bad-agent-token");
+      await writeFile(bad, "first-secret-part\nsecond-secret-part\n", {
+        mode: 0o600,
+      });
+
+      expect(
+        await bridgeStatus(
+          options({ env: { ...env, BRIDGE_AGENT_TOKEN_FILE: bad } }),
+        ),
+      ).toBe(0);
+
+      expect(gmTabLine([...out, ...err])).toMatch(/unknown/i);
+      expect(printed()).not.toContain("first-secret-part");
+      expect(printed()).not.toContain("second-secret-part");
+    },
+    TIMEOUT,
+  );
+  it(
+    "status with a missing agent token file reports the GM tab as unknown and names the file",
+    async () => {
+      await started();
+      out = [];
+      err = [];
+      const missing = join(dir, "no-such-agent-token");
+
+      expect(
+        await bridgeStatus(
+          options({ env: { ...env, BRIDGE_AGENT_TOKEN_FILE: missing } }),
+        ),
+      ).toBe(0);
+
+      const line = gmTabLine([...out, ...err]);
+      expect(line).toMatch(/unknown/i);
+      expect(line).toContain(missing);
+      expect(printed()).not.toContain(AGENT_TOKEN);
+    },
+    TIMEOUT,
+  );
+  it(
+    "status with an agent token the bridge refuses reports the GM tab as unknown with the reason, without printing the token",
+    async () => {
+      await started();
+      out = [];
+      err = [];
+      const wrongToken = "b2".repeat(32);
+      const wrong = join(dir, "wrong-agent-token");
+      await writeFile(wrong, wrongToken + "\n", { mode: 0o600 });
+
+      expect(
+        await bridgeStatus(
+          options({ env: { ...env, BRIDGE_AGENT_TOKEN_FILE: wrong } }),
+        ),
+      ).toBe(0);
+
+      const line = gmTabLine([...out, ...err]);
+      expect(line).toMatch(/unknown/i);
+      expect(line).toMatch(/refused|unauthori[sz]ed|401/i);
+      expect(printed()).not.toContain(wrongToken);
+      expect(printed()).not.toContain(AGENT_TOKEN);
     },
     TIMEOUT,
   );
