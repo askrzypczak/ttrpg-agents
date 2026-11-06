@@ -105,6 +105,31 @@ describe("query schemas", () => {
     expect(parsed.data).toEqual({ ...status, artWaits: [] });
   });
 
+  it("a scene-status result carries the room id", () => {
+    const parsed = queryResultSchema.safeParse({
+      name: "scene-status",
+      result: { ...status, artWaits: [], roomId: "room-abc" },
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({
+      name: "scene-status",
+      result: { ...status, artWaits: [], roomId: "room-abc" },
+    });
+  });
+
+  it("a scene-status result without a room id still decodes, with none", () => {
+    const parsed = queryResultSchema.safeParse({
+      name: "scene-status",
+      result: { ...status, artWaits: [] },
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({
+      name: "scene-status",
+      result: { ...status, artWaits: [] },
+    });
+    expect(parsed.data?.result).not.toHaveProperty("roomId");
+  });
+
   it("an art wait with an unknown step is rejected", () => {
     for (const step of ["upload", "confirm", "", "PICK"]) {
       expect(

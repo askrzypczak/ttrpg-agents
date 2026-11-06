@@ -69,6 +69,9 @@ export function createFakeObr(
       void Promise.resolve().then(callback);
     },
     getRole: () => Promise.resolve(scene.role),
+    getRoomId: () => {
+      throw new Error("not implemented");
+    },
     isSceneReady: () => Promise.resolve(scene.isReady()),
     onSceneReadyChange: (callback) =>
       scene.onChange((change) => {

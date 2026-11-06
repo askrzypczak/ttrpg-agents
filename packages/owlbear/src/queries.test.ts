@@ -51,6 +51,7 @@ describe("handleQuery scene-status", () => {
         tokenCount: 3,
         appliedInstanceCount: 2,
         artWaits: [],
+        roomId: "fake-room",
       },
     });
   });
@@ -66,6 +67,7 @@ describe("handleQuery scene-status", () => {
         tokenCount: 0,
         appliedInstanceCount: 0,
         artWaits: [],
+        roomId: "fake-room",
       },
     });
   });
@@ -88,8 +90,19 @@ describe("handleQuery scene-status", () => {
         tokenCount: 0,
         appliedInstanceCount: 0,
         artWaits,
+        roomId: "fake-room",
       },
     });
+  });
+
+  it("`scene-status` answers the room id the adapter reports", async () => {
+    const { obr } = createFakeObr();
+    const sync = createEncounterSync(obr);
+
+    const answer = await handleQuery(obr, sync, { name: "scene-status" });
+
+    expect(answer.name).toBe("scene-status");
+    expect(answer.result).toHaveProperty("roomId", "fake-room");
   });
 });
 
