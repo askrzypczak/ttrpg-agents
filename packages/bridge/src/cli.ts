@@ -18,6 +18,12 @@ import {
 import { broadcastMapRooms, mapRoomsMessage } from "./map-rooms.js";
 import { DEFAULT_BRIDGE_PORT, startBridgeServer } from "./server.js";
 import {
+  checkoutCommit,
+  defaultStatePath,
+  removeStateFile,
+  writeStateFile,
+} from "./state-file.js";
+import {
   defaultAgentTokenPath,
   defaultTokenPath,
   loadOrCreateToken,
@@ -29,6 +35,8 @@ const port = process.env.BRIDGE_PORT
 const staticDir =
   process.env.BRIDGE_STATIC_DIR ??
   fileURLToPath(new URL("../../owlbear/dist", import.meta.url));
+const statePath = process.env.BRIDGE_STATE_FILE ?? defaultStatePath();
+const checkout = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const tokenPath = process.env.BRIDGE_TOKEN_FILE ?? defaultTokenPath();
 const agentTokenPath =
   process.env.BRIDGE_AGENT_TOKEN_FILE ?? defaultAgentTokenPath();
@@ -62,6 +70,14 @@ const server = await startBridgeServer({
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
   storeTokenImage: (bytes) => storeTokenImage(imageRepo, bytes),
   getTokenImage: (sha256) => imageRepo.getTokenImage(sha256),
+}).catch((error: unknown) => {
+  if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+    console.error(
+      `bridge: port ${String(port)} is already in use. Run \`npm run bridge:status\` to see what holds it.`,
+    );
+    process.exit(1);
+  }
+  throw error;
 });
 const stopPolling = broadcastLogEvents(log, server, {
   onUnreadable: ({ seq, error }) =>
@@ -71,10 +87,20 @@ const stopPolling = broadcastLogEvents(log, server, {
   snapshot: () => snapshotMessage(repo, artRepo, log),
 });
 const stopMapRooms = broadcastMapRooms(maps, server);
+// Written before the install URL is printed, so a log that ends before the
+// record exists never holds the token.
+await writeStateFile(statePath, {
+  pid: process.pid,
+  port: server.port,
+  checkout,
+  commit: checkoutCommit(checkout),
+  startedAt: new Date(performance.timeOrigin).toISOString(),
+});
 console.log(`bridge listening on http://localhost:${server.port}`);
 console.log(`serving ${staticDir}`);
 console.log(`token file: ${tokenPath}`);
 console.log(`agent token file: ${agentTokenPath}`);
+console.log(`state file: ${statePath}`);
 console.log(
   `install in Owlbear: http://localhost:${server.port}/manifest.json?token=${token}`,
 );
@@ -83,6 +109,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     stopPolling();
     stopMapRooms();
-    void server.close().then(() => process.exit(0));
+    void server
+      .close()
+      .then(() => removeStateFile(statePath, process.pid))
+      .then(() => process.exit(0));
   });
 }

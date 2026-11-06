@@ -49,6 +49,7 @@ export async function startWorkerBridge(options: {
         BRIDGE_STATIC_DIR: staticDir,
         BRIDGE_TOKEN_FILE: tokenFile,
         BRIDGE_AGENT_TOKEN_FILE: agentTokenFile,
+        BRIDGE_STATE_FILE: join(dir, "bridge-state.json"),
         TTRPG_AGENTS_DB: dbPath,
       },
       stdio: ["ignore", "pipe", "pipe"],

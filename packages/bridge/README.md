@@ -9,9 +9,34 @@ the change log in that file and pushes each new event to the extension.
 ## Run
 
 ```sh
-npm run build          # the bridge serves the extension built into packages/owlbear/dist
-npm run bridge         # from the repo root; runs packages/bridge/dist/cli.js
+npm run bridge:start     # build, then run the bridge detached from the terminal
+npm run bridge:status    # what is running, from which checkout and commit
+npm run bridge:restart   # stop, then start from this checkout
+npm run bridge:stop
+npm run bridge           # foreground instead: runs packages/bridge/dist/cli.js (build first)
 ```
+
+`bridge:start` runs `npm run build` in its checkout (the bridge serves the
+extension built into `packages/owlbear/dist`), starts the bridge in its own
+session and returns once it listens. It refuses when a bridge is already
+running (use `bridge:restart`). `bridge:stop` sends SIGTERM and waits up to
+10 s, and succeeds when nothing is running. A foreground bridge on a taken port
+prints one line naming the port and exits 1.
+
+Every bridge, foreground or not, writes a state file once it listens (pid,
+port, checkout, commit, start time; mode 0600 in a 0700 directory) and removes
+it when it stops. The commands read it, and check with `ps` that the pid is
+still that bridge before signalling it, so a stale file never leads to
+signalling another process. The detached bridge's stdout and stderr go to
+`bridge.log` beside the state file, emptied on each start and mode 0600: it
+holds the install URL, so the commands print its path, never a token.
+
+`bridge:status` reports the running bridge's pid, port, checkout, commit, start
+time and log, with a warning when its checkout or commit is not this
+checkout's. It asks the bridge for `scene-status` with the agent token to say
+whether a GM tab is connected (or unknown, with the reason). With no running
+bridge it says whether the port still accepts connections, held by another
+process. It changes nothing and exits 0.
 
 The bridge prints an `install in Owlbear` URL (`.../manifest.json?token=...`).
 In Owlbear Rodeo, Profile > Add Custom Extension, enter that URL. Then switch
@@ -30,8 +55,24 @@ Environment:
 - `BRIDGE_AGENT_TOKEN_FILE`: agent token for `POST /agent/query`, created
   with mode 0600 on first run (default `~/.config/ttrpg-agents/agent-token`).
   It is never served and is separate from the extension token.
+- `BRIDGE_STATE_FILE`: the state file (default
+  `~/.config/ttrpg-agents/bridge-state.json`); the log is `bridge.log` in the
+  same directory. Set it to run a second bridge, or tests, without touching
+  the first one's record.
 - `TTRPG_AGENTS_DB`: the encounter database to watch, the same file the MCP
   server writes (see `packages/mcp/README.md` for the default location).
+
+## Test a branch against the real table
+
+1. From the branch's checkout (after `npm ci`), run `npm run bridge:restart`:
+   it stops the running bridge, wherever it was started, builds this checkout
+   and starts the bridge from it. `npm run bridge:status` should show this
+   checkout and its commit with no warning.
+2. Reload the GM's Owlbear tab so it loads the extension this bridge serves.
+3. Reconnect the MCP server (`/mcp` in Claude Code) so it picks up the fresh
+   build.
+4. The branch's migrations run on the shared database unless `TTRPG_AGENTS_DB`
+   points elsewhere.
 
 ## Queries
 
