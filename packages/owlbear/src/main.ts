@@ -1,4 +1,6 @@
 import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
 import {
   ReconnectingSocket,
   type RejectionCode,
@@ -15,17 +17,31 @@ import {
 import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
 import { createMapOverlay } from "./overlay.js";
-import { describeError, panelView, type PanelView } from "./panel-state.js";
+import { Panel, type PanelActions } from "./panel.js";
+import { describeError, panelView } from "./panel-state.js";
 import { tokenDeletedErrorText } from "./token-deleted.js";
 import { downloadTokenImage, uploadTokenImage } from "./token-art.js";
 
 const EXTENSION_VERSION = "0.0.0";
 
-function el(id: string): HTMLElement {
-  const found = document.getElementById(id);
-  if (!found) throw new Error(`missing element #${id}`);
-  return found;
-}
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("missing element #root");
+const root = createRoot(rootElement);
+
+// Until the sync and socket exist, the panel's controls do nothing.
+const noActions: PanelActions = {
+  useThisTab: () => {},
+  dismissOverrides: () => {},
+  reuploadArt: () => {},
+  pickUploadedArt: () => {},
+  repickArt: () => {},
+  uploadArtFile: () => {},
+  pickUploadedFile: () => {},
+  setOverlayEnabled: () => {},
+};
+
+// "Starting..." until Owlbear is ready.
+root.render(createElement(Panel, { view: undefined, actions: noActions }));
 
 const obr = createObrAdapter();
 
@@ -58,69 +74,10 @@ obr.onReady(async () => {
   // them. In memory only: a reload starts with its own.
   const overrides: string[] = [];
 
-  // The re-upload rows as last drawn: they are drawn again only when they
-  // change, so a periodic render never replaces a button under the pointer.
-  let drawnReuploads = "";
-  const drawReuploads = (rows: PanelView["reuploads"]) => {
-    const drawn = JSON.stringify(rows ?? []);
-    if (drawn === drawnReuploads) return;
-    drawnReuploads = drawn;
-    el("reupload").hidden = rows === undefined;
-    el("reupload-list").replaceChildren(
-      ...(rows ?? []).map((row) => {
-        const item = document.createElement("li");
-        item.dataset.monsterKey = row.monsterKey;
-        const label = document.createElement("span");
-        label.textContent = row.label;
-        const reupload = document.createElement("button");
-        reupload.dataset.action = "reupload";
-        reupload.textContent = "Re-upload";
-        const pick = document.createElement("button");
-        pick.dataset.action = "pick";
-        pick.textContent = "Pick the uploaded image";
-        pick.hidden = !row.canPick;
-        const hint = document.createElement("p");
-        hint.className = "reupload-hint";
-        hint.textContent = row.hint ?? "";
-        item.append(label, " ", reupload, " ", pick, hint);
-        return item;
-      }),
-    );
-  };
-
-  // The Token art rows as last drawn, drawn again only when they change, like
-  // the re-upload rows.
-  let drawnTypeArt = "";
-  const drawTypeArt = (rows: PanelView["typeArt"]) => {
-    const drawn = JSON.stringify(rows ?? []);
-    if (drawn === drawnTypeArt) return;
-    drawnTypeArt = drawn;
-    el("type-art").hidden = rows === undefined;
-    el("type-art-list").replaceChildren(
-      ...(rows ?? []).map((row) => {
-        const item = document.createElement("li");
-        item.dataset.monsterKey = row.monsterKey;
-        const label = document.createElement("span");
-        label.textContent = row.label;
-        const pick = document.createElement("button");
-        pick.dataset.action = "pick-art";
-        pick.textContent = "Pick art";
-        const upload = document.createElement("button");
-        upload.dataset.action = "upload-art";
-        upload.textContent = "Upload new art";
-        const pickUpload = document.createElement("button");
-        pickUpload.dataset.action = "pick-upload";
-        pickUpload.textContent = "Pick the uploaded image";
-        pickUpload.hidden = !row.canPick;
-        const hint = document.createElement("p");
-        hint.className = "type-art-hint";
-        hint.textContent = row.hint ?? "";
-        hint.hidden = row.hint === undefined;
-        item.append(label, " ", pick, " ", upload, " ", pickUpload, hint);
-        return item;
-      }),
-    );
-  };
+  // Scene readiness once known, and whether the map overlay toggle shows.
+  let sceneReady: boolean | undefined;
+  let showOverlayToggle = false;
+  let actions = noActions;
 
   let rejection: RejectionCode | undefined;
   const render = () => {
@@ -141,23 +98,8 @@ obr.onReady(async () => {
       overrides,
       disconnectedMs: Date.now() - streakStart,
     });
-    const status = el("status");
-    status.textContent = view.message;
-    status.dataset.kind = view.kind;
-    el("hint").textContent = view.hint ?? "";
-    el("art-prompt").textContent = view.prompt ?? "";
-    drawReuploads(view.reuploads);
-    drawTypeArt(view.typeArt);
-    el("use-this-tab").hidden = view.action !== "use-this-tab";
-    el("sync-error").textContent = view.error ?? "";
-    el("edit-note").textContent = view.note ?? "";
-    el("overrides").hidden = view.overrides === undefined;
-    el("overrides-list").replaceChildren(
-      ...(view.overrides ?? []).map((text) => {
-        const item = document.createElement("li");
-        item.textContent = text;
-        return item;
-      }),
+    root.render(
+      createElement(Panel, { view, sceneReady, showOverlayToggle, actions }),
     );
   };
 
@@ -170,12 +112,7 @@ obr.onReady(async () => {
   const overlay = createMapOverlay(obr, {
     onError: (e) => console.error("map overlay failed", e),
   });
-  const overlayToggle = el("overlay-toggle") as HTMLInputElement;
-  overlayToggle.checked = true;
-  el("overlay").hidden = false;
-  overlayToggle.addEventListener("change", () => {
-    void overlay.setEnabled(overlayToggle.checked);
-  });
+  showOverlayToggle = true;
 
   // The socket is created after the sync, which reports deletions and gaps through it.
   let sendToBridge: (message: BridgeMessage) => boolean = () => false;
@@ -302,56 +239,28 @@ obr.onReady(async () => {
     socket.close();
     socket.start();
   };
-  el("use-this-tab").addEventListener("click", reconnect);
-  el("dismiss-overrides").addEventListener("click", () => {
-    overrides.length = 0;
-    render();
-  });
-  // The re-upload rows' buttons; nothing in the sync waits on them.
-  el("reupload-list").addEventListener("click", (event) => {
-    const button =
-      event.target instanceof Element
-        ? event.target.closest<HTMLElement>("button[data-action]")
-        : null;
-    const monsterKey = button?.closest<HTMLElement>("li")?.dataset.monsterKey;
-    if (button === null || monsterKey === undefined) return;
-    if (button.dataset.action === "reupload") void sync.reuploadArt(monsterKey);
-    else if (button.dataset.action === "pick")
-      void sync.pickUploadedArt(monsterKey);
-  });
-  // The Token art rows' buttons; nothing in the sync waits on them either.
-  // The file chooser of "Upload new art" answers for the row that opened it.
-  const artFile = el("art-file") as HTMLInputElement;
-  let uploadFor: string | undefined;
-  el("type-art-list").addEventListener("click", (event) => {
-    const button =
-      event.target instanceof Element
-        ? event.target.closest<HTMLElement>("button[data-action]")
-        : null;
-    const monsterKey = button?.closest<HTMLElement>("li")?.dataset.monsterKey;
-    if (button === null || monsterKey === undefined) return;
-    if (button.dataset.action === "pick-art") void sync.repickArt(monsterKey);
-    else if (button.dataset.action === "upload-art") {
-      uploadFor = monsterKey;
-      artFile.click();
-    } else if (button.dataset.action === "pick-upload")
-      void sync.pickUploadedFile(monsterKey);
-  });
-  artFile.addEventListener("change", () => {
-    const file = artFile.files?.[0];
-    // Cleared so that the same file can be chosen again.
-    artFile.value = "";
-    const monsterKey = uploadFor;
-    uploadFor = undefined;
-    if (file !== undefined && monsterKey !== undefined)
-      void sync.uploadArtFile(monsterKey, file);
-  });
+  // Nothing in the sync waits on the panel's buttons.
+  actions = {
+    useThisTab: () => reconnect(),
+    dismissOverrides: () => {
+      overrides.length = 0;
+      render();
+    },
+    reuploadArt: (monsterKey) => void sync.reuploadArt(monsterKey),
+    pickUploadedArt: (monsterKey) => void sync.pickUploadedArt(monsterKey),
+    repickArt: (monsterKey) => void sync.repickArt(monsterKey),
+    uploadArtFile: (monsterKey, file) =>
+      void sync.uploadArtFile(monsterKey, file),
+    pickUploadedFile: (monsterKey) => void sync.pickUploadedFile(monsterKey),
+    setOverlayEnabled: (enabled) => void overlay.setEnabled(enabled),
+  };
   socket.start();
   // Re-render periodically so the stalled hint appears without a state change.
   setInterval(render, 1000);
 
   const showScene = (ready: boolean) => {
-    el("scene").textContent = ready ? "Scene ready." : "Waiting for scene...";
+    sceneReady = ready;
+    render();
   };
   showScene(await obr.isSceneReady());
   obr.onSceneReadyChange(showScene);

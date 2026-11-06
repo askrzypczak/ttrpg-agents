@@ -126,7 +126,7 @@ describe("Panel", () => {
 
     // The list changes while the file chooser is open.
     render(
-      makeView([row("kobold", "Kobold"), row("owlbear", "Owlbear")]),
+      makeView([row("owlbear", "Owlbear"), row("kobold", "Kobold")]),
       actions,
     );
 
