@@ -63,10 +63,11 @@ The queries:
 
 - `scene-status` (`{"name":"scene-status"}`): whether the scene is ready, how
   many of our tokens are on it, how many instances the extension has applied,
-  and `artWaits`, the monster types whose token art waits on the GM (monster
-  key, name and step: `pick` while a fresh image picker is open or still to
-  open, `reupload` while its stored art is listed for re-upload in the panel);
-  an answer without it reads as none.
+  `roomId`, the id of the Owlbear room the tab is in (absent from an older
+  tab), and `artWaits`, the monster types whose token art waits on the GM
+  (monster key, name and step: `pick` while a fresh image picker is open or
+  still to open, `reupload` while its stored art is listed for re-upload in
+  the panel); an answer without it reads as none.
 - `scene-map`: the scene grid (dpi and type) and, for each image on the map
   layer, its id, name, image size, image grid (dpi and offset) and transform
   (position, rotation, scale). On a scene that is not ready the extension's
