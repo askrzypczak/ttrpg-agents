@@ -220,4 +220,15 @@ describe("loadAliases", () => {
     expect((err as Error).message).toContain(file);
     expect((err as Error).message).toContain("THUG");
   });
+
+  it("loadAliases fails naming the file and entry when the file is not an array or an entry is malformed", () => {
+    const notArray = loadError({});
+    expect(notArray.err).toBeInstanceOf(MonsterLoadError);
+    expect((notArray.err as Error).message).toContain(notArray.file);
+
+    const malformed = loadError([{ key: "srd-2024_tough", note: "x" }]);
+    expect(malformed.err).toBeInstanceOf(MonsterLoadError);
+    expect((malformed.err as Error).message).toContain(malformed.file);
+    expect((malformed.err as Error).message).toContain("#0");
+  });
 });
