@@ -54,7 +54,7 @@ flowchart LR
 ## Processes
 
 - **MCP server**: stdio, started by Claude Code from `.mcp.json` through `packages/mcp/bin/stdio.mjs`. It writes the database and asks the table through the bridge (see "Queries to the table").
-- **Bridge**: `npm run bridge`, a separate process on 127.0.0.1, default port 5199 (`BRIDGE_PORT`): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
+- **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199 (`BRIDGE_PORT`): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
 - **Extension**: runs in the GM's Owlbear tab as the bridge's client, reconciles the scene to the encounter and answers the agent's queries. It fetches images from Owlbear for token art and for the `map-image` query. Mechanics: [`packages/owlbear/README.md`](../packages/owlbear/README.md).
 - **Token art library import** (`npm run import:token-art`): a third, occasional process on the same database. See [`packages/store-sqlite/README.md`](../packages/store-sqlite/README.md), Token art library.
 
@@ -80,6 +80,7 @@ Invariants the processes rely on:
 ## Token and auth
 
 - Two tokens, each a file created with mode 0600 on first run: the extension token (`BRIDGE_TOKEN_FILE`, default `~/.config/ttrpg-agents/bridge-token`) and the agent token (`BRIDGE_AGENT_TOKEN_FILE`, default `~/.config/ttrpg-agents/agent-token`). The bridge never serves the agent token.
+- The bridge's state file (`BRIDGE_STATE_FILE`, default `~/.config/ttrpg-agents/bridge-state.json`) and the detached bridge's `bridge.log` beside it are mode 0600 like the tokens: the log holds the install URL with the extension token. The lifecycle commands print the log's path, never a token; `bridge:status` reads the agent token only to send a `scene-status` query.
 - The extension gets its token from the manifest: a `manifest.json` request with the right `?token=` puts it in the popover URL fragment, and the extension reads `location.hash` and sends it in `hello`. A bad or missing token closes the socket. The same token, as `Authorization: Bearer`, authorises `POST /token-images` and `GET /token-images/<sha256>`.
 - The agent token, as `Authorization: Bearer`, authorises `POST /agent/query` and nothing else. The extension token is refused there, and the agent token on the image routes.
 - Tokens are compared in constant time before a body is read. The Host header must be a loopback name with the actual port (DNS-rebinding defence), and the WebSocket upgrade must come from the bridge's own loopback origin on `/ws`. No route sends CORS headers: the panel is served by the bridge, so its requests are same-origin.
