@@ -232,9 +232,7 @@ export function createObrAdapter(): ObrAdapter {
     },
     getRole: async () =>
       (await OBR.player.getRole()) === "GM" ? "gm" : "player",
-    getRoomId: () => {
-      throw new Error("not implemented");
-    },
+    getRoomId: () => OBR.room.id,
     isSceneReady: () => OBR.scene.isReady(),
     onSceneReadyChange: (callback) => OBR.scene.onReadyChange(callback),
     onItemsChange: (callback) => OBR.scene.items.onChange(() => callback()),
