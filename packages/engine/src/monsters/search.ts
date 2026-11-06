@@ -1,6 +1,12 @@
 import type { Monster } from "./schema.js";
 import type { MonsterIndex } from "./types.js";
 
+/** A search result: the monster and, when it matched by an old name, that alias as written. */
+export interface MonsterMatch {
+  monster: Monster;
+  alias?: string;
+}
+
 /** Look up a monster by its exact key; undefined if absent. */
 export function getMonsterByKey(
   index: MonsterIndex,
@@ -54,7 +60,10 @@ function escapeRegExp(s: string): string {
  * name, then name prefix, then whole-word match, then substring; ties go to
  * the shorter name, then alphabetical. No match yields [].
  */
-export function searchMonsters(index: MonsterIndex, query: string): Monster[] {
+export function searchMonsters(
+  index: MonsterIndex,
+  query: string,
+): MonsterMatch[] {
   const q = query.trim().toLowerCase();
   if (q === "") return [];
   const variants = queryVariants(q);
@@ -75,5 +84,5 @@ export function searchMonsters(index: MonsterIndex, query: string): Monster[] {
         a.monster.name.length - b.monster.name.length ||
         a.monster.name.localeCompare(b.monster.name),
     )
-    .map((s) => s.monster);
+    .map((s) => ({ monster: s.monster }));
 }

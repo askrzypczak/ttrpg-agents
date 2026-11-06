@@ -87,7 +87,18 @@ export function loadMonsters(sources: MonsterFileSource[]): MonsterIndex {
       }
     }
   }
-  return { monsters, byKey };
+  return { monsters, byKey, aliases: new Map() };
+}
+
+/**
+ * Add the aliases (old monster names) in `file` to `index`. Throws
+ * {@link MonsterLoadError} naming the file and entry on invalid data, an
+ * unknown key, an alias that is a current monster name, or a repeated alias.
+ */
+export function loadAliases(file: string, index: MonsterIndex): MonsterIndex {
+  void file;
+  void index;
+  throw new Error("not implemented");
 }
 
 /** Path of the committed SRD 5.2 snapshot (works from src/ and dist/). */

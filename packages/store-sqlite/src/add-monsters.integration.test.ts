@@ -314,6 +314,7 @@ describe("addMonsters", () => {
     const index = {
       monsters: [weak],
       byKey: new Map([[weak.key, weak]]),
+      aliases: new Map(),
     };
     const rng: Rng = { nextInt: () => 0 }; // every die shows its minimum (1)
     const { instances, rolls } = addMonsters(

@@ -168,7 +168,9 @@ const searchMonstersTool = defineTool({
     "Search monsters by name (case-insensitive, plural-tolerant). Returns up to 10 matches with their keys.",
   inputSchema: { query: z.string() },
   run(ctx, { query }) {
-    const matches = searchMonsters(ctx.monsters, query).slice(0, 10);
+    const matches = searchMonsters(ctx.monsters, query)
+      .slice(0, 10)
+      .map((m) => m.monster);
     if (matches.length === 0) {
       return ok(`No monsters match "${query}".`, { results: [] });
     }
