@@ -60,8 +60,8 @@ export default tseslint.config(
     // Inline directives are ignored in production source, so a boundary rule
     // (no-restricted-imports) cannot be bypassed with a comment. Tests, e2e and
     // scripts may still use them. See CLAUDE.md, Architecture.
-    files: ["packages/*/src/**/*.ts"],
-    ignores: ["packages/*/src/**/*.test.ts"],
+    files: ["packages/*/src/**/*.{ts,tsx}"],
+    ignores: ["packages/*/src/**/*.test.{ts,tsx}"],
     linterOptions: { noInlineConfig: true },
   },
   {
@@ -81,7 +81,7 @@ export default tseslint.config(
   {
     // Promise-heavy code (bridge, sockets, sync): needs type information, so
     // scope it to the sources and scripts the root tsconfig covers.
-    files: ["packages/*/src/**/*.ts", "scripts/**/*.ts"],
+    files: ["packages/*/src/**/*.{ts,tsx}", "scripts/**/*.ts"],
     languageOptions: {
       parserOptions: { projectService: true },
     },
@@ -284,7 +284,7 @@ export default tseslint.config(
     // The extension runs in the browser: it may import only the browser-safe
     // engine and protocol packages, and no Node builtins. Its tests keep these
     // restrictions too.
-    files: ["packages/owlbear/src/**/*.ts"],
+    files: ["packages/owlbear/src/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -302,8 +302,8 @@ export default tseslint.config(
   {
     // Later matching configs replace earlier rule options, so restate the
     // owlbear restrictions for production source, adding the test-data ban.
-    files: ["packages/owlbear/src/**/*.ts"],
-    ignores: ["packages/owlbear/src/**/*.test.ts"],
+    files: ["packages/owlbear/src/**/*.{ts,tsx}"],
+    ignores: ["packages/owlbear/src/**/*.test.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
