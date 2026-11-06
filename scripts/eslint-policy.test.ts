@@ -69,3 +69,53 @@ describe("inline eslint-disable policy", () => {
     expect(messages.filter((m) => m.ruleId === "no-empty-pattern")).toEqual([]);
   });
 });
+
+// Must exist on disk for the project service (see above).
+const EXTENSION_TSX = "packages/owlbear/src/panel.tsx";
+
+describe("lint policy for .tsx files", () => {
+  it("a .tsx file in the extension other than obr-adapter.ts may not import the Owlbear SDK", async () => {
+    const messages = await lint(
+      'import OBR from "@owlbear-rodeo/sdk";\nexport const sdk = OBR;\n',
+      EXTENSION_TSX,
+    );
+    expect(messages).toContainEqual(
+      expect.objectContaining({ ruleId: "no-restricted-imports", severity: 2 }),
+    );
+  });
+
+  it("an eslint-disable in a production .tsx file is ignored and reported as a warning", async () => {
+    const messages = await lint(
+      '// eslint-disable-next-line no-restricted-imports\nimport OBR from "@owlbear-rodeo/sdk";\nexport const sdk = OBR;\n',
+      EXTENSION_TSX,
+    );
+    expect(messages).toContainEqual(
+      expect.objectContaining({ ruleId: "no-restricted-imports", severity: 2 }),
+    );
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        severity: 1,
+        message: expect.stringContaining("noInlineConfig"),
+      }),
+    );
+  });
+
+  it("the type-aware promise rules apply to .tsx files", async () => {
+    const messages = await lint(
+      "async function load(): Promise<void> {}\nload();\nexport const handler: () => void = async () => {};\n",
+      EXTENSION_TSX,
+    );
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        ruleId: "@typescript-eslint/no-floating-promises",
+        severity: 2,
+      }),
+    );
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        ruleId: "@typescript-eslint/no-misused-promises",
+        severity: 2,
+      }),
+    );
+  });
+});
