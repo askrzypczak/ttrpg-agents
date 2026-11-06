@@ -4,7 +4,8 @@ import { getMonsterByKey, searchMonsters } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "./loader.js";
 
 const index = loadSrdMonsters();
-const names = (q: string) => searchMonsters(index, q).map((m) => m.name);
+const names = (q: string) =>
+  searchMonsters(index, q).map((r) => r.monster.name);
 
 describe("searchMonsters", () => {
   it("finds the shadow case-insensitively", () => {

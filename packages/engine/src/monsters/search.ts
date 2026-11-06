@@ -1,6 +1,15 @@
 import type { Monster } from "./schema.js";
 import type { MonsterIndex } from "./types.js";
 
+/**
+ * A search result: the monster and, when it matched by an old name, that alias
+ * as written. The `alias` property is absent on a match on the current name.
+ */
+export interface MonsterMatch {
+  monster: Monster;
+  alias?: string;
+}
+
 /** Look up a monster by its exact key; undefined if absent. */
 export function getMonsterByKey(
   index: MonsterIndex,
@@ -45,35 +54,74 @@ function score(name: string, q: string): number | undefined {
   return undefined;
 }
 
+/** The strongest score of any query variant against `text`. */
+function bestScore(text: string, variants: string[]): number | undefined {
+  let best: number | undefined;
+  for (const v of variants) {
+    const s = score(text, v);
+    if (s !== undefined && (best === undefined || s < best)) best = s;
+  }
+  return best;
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
- * Case-insensitive, plural-tolerant name search. Results are ranked: exact
- * name, then name prefix, then whole-word match, then substring; ties go to
- * the shorter name, then alphabetical. No match yields [].
+ * Case-insensitive, plural-tolerant search over current names and old names
+ * (aliases). Each monster appears once, with its best match: its name, or an
+ * alias that points to it when that matches more strongly. Results are ranked
+ * by match strength, then name matches before alias matches, then the shorter
+ * monster name, then alphabetical. An alias hit carries the alias as written.
+ * No match yields [].
  */
-export function searchMonsters(index: MonsterIndex, query: string): Monster[] {
+export function searchMonsters(
+  index: MonsterIndex,
+  query: string,
+): MonsterMatch[] {
   const q = query.trim().toLowerCase();
   if (q === "") return [];
   const variants = queryVariants(q);
-  const scored: { monster: Monster; rank: number }[] = [];
+  const aliasesByKey = new Map<string, string[]>();
+  for (const [alias, key] of index.aliases) {
+    const list = aliasesByKey.get(key) ?? [];
+    list.push(alias);
+    aliasesByKey.set(key, list);
+  }
+  const scored: { match: MonsterMatch; rank: number; viaAlias: boolean }[] = [];
   for (const monster of index.monsters) {
-    const name = monster.name.toLowerCase();
-    let best: number | undefined;
-    for (const v of variants) {
-      const s = score(name, v);
-      if (s !== undefined && (best === undefined || s < best)) best = s;
+    const nameRank = bestScore(monster.name.toLowerCase(), variants);
+    let bestAlias: { alias: string; rank: number } | undefined;
+    for (const alias of aliasesByKey.get(monster.key) ?? []) {
+      const rank = bestScore(alias.toLowerCase(), variants);
+      if (
+        rank !== undefined &&
+        (bestAlias === undefined || rank < bestAlias.rank)
+      ) {
+        bestAlias = { alias, rank };
+      }
     }
-    if (best !== undefined) scored.push({ monster, rank: best });
+    if (
+      bestAlias !== undefined &&
+      (nameRank === undefined || bestAlias.rank < nameRank)
+    ) {
+      scored.push({
+        match: { monster, alias: bestAlias.alias },
+        rank: bestAlias.rank,
+        viaAlias: true,
+      });
+    } else if (nameRank !== undefined) {
+      scored.push({ match: { monster }, rank: nameRank, viaAlias: false });
+    }
   }
   return scored
     .sort(
       (a, b) =>
         a.rank - b.rank ||
-        a.monster.name.length - b.monster.name.length ||
-        a.monster.name.localeCompare(b.monster.name),
+        Number(a.viaAlias) - Number(b.viaAlias) ||
+        a.match.monster.name.length - b.match.monster.name.length ||
+        a.match.monster.name.localeCompare(b.match.monster.name),
     )
-    .map((s) => s.monster);
+    .map((s) => s.match);
 }

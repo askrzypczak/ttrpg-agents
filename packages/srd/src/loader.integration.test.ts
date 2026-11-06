@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Monster } from "@ttrpg-agents/engine";
-import { MonsterLoadError, loadMonsters, loadSrdMonsters } from "./loader.js";
+import {
+  MonsterLoadError,
+  loadAliases,
+  loadMonsters,
+  loadSrdMonsters,
+} from "./loader.js";
 
 function monster(key: string, name = key): Monster {
   return {
@@ -147,5 +152,83 @@ describe("SRD snapshot", () => {
   it("is sorted by key so regeneration diffs stay clean", () => {
     const keys = srd().monsters.map((m) => m.key);
     expect(keys).toEqual([...keys].sort());
+  });
+
+  it("every committed alias resolves to a monster in the snapshot", () => {
+    const index = srd();
+    expect(index.aliases.size).toBeGreaterThan(0);
+    expect(index.aliases.get("Thug")).toBe("srd-2024_tough");
+    for (const [name, key] of index.aliases) {
+      expect(index.byKey.has(key), `${name} -> ${key}`).toBe(true);
+    }
+  });
+});
+
+describe("loadAliases", () => {
+  const base = () =>
+    loadMonsters([
+      {
+        path: write(tmp(), "monsters.json", [
+          monster("srd-2024_tough", "Tough"),
+          monster("srd-2024_warrior-veteran", "Warrior Veteran"),
+        ]),
+      },
+    ]);
+
+  function loadError(entries: unknown): { err: unknown; file: string } {
+    const file = write(tmp(), "aliases.json", entries);
+    const index = base();
+    try {
+      loadAliases(file, index);
+    } catch (e) {
+      return { err: e, file };
+    }
+    return { err: undefined, file };
+  }
+
+  it("loadAliases fails naming the file and entry when an alias points to an unknown key", () => {
+    const { err, file } = loadError([
+      { name: "Thug", key: "srd-2024_tough", note: "SRD 5.1 name" },
+      { name: "Bandit Boss", key: "srd-2024_nope", note: "SRD 5.1 name" },
+    ]);
+    expect(err).toBeInstanceOf(MonsterLoadError);
+    expect((err as Error).message).toContain(file);
+    expect((err as Error).message).toContain("Bandit Boss");
+  });
+
+  it("loadAliases fails naming the file and entry when an alias is the current name of a monster", () => {
+    const { err, file } = loadError([
+      { name: "Thug", key: "srd-2024_tough", note: "SRD 5.1 name" },
+      {
+        name: "warrior veteran",
+        key: "srd-2024_tough",
+        note: "SRD 5.1 name",
+      },
+    ]);
+    expect(err).toBeInstanceOf(MonsterLoadError);
+    expect((err as Error).message).toContain(file);
+    expect((err as Error).message).toContain("warrior veteran");
+  });
+
+  it("loadAliases fails naming the file and entry when an old name appears twice", () => {
+    const { err, file } = loadError([
+      { name: "Thug", key: "srd-2024_tough", note: "SRD 5.1 name" },
+      { name: "Veteran", key: "srd-2024_warrior-veteran", note: "SRD 5.1" },
+      { name: "THUG", key: "srd-2024_warrior-veteran", note: "SRD 5.1 name" },
+    ]);
+    expect(err).toBeInstanceOf(MonsterLoadError);
+    expect((err as Error).message).toContain(file);
+    expect((err as Error).message).toContain("THUG");
+  });
+
+  it("loadAliases fails naming the file and entry when the file is not an array or an entry is malformed", () => {
+    const notArray = loadError({});
+    expect(notArray.err).toBeInstanceOf(MonsterLoadError);
+    expect((notArray.err as Error).message).toContain(notArray.file);
+
+    const malformed = loadError([{ key: "srd-2024_tough", note: "x" }]);
+    expect(malformed.err).toBeInstanceOf(MonsterLoadError);
+    expect((malformed.err as Error).message).toContain(malformed.file);
+    expect((malformed.err as Error).message).toContain("#0");
   });
 });

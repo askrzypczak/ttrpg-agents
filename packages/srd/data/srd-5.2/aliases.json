@@ -1,0 +1,92 @@
+[
+  {
+    "name": "Acolyte",
+    "key": "srd-2024_priest-acolyte",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Androsphinx",
+    "key": "srd-2024_sphinx-of-valor",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Cult Fanatic",
+    "key": "srd-2024_cultist-fanatic",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Giant Poisonous Snake",
+    "key": "srd-2024_giant-venomous-snake",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Giant Sea Horse",
+    "key": "srd-2024_giant-seahorse",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Gynosphinx",
+    "key": "srd-2024_sphinx-of-lore",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Poisonous Snake",
+    "key": "srd-2024_venomous-snake",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Quipper",
+    "key": "srd-2024_piranha",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Sea Horse",
+    "key": "srd-2024_seahorse",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Swarm of Beetles",
+    "key": "srd-2024_swarm-of-insects",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Swarm of Centipedes",
+    "key": "srd-2024_swarm-of-insects",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Swarm of Poisonous Snakes",
+    "key": "srd-2024_swarm-of-venomous-snakes",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Swarm of Quippers",
+    "key": "srd-2024_swarm-of-piranhas",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Swarm of Spiders",
+    "key": "srd-2024_swarm-of-insects",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Swarm of Wasps",
+    "key": "srd-2024_swarm-of-insects",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Thug",
+    "key": "srd-2024_tough",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Tribal Warrior",
+    "key": "srd-2024_warrior-infantry",
+    "note": "SRD 5.1 name"
+  },
+  {
+    "name": "Veteran",
+    "key": "srd-2024_warrior-veteran",
+    "note": "SRD 5.1 name"
+  }
+]
