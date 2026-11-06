@@ -15,6 +15,11 @@ Owlbear Rodeo extension (GM-only panel that talks to the local bridge).
 - Logic modules (`hidden-token.ts`, ...) take an `ObrAdapter`, never the SDK.
   `initiative.ts` and `stat-bubbles.ts` are pure projectors, not logic modules. `main.ts` wires
   `createObrAdapter()` into the logic modules.
+- The panel is React. `src/panel-state.ts` (`panelView`) turns the panel's
+  state into a `PanelView`; `src/panel.tsx` (`Panel`) renders a `PanelView`
+  and calls its `PanelActions` from the controls. `index.html` holds only the
+  root element. `main.ts` wires the socket, sync and overlay, builds the
+  `PanelView` and renders `Panel` into the root (with `createElement`, no JSX).
 
 ## Encounter sync
 
@@ -125,15 +130,15 @@ The store's answer is the `table` event carrying the command id: it pushes
 nothing for the field the command set, and pushes a field the command did not
 set that the store changed. An
 acknowledgement that differs from the sent value keeps the typed value on the
-token and calls `options.onEditDiffers` with a note (`main.ts` shows it in
+token and calls `options.onEditDiffers` with a note (the panel shows it in
 `#edit-note` until `options.onStoreChange` signals the next store change). A
 refused edit keeps the typed value, is settled so it is not sent again, and
 shows the bridge's error.
 
 A snapshot pushes the store's value over a kept clamp or refusal. Each such
 write is reported in `plan.overrides`; the sync calls `options.onOverride(text)`
-once per record after the write, and `main.ts` lists them under `#overrides`
-until the DM presses `#dismiss-overrides` (in memory only; `onStoreChange`
+once per record after the write, and `main.ts` keeps them for `Panel` to list
+under `#overrides` until the DM presses `#dismiss-overrides` (in memory only; `onStoreChange`
 leaves the list alone). A snapshot on the same connection (sent in place of an
 unreadable change-log row) may cover the answers of edits already sent, so the
 sync forgets them; one the store has not applied yet is planned and sent
@@ -206,8 +211,8 @@ reported again.
 token with no usable art. `createEncounterSync` then calls
 `ObrAdapter.pickImage()` once per such type, inside the reconcile (an art
 step): `options.onArtStep` hears the monster name and its place among the
-reconcile's picks (`main.ts` shows "Art 1 of 2: ..." in `#art-prompt` and opens
-the panel). A valid pick (`publishedTokenArtSchema`) is sent as a
+reconcile's picks (the panel shows "Art 1 of 2: ..." in `#art-prompt` and
+`main.ts` opens the panel). A valid pick (`publishedTokenArtSchema`) is sent as a
 `token-art-set` (no envelope id, no answer) and re-planned, and the type's
 existing circles are replaced with image tokens (`reskins`, below); a cancel, a
 picker error or an invalid image creates a circle, shows nothing, and the
@@ -250,8 +255,8 @@ edge; it does not reach Owlbear's origin. A gone asset answers HTTP 400 with a
 JSON body whose `code` is `NoSuchKey`, as a url that never existed does, so it
 reads as gone.
 
-`options.onReuploadsChange` hears the list (`Reupload`: monster key, name via `monsterTypeName`, asset name `ttrpg-art-<first 16 hex of the hash>` via `republishName`, uploaded this session or not); `main.ts` shows it in `#reupload` near the top of the
-panel, one row per type, and opens the panel when a type joins.
+`options.onReuploadsChange` hears the list (`Reupload`: monster key, name via `monsterTypeName`, asset name `ttrpg-art-<first 16 hex of the hash>` via `republishName`, uploaded this session or not); `Panel` shows it in `#reupload` near the top of the
+panel, one row per type, and `main.ts` opens the panel when a type joins.
 
 The row's "Re-upload" calls `sync.reuploadArt(monsterKey)`: the bytes are
 loaded from the bridge and uploaded to the GM's library with
@@ -270,9 +275,9 @@ one runs is ignored.
 changes (`TypeArt`: monster key, name via `monsterTypeName`, state): each
 monster type with an instance in the encounter, once, in encounter order, as
 `reupload` (on the re-upload list), `art` (usable art), `declined` (its fresh
-pick was cancelled, failed or invalid this session) or `none`. `main.ts`
+pick was cancelled, failed or invalid this session) or `none`. `Panel`
 shows it in `#type-art`, below the overrides, with a "Pick art" button per
-row, and does not open the panel for it. The re-upload box stays as it is; a
+row, and `main.ts` does not open the panel for it. The re-upload box stays as it is; a
 type on it is also in this list, so its art can be replaced too.
 
 "Pick art" calls `sync.repickArt(monsterKey)`, which opens the picker with no
@@ -360,9 +365,9 @@ It only ever removes its own items (by key), and it writes local items only
 (`ObrAdapter.addLocalItems`, `getLocalItems`, `deleteLocalItems` over
 `OBR.scene.local`): nothing reaches the scene or other clients. A failure goes
 to `onError` (`main.ts` logs it) and the next trigger redraws from scratch.
-`main.ts` creates it for a GM with a token, routes `map-rooms` to it and wires
-the panel's `#overlay-toggle` ("Show map grid and rooms", on at every load,
-not saved).
+`main.ts` creates it for a GM with a token, routes `map-rooms` to it and passes
+`overlay.setEnabled` to `Panel`, which renders `#overlay-toggle` ("Show map grid
+and rooms", on at every load, not saved).
 
 ## Map image
 
@@ -397,6 +402,11 @@ the unit fake: pass it as the `local` option or read it from the result's
 `local`. They reject with `MissingDataError` while the scene is not ready.
 
 Use `scene` for assertions and to drive changes (`scene.setReady(true)`). The e2e fake host reuses `SceneModel`.
+
+Component tests live in `src/*.test.tsx` and run under jsdom: the file starts
+with `// @vitest-environment jsdom` and renders with `createRoot` from
+`react-dom/client` inside `act` from `react` (no Testing Library), then
+queries the container's DOM.
 
 ## E2E (Playwright, no Owlbear account)
 
