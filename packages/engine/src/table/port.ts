@@ -18,6 +18,11 @@ export interface TableSceneStatus {
   appliedInstanceCount: number;
   /** The monster types whose art waits on the GM. */
   artWaits: TableArtWait[];
+  /**
+   * The Owlbear room the GM tab is in; absent when the tab runs an extension
+   * older than this field.
+   */
+  roomId?: string;
 }
 
 /** One map image on the table, with its image grid and transform. */

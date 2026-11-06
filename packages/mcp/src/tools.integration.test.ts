@@ -923,6 +923,7 @@ describe("table_status", () => {
       tokenCount: 3,
       appliedInstanceCount: 3,
       artWaits: [],
+      roomId: "room-abc",
     });
     const r = await call("table_status");
     expect(r.isError).toBeFalsy();
@@ -937,7 +938,65 @@ describe("table_status", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: true,
+      roomId: "room-abc",
     });
+  });
+
+  it("table_status names the room in its summary line and structured result when in sync", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [],
+      roomId: "room-abc",
+    });
+    const r = await call("table_status");
+    expect(r.isError).toBeFalsy();
+    expect(text(r).split("\n")[0]).toBe(
+      "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+    );
+    expect(r.structuredContent).toMatchObject({
+      inSync: true,
+      roomId: "room-abc",
+    });
+  });
+
+  it("table_status names the room in its summary line when out of sync", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    ctx.table = tableAnswering({
+      sceneReady: false,
+      tokenCount: 0,
+      appliedInstanceCount: 0,
+      artWaits: [],
+      roomId: "room-xyz",
+    });
+    const r = await call("table_status");
+    expect(r.isError).toBeFalsy();
+    expect(text(r).split("\n")[0]).toBe(
+      "Owlbear is out of sync (room room-xyz): scene not ready, 0 tokens on the scene, 0 instances applied, 3 in the encounter.",
+    );
+    expect(r.structuredContent).toMatchObject({
+      inSync: false,
+      roomId: "room-xyz",
+    });
+  });
+
+  it("table_status without a room id says the room is unknown and to reload the Owlbear tab, and leaves `roomId` out of its structured result", async () => {
+    seed(item("A", 1), item("B", 2), item("C", 3));
+    ctx.table = tableAnswering({
+      sceneReady: true,
+      tokenCount: 3,
+      appliedInstanceCount: 3,
+      artWaits: [],
+    });
+    const r = await call("table_status");
+    expect(r.isError).toBeFalsy();
+    expect(text(r).split("\n")[0]).toBe(
+      "Owlbear is in sync (room unknown: reload the Owlbear tab): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+    );
+    expect(r.structuredContent).toMatchObject({ inSync: true });
+    expect(r.structuredContent).not.toHaveProperty("roomId");
   });
 
   it("`table_status` reports out of sync with all three counts in the text", async () => {
@@ -979,6 +1038,7 @@ describe("table_status", () => {
       artWaits: [
         { monsterKey: "srd-2024_ogre", monsterName: "Ogre", step: "pick" },
       ],
+      roomId: "room-abc",
     });
     const r = await call("table_status");
     expect(r.isError).toBeFalsy();
@@ -986,7 +1046,7 @@ describe("table_status", () => {
       "Tokens are waiting on the GM: art for Ogre is being chosen in Owlbear's image picker; cancelling it gives circles.";
     const lines = text(r).split("\n");
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatch(/^Owlbear is out of sync: /);
+    expect(lines[0]).toMatch(/^Owlbear is out of sync \(room room-abc\): /);
     expect(lines[1]).toBe(line);
     expect(r.structuredContent).toMatchObject({
       inSync: false,
@@ -1010,6 +1070,7 @@ describe("table_status", () => {
         reupload("srd-2024_wolf", "Wolf"),
         reupload("srd-2024_owlbear", "Owlbear"),
       ],
+      roomId: "room-abc",
     });
     const two = await call("table_status");
     expect(two.isError).toBeFalsy();
@@ -1018,7 +1079,7 @@ describe("table_status", () => {
     const twoLines = text(two).split("\n");
     expect(twoLines).toHaveLength(2);
     // A re-upload alone leaves the verdict to the counts.
-    expect(twoLines[0]).toMatch(/^Owlbear is in sync: /);
+    expect(twoLines[0]).toMatch(/^Owlbear is in sync \(room room-abc\): /);
     expect(twoLines[1]).toBe(twoLine);
     expect(two.structuredContent).toMatchObject({
       inSync: true,
@@ -1060,11 +1121,12 @@ describe("table_status", () => {
       tokenCount: 3,
       appliedInstanceCount: 3,
       artWaits: [],
+      roomId: "room-abc",
     });
     const r = await call("table_status");
     expect(r.isError).toBeFalsy();
     expect(text(r)).toBe(
-      "Owlbear is in sync: scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+      "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
     );
     expect(r.structuredContent).toEqual({
       sceneReady: true,
@@ -1072,8 +1134,9 @@ describe("table_status", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: true,
+      roomId: "room-abc",
       summary:
-        "Owlbear is in sync: scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+        "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
     });
   });
 });

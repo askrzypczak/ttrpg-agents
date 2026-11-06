@@ -976,7 +976,7 @@ const tableStatusTool = defineTool({
   name: "table_status",
   annotations: { readOnlyHint: true },
   description:
-    "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count) and compare it with the encounter; also names the monster types whose token art waits on the GM, with what to click (waitingOnGm). Needs the bridge running.",
+    "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count, room id) and compare it with the encounter; also names the monster types whose token art waits on the GM, with what to click (waitingOnGm). Needs the bridge running.",
   inputSchema: {},
   async run(ctx) {
     const {
@@ -986,11 +986,16 @@ const tableStatusTool = defineTool({
       encounterCount,
       inSync,
       artWaits,
+      roomId,
     } = await getTableStatus(ctx.repo, ctx.table);
     const counts = `${String(tokenCount)} tokens on the scene, ${String(appliedInstanceCount)} instances applied, ${String(encounterCount)} in the encounter`;
+    const room =
+      roomId === undefined
+        ? "room unknown: reload the Owlbear tab"
+        : `room ${roomId}`;
     const status = inSync
-      ? `Owlbear is in sync: scene ready, ${counts}.`
-      : `Owlbear is out of sync: ${sceneReady ? "scene ready" : "scene not ready"}, ${counts}.`;
+      ? `Owlbear is in sync (${room}): scene ready, ${counts}.`
+      : `Owlbear is out of sync (${room}): ${sceneReady ? "scene ready" : "scene not ready"}, ${counts}.`;
     const waitingOnGm = artWaitLines(artWaits);
     return ok([status, ...waitingOnGm].join("\n"), {
       sceneReady,
@@ -998,6 +1003,7 @@ const tableStatusTool = defineTool({
       appliedInstanceCount,
       encounterCount,
       inSync,
+      ...(roomId !== undefined ? { roomId } : {}),
       ...(waitingOnGm.length > 0 ? { waitingOnGm } : {}),
     });
   },

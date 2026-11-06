@@ -63,6 +63,7 @@ export async function handleQuery(
           tokenCount,
           appliedInstanceCount: sync.appliedInstanceCount(),
           artWaits: sync.artWaits(),
+          roomId: obr.getRoomId(),
         },
       };
     }

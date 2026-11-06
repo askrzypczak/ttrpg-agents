@@ -78,6 +78,30 @@ describe("createBridgeTable", () => {
     });
   });
 
+  it("`sceneStatus` passes the room id from an ok `scene-status` result through", async () => {
+    const { client } = clientAnswering({
+      ok: true,
+      result: {
+        name: "scene-status",
+        result: {
+          sceneReady: true,
+          tokenCount: 1,
+          appliedInstanceCount: 1,
+          artWaits: [],
+          roomId: "room-abc",
+        },
+      },
+    });
+    const status = await createBridgeTable(client).sceneStatus();
+    expect(status).toEqual({
+      sceneReady: true,
+      tokenCount: 1,
+      appliedInstanceCount: 1,
+      artWaits: [],
+      roomId: "room-abc",
+    });
+  });
+
   it("throws `TableUnavailableError` carrying the bridge's message for any `{ ok: false }` response, each error code", async () => {
     for (const code of agentErrorCodeSchema.options) {
       const message = `bridge says ${code}`;

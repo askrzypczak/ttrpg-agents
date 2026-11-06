@@ -69,6 +69,7 @@ export function createFakeObr(
       void Promise.resolve().then(callback);
     },
     getRole: () => Promise.resolve(scene.role),
+    getRoomId: () => "fake-room",
     isSceneReady: () => Promise.resolve(scene.isReady()),
     onSceneReadyChange: (callback) =>
       scene.onChange((change) => {
