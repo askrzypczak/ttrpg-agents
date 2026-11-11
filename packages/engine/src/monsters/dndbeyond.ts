@@ -9,7 +9,8 @@ export function dndBeyondUrl(
   index: MonsterIndex,
   monster: Monster,
 ): string | undefined {
-  void index;
-  void monster;
-  throw new Error("not implemented");
+  const segment = index.dndBeyondPages.get(monster.key);
+  return segment === undefined
+    ? undefined
+    : `https://www.dndbeyond.com/monsters/${encodeURIComponent(segment)}`;
 }
