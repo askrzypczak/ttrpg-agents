@@ -24,7 +24,11 @@
     "coverage": "node scripts/coverage.ts",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "bridge": "npm run start -w @ttrpg-agents/bridge"
+    "bridge": "node packages/bridge/dist/cli.js",
+    "bridge:start": "node scripts/bridge.ts start",
+    "bridge:stop": "node scripts/bridge.ts stop",
+    "bridge:restart": "node scripts/bridge.ts restart",
+    "bridge:status": "node scripts/bridge.ts status"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
