@@ -21,7 +21,9 @@ Each tool's reply lines come back as the `summary` of its result (the same lines
 
 - Call `search_monsters` for each monster name first, unless the key is already known from this session.
 - If one match is clear (exact or plural-tolerant name match, or a single result), use it without asking.
+- If the result you use came from an alias, the reply has a line such as "Thug is now Tough (srd-5.2)."; relay that line once.
 - If several unrelated or differently-sized matches fit (for example "a dragon" returns many dragons, "a goblin" returns warrior, boss and minion), ask the DM which one, listing the options briefly, and add nothing until they answer.
+- If `search_monsters` finds nothing, say so and ask the DM; never map an old or unknown name to another monster from memory.
 
 ## Never invent numbers
 

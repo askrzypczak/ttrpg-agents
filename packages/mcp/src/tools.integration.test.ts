@@ -200,6 +200,35 @@ describe("search_monsters", () => {
     expect(r.structuredContent?.["results"]).toEqual([]);
     expect(text(r)).toContain("No monsters match");
   });
+
+  it('search_monsters finds Tough for "thug" and "thugs" and names the rename in its summary and results', async () => {
+    for (const query of ["thug", "thugs"]) {
+      const r = await call("search_monsters", { query });
+      expect(r.isError).toBeUndefined();
+      const results = r.structuredContent?.["results"] as Record<
+        string,
+        unknown
+      >[];
+      expect(results[0]).toMatchObject({
+        key: "srd-2024_tough",
+        name: "Tough",
+        source: "srd-5.2",
+        alias: "Thug",
+      });
+      const lines = text(r).split("\n");
+      expect(lines[0]).toBe("Thug is now Tough (srd-5.2).");
+      expect(text(r)).toContain("srd-2024_tough");
+      expect(r.structuredContent?.["summary"]).toBe(text(r));
+    }
+    // A plain name match carries no rename.
+    const shadow = await call("search_monsters", { query: "shadow" });
+    const shadowResults = shadow.structuredContent?.["results"] as Record<
+      string,
+      unknown
+    >[];
+    expect(shadowResults[0]).not.toHaveProperty("alias");
+    expect(text(shadow)).not.toContain(" is now ");
+  });
 });
 
 describe("get_statblock", () => {

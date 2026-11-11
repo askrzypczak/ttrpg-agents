@@ -23,7 +23,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 
 | Tool                   | Purpose                                                                                                                                           |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_monsters`      | Name search (top 10) with keys                                                                                                                    |
+| `search_monsters`      | Name search (top 10) with keys; old SRD 5.1 names match too, shown as renamed (alias) hits                                                        |
 | `get_statblock`        | Markdown statblock by key                                                                                                                         |
 | `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init; `join` (id or exact name) adds to that monster's group and initiative           |
 | `preview_monsters`     | Dry run of `add_monsters` (same arguments and checks): names, AC, average HP and dice, init modifier, footprint, room cells; adds nothing         |

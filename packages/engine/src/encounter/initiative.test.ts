@@ -49,6 +49,7 @@ const bestiary = [monster("goblin", "Goblin", 2), monster("ogre", "Ogre", -1)];
 const monsters: MonsterIndex = {
   monsters: bestiary,
   byKey: new Map(bestiary.map((m) => [m.key, m] as const)),
+  aliases: new Map(),
 };
 
 const NOW = "2026-01-01T00:00:00.000Z";

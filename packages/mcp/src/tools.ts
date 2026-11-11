@@ -165,24 +165,33 @@ const searchMonstersTool = defineTool({
   name: "search_monsters",
   annotations: { readOnlyHint: true },
   description:
-    "Search monsters by name (case-insensitive, plural-tolerant). Returns up to 10 matches with their keys.",
+    "Search monsters by name (case-insensitive, plural-tolerant). Also matches older SRD 5.1 names (aliases) and says when a monster was renamed. Returns up to 10 matches with their keys.",
   inputSchema: { query: z.string() },
   run(ctx, { query }) {
     const matches = searchMonsters(ctx.monsters, query).slice(0, 10);
     if (matches.length === 0) {
       return ok(`No monsters match "${query}".`, { results: [] });
     }
+    const renames = matches.flatMap((m) =>
+      m.alias === undefined
+        ? []
+        : [`${m.alias} is now ${m.monster.name} (${m.monster.source}).`],
+    );
     return ok(
-      table(
-        ["key", "name", "CR", "source"],
-        matches.map((m) => [m.key, m.name, m.cr, m.source]),
-      ),
+      [
+        ...renames,
+        table(
+          ["key", "name", "CR", "source"],
+          matches.map(({ monster: m }) => [m.key, m.name, m.cr, m.source]),
+        ),
+      ].join("\n"),
       {
-        results: matches.map((m) => ({
+        results: matches.map(({ monster: m, alias }) => ({
           key: m.key,
           name: m.name,
           cr: m.cr,
           source: m.source,
+          ...(alias === undefined ? {} : { alias }),
         })),
       },
     );
