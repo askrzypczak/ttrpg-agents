@@ -92,6 +92,7 @@ const monsters: MonsterIndex = {
   monsters: bestiary,
   byKey: new Map(bestiary.map((m) => [m.key, m] as const)),
   aliases: new Map(),
+  dndBeyondPages: new Map(),
 };
 
 /** Test-only Rng: yields the given values in order, cycling, each reduced mod max; counts calls. */

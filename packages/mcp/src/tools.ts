@@ -214,6 +214,17 @@ const getStatblockTool = defineTool({
   },
 });
 
+const openStatblockTool = defineTool({
+  name: "open_statblock",
+  annotations: { readOnlyHint: true },
+  description:
+    "Open a monster's D&D Beyond 2024 Monster Manual page in the DM's default browser, by its exact key; replies with the link. The page needs a D&D Beyond login that owns the 2024 Monster Manual.",
+  inputSchema: { key: z.string() },
+  run() {
+    return fail("not implemented");
+  },
+});
+
 /** The add_monsters input, shared with preview_monsters so the same arguments validate the same way. */
 const addMonstersInput = {
   groups: z.array(
@@ -1633,6 +1644,7 @@ function clearedListLine(cleared: readonly MonsterInstance[]): string[] {
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
+  openStatblockTool,
   addMonstersTool,
   previewMonstersTool,
   moveMonstersTool,

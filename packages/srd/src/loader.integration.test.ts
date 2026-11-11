@@ -2,10 +2,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { Monster } from "@ttrpg-agents/engine";
+import { dndBeyondUrl, type Monster } from "@ttrpg-agents/engine";
 import {
   MonsterLoadError,
   loadAliases,
+  loadDndBeyondPages,
   loadMonsters,
   loadSrdMonsters,
 } from "./loader.js";
@@ -162,6 +163,39 @@ describe("SRD snapshot", () => {
       expect(index.byKey.has(key), `${name} -> ${key}`).toBe(true);
     }
   });
+
+  it("the SRD snapshot's D&D Beyond URLs for Aboleth, Goblin Warrior, Adult Red Dragon, Will-o'-Wisp and Warhorse Skeleton are their 2024 pages", () => {
+    const index = srd();
+    const url = (key: string) => {
+      const m = index.byKey.get(key);
+      expect(m, key).toBeDefined();
+      return dndBeyondUrl(index, m as Monster);
+    };
+    expect({
+      aboleth: url("srd-2024_aboleth"),
+      goblinWarrior: url("srd-2024_goblin-warrior"),
+      adultRedDragon: url("srd-2024_adult-red-dragon"),
+      willOWisp: url("srd-2024_will-o-wisp"),
+      warhorseSkeleton: url("srd-2024_warhorse-skeleton"),
+    }).toEqual({
+      aboleth: "https://www.dndbeyond.com/monsters/5194867-aboleth",
+      goblinWarrior:
+        "https://www.dndbeyond.com/monsters/5195050-goblin-warrior",
+      adultRedDragon:
+        "https://www.dndbeyond.com/monsters/5194875-adult-red-dragon",
+      willOWisp: "https://www.dndbeyond.com/monsters/5195270-will-o-wisp",
+      warhorseSkeleton:
+        "https://www.dndbeyond.com/monsters/5195257-warhorse-skeleton",
+    });
+  });
+
+  it("every SRD monster has a D&D Beyond URL except Giant Fly, which has no 2024 page", () => {
+    const index = srd();
+    const without = index.monsters
+      .filter((m) => dndBeyondUrl(index, m) === undefined)
+      .map((m) => m.key);
+    expect(without).toEqual(["srd-2024_giant-fly"]);
+  });
 });
 
 describe("loadAliases", () => {
@@ -230,5 +264,52 @@ describe("loadAliases", () => {
     expect(malformed.err).toBeInstanceOf(MonsterLoadError);
     expect((malformed.err as Error).message).toContain(malformed.file);
     expect((malformed.err as Error).message).toContain("#0");
+  });
+});
+
+describe("loadDndBeyondPages", () => {
+  const base = () =>
+    loadMonsters([
+      {
+        path: write(tmp(), "monsters.json", [
+          monster("srd-2024_aboleth", "Aboleth"),
+          monster("srd-2024_goblin-warrior", "Goblin Warrior"),
+        ]),
+      },
+    ]);
+
+  function loadError(data: unknown): { err: unknown; file: string } {
+    const file = write(tmp(), "dndbeyond.json", data);
+    const index = base();
+    try {
+      loadDndBeyondPages(file, index);
+    } catch (e) {
+      return { err: e, file };
+    }
+    return { err: undefined, file };
+  }
+
+  it("loadDndBeyondPages fails naming the file and key when a key is not in the snapshot", () => {
+    const { err, file } = loadError({
+      "srd-2024_aboleth": "5194867-aboleth",
+      "srd-2024_nope": "5199999-nope",
+    });
+    expect(err).toBeInstanceOf(MonsterLoadError);
+    expect((err as Error).message).toContain(file);
+    expect((err as Error).message).toContain("srd-2024_nope");
+  });
+
+  it("loadDndBeyondPages fails naming the file when the file is not an object or a page is not `<id>-<slug>`", () => {
+    const cases: unknown[] = [
+      ["srd-2024_aboleth", "5194867-aboleth"],
+      { "srd-2024_aboleth": "https://evil.example/x" },
+      { "srd-2024_aboleth": "../5194867-aboleth" },
+      { "srd-2024_aboleth": 5194867 },
+    ];
+    for (const data of cases) {
+      const { err, file } = loadError(data);
+      expect(err, JSON.stringify(data)).toBeInstanceOf(MonsterLoadError);
+      expect((err as Error).message, JSON.stringify(data)).toContain(file);
+    }
   });
 });

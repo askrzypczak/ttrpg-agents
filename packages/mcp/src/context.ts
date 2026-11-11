@@ -1,4 +1,5 @@
 import type {
+  BrowserPort,
   EncounterRepository,
   MapRepository,
   MonsterIndex,
@@ -10,6 +11,8 @@ import type {
 export interface ToolContext {
   /** Asks the table (in production the Owlbear GM tab, via the bridge). */
   table: TablePort;
+  /** Shows a page to the DM (in production the system browser). */
+  browser: BrowserPort;
   repo: EncounterRepository;
   /** Registered maps and the active one. */
   maps: MapRepository;

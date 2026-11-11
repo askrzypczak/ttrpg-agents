@@ -41,6 +41,7 @@ beforeEach(() => {
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${++groupN}`,
+    browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     newCommandId: () => "command",
   };
 });

@@ -4,6 +4,7 @@ import { tools, type ToolAnnotations } from "./tools.js";
 const expected: Record<string, ToolAnnotations | undefined> = {
   search_monsters: { readOnlyHint: true },
   get_statblock: { readOnlyHint: true },
+  open_statblock: { readOnlyHint: true },
   list_encounter: { readOnlyHint: true },
   add_monsters: { destructiveHint: false },
   preview_monsters: { readOnlyHint: true },

@@ -11,6 +11,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { createServer } from "./server.js";
+import { createSystemBrowser } from "./system-browser.js";
 
 const rng: Rng = { nextInt: (maxExclusive) => randomInt(maxExclusive) };
 
@@ -18,6 +19,7 @@ async function main(): Promise<void> {
   const db = openDatabase();
   const server = createServer({
     table: createBridgeTable(),
+    browser: createSystemBrowser(),
     repo: new SqliteEncounterRepository(db),
     maps: new SqliteMapRepository(db),
     monsters: loadSrdMonsters(),

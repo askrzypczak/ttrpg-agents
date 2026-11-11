@@ -92,7 +92,7 @@ export function loadMonsters(sources: MonsterFileSource[]): MonsterIndex {
       }
     }
   }
-  return { monsters, byKey, aliases: new Map() };
+  return { monsters, byKey, aliases: new Map(), dndBeyondPages: new Map() };
 }
 
 const aliasEntrySchema = z.object({
@@ -156,6 +156,22 @@ export function loadAliases(file: string, index: MonsterIndex): MonsterIndex {
     aliases.set(name, key);
   }
   return { ...index, aliases };
+}
+
+/**
+ * Add the D&D Beyond 2024 pages in `file` to `index`. The file holds a JSON
+ * object mapping monster keys to page path segments `<id>-<slug>`. Throws
+ * {@link MonsterLoadError} naming the file (and the key, where there is one)
+ * when the file is not an object, a key is not in the index, or a value is
+ * not an `<id>-<slug>` string.
+ */
+export function loadDndBeyondPages(
+  file: string,
+  index: MonsterIndex,
+): MonsterIndex {
+  void file;
+  void index;
+  throw new Error("not implemented");
 }
 
 /** Path of the committed SRD 5.2 snapshot (works from src/ and dist/). */
