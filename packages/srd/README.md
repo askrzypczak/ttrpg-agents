@@ -5,7 +5,7 @@ SRD 5.2 monster data adapter: the committed snapshot, its loader and the import 
 ## Monsters
 
 - `src/map-open5e.ts`: pure mapper from an Open5e v2 creature to `Monster`.
-- `src/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadAliases(file, index)` adds the alias file's entries (see Aliases). `loadSrdMonsters()` loads the committed snapshot with its aliases. A private source can be added later by passing another `{ path }`.
+- `src/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadAliases(file, index)` adds the alias file's entries (see Aliases). `loadDndBeyondPages(file, index)` adds the D&D Beyond page file's entries (see D&D Beyond pages). `loadSrdMonsters()` loads the committed snapshot with its aliases and pages. A private source can be added later by passing another `{ path }`.
 
 ## SRD 5.2 data
 
@@ -28,3 +28,9 @@ The script (`scripts/import-srd.ts`) pages through `https://api.open5e.com/v2/cr
 `loadAliases` (used by `loadSrdMonsters()`) fails, naming the file and entry, when an entry is malformed, its key is not in the snapshot, its name is a current monster name, or its name repeats an earlier entry (names compare case-insensitively). The test suite checks that every committed alias resolves.
 
 A new pair needs evidence in its PR that it is the SRD 5.1 to 5.2 successor: the same role and CR, or the reason it differs.
+
+## D&D Beyond pages
+
+`data/srd-5.2/dndbeyond.json` is a JSON object that maps each monster key to its D&D Beyond 2024 page path `<id>-<slug>` (the part after `/monsters/`), sorted by key. It is hand-curated from the maintainer's harvest of the Free Rules creature page (see #278), not written by the import script. The slug is required: D&D Beyond returns 404 without it.
+
+`loadDndBeyondPages` (used by `loadSrdMonsters()`) fails, naming the file and entry, when the file is not an object, a key is not in the snapshot or a value is not `<id>-<slug>`. Giant Fly has no 2024 page and no entry; the test suite lists it as the one exception.

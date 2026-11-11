@@ -15,12 +15,13 @@ flowchart LR
   end
   subgraph core["Engine (no I/O)"]
     uc["use cases: addMonsters, getTableStatus, useMap, ..."]
-    ports["ports: EncounterRepository, MonsterIndex, TablePort, MapRepository"]
+    ports["ports: EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort"]
   end
   subgraph driven["Driven adapters"]
     store["store-sqlite"]
     srd["srd"]
     bclient["bridge client"]
+    sysbrowser["mcp system browser (macOS open)"]
   end
   mcp --> uc
   bsrv -->|"reads EncounterRepository and MapRepository, reads and writes TokenArtRepository and TokenImageRepository"| ports
@@ -28,8 +29,10 @@ flowchart LR
   ports -.implemented by.-> store
   ports -.implemented by.-> srd
   ports -.implemented by.-> bclient
+  ports -.implemented by.-> sysbrowser
   store --> db[("SQLite")]
   bclient -->|"HTTP + agent token (queries only)"| bsrv
+  sysbrowser --> browser["DM's browser"]
   bsrv <-->|"WebSocket + token"| ext["Owlbear extension (protocol)"]
   ext -->|"HTTP POST and GET /token-images + token"| bsrv
 ```
@@ -45,6 +48,7 @@ flowchart LR
   claude["Claude Code"] -->|"stdio"| mcp["MCP server"]
   mcp -->|"writes"| db[("SQLite file")]
   mcp -->|"TablePort via the bridge client: POST /agent/query"| bridge
+  mcp -->|"open_statblock: macOS open"| browser["DM's browser"]
   bridge["Bridge"] -->|"polls"| db
   ext["Owlbear extension"] <-->|"WebSocket + token"| bridge
   ext -->|"HTTP POST and GET /token-images + token"| bridge
@@ -54,6 +58,7 @@ flowchart LR
 ## Processes
 
 - **MCP server**: stdio, started by Claude Code from `.mcp.json` through `packages/mcp/bin/stdio.mjs`. It writes the database and asks the table through the bridge (see "Queries to the table").
+- **Browser opener**: the MCP server runs macOS `open <url>` for `open_statblock`, a short-lived process that hands a D&D Beyond page to the DM's default browser (other platforms are refused; the reply still carries the link).
 - **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199 (`BRIDGE_PORT`): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
 - **Extension**: runs in the GM's Owlbear tab as the bridge's client, reconciles the scene to the encounter and answers the agent's queries. It fetches images from Owlbear for token art and for the `map-image` query. Mechanics: [`packages/owlbear/README.md`](../packages/owlbear/README.md).
 - **Token art library import** (`npm run import:token-art`): a third, occasional process on the same database. See [`packages/store-sqlite/README.md`](../packages/store-sqlite/README.md), Token art library.
