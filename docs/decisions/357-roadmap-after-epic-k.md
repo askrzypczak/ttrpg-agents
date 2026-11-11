@@ -117,3 +117,129 @@ PR: [#357](https://github.com/askrzypczak/ttrpg-agents/pull/357). No ticket: the
 - Where: `MONSTER_SOURCES` (`packages/engine/src/monsters/schema.ts`); `MonsterIndex` (`packages/engine/src/monsters/types.ts`).
 - Revisit if: a second rule system is wanted (129.1), or on-demand import is too slow for a whole book.
 - Status: active
+
+## 357.11 After the review, scene-bound encounters come ahead of creatures and art, and every epic of the roadmap is filed in one pass
+
+- Decided by: maintainer, 2026-11-11, in chat, approving the order the orchestrator proposed from an independent review of the plan; he then asked for every epic to be filed before the conversation ended.
+- Context: The review (a subagent, run at the maintainer's request) found that the first order under-served 357.3: prepared encounters came third, behind work whose value they reduce, and the roadmap itself lived only in the conversation.
+- Options:
+  - Chosen: setup and configuration (#366); scene-bound encounters (#358); creature library (#376); token art pipeline (#375), with its S3 host (#289) decided once scene-bound encounters are in use; encounter difficulty; saves and checks; positions and range; movement and reveal; action rolls; actions on the grid; conditions and effects. Player state from D&D Beyond is a separate track. Line of sight, turn flow, a party model, comprehensive prep on the map, a session log, a second VTT connector, the autonomy layer and a database restore command are parked. The roadmap lives in #392.
+  - The first order (creatures, art, then prepared encounters): preparing several encounters has no workaround today, while a custom creature has one (an SRD stand-in with its HP, AC and name changed).
+  - File the first four epics now and the rest once they are in use (the orchestrator's suggestion, because later designs depend on earlier ones): the maintainer wants the whole roadmap durable now.
+- Where: #392 (the roadmap issue, with the epics as sub-issues).
+- Revisit if: an epic is added, reordered or parked; #392 is changed in the same piece of work.
+- Status: active
+
+## 357.12 The extension does nothing for players
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: Players may be remote (357.8), and the extension's page is served by the bridge on the GM's machine. Nobody has checked what a player on another device sees; the maintainer has noticed nothing odd, and his players have not tried to open it.
+- Options:
+  - Chosen: the extension does not need to work for players, and ideally does nothing visible for them.
+  - Make the extension reachable for players, by hosting its files where their browsers can load them: not needed.
+- Where: #368 (the hand check) and #373.
+- Revisit if: #368 finds that players are disturbed by the page load itself, which only a public host would fix.
+- Status: active
+
+## 357.13 A process started from a git worktree uses the development database automatically
+
+- Decided by: maintainer, 2026-11-11, in chat (yes to the orchestrator's proposal). He also said he will never start a real live session from a worktree.
+- Context: Agent sessions work in worktrees, and today the MCP server and bridge they start open the maintainer's real database and run a branch's migrations on it.
+- Options:
+  - Chosen: a second, development profile with its own database, tokens and port, chosen automatically when the process runs from a linked worktree; an environment variable overrides it either way.
+  - Choose the profile only by the environment variable: every agent session would have to set it, and one that forgot would open the real database.
+- Where: #370.
+- Status: active
+
+## 357.14 The first monster added in a scene with no encounter creates the encounter at once
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: With one encounter per scene (357.5), a scene opened for the first time has none.
+- Options:
+  - Chosen: the write creates the encounter, named "Encounter N", bound to the scene, and the reply says so. It can be renamed later.
+  - Ask for a name first: spawning a monster mid-session must stay one sentence.
+- Where: #363.
+- Status: active
+
+## 357.15 Existing encounters are discarded when scene-bound encounters land
+
+- Decided by: maintainer, 2026-11-11, in chat: the current system is not the source of truth of anything.
+- Context: Today's single encounter and its tokens exist in the maintainer's database and scenes. The orchestrator had specified an upgrade path that kept them.
+- Options:
+  - Chosen: no migration and no adoption. Upgrading discards existing encounters, and old tokens left in scenes are deleted by hand.
+  - The first scene opened that still holds today's tokens adopts today's encounter (the orchestrator's suggested default): extra rules in the engine, the wire and the extension to preserve data nobody needs.
+- Where: #360, #361, #363, #364.
+- Status: active
+
+## 357.16 A creature the DM stored wins over an SRD monster of the same name
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: An imported creature can share its name with an SRD monster (the creature library, #376), and at the table the DM says only the name.
+- Options:
+  - Chosen: the stored creature is used and its book is named in the reply. The agent asks only when two stored creatures from different books share the name.
+  - Ask each time: it costs a turn mid-session for a creature the DM imported on purpose.
+- Where: #381 (the ranking), #391 (the skill rule).
+- Status: active
+
+## 357.17 The DM's own image replaces art he picked in Owlbear without asking
+
+- Decided by: maintainer, 2026-11-11, in chat, against the orchestrator's suggested default.
+- Context: Token art has three sources (357.7): a pick in Owlbear, the DM's own image set through the agent, and the TooManyTokens default.
+- Options:
+  - Chosen: the DM's latest explicit choice wins, whether made in Owlbear or through the agent, with no confirmation. The TooManyTokens default only fills a type that has no art.
+  - A pick in Owlbear outranks art set through the agent unless the DM confirms the replacement (the suggested default): an extra question for something he has just asked for.
+- Where: #378, #382, #387.
+- Status: active
+
+## 357.18 Always online is required
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: Default token art is fetched from the hosts that serve TooManyTokens, and the orchestrator asked whether a setting should switch that off for offline play.
+- Options:
+  - Chosen: a network connection is a requirement of the tool. No offline design, and no off switches for features that need the network.
+  - A setting that turns the TooManyTokens default off: not wanted.
+- Where: #383.
+- Revisit if: the maintainer needs to run a session without a network.
+- Status: active
+
+## 357.19 Names of creatures from non-SRD books may appear in the repo; their text, numbers and art may not
+
+- Decided by: orchestrator, 2026-11-11, proposed in chat as a default; the maintainer raised no objection; not human-approved.
+- Context: The repo is public, agents write its tests and tickets, and the creature and token art epics handle content from books the maintainer owns (357.10). A rule that banned names too would make tickets about such creatures unwritable.
+- Options:
+  - Chosen: names may appear anywhere. Text, numbers and art may not appear anywhere an agent writes: data, fixtures, tests, docs, the decision log, tickets, comments, PR bodies, commit messages, eval files and CI artifacts. Import tests use an invented test book.
+  - Ban names as well: the TooManyTokens index and many ticket titles could not be written.
+  - Cover only committed data and fixtures: an agent debugging a failed import would quote the statblock in a PR or a comment.
+- Where: #374.
+- Status: active
+
+## 357.20 With no GM tab open, a change goes to the encounter the DM names, else the last current one
+
+- Decided by: orchestrator, 2026-11-11, proposed in chat as a default; the maintainer raised no objection; not human-approved.
+- Context: With scene-bound encounters the open scene picks the encounter, but the MCP server also writes when no tab is open.
+- Options:
+  - Chosen: the encounter the DM names; otherwise the last current one. The reply names the encounter.
+  - Refuse writes with no tab open: the tools work without the table today, and prep away from Owlbear would stop working.
+- Where: #363, #365.
+- Status: active
+
+## 357.21 Undo of an agent move returns the token to where it stood, and a move the DM asked for raises no override note
+
+- Decided by: orchestrator, 2026-11-11, proposed in chat as a default; the maintainer raised no objection; not human-approved.
+- Context: The review found that undo of a move goes to the previous stored position, which is stale once the GM has dragged the token, and that every agent move of a dragged token adds a note to the panel (277.6).
+- Options:
+  - Chosen: a move records the live position it read, and undo returns there. A move that read the live position in the same command is not an override.
+  - Keep today's rules: in combat, undo would send a token to a stale spot and nearly every move would add a panel note.
+- Where: the movement and reveal epic; it amends 277.6 and the position row of "Who owns what" when built.
+- Status: active
+
+## 357.22 2024 statblock wording first; books in the 2014 format import as text
+
+- Decided by: orchestrator, 2026-11-11, proposed in chat as a default; the maintainer raised no objection; not human-approved.
+- Context: The engine's statblock check reads the SRD 5.2 wording. Older books word attacks differently.
+- Options:
+  - Chosen: the check and later roll tools parse the 2024 wording. A 2014-format entry is stored as text; only its dice expressions are listed and checked.
+  - Parse both formats from the start: a second grammar before the first has been used.
+- Where: #384, #388.
+- Revisit if: most of the maintainer's imports turn out to be in the 2014 format.
+- Status: active
