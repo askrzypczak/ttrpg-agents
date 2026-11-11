@@ -56,6 +56,7 @@ const index: MonsterIndex = {
     ["Veteran", "warrior-veteran"],
     ["Poisonous Snake", "venomous-snake"],
   ]),
+  dndBeyondPages: new Map(),
 };
 const names = (q: string) =>
   searchMonsters(index, q).map((r) => r.monster.name);

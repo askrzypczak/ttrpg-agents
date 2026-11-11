@@ -58,6 +58,7 @@ beforeEach(() => {
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${++groupN}`,
+    browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     newCommandId: () => "command",
   };
 });
@@ -144,7 +145,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the thirty-one tools", () => {
+  it("exposes the thirty-two tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -157,6 +158,7 @@ describe("tool registry", () => {
       "list_rooms",
       "merge_initiative",
       "move_monsters",
+      "open_statblock",
       "preview_monsters",
       "propose_rooms",
       "remove_monsters",
@@ -256,6 +258,100 @@ describe("get_statblock", () => {
     const r = await call("get_statblock", { key: "nope" });
     expect(r.isError).toBe(true);
     expect(text(r)).toContain('Unknown monster "nope"');
+  });
+});
+
+describe("open_statblock", () => {
+  const ABOLETH = "srd-2024_aboleth";
+  const ABOLETH_URL = "https://www.dndbeyond.com/monsters/5194867-aboleth";
+  let shown: string[];
+
+  /** A browser that records each page it is asked to show. */
+  function recordingBrowser(outcome: () => Promise<void>): void {
+    shown = [];
+    ctx.browser = {
+      showPage: (url) => {
+        shown.push(url);
+        return outcome();
+      },
+    };
+  }
+
+  beforeEach(() => {
+    recordingBrowser(() => Promise.resolve());
+  });
+
+  it("open_statblock shows the monster's D&D Beyond page through the browser port and replies with its URL", async () => {
+    const r = await call("open_statblock", { key: ABOLETH });
+    const reply = `Opened the D&D Beyond page for Aboleth: ${ABOLETH_URL}`;
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(reply);
+    expect(shown).toEqual([ABOLETH_URL]);
+    expect(r.structuredContent).toEqual({
+      key: ABOLETH,
+      url: ABOLETH_URL,
+      opened: true,
+      summary: reply,
+    });
+  });
+
+  it("open_statblock still replies with the URL when the browser cannot be opened", async () => {
+    recordingBrowser(() =>
+      Promise.reject(new Error("no browser opener for linux")),
+    );
+    const r = await call("open_statblock", { key: ABOLETH });
+    const reply = `Could not open a browser (no browser opener for linux). D&D Beyond page for Aboleth: ${ABOLETH_URL}`;
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(reply);
+    expect(shown).toEqual([ABOLETH_URL]);
+    expect(r.structuredContent).toEqual({
+      key: ABOLETH,
+      url: ABOLETH_URL,
+      opened: false,
+      summary: reply,
+    });
+  });
+
+  it("open_statblock fails with get_statblock's error for an unknown key and opens nothing", async () => {
+    const statblock = await call("get_statblock", { key: "nope" });
+    const r = await call("open_statblock", { key: "nope" });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe(text(statblock));
+    expect(text(r)).toBe(
+      'Unknown monster "nope". Use search_monsters to find keys.',
+    );
+    expect(shown).toEqual([]);
+  });
+
+  it("open_statblock opens nothing for a monster without a D&D Beyond page and says so", async () => {
+    const key = "srd-2024_giant-fly";
+    const r = await call("open_statblock", { key });
+    const reply =
+      "Giant Fly has no D&D Beyond 2024 page. Use get_statblock for its statblock.";
+    expect(r.isError).toBeUndefined();
+    expect(text(r)).toBe(reply);
+    expect(shown).toEqual([]);
+    expect(r.structuredContent).toEqual({
+      key,
+      url: null,
+      opened: false,
+      summary: reply,
+    });
+  });
+
+  it("open_statblock opens nothing for a hostile-looking key", async () => {
+    for (const key of [
+      "https://evil.example/",
+      "srd-2024_aboleth; open -a Calculator",
+      "../../etc/passwd",
+    ]) {
+      const r = await call("open_statblock", { key });
+      expect(r.isError, key).toBe(true);
+      expect(text(r), key).toBe(
+        `Unknown monster "${key}". Use search_monsters to find keys.`,
+      );
+    }
+    expect(shown).toEqual([]);
   });
 });
 

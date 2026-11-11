@@ -25,6 +25,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `search_monsters`      | Name search (top 10) with keys; old SRD 5.1 names match too, shown as renamed (alias) hits                                                        |
 | `get_statblock`        | Markdown statblock by key                                                                                                                         |
+| `open_statblock`       | Open a monster's D&D Beyond 2024 page (by key) in the default browser; replies with the link; needs a login that owns the 2024 Monster Manual     |
 | `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init; `join` (id or exact name) adds to that monster's group and initiative           |
 | `preview_monsters`     | Dry run of `add_monsters` (same arguments and checks): names, AC, average HP and dice, init modifier, footprint, room cells; adds nothing         |
 | `move_monsters`        | Move monsters (ids or exact names, all-or-nothing) into a saved room, keeping their state; one already in that room avoids its own cells          |
@@ -60,6 +61,8 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 tab open: they ask the table through the engine's `TablePort` (wired to the bridge
 client in `src/stdio.ts`), and a stopped bridge, no tab or a slow tab come back as
 `isError` results. `remove_rooms` and `propose_rooms` do not ask the table.
+
+`open_statblock` opens the page with macOS `open` (other platforms are refused, see `src/system-browser.ts`). When the browser cannot be opened it still replies with the link, and a monster without a page (Giant Fly) gets a reply saying so.
 
 Domain errors (unknown monster, ambiguous target, bad amount) come back as
 `isError` results rather than protocol errors.

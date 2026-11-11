@@ -72,6 +72,7 @@ beforeEach(() => {
     rng: { nextInt: (max) => 3 % max },
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${String(++groups)}`,
+    browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     newCommandId: () => `command-${String(++commands)}`,
   };
 });

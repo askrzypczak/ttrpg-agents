@@ -128,6 +128,7 @@ beforeEach(() => {
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group-1",
+    browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     newCommandId: () => {
       const id = `command-${String(issuedCommandIds.length + 1)}`;
       issuedCommandIds.push(id);

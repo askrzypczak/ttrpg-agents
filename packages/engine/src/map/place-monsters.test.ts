@@ -268,6 +268,7 @@ const monsters: MonsterIndex = {
   monsters: bestiary,
   byKey: new Map(bestiary.map((m) => [m.key, m] as const)),
   aliases: new Map(),
+  dndBeyondPages: new Map(),
 };
 
 function setup(
@@ -816,6 +817,7 @@ describe("previewMonsters", () => {
         [shadow.key, shadow],
       ]),
       aliases: new Map(),
+      dndBeyondPages: new Map(),
     };
     const { repo } = setup();
     const preview = previewMonsters({ repo, monsters: index }, [

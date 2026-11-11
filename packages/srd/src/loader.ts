@@ -71,7 +71,8 @@ function loadFile(file: string): Monster[] {
 /**
  * Load, validate and merge monsters from several sources. Throws
  * {@link MonsterLoadError} on invalid data or on a key present twice. The
- * result has no aliases; add them with {@link loadAliases}.
+ * result has no aliases or D&D Beyond pages; add them with {@link loadAliases}
+ * and {@link loadDndBeyondPages}.
  */
 export function loadMonsters(sources: MonsterFileSource[]): MonsterIndex {
   const monsters: Monster[] = [];
@@ -92,7 +93,7 @@ export function loadMonsters(sources: MonsterFileSource[]): MonsterIndex {
       }
     }
   }
-  return { monsters, byKey, aliases: new Map() };
+  return { monsters, byKey, aliases: new Map(), dndBeyondPages: new Map() };
 }
 
 const aliasEntrySchema = z.object({
@@ -158,6 +159,47 @@ export function loadAliases(file: string, index: MonsterIndex): MonsterIndex {
   return { ...index, aliases };
 }
 
+/** A D&D Beyond page path segment: `<id>-<slug>`, the slug required. */
+const dndBeyondSegment = /^[0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Add the D&D Beyond 2024 pages in `file` to `index`. The file holds a JSON
+ * object mapping monster keys to page path segments `<id>-<slug>`. Throws
+ * {@link MonsterLoadError} naming the file (and the key, where there is one)
+ * when the file is not an object, a key is not in the index, or a value is
+ * not an `<id>-<slug>` string.
+ */
+export function loadDndBeyondPages(
+  file: string,
+  index: MonsterIndex,
+): MonsterIndex {
+  const data = readJsonFile(file);
+  if (!isJsonObject(data)) {
+    throw new MonsterLoadError(
+      `${file}: expected an object mapping monster keys to D&D Beyond page segments`,
+    );
+  }
+  const pages = new Map<string, string>();
+  for (const [key, segment] of Object.entries(data)) {
+    if (!index.byKey.has(key)) {
+      throw new MonsterLoadError(
+        `${file}: D&D Beyond page for unknown key "${key}"`,
+      );
+    }
+    if (typeof segment !== "string" || !dndBeyondSegment.test(segment)) {
+      throw new MonsterLoadError(
+        `${file}: D&D Beyond page for "${key}" is not an <id>-<slug> string`,
+      );
+    }
+    pages.set(key, segment);
+  }
+  return { ...index, dndBeyondPages: pages };
+}
+
 /** Path of the committed SRD 5.2 snapshot (works from src/ and dist/). */
 export const SRD_MONSTERS_PATH = resolve(
   fileURLToPath(import.meta.url),
@@ -170,10 +212,19 @@ const SRD_ALIASES_PATH = resolve(
   "../../data/srd-5.2/aliases.json",
 );
 
-/** Load the committed SRD 5.2 snapshot with its aliases (see {@link loadAliases}). */
+/** Path of the committed D&D Beyond 2024 page segments (works from src/ and dist/). */
+const SRD_DNDBEYOND_PATH = resolve(
+  fileURLToPath(import.meta.url),
+  "../../data/srd-5.2/dndbeyond.json",
+);
+
+/**
+ * Load the committed SRD 5.2 snapshot with its aliases (see {@link loadAliases})
+ * and its D&D Beyond 2024 pages (see {@link loadDndBeyondPages}).
+ */
 export function loadSrdMonsters(): MonsterIndex {
-  return loadAliases(
-    SRD_ALIASES_PATH,
-    loadMonsters([{ path: SRD_MONSTERS_PATH }]),
+  return loadDndBeyondPages(
+    SRD_DNDBEYOND_PATH,
+    loadAliases(SRD_ALIASES_PATH, loadMonsters([{ path: SRD_MONSTERS_PATH }])),
   );
 }

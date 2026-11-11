@@ -71,6 +71,7 @@ function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group",
+    browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     newCommandId: () => "command",
   };
 }

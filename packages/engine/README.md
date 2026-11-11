@@ -6,6 +6,7 @@ The domain engine: dice, monster schema and search, encounter events, map geomet
 
 - `src/monsters/schema.ts`: zod schema and the `Monster` type.
 - `src/monsters/search.ts`: `searchMonsters(index, query)` (case-insensitive, plural-tolerant, ranked; also matches aliases, marked as alias hits) and `getMonsterByKey`.
+- `src/monsters/dndbeyond.ts`: `dndBeyondUrl(index, monster)`, the monster's D&D Beyond 2024 page URL from `MonsterIndex.dndBeyondPages`, or undefined when it has none.
 - `src/monsters/footprint.ts`: `footprintForSize(size)`, the grid cells per side a token of a size category spans (small and medium 1, large 2, huge 3, gargantuan 4, anything else 1). `addMonsters` stores it on each new instance as `footprint`.
 
 ## Encounter events
@@ -40,3 +41,7 @@ Each instance carries `spawnPosition`: where a new token for it is created, in s
 ## Table
 
 `src/table/`: `TablePort` (driven port: `sceneStatus()` asks the table, the VTT, about its scene; `sceneMap()` asks for the scene grid and the map images with their transforms; `sceneTokens()` asks for the position of each item on the table's character and mount layers, which the room placement for `add_monsters` (#50) reads to skip occupied cells; `mapImage(itemId)` asks for the gridded image of a map item, drawn as the DM sees it with the display grid's labels; all fail with `TableUnavailableError`) and `getTableStatus(repo, table)`, which adds the encounter count and the verdict: `inSync` = scene ready and token, applied and encounter counts all equal. The bridge client implements the port; `mcp` only formats the result.
+
+## Browser
+
+`src/browser.ts`: `BrowserPort` (driven port: `showPage(url)` shows a page to the DM in their browser, and rejects with the reason when it cannot), implemented in `mcp` (`src/system-browser.ts`).

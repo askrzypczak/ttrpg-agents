@@ -1,11 +1,11 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "that should have been a goblin boss", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "undo that", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "that should have been a goblin boss", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "undo that", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", "open the aboleth's statblock", "show me the goblin's page", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `table_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `open_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `table_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 Each tool's reply lines come back as the `summary` of its result (the same lines as its text); "relay the tool's line" below means a line of that summary, copied as it is. `get_map_image` is the exception: its result is an image block plus one text line, with no `summary`.
 
@@ -30,6 +30,14 @@ Each tool's reply lines come back as the `summary` of its result (the same lines
 HP, AC, initiative, rolls, damage totals and attack bonuses come only from tool output. Do not roll dice yourself, do not guess, and do not explain how a total was derived. If the tools cannot produce a number, say so. For "what does X roll to hit", read the statblock with `get_statblock` and quote it; do not roll.
 
 For "what's X's AC?", call `list_encounter` and quote the AC in that monster's row, not `get_statblock`: the row includes changes made with `set_armor_class` or at the table, and the statblock has only the monster type's base AC. A `-` means the monster has no armor class; say so.
+
+## Opening the D&D Beyond page
+
+- "Open the aboleth's statblock", "show me the goblin's page" or "pull up the troll on D&D Beyond" is ONE `open_statblock` call with the monster key (resolve it as under Resolving monster names; for a monster already in the encounter, use its `monsterKey`).
+- Relay the tool's line verbatim: it carries the link, also when the browser could not be opened.
+- If it says the monster has no D&D Beyond page, offer `get_statblock` for its statblock.
+- The page needs a D&D Beyond login that owns the 2024 Monster Manual. If the DM says they see a login or purchase page, tell them that.
+- Do not call `get_statblock` as well unless the DM asks for it.
 
 ## Spatial and narrative hints
 
