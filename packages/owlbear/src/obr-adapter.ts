@@ -29,6 +29,8 @@ const IMAGE_ALIVE_TIMEOUT_MS = 5000;
 export interface ObrAdapter {
   onReady(callback: () => void | Promise<void>): void;
   getRole(): Promise<PlayerRole>;
+  /** The id of the Owlbear room this tab is in (`OBR.room.id`). */
+  getRoomId(): string;
   isSceneReady(): Promise<boolean>;
   /** Returns an unsubscribe function. */
   onSceneReadyChange(callback: (ready: boolean) => void): () => void;
@@ -101,6 +103,7 @@ export type ImageUpload = { bytes: Uint8Array; mime: string; name: string };
 export type ObrReader = Pick<
   ObrAdapter,
   | "isSceneReady"
+  | "getRoomId"
   | "getItems"
   | "getSceneMetadata"
   | "getViewportCenter"
@@ -229,6 +232,7 @@ export function createObrAdapter(): ObrAdapter {
     },
     getRole: async () =>
       (await OBR.player.getRole()) === "GM" ? "gm" : "player",
+    getRoomId: () => OBR.room.id,
     isSceneReady: () => OBR.scene.isReady(),
     onSceneReadyChange: (callback) => OBR.scene.onReadyChange(callback),
     onItemsChange: (callback) => OBR.scene.items.onChange(() => callback()),

@@ -168,6 +168,7 @@ function twoScenes() {
   const obr: ObrAdapter = {
     onReady: (cb) => current.obr.onReady(cb),
     getRole: () => current.obr.getRole(),
+    getRoomId: () => current.obr.getRoomId(),
     isSceneReady: () => current.obr.isSceneReady(),
     onSceneReadyChange: (cb) => {
       listeners.add(cb);

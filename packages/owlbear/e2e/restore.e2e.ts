@@ -251,6 +251,7 @@ test.describe("restoring a cleared encounter", () => {
           artWaits: [
             { monsterKey: "shadow", monsterName: "Shadow", step: "reupload" },
           ],
+          roomId: "e2e-room",
         },
       },
     });

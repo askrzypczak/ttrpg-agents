@@ -21,6 +21,7 @@ describe("replyToQuery", () => {
           tokenCount: 0,
           appliedInstanceCount: 0,
           artWaits: [],
+          roomId: "fake-room",
         },
       },
     });

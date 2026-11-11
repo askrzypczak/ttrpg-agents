@@ -165,24 +165,33 @@ const searchMonstersTool = defineTool({
   name: "search_monsters",
   annotations: { readOnlyHint: true },
   description:
-    "Search monsters by name (case-insensitive, plural-tolerant). Returns up to 10 matches with their keys.",
+    "Search monsters by name (case-insensitive, plural-tolerant). Also matches older SRD 5.1 names (aliases) and says when a monster was renamed. Returns up to 10 matches with their keys.",
   inputSchema: { query: z.string() },
   run(ctx, { query }) {
     const matches = searchMonsters(ctx.monsters, query).slice(0, 10);
     if (matches.length === 0) {
       return ok(`No monsters match "${query}".`, { results: [] });
     }
+    const renames = matches.flatMap((m) =>
+      m.alias === undefined
+        ? []
+        : [`${m.alias} is now ${m.monster.name} (${m.monster.source}).`],
+    );
     return ok(
-      table(
-        ["key", "name", "CR", "source"],
-        matches.map((m) => [m.key, m.name, m.cr, m.source]),
-      ),
+      [
+        ...renames,
+        table(
+          ["key", "name", "CR", "source"],
+          matches.map(({ monster: m }) => [m.key, m.name, m.cr, m.source]),
+        ),
+      ].join("\n"),
       {
-        results: matches.map((m) => ({
+        results: matches.map(({ monster: m, alias }) => ({
           key: m.key,
           name: m.name,
           cr: m.cr,
           source: m.source,
+          ...(alias === undefined ? {} : { alias }),
         })),
       },
     );
@@ -976,7 +985,7 @@ const tableStatusTool = defineTool({
   name: "table_status",
   annotations: { readOnlyHint: true },
   description:
-    "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count) and compare it with the encounter; also names the monster types whose token art waits on the GM, with what to click (waitingOnGm). Needs the bridge running.",
+    "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count, room id) and compare it with the encounter; also names the monster types whose token art waits on the GM, with what to click (waitingOnGm). Needs the bridge running.",
   inputSchema: {},
   async run(ctx) {
     const {
@@ -986,11 +995,16 @@ const tableStatusTool = defineTool({
       encounterCount,
       inSync,
       artWaits,
+      roomId,
     } = await getTableStatus(ctx.repo, ctx.table);
     const counts = `${String(tokenCount)} tokens on the scene, ${String(appliedInstanceCount)} instances applied, ${String(encounterCount)} in the encounter`;
+    const room =
+      roomId === undefined
+        ? "room unknown: reload the Owlbear tab"
+        : `room ${roomId}`;
     const status = inSync
-      ? `Owlbear is in sync: scene ready, ${counts}.`
-      : `Owlbear is out of sync: ${sceneReady ? "scene ready" : "scene not ready"}, ${counts}.`;
+      ? `Owlbear is in sync (${room}): scene ready, ${counts}.`
+      : `Owlbear is out of sync (${room}): ${sceneReady ? "scene ready" : "scene not ready"}, ${counts}.`;
     const waitingOnGm = artWaitLines(artWaits);
     return ok([status, ...waitingOnGm].join("\n"), {
       sceneReady,
@@ -998,6 +1012,7 @@ const tableStatusTool = defineTool({
       appliedInstanceCount,
       encounterCount,
       inSync,
+      ...(roomId !== undefined ? { roomId } : {}),
       ...(waitingOnGm.length > 0 ? { waitingOnGm } : {}),
     });
   },

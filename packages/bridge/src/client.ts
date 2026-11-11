@@ -86,12 +86,12 @@ export function createBridgeClient(options?: {
 /**
  * Driven adapter for the engine's `TablePort`, over `client` (default
  * `createBridgeClient()`). `sceneStatus` sends `scene-status` and returns the
- * scene counts; `sceneMap` sends `scene-map` and returns the scene grid and
- * map items; `sceneTokens` sends `scene-tokens` and returns each token's
- * bounds; `mapImage` sends `map-image` with the item id and returns the
- * gridded map image. For any of them, a `{ ok: false }` becomes a
- * `TableUnavailableError` with the bridge's message, and so does a result for
- * another query.
+ * scene counts and the room id (when the tab reports one); `sceneMap` sends
+ * `scene-map` and returns the scene grid and map items; `sceneTokens` sends
+ * `scene-tokens` and returns each token's bounds; `mapImage` sends `map-image`
+ * with the item id and returns the gridded map image. For any of them, a
+ * `{ ok: false }` becomes a `TableUnavailableError` with the bridge's message,
+ * and so does a result for another query.
  */
 export function createBridgeTable(
   client: BridgeClient = createBridgeClient(),
@@ -104,9 +104,15 @@ export function createBridgeTable(
         throw new TableUnavailableError(
           `the table answered "${res.result.name}" to a "scene-status" query`,
         );
-      const { sceneReady, tokenCount, appliedInstanceCount, artWaits } =
+      const { sceneReady, tokenCount, appliedInstanceCount, artWaits, roomId } =
         res.result.result;
-      return { sceneReady, tokenCount, appliedInstanceCount, artWaits };
+      return {
+        sceneReady,
+        tokenCount,
+        appliedInstanceCount,
+        artWaits,
+        ...(roomId !== undefined ? { roomId } : {}),
+      };
     },
     async sceneMap() {
       const res = await client.query({ name: "scene-map" });

@@ -43,12 +43,27 @@ const monsters = [
   stub("werewolf", "Werewolf"),
   stub("harpy", "Harpy"),
   stub("ogre", "Ogre"),
+  stub("tough", "Tough"),
+  stub("thunderbird", "Thunderbird"),
+  stub("warrior-veteran", "Warrior Veteran"),
+  stub("venomous-snake", "Venomous Snake"),
 ];
 const index: MonsterIndex = {
   monsters,
   byKey: new Map(monsters.map((m) => [m.key, m] as const)),
+  aliases: new Map([
+    ["Thug", "tough"],
+    ["Veteran", "warrior-veteran"],
+    ["Poisonous Snake", "venomous-snake"],
+  ]),
 };
-const names = (q: string) => searchMonsters(index, q).map((m) => m.name);
+const names = (q: string) =>
+  searchMonsters(index, q).map((r) => r.monster.name);
+const byKey = (key: string): Monster => {
+  const m = index.byKey.get(key);
+  if (!m) throw new Error(`no stub monster ${key}`);
+  return m;
+};
 
 describe("searchMonsters", () => {
   it("finds a name case-insensitively and ignoring surrounding whitespace", () => {
@@ -77,6 +92,46 @@ describe("searchMonsters", () => {
     expect(names("   ")).toEqual([]);
     expect(names(".*")).toEqual([]);
     expect(names("w.lf")).toEqual([]);
+  });
+
+  it("finds a monster by an alias case-insensitively and plural-tolerantly, marking it as an alias hit", () => {
+    for (const q of ["thug", "Thug", "THUG", "thugs", " Thugs "]) {
+      expect(searchMonsters(index, q)).toEqual([
+        { monster: byKey("tough"), alias: "Thug" },
+      ]);
+    }
+  });
+
+  it("does not mark a match on the current name as an alias hit", () => {
+    // The same monster is an alias hit only when its old name is what matched.
+    expect(searchMonsters(index, "poisonous snakes")).toEqual([
+      { monster: byKey("venomous-snake"), alias: "Poisonous Snake" },
+    ]);
+    for (const q of ["venomous snake", "Tough"]) {
+      const results = searchMonsters(index, q);
+      expect(results).toHaveLength(1);
+      expect(results[0]).not.toHaveProperty("alias");
+    }
+    // Name and alias both match "snake" as a whole word: the name wins.
+    const snake = searchMonsters(index, "snake");
+    expect(snake).toEqual([{ monster: byKey("venomous-snake") }]);
+    expect(snake[0]).not.toHaveProperty("alias");
+  });
+
+  it("ranks a current-name match above an alias match of the same strength", () => {
+    // Both are prefix matches; the name match wins although its name is longer.
+    expect(searchMonsters(index, "thu")).toEqual([
+      { monster: byKey("thunderbird") },
+      { monster: byKey("tough"), alias: "Thug" },
+    ]);
+  });
+
+  it("lists a monster once, marked as an alias hit, when its alias matches more strongly than its name (veteran -> Warrior Veteran)", () => {
+    for (const q of ["veteran", "Veterans"]) {
+      expect(searchMonsters(index, q)).toEqual([
+        { monster: byKey("warrior-veteran"), alias: "Veteran" },
+      ]);
+    }
   });
 });
 
