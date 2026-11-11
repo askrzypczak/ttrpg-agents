@@ -1,3 +1,4 @@
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // E2E_COVERAGE=1 (set by scripts/coverage.ts and the CI e2e job) builds an
@@ -6,6 +7,7 @@ import { defineConfig } from "vite";
 const coverage = process.env.E2E_COVERAGE === "1";
 
 export default defineConfig({
+  plugins: [react()],
   build: {
     outDir: "dist",
     emptyOutDir: true,

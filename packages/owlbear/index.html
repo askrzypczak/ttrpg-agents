@@ -41,53 +41,7 @@
     </style>
   </head>
   <body>
-    <h3>ttrpg-agents</h3>
-    <p id="status">Starting...</p>
-    <p id="art-prompt"></p>
-    <div id="reupload" hidden>
-      <p>
-        <strong>Token art to re-upload.</strong> These monster types are drawn
-        as circles until their art is re-uploaded:
-      </p>
-      <ul id="reupload-list"></ul>
-    </div>
-    <p id="hint"></p>
-    <button id="use-this-tab" hidden>Use this tab</button>
-    <p id="sync-error"></p>
-    <p id="edit-note"></p>
-    <div id="overrides" hidden>
-      <p>
-        Table values written over: by a snapshot (connect, reconnect or a
-        skipped change), which cannot tell an MCP change made meanwhile from a
-        clamped value, by an agent move of a token that had been moved on the
-        table, by a redraw for an agent's monster change of a token whose art or
-        size had been changed on the table or that had to be replaced with a new
-        token (its attachments deleted), or by any redraw of a token with art
-        you picked again in this panel:
-      </p>
-      <ul id="overrides-list"></ul>
-      <button id="dismiss-overrides">Dismiss</button>
-    </div>
-    <div id="type-art" hidden>
-      <p>
-        <strong>Token art.</strong> Pick art opens Owlbear's image picker for a
-        monster type; Upload new art adds an image file to Owlbear's library,
-        and Pick the uploaded image then picks it. A pick redraws the type's
-        tokens with the new art.
-      </p>
-      <ul id="type-art-list"></ul>
-      <input
-        type="file"
-        id="art-file"
-        accept="image/png,image/jpeg,image/webp"
-        hidden
-      />
-    </div>
-    <p id="scene"></p>
-    <label id="overlay" hidden
-      ><input type="checkbox" id="overlay-toggle" checked autocomplete="off" />
-      Show map grid and rooms</label
-    >
+    <div id="root"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
