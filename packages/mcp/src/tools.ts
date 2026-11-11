@@ -5,6 +5,7 @@ import {
   canRestoreEncounter,
   changeMonsterType,
   compareByInitiative,
+  dndBeyondUrl,
   formatColumnLabel,
   getMapImage,
   getTableStatus,
@@ -198,6 +199,11 @@ const searchMonstersTool = defineTool({
   },
 });
 
+/** The error for a key that names no monster, shared by the statblock tools. */
+function unknownMonster(key: string): ToolResult {
+  return fail(`Unknown monster "${key}". Use search_monsters to find keys.`);
+}
+
 const getStatblockTool = defineTool({
   name: "get_statblock",
   annotations: { readOnlyHint: true },
@@ -205,11 +211,7 @@ const getStatblockTool = defineTool({
   inputSchema: { key: z.string() },
   run(ctx, { key }) {
     const monster = getMonsterByKey(ctx.monsters, key);
-    if (!monster) {
-      return fail(
-        `Unknown monster "${key}". Use search_monsters to find keys.`,
-      );
-    }
+    if (!monster) return unknownMonster(key);
     return ok(formatStatblock(monster), { monster });
   },
 });
@@ -220,8 +222,28 @@ const openStatblockTool = defineTool({
   description:
     "Open a monster's D&D Beyond 2024 Monster Manual page in the DM's default browser, by its exact key; replies with the link. The page needs a D&D Beyond login that owns the 2024 Monster Manual.",
   inputSchema: { key: z.string() },
-  run() {
-    return fail("not implemented");
+  async run(ctx, { key }) {
+    const monster = getMonsterByKey(ctx.monsters, key);
+    if (!monster) return unknownMonster(key);
+    const url = dndBeyondUrl(ctx.monsters, monster);
+    if (url === undefined) {
+      const reply = `${monster.name} has no D&D Beyond 2024 page. Use get_statblock for its statblock.`;
+      return ok(reply, { key, url: null, opened: false });
+    }
+    try {
+      await ctx.browser.showPage(url);
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      return ok(
+        `Could not open a browser (${reason}). D&D Beyond page for ${monster.name}: ${url}`,
+        { key, url, opened: false },
+      );
+    }
+    return ok(`Opened the D&D Beyond page for ${monster.name}: ${url}`, {
+      key,
+      url,
+      opened: true,
+    });
   },
 });
 
