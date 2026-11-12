@@ -12,9 +12,7 @@ node packages/mcp/dist/stdio.js
 The repo-root `.mcp.json` registers it as `ttrpg-agents` for Claude Code
 (approve the project server on first use).
 
-The encounter is stored in SQLite (implemented by [`@ttrpg-agents/store-sqlite`](../store-sqlite/README.md)) at `$TTRPG_AGENTS_DB`, else
-`$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else
-`~/.local/share/ttrpg-agents/encounters.db`.
+The encounter is stored in SQLite (implemented by [`@ttrpg-agents/store-sqlite`](../store-sqlite/README.md)) in the file the `database` setting names; see [`docs/settings.md`](../../docs/settings.md).
 
 The project skill `.claude/skills/dm-encounter` tells Claude how to turn DM
 table commands into these tool calls (see its `EVALS.md` for the prompt evals).
