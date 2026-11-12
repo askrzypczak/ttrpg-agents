@@ -342,6 +342,7 @@ export async function bridgeStatus(options: LifecycleOptions): Promise<number> {
   const { statePath, checkout, out } = options;
   const logPath = logPathFor(statePath);
   const record = await readStateFile(statePath);
+  out(`profile: ${options.profile}`);
 
   if (record !== null && isRecordedBridge(record)) {
     out("bridge: running");
