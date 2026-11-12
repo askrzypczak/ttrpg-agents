@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { decodeMessage, type BridgeMessage } from "@ttrpg-agents/protocol";
+import {
+  PROTOCOL_VERSION,
+  decodeMessage,
+  type BridgeMessage,
+} from "@ttrpg-agents/protocol";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
 let dir: string;
@@ -34,14 +38,14 @@ it("token-deleted without a removeInstance option gets a non-fatal unexpected-ty
   await new Promise((resolve) => socket.once("open", resolve));
   socket.send(
     JSON.stringify({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role: "gm", extensionVersion: "0", token: server.token },
+      payload: { role: "gm", extensionVersion: "0" },
     }),
   );
   socket.send(
     JSON.stringify({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "token-deleted",
       id: "token-deleted:i1",
       payload: { instanceId: "i1" },

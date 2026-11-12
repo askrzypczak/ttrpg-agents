@@ -22,7 +22,6 @@ import {
 } from "@ttrpg-agents/protocol";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
-const EXTENSION_TOKEN = "e7".repeat(32);
 const AGENT_TOKEN = "a9".repeat(32);
 
 const fromBase64 = (b64: string): Uint8Array =>
@@ -75,7 +74,6 @@ async function start(
   server = await startBridgeServer({
     port: 0,
     staticDir: dir,
-    token: EXTENSION_TOKEN,
     agentToken: AGENT_TOKEN,
     storeTokenImage: store,
   });
@@ -125,26 +123,11 @@ function parseAnswer(text: string): TokenImageUploadResponse | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-/** Posts raw bytes to the upload route. */
-async function upload(
-  bridge: BridgeServer,
-  body: Uint8Array,
-  token?: string,
-): Promise<Answer> {
-  const res = await fetch(
-    `http://127.0.0.1:${String(bridge.port)}${TOKEN_IMAGE_UPLOAD_PATH}`,
-    {
-      method: "POST",
-      headers: token !== undefined ? { Authorization: `Bearer ${token}` } : {},
-      body,
-    },
-  );
-  const text = await res.text();
-  return {
-    status: res.status,
-    contentType: res.headers.get("content-type"),
-    body: parseAnswer(text),
-  };
+/** Posts raw bytes to the upload route from the bridge's own origin. */
+function upload(bridge: BridgeServer, body: Uint8Array): Promise<Answer> {
+  return post(bridge, body, {
+    Origin: `http://127.0.0.1:${String(bridge.port)}`,
+  });
 }
 
 /** The refusal's code, or undefined when the answer is not a typed refusal. */
@@ -155,57 +138,6 @@ function refusalCode(answer: Answer): string | undefined {
 }
 
 describe("POST /token-images", () => {
-  it("POST /token-images with the extension token stores a PNG, a JPEG and a WebP and answers each one's hash, mime and dimensions", async () => {
-    const bridge = await start();
-    const cases = [
-      [PNG_1X1, "image/png"],
-      [JPEG_1X1, "image/jpeg"],
-      [WEBP_1X1, "image/webp"],
-    ] as const;
-    for (const [bytes, mime] of cases) {
-      const answer = await upload(bridge, bytes, EXTENSION_TOKEN);
-      const sha256 = sha256Of(bytes);
-      expect(answer.status).toBe(200);
-      expect(answer.body).toEqual({
-        ok: true,
-        image: { sha256, mime, width: 1, height: 1 },
-      });
-      const stored = images.getTokenImage(sha256);
-      expect(stored).toMatchObject({ sha256, mime, width: 1, height: 1 });
-      expect(Buffer.from(stored?.bytes ?? [])).toEqual(Buffer.from(bytes));
-    }
-    expect(storedImageCount()).toBe(3);
-  });
-
-  it("POST /token-images without a token is refused with 401 and stores nothing", async () => {
-    const bridge = await start();
-    const answer = await upload(bridge, PNG_1X1);
-    expect(answer.status).toBe(401);
-    expect(refusalCode(answer)).toBe("unauthorized");
-    expect(storedImageCount()).toBe(0);
-  });
-
-  it("POST /token-images without a token is refused with 401 before reading a body over 1 MiB", async () => {
-    const bridge = await start();
-    const over = pngDeclaring(1, 1, TOKEN_IMAGE_MAX_BYTES + 1);
-    const answer = await upload(bridge, over);
-    expect(answer.status).toBe(401);
-    expect(refusalCode(answer)).toBe("unauthorized");
-    expect(storedImageCount()).toBe(0);
-  });
-
-  it("POST /token-images with the agent token is refused with 401 and stores nothing", async () => {
-    const bridge = await start();
-    const answer = await upload(bridge, PNG_1X1, AGENT_TOKEN);
-    expect(answer.status).toBe(401);
-    expect(refusalCode(answer)).toBe("unauthorized");
-    expect(storedImageCount()).toBe(0);
-    // Control: the extension token is accepted for the same bytes.
-    const accepted = await upload(bridge, PNG_1X1, EXTENSION_TOKEN);
-    expect(accepted.status).toBe(200);
-    expect(storedImageCount()).toBe(1);
-  });
-
   it("POST /token-images with a wrong Host is refused with 403 and stores nothing", async () => {
     const bridge = await start();
     const answer = await new Promise<{
@@ -217,7 +149,7 @@ describe("POST /token-images", () => {
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${EXTENSION_TOKEN}`,
+            Origin: `http://127.0.0.1:${String(bridge.port)}`,
             Host: "evil.example:80",
           },
         },
@@ -236,26 +168,26 @@ describe("POST /token-images", () => {
     expect(answer.contentType).toMatch(/^text\/plain/);
     expect(storedImageCount()).toBe(0);
     // Control: the same request with the right Host is accepted.
-    expect((await upload(bridge, PNG_1X1, EXTENSION_TOKEN)).status).toBe(200);
+    expect((await upload(bridge, PNG_1X1)).status).toBe(200);
   });
 
   it("POST /token-images with a body over 1 MiB is refused with 413 too_large and stores nothing", async () => {
     const bridge = await start();
     const over = pngDeclaring(2048, 1, TOKEN_IMAGE_MAX_BYTES + 1);
-    const answer = await upload(bridge, over, EXTENSION_TOKEN);
+    const answer = await upload(bridge, over);
     expect(answer.status).toBe(413);
     expect(refusalCode(answer)).toBe("too_large");
     expect(storedImageCount()).toBe(0);
     // Control: the same image one byte shorter, exactly 1 MiB, is accepted.
     const exact = pngDeclaring(2048, 1, TOKEN_IMAGE_MAX_BYTES);
-    const accepted = await upload(bridge, exact, EXTENSION_TOKEN);
+    const accepted = await upload(bridge, exact);
     expect(accepted.status).toBe(200);
     expect(storedImageCount()).toBe(1);
   });
 
   it("POST /token-images with an SVG body is refused with 422 svg and stores nothing", async () => {
     const bridge = await start();
-    const answer = await upload(bridge, SVG, EXTENSION_TOKEN);
+    const answer = await upload(bridge, SVG);
     expect(answer.status).toBe(422);
     expect(refusalCode(answer)).toBe("svg");
     expect(storedImageCount()).toBe(0);
@@ -264,7 +196,7 @@ describe("POST /token-images", () => {
   it("POST /token-images with unknown bytes is refused with 422 unsupported_type and stores nothing", async () => {
     const bridge = await start();
     const unknown = new Uint8Array(64).map((_, i) => (i * 7 + 3) % 251);
-    const answer = await upload(bridge, unknown, EXTENSION_TOKEN);
+    const answer = await upload(bridge, unknown);
     expect(answer.status).toBe(422);
     expect(refusalCode(answer)).toBe("unsupported_type");
     expect(storedImageCount()).toBe(0);
@@ -274,7 +206,7 @@ describe("POST /token-images", () => {
     const bridge = await start(() => {
       throw new Error("database is locked");
     });
-    const answer = await upload(bridge, PNG_1X1, EXTENSION_TOKEN);
+    const answer = await upload(bridge, PNG_1X1);
     expect(answer.status).toBe(500);
     expect(refusalCode(answer)).toBe("store_failed");
     expect(storedImageCount()).toBe(0);
@@ -297,7 +229,7 @@ describe("POST /token-images", () => {
     const body = new TextEncoder().encode(
       `http://127.0.0.1:${String(canaryPort)}/canary.png`,
     );
-    const answer = await upload(bridge, body, EXTENSION_TOKEN);
+    const answer = await upload(bridge, body);
     // Grace period for any request the bridge might have started late.
     await new Promise((resolve) => setTimeout(resolve, 200));
 

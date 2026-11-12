@@ -12,6 +12,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -124,19 +125,19 @@ async function connect(server: BridgeServer): Promise<Client> {
   };
 }
 
-function hello(token: string, role: "gm" | "player" = "gm"): string {
+function hello(role: "gm" | "player" = "gm"): string {
   return encodeMessage({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "hello",
     id: "h1",
-    payload: { role, extensionVersion: "0", token },
+    payload: { role, extensionVersion: "0" },
   });
 }
 
 /** Raw JSON: the message type is new to the protocol. */
 function tokenDeleted(instanceId: string): string {
   return JSON.stringify({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "token-deleted",
     id: `token-deleted:${instanceId}`,
     payload: { instanceId },
@@ -149,7 +150,7 @@ async function authed(
   role: "gm" | "player" = "gm",
 ): Promise<Client> {
   const client = await connect(server);
-  client.ws.send(hello(server.token, role));
+  client.ws.send(hello(role));
   await waitFor(() => client.snapshots().length > 0);
   expect(client.received[0]?.type).toBe("hello-ack");
   return client;
@@ -160,7 +161,9 @@ let pings = 0;
 /** Resolves once the bridge has handled everything this client sent so far. */
 async function handled(client: Client): Promise<void> {
   const id = `handled-${++pings}`;
-  client.ws.send(encodeMessage({ v: 1, type: "ping", id, payload: {} }));
+  client.ws.send(
+    encodeMessage({ v: PROTOCOL_VERSION, type: "ping", id, payload: {} }),
+  );
   await waitFor(() =>
     client.received.some((m) => m.type === "pong" && m.id === id),
   );
@@ -191,26 +194,6 @@ describe("token-deleted over the bridge", () => {
     expect(storedIds()).toEqual([second!.id]);
   });
 
-  it("a client with a wrong token claiming role gm is rejected and removes nothing", async () => {
-    const server = await startServer();
-    const [first, second] = shadows;
-    const intruder = await connect(server);
-    intruder.ws.send(hello("not-the-token", "gm"));
-    intruder.ws.send(tokenDeleted(first!.id));
-
-    expect(await intruder.closed).toBe(1008);
-    expect(intruder.received[0]).toMatchObject({
-      type: "error",
-      payload: { code: "bad-token", fatal: true },
-    });
-    expect(storedIds()).toEqual([first!.id, second!.id]);
-
-    // Control: the same request from an authenticated client is honoured.
-    const gm = await authed(server);
-    await deleteAndAwaitHandled(gm, first!.id);
-    expect(storedIds()).toEqual([second!.id]);
-  });
-
   it("token-deleted before hello is rejected unauthenticated and removes nothing", async () => {
     const server = await startServer();
     const [first, second] = shadows;
@@ -230,7 +213,7 @@ describe("token-deleted over the bridge", () => {
     expect(storedIds()).toEqual([second!.id]);
   });
 
-  it("a valid token with role player is treated like any other role", async () => {
+  it("a client with role player is treated like any other role", async () => {
     const server = await startServer();
     const [first, second] = shadows;
     const client = await authed(server, "player");

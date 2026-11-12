@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
-import {
-  defaultAgentTokenPath,
-  defaultTokenPath,
-  loadOrCreateToken,
-} from "./token-file.js";
+import { basename, join } from "node:path";
+import { defaultAgentTokenPath, loadOrCreateToken } from "./token-file.js";
 
 let dir: string;
 beforeEach(async () => {
@@ -28,8 +24,6 @@ describe("loadOrCreateToken", () => {
 
   it("the agent token file is created with mode 0600 and reused", async () => {
     expect(basename(defaultAgentTokenPath())).toBe("agent-token");
-    expect(dirname(defaultAgentTokenPath())).toBe(dirname(defaultTokenPath()));
-    expect(defaultAgentTokenPath()).not.toBe(defaultTokenPath());
     const path = join(dir, "agent-token");
     const first = await loadOrCreateToken(path);
     expect(first).toMatch(/^[0-9a-f]{64}$/);

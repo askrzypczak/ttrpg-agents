@@ -11,7 +11,11 @@ import {
   SqliteTokenArtRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
-import { decodeMessage, encodeMessage } from "@ttrpg-agents/protocol";
+import {
+  PROTOCOL_VERSION,
+  decodeMessage,
+  encodeMessage,
+} from "@ttrpg-agents/protocol";
 import {
   broadcastLogEvents,
   editInstance,
@@ -122,10 +126,10 @@ beforeEach(async () => {
   socket.on("message", (data) => received.push(data.toString()));
   socket.send(
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
       id: "h1",
-      payload: { role: "gm", extensionVersion: "0", token: server.token },
+      payload: { role: "gm", extensionVersion: "0" },
     }),
   );
   await waitFor(() => received.some((m) => m.includes("encounter-snapshot")));
@@ -146,7 +150,7 @@ const awaitWrites = (n: number): Promise<void> =>
 
 /** Raw JSON, as the extension sends it. */
 function send(message: Record<string, unknown>): void {
-  socket.send(JSON.stringify({ v: 1, ...message }));
+  socket.send(JSON.stringify({ v: PROTOCOL_VERSION, ...message }));
 }
 
 const edit = (id?: string): Record<string, unknown> => ({

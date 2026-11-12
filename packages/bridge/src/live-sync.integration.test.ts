@@ -15,6 +15,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -62,10 +63,10 @@ async function connect(): Promise<Connection> {
   });
   ws.send(
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
       id: "h1",
-      payload: { role: "gm", extensionVersion: "0", token: server.token },
+      payload: { role: "gm", extensionVersion: "0" },
     }),
   );
   await waitFor(() => snapshotsOf(connection).length > 0);

@@ -176,7 +176,7 @@ describe("bridge CLI", () => {
       const withVariable = spawnTracked(process.execPath, [CLI]);
       await listeningPort(withVariable);
       await recordOf(withVariable);
-      await stopChild(withVariable);
+      await stopChild(withVariable.child);
       expect(await exists(named)).toBe(false);
       expect(await exists(defaultPath)).toBe(false);
 
@@ -184,7 +184,7 @@ describe("bridge CLI", () => {
       const withoutVariable = spawnTracked(process.execPath, [CLI]);
       await listeningPort(withoutVariable);
       await recordOf(withoutVariable);
-      await stopChild(withoutVariable);
+      await stopChild(withoutVariable.child);
       expect(await exists(defaultPath)).toBe(false);
     },
     TIMEOUT,
