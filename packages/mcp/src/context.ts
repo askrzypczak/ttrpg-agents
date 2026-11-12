@@ -4,6 +4,7 @@ import type {
   MapRepository,
   MonsterIndex,
   Rng,
+  SetupPorts,
   TablePort,
 } from "@ttrpg-agents/engine";
 
@@ -22,4 +23,6 @@ export interface ToolContext {
   newGroupId: () => string;
   /** Source of command ids: one per tool call, shared by all its writes. */
   newCommandId: () => string;
+  /** Settings facts and the database and bridge probes, for the setup report. */
+  setup: SetupPorts;
 }

@@ -10,7 +10,12 @@ import {
   decodeMessage,
   encodeMessage,
 } from "@ttrpg-agents/protocol";
-import { createBridgeClient } from "./client.js";
+import type { AgentQueryResponse, Query } from "@ttrpg-agents/protocol";
+import {
+  createBridgeClient,
+  createBridgeProbe,
+  type BridgeClient,
+} from "./client.js";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
 // Real bridge on an ephemeral port; a `ws` client stands in for the extension
@@ -126,5 +131,144 @@ describe("bridge client", () => {
     expect(response.error.code).toBe("bridge-unreachable");
     expect(response.error.message).toMatch(/start/i);
     expect(response.error.message).toMatch(/bridge/i);
+  });
+});
+
+/** A fake client answering every query with `response`, recording the queries. */
+function fakeClient(response: AgentQueryResponse): BridgeClient & {
+  queries: Query[];
+} {
+  const queries: Query[] = [];
+  return {
+    queries,
+    query(q) {
+      queries.push(q);
+      return Promise.resolve(response);
+    },
+  };
+}
+
+function failing(code: string): AgentQueryResponse {
+  return {
+    ok: false,
+    error: { code, message: `the bridge says ${code}` },
+  } as AgentQueryResponse;
+}
+
+function sceneStatus(roomId?: string): AgentQueryResponse {
+  return {
+    ok: true,
+    result: {
+      name: "scene-status",
+      result: {
+        sceneReady: true,
+        tokenCount: 0,
+        appliedInstanceCount: 0,
+        artWaits: [],
+        ...(roomId !== undefined ? { roomId } : {}),
+      },
+    },
+  };
+}
+
+describe("bridge probe", () => {
+  it("the bridge probe reports no-token-file without a query when the agent token file is missing", async () => {
+    const client = fakeClient(sceneStatus("room-1"));
+    const missing = join(dir, "missing", "agent-token");
+    const facts = await createBridgeProbe({
+      client,
+      port: 5199,
+      tokenPath: missing,
+    }).check();
+    expect(facts).toEqual({
+      port: 5199,
+      tokenFile: missing,
+      answer: { kind: "no-token-file" },
+    });
+    expect(client.queries).toEqual([]);
+  });
+
+  it("the bridge probe maps bridge-unreachable to unreachable, unauthorized to token-refused and not-connected to no-gm-tab", async () => {
+    const cases: [string, string][] = [
+      ["bridge-unreachable", "unreachable"],
+      ["unauthorized", "token-refused"],
+      ["not-connected", "no-gm-tab"],
+    ];
+    for (const [code, kind] of cases) {
+      const client = fakeClient(failing(code));
+      const facts = await createBridgeProbe({
+        client,
+        port: 5199,
+        tokenPath,
+      }).check();
+      expect(facts.answer, code).toEqual({ kind });
+      expect(client.queries, code).toEqual([{ name: "scene-status" }]);
+    }
+  });
+
+  it("the bridge probe maps a scene-status result to gm-tab-connected with its room id, and without one when the tab sends none", async () => {
+    const withRoom = await createBridgeProbe({
+      client: fakeClient(sceneStatus("room-abc")),
+      port: 5199,
+      tokenPath,
+    }).check();
+    expect(withRoom.answer).toEqual({
+      kind: "gm-tab-connected",
+      roomId: "room-abc",
+    });
+
+    const withoutRoom = await createBridgeProbe({
+      client: fakeClient(sceneStatus()),
+      port: 5199,
+      tokenPath,
+    }).check();
+    expect(withoutRoom.answer).toEqual({ kind: "gm-tab-connected" });
+  });
+
+  it("the bridge probe maps timeout and query-failed to gm-tab-not-answering", async () => {
+    for (const code of ["timeout", "query-failed"]) {
+      const facts = await createBridgeProbe({
+        client: fakeClient(failing(code)),
+        port: 5199,
+        tokenPath,
+      }).check();
+      expect(facts.answer, code).toEqual({ kind: "gm-tab-not-answering" });
+    }
+  });
+
+  it("the bridge probe maps bad-request and a result for another query to unreachable", async () => {
+    const otherQuery: AgentQueryResponse = {
+      ok: true,
+      result: { name: "scene-tokens", result: { tokens: [] } },
+    };
+    for (const response of [failing("bad-request"), otherQuery]) {
+      const facts = await createBridgeProbe({
+        client: fakeClient(response),
+        port: 5199,
+        tokenPath,
+      }).check();
+      expect(facts.answer).toEqual({ kind: "unreachable" });
+    }
+  });
+
+  it("the bridge probe's facts carry the port and the token file path, and not the token", async () => {
+    const secret = "probe-secret-token-7f3a9c";
+    const secretPath = join(dir, "secret-token");
+    await writeFile(secretPath, secret + "\n", { mode: 0o600 });
+    for (const response of [
+      sceneStatus("room-abc"),
+      failing("unauthorized"),
+      failing("bridge-unreachable"),
+    ]) {
+      const facts = await createBridgeProbe({
+        client: fakeClient(response),
+        port: 6123,
+        tokenPath: secretPath,
+      }).check();
+      expect(facts.port).toBe(6123);
+      expect(facts.tokenFile).toBe(secretPath);
+      expect(JSON.stringify(facts)).not.toContain(secret);
+      expect(JSON.stringify(facts)).not.toContain("the bridge says");
+    }
   });
 });

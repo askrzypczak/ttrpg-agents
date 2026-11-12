@@ -8,6 +8,7 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
+import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -30,6 +31,7 @@ beforeEach(() => {
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group",
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
+    setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
 });

@@ -1,6 +1,7 @@
 import {
   TableUnavailableError,
   applyInstanceEdit,
+  getSetupStatus,
   type EncounterRepository,
   type MonsterInstance,
   type NewMonsterInstance,
@@ -17,7 +18,9 @@ import {
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
+import { formatSetupStatus } from "./setup-status.js";
 import { tools, type ToolResult } from "./tools.js";
+import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -59,6 +62,7 @@ beforeEach(() => {
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${++groupN}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
+    setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
 });
@@ -145,7 +149,7 @@ function names(): string[] {
 }
 
 describe("tool registry", () => {
-  it("exposes the thirty-two tools", () => {
+  it("exposes the thirty-three tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -175,6 +179,7 @@ describe("tool registry", () => {
       "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "setup_status",
       "split_initiative",
       "table_status",
       "undo",
@@ -1037,6 +1042,24 @@ describe("clear_encounter", () => {
     const r = await call("clear_encounter");
     expect(text(r)).toContain("Cleared 2");
     expect(names()).toEqual([]);
+  });
+});
+
+describe("setup_status", () => {
+  it("setup_status replies with the formatted report of ctx.setup and structured ready and rows, and is not an error when the bridge is down", async () => {
+    const bridgeDown = {
+      bridge: { answer: { kind: "unreachable" as const } },
+    };
+    ctx.setup = makeTestSetupPorts(bridgeDown);
+    const r = await call("setup_status");
+    const expected = await getSetupStatus(makeTestSetupPorts(bridgeDown));
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toBe(formatSetupStatus(expected));
+    expect(r.structuredContent).toEqual({
+      summary: text(r),
+      ready: false,
+      rows: expected.rows,
+    });
   });
 });
 

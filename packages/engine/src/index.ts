@@ -7,3 +7,4 @@ export * from "./monsters/index.js";
 export * from "./table/index.js";
 export * from "./map/index.js";
 export * from "./browser.js";
+export * from "./setup/index.js";

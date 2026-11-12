@@ -3,7 +3,11 @@
 // its composition root only). It imports only Node builtins,
 // `@ttrpg-agents/engine` and `@ttrpg-agents/protocol`.
 import { readFile } from "node:fs/promises";
-import { TableUnavailableError, type TablePort } from "@ttrpg-agents/engine";
+import {
+  TableUnavailableError,
+  type BridgeProbe,
+  type TablePort,
+} from "@ttrpg-agents/engine";
 import {
   agentQueryResponseSchema,
   type AgentQueryResponse,
@@ -127,6 +131,20 @@ export function createBridgeTable(client: BridgeClient): TablePort {
         );
       const { mimeType, data, width, height } = res.result.result;
       return { mimeType, data, width, height };
+    },
+  };
+}
+
+/** Asks the bridge on `port` for `scene-status` through `client`, after checking the token file at `tokenPath` exists; maps the answer to facts. */
+export function createBridgeProbe(options: {
+  client: BridgeClient;
+  port: number;
+  tokenPath: string;
+}): BridgeProbe {
+  void options;
+  return {
+    check() {
+      return Promise.reject(new Error("not implemented"));
     },
   };
 }
