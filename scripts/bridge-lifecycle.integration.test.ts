@@ -888,6 +888,7 @@ const SETTING_VARIABLES = new Set([
   "BRIDGE_AGENT_TOKEN_FILE",
   "BRIDGE_STATE_FILE",
   "BRIDGE_STATIC_DIR",
+  "TTRPG_AGENTS_BACKUP_DIR",
 ]);
 
 /** Whether `path` lies strictly inside `parent`. */
