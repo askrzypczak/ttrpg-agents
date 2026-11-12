@@ -23,7 +23,7 @@ Hexagonal architecture (ports and adapters) around a domain core: Claude handles
 Runtime view (processes, ports, auth, data flow): [`docs/architecture.md`](docs/architecture.md). Update that page when processes, ports, auth or the data flow change.
 
 ## Conventions
-- Owner: Tony (personal GitHub account `askrzypczak`). Public repo, openly an agent-written test project for claude-workflow (see README). Tony is the only contributor: issues are for directing agents, outside PRs are not accepted. No license yet (all rights reserved); the SRD data is CC-BY 4.0.
+- Owner: Tony (personal GitHub account `askrzypczak`). Public repo, openly an agent-written test project for claude-workflow (see README). Tony is the only contributor: issues are for directing agents, outside PRs are not accepted. The code is under the MIT License (see `LICENSE`); the SRD data is CC-BY 4.0.
 - Keep this file short. It records the current rules and conventions; their history is in the decision log (next section).
 - Table wins, per field: a value changed on the Owlbear table (by the GM or anyone) stays until the agent/MCP gives that same value something new (the encounter changes it). `planSync` implements it with a baseline per owned key; a projector with several fields in one key applies it per field using the baseline passed as its third argument. Only Stat Bubbles `hide` does so today; its other fields are still one value (see `packages/owlbear/README.md`, #162).
 - Never authorize by the client-supplied `role` (bridge `hello`); it only drives UI. Bridge clients authenticate with the token.
