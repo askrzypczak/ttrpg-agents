@@ -1,5 +1,7 @@
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadConfig } from "@ttrpg-agents/config";
 import { storeTokenImage } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterLog,
@@ -16,31 +18,32 @@ import {
   snapshotMessage,
 } from "./encounter-bridge.js";
 import { broadcastMapRooms, mapRoomsMessage } from "./map-rooms.js";
-import { DEFAULT_BRIDGE_PORT, startBridgeServer } from "./server.js";
+import { startBridgeServer } from "./server.js";
 import {
   checkoutCommit,
-  defaultStatePath,
   removeStateFile,
   writeStateFile,
 } from "./state-file.js";
-import { defaultAgentTokenPath, loadOrCreateToken } from "./token-file.js";
+import { loadOrCreateToken } from "./token-file.js";
 
-const port = process.env.BRIDGE_PORT
-  ? Number(process.env.BRIDGE_PORT)
-  : DEFAULT_BRIDGE_PORT;
-const staticDir =
-  process.env.BRIDGE_STATIC_DIR ??
-  fileURLToPath(new URL("../../owlbear/dist", import.meta.url));
-const statePath = process.env.BRIDGE_STATE_FILE ?? defaultStatePath();
 const checkout = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
-const agentTokenPath =
-  process.env.BRIDGE_AGENT_TOKEN_FILE ?? defaultAgentTokenPath();
+const { settings, problems } = loadConfig({
+  env: process.env,
+  home: homedir(),
+  checkout,
+});
+for (const problem of problems) console.error(problem.message);
+if (problems.some((p) => p.level === "error")) process.exit(1);
+const port = settings.bridgePort;
+const staticDir = settings.extensionDir;
+const statePath = settings.bridgeStateFile;
+const agentTokenPath = settings.agentTokenFile;
 const agentToken = await loadOrCreateToken(agentTokenPath);
 
 // The snapshot is sent after each hello-ack. Every later change, by the MCP
 // server process or by this one, reaches the client as an event polled from the
 // change log.
-const db = openDatabase();
+const db = openDatabase(settings.database);
 const repo = new SqliteEncounterRepository(db);
 const artRepo = new SqliteTokenArtRepository(db);
 const imageRepo = new SqliteTokenImageRepository(db);

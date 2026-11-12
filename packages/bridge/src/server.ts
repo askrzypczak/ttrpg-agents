@@ -41,7 +41,6 @@ import {
   type TokenImageStoreResult,
 } from "@ttrpg-agents/engine";
 
-export const DEFAULT_BRIDGE_PORT = 5199;
 export const SERVER_VERSION = "0.0.0";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -65,7 +64,7 @@ const ALLOWED_ORIGINS = new Set([
 
 export interface BridgeServerOptions {
   /** 0 picks an ephemeral port. */
-  port?: number;
+  port: number;
   /** Directory of the built extension (contains manifest.json). */
   staticDir: string;
   host?: string;
@@ -387,7 +386,7 @@ export async function startBridgeServer(
   options: BridgeServerOptions,
 ): Promise<BridgeServer> {
   const {
-    port = DEFAULT_BRIDGE_PORT,
+    port,
     staticDir,
     host = "127.0.0.1",
     snapshot,

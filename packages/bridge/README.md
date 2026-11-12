@@ -46,21 +46,8 @@ the account is not enough; it does not load in a room until then. An extension
 installed with an older `?token=` URL keeps working: the bridge ignores the
 query.
 
-Environment:
-
-- `BRIDGE_PORT`: port to listen on (default `5199`).
-- `BRIDGE_STATIC_DIR`: folder to serve (default `packages/owlbear/dist`). The
-  bridge serves whatever it points at, readable by owlbear.rodeo pages, so only
-  point it at the built extension.
-- `BRIDGE_AGENT_TOKEN_FILE`: agent token for `POST /agent/query`, created
-  with mode 0600 on first run (default `~/.config/ttrpg-agents/agent-token`).
-  It is never served.
-- `BRIDGE_STATE_FILE`: the state file (default
-  `~/.config/ttrpg-agents/bridge-state.json`); the log is `bridge.log` in the
-  same directory. Set it to run a second bridge, or tests, without touching
-  the first one's record.
-- `TTRPG_AGENTS_DB`: the encounter database to watch, the same file the MCP
-  server writes (see `packages/mcp/README.md` for the default location).
+Settings (port, served folder, agent token file, state file and database):
+see [`docs/settings.md`](../../docs/settings.md).
 
 ## Test a branch against the real table
 
