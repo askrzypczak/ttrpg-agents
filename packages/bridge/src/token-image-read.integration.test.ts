@@ -44,6 +44,18 @@ async function start(): Promise<BridgeServer> {
   return server;
 }
 
+/** A bridge over a temp SQLite file, wired like the CLI, with no extension token. */
+async function startBridge(): Promise<BridgeServer> {
+  server = await startBridgeServer({
+    port: 0,
+    staticDir: dir,
+    agentToken: AGENT_TOKEN,
+    storeTokenImage: (bytes) => storeTokenImage(images, bytes),
+    getTokenImage: (sha256) => images.getTokenImage(sha256),
+  });
+  return server;
+}
+
 /** Stores the bytes as a token image and returns their hash. */
 function seed(bytes: Uint8Array): string {
   const result = storeTokenImage(images, bytes);
@@ -216,7 +228,7 @@ describe("GET /token-images/<sha256>", () => {
   });
 
   it("the read route sends no CORS headers, even for an Owlbear origin", async () => {
-    const bridge = await start();
+    const bridge = await startBridge();
     const sha256 = seed(PNG_1X1);
     const path = `/token-images/${sha256}`;
 
@@ -224,20 +236,40 @@ describe("GET /token-images/<sha256>", () => {
       "https://www.owlbear.rodeo",
       "https://owlbear.rodeo",
     ]) {
-      const answer = await get(bridge, path, {
-        ...bearer(EXTENSION_TOKEN),
-        Origin: origin,
-      });
+      const answer = await get(bridge, path, { Origin: origin });
       expect(answer.status).toBe(200);
       expect(answer.bytes).toEqual(Buffer.from(PNG_1X1));
       expect(answer.headers["access-control-allow-origin"]).toBeUndefined();
     }
 
     // Refusals carry none either.
-    const refused = await get(bridge, path, {
-      Origin: "https://www.owlbear.rodeo",
-    });
-    expect(refused.status).toBe(401);
-    expect(refused.headers["access-control-allow-origin"]).toBeUndefined();
+    for (const refusedPath of [
+      `/token-images/${"0f".repeat(32)}`,
+      `/token-images/${sha256.toUpperCase()}`,
+    ]) {
+      const refused = await get(bridge, refusedPath, {
+        Origin: "https://www.owlbear.rodeo",
+      });
+      expect(refused.status, refusedPath).toBe(404);
+      expect(
+        refused.headers["access-control-allow-origin"],
+        refusedPath,
+      ).toBeUndefined();
+    }
+  });
+
+  it("GET /token-images/<sha256> answers the stored bytes with the stored mime as Content-Type with no Authorization", async () => {
+    const bridge = await startBridge();
+    for (const [bytes, mime] of [
+      [PNG_1X1, "image/png"],
+      [WEBP_1X1, "image/webp"],
+    ] as const) {
+      const sha256 = seed(bytes);
+      const answer = await get(bridge, tokenImagePath(sha256));
+      expect(answer.status).toBe(200);
+      expect(answer.headers["content-type"]).toBe(mime);
+      expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+      expect(answer.bytes).toEqual(Buffer.from(bytes));
+    }
   });
 });

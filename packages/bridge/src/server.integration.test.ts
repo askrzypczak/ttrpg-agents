@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { get } from "node:http";
 import { WebSocket } from "ws";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -121,6 +122,22 @@ function hostGet(
 }
 
 describe("bridge server", () => {
+  it("admits a hello with no token on a socket from the bridge's own origin with hello-ack", async () => {
+    const ws = await connect();
+    const reply = await request(
+      ws,
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        type: "hello",
+        id: "h1",
+        payload: { role: "gm", extensionVersion: "0" },
+      }),
+    );
+    expect(reply.type).toBe("hello-ack");
+    expect(reply.id).toBe("h1");
+    ws.close();
+  });
+
   it("answers hello with a valid token with hello-ack", async () => {
     const ws = await connect();
     const reply = await request(ws, helloWith(server.token));

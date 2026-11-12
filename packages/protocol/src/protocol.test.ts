@@ -81,8 +81,24 @@ const samples: BridgeMessage[] = [
 ];
 
 describe("protocol", () => {
-  it("uses version 1", () => {
-    expect(PROTOCOL_VERSION).toBe(1);
+  it("uses version 2", () => {
+    expect(PROTOCOL_VERSION).toBe(2);
+  });
+
+  it("a hello without a token decodes", () => {
+    const r = decodeMessage(
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        type: "hello",
+        id: "h1",
+        payload: { role: "gm", extensionVersion: "1" },
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.message.type).toBe("hello");
+      expect(r.message.payload).toEqual({ role: "gm", extensionVersion: "1" });
+    }
   });
 
   it.each(samples)("round-trips $type", (message) => {
@@ -193,8 +209,8 @@ describe("protocol", () => {
     },
   );
 
-  it("rejects an unsupported version", () => {
-    const r = decodeMessage('{"v":2,"type":"ping","payload":{}}');
+  it("rejects the previous version 1", () => {
+    const r = decodeMessage('{"v":1,"type":"ping","payload":{}}');
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("unsupported-version");
   });

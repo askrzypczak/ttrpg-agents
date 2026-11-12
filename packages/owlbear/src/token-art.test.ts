@@ -91,6 +91,18 @@ describe("uploadTokenImage", () => {
     expect([...(calls[0]?.body ?? [])]).toEqual([...BYTES]);
   });
 
+  it("uploadTokenImage posts the bytes to /token-images with no Authorization header", async () => {
+    const calls = stubFetch(200, stored);
+
+    await uploadTokenImage(BYTES);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url.endsWith(TOKEN_IMAGE_UPLOAD_PATH)).toBe(true);
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.authorization).toBeNull();
+    expect([...(calls[0]?.body ?? [])]).toEqual([...BYTES]);
+  });
+
   it("uploadTokenImage resolves with the bridge's answer, a stored image or a refusal", async () => {
     stubFetch(200, stored);
     await expect(uploadTokenImage(BYTES, TOKEN)).resolves.toEqual(stored);
@@ -169,6 +181,20 @@ describe("downloadTokenImage", () => {
     expect(calls[0]?.url.endsWith(`/token-images/${SHA256}`)).toBe(true);
     expect(calls[0]?.method ?? "GET").toBe("GET");
     expect(calls[0]?.authorization).toBe(`Bearer ${TOKEN}`);
+    expect(image.mime).toBe("image/webp");
+    expect(image.bytes).toBeInstanceOf(Uint8Array);
+    expect([...image.bytes]).toEqual([...BYTES]);
+  });
+
+  it("downloadTokenImage gets /token-images/<sha256> with no Authorization header and resolves with the bytes and the answered mime", async () => {
+    const calls = stubFetchBody(200, BYTES, "image/webp");
+
+    const image = await downloadTokenImage(SHA256);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url.endsWith(`/token-images/${SHA256}`)).toBe(true);
+    expect(calls[0]?.method ?? "GET").toBe("GET");
+    expect(calls[0]?.authorization).toBeNull();
     expect(image.mime).toBe("image/webp");
     expect(image.bytes).toBeInstanceOf(Uint8Array);
     expect([...image.bytes]).toEqual([...BYTES]);

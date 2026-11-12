@@ -146,6 +146,74 @@ async function exists(path: string): Promise<boolean> {
 
 describe("bridge CLI", () => {
   it(
+    "the bridge prints the install URL with no token",
+    async () => {
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const port = await listeningPort(bridge);
+      const line = await waitFor(() => {
+        const m = /^install in Owlbear: .*$/m.exec(bridge.stdout());
+        return Promise.resolve(m ? m[0] : undefined);
+      }, "the install line");
+
+      expect(line).toBe(
+        `install in Owlbear: http://localhost:${String(port)}/manifest.json`,
+      );
+      expect(bridge.stdout()).not.toContain(EXTENSION_TOKEN);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "the bridge creates no extension token file, neither at BRIDGE_TOKEN_FILE nor at the default path under HOME",
+    async () => {
+      const home = join(dir, "home");
+      await mkdir(home);
+      env.HOME = home;
+      const named = join(dir, "missing", "bridge-token");
+      const defaultPath = join(home, ".config", "ttrpg-agents", "bridge-token");
+
+      env.BRIDGE_TOKEN_FILE = named;
+      const withVariable = spawnTracked(process.execPath, [CLI]);
+      await listeningPort(withVariable);
+      await recordOf(withVariable);
+      await stopChild(withVariable);
+      expect(await exists(named)).toBe(false);
+      expect(await exists(defaultPath)).toBe(false);
+
+      delete env.BRIDGE_TOKEN_FILE;
+      const withoutVariable = spawnTracked(process.execPath, [CLI]);
+      await listeningPort(withoutVariable);
+      await recordOf(withoutVariable);
+      await stopChild(withoutVariable);
+      expect(await exists(defaultPath)).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a manifest request with an old install URL's ?token= gets the manifest as built, even when BRIDGE_TOKEN_FILE holds that token",
+    async () => {
+      const built =
+        JSON.stringify(
+          { name: "t", action: { popover: "/index.html" } },
+          null,
+          2,
+        ) + "\n";
+      await writeFile(join(dir, "static", "manifest.json"), built);
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const port = await listeningPort(bridge);
+
+      const res = await fetch(
+        `http://127.0.0.1:${String(port)}/manifest.json?token=${EXTENSION_TOKEN}`,
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(built);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "once listening, the bridge records its pid, port, checkout, commit and start time in the state file",
     async () => {
       const spawnedAt = Date.now();

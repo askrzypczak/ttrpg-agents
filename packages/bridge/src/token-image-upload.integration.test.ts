@@ -307,3 +307,140 @@ describe("POST /token-images", () => {
     expect(storedImageCount()).toBe(0);
   });
 });
+
+/** A bridge over a temp SQLite file, wired like the CLI, with no extension token. */
+async function startBridge(): Promise<BridgeServer> {
+  server = await startBridgeServer({
+    port: 0,
+    staticDir: dir,
+    agentToken: AGENT_TOKEN,
+    storeTokenImage: (bytes) => storeTokenImage(images, bytes),
+  });
+  return server;
+}
+
+/** The two origins the bridge serves its own pages from. */
+const ownOrigins = (bridge: BridgeServer): string[] => [
+  `http://localhost:${String(bridge.port)}`,
+  `http://127.0.0.1:${String(bridge.port)}`,
+];
+
+/** Posts raw bytes to the upload route with exactly the given extra headers. */
+function post(
+  bridge: BridgeServer,
+  body: Uint8Array,
+  headers: Record<string, string>,
+): Promise<Answer> {
+  return new Promise((resolve, reject) => {
+    let answered = false;
+    const req = request(
+      {
+        host: "127.0.0.1",
+        port: bridge.port,
+        path: TOKEN_IMAGE_UPLOAD_PATH,
+        method: "POST",
+        headers: { "Content-Length": String(body.length), ...headers },
+      },
+      (res) => {
+        answered = true;
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            contentType: res.headers["content-type"] ?? null,
+            body: parseAnswer(Buffer.concat(chunks).toString("utf8")),
+          }),
+        );
+        res.on("error", reject);
+      },
+    );
+    // A refusal sent before the body is read may cut the upload short.
+    req.on("error", (e) => {
+      if (!answered) reject(e);
+    });
+    req.end(body);
+  });
+}
+
+describe("POST /token-images by origin", () => {
+  it("POST /token-images with the bridge's own Origin (localhost or 127.0.0.1 with its port) stores a PNG, a JPEG and a WebP and answers each one's hash, mime and dimensions", async () => {
+    const bridge = await startBridge();
+    const cases = [
+      [PNG_1X1, "image/png"],
+      [JPEG_1X1, "image/jpeg"],
+      [WEBP_1X1, "image/webp"],
+    ] as const;
+    for (const origin of ownOrigins(bridge)) {
+      for (const [bytes, mime] of cases) {
+        const answer = await post(bridge, bytes, { Origin: origin });
+        const sha256 = sha256Of(bytes);
+        expect(answer.status, origin).toBe(200);
+        expect(answer.body, origin).toEqual({
+          ok: true,
+          image: { sha256, mime, width: 1, height: 1 },
+        });
+        const stored = images.getTokenImage(sha256);
+        expect(stored).toMatchObject({ sha256, mime, width: 1, height: 1 });
+        expect(Buffer.from(stored?.bytes ?? [])).toEqual(Buffer.from(bytes));
+      }
+    }
+    expect(storedImageCount()).toBe(3);
+  });
+
+  it("POST /token-images with another Origin (an Owlbear origin, another port, null) is refused with 403 unauthorized and stores nothing", async () => {
+    const bridge = await startBridge();
+    for (const origin of [
+      "https://www.owlbear.rodeo",
+      `http://localhost:${String(bridge.port + 1)}`,
+      "null",
+    ]) {
+      const answer = await post(bridge, PNG_1X1, { Origin: origin });
+      expect(answer.status, origin).toBe(403);
+      expect(refusalCode(answer), origin).toBe("unauthorized");
+    }
+    expect(storedImageCount()).toBe(0);
+  });
+
+  it("POST /token-images with no Origin is refused with 403 unauthorized and stores nothing", async () => {
+    const bridge = await startBridge();
+    const answer = await post(bridge, PNG_1X1, {});
+    expect(answer.status).toBe(403);
+    expect(refusalCode(answer)).toBe("unauthorized");
+    expect(storedImageCount()).toBe(0);
+  });
+
+  it("POST /token-images with another Origin is refused with 403 before reading a body over 1 MiB", async () => {
+    const bridge = await startBridge();
+    // Read, this body would be refused as too_large instead.
+    const over = pngDeclaring(1, 1, TOKEN_IMAGE_MAX_BYTES + 1);
+    const answer = await post(bridge, over, {
+      Origin: "https://www.owlbear.rodeo",
+    });
+    expect(answer.status).toBe(403);
+    expect(refusalCode(answer)).toBe("unauthorized");
+    expect(storedImageCount()).toBe(0);
+  });
+
+  it("POST /token-images decides by Origin alone: a bearer (the agent token or any other) neither admits another origin nor stops the bridge's own", async () => {
+    const bridge = await startBridge();
+    const own = `http://localhost:${String(bridge.port)}`;
+    for (const bearer of [AGENT_TOKEN, "not-a-token"]) {
+      const refused = await post(bridge, PNG_1X1, {
+        Origin: "https://www.owlbear.rodeo",
+        Authorization: `Bearer ${bearer}`,
+      });
+      expect(refused.status, bearer).toBe(403);
+      expect(refusalCode(refused), bearer).toBe("unauthorized");
+    }
+    expect(storedImageCount()).toBe(0);
+    for (const bearer of [AGENT_TOKEN, "not-a-token"]) {
+      const accepted = await post(bridge, PNG_1X1, {
+        Origin: own,
+        Authorization: `Bearer ${bearer}`,
+      });
+      expect(accepted.status, bearer).toBe(200);
+    }
+    expect(storedImageCount()).toBe(1);
+  });
+});
