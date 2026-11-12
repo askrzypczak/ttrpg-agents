@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SavedRoom } from "@ttrpg-agents/engine";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -39,7 +40,7 @@ const cellar: SavedRoom = {
 describe("map-rooms message", () => {
   it("a map-rooms message round-trips the active map's item id and its rooms", () => {
     const message: BridgeMessage = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "map-rooms",
       payload: { itemId: "trollskull", rooms: [taproom, cellar] },
     };
@@ -52,7 +53,7 @@ describe("map-rooms message", () => {
 
   it("a map-rooms message with no map in use round-trips a null item id and no rooms", () => {
     const message: BridgeMessage = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "map-rooms",
       payload: { itemId: null, rooms: [] },
     };
@@ -65,7 +66,7 @@ describe("map-rooms message", () => {
 
   it("a map-rooms room with an unknown status is invalid-payload", () => {
     const raw = JSON.stringify({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "map-rooms",
       payload: {
         itemId: "trollskull",

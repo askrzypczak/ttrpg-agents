@@ -38,7 +38,6 @@ export async function openHarness(
     ready?: boolean;
     target?: string;
     obrOrigin?: string;
-    token?: string | null;
     /** Item calls fail with this message even when the scene is ready. */
     failItems?: string;
     /** The asset picker's answer (SDK `ImageDownload`s). Default: a cancel. */
@@ -48,9 +47,6 @@ export async function openHarness(
   const url = new URL(HARNESS);
   url.searchParams.set("target", options.target ?? EXTENSION());
   if (options.obrOrigin) url.searchParams.set("obrOrigin", options.obrOrigin);
-  const token =
-    options.token === undefined ? currentBridge().token : options.token;
-  if (token) url.searchParams.set("token", token);
   if (options.failItems) url.searchParams.set("failItems", options.failItems);
   if (options.pickedImages)
     url.searchParams.set("pickedImages", JSON.stringify(options.pickedImages));
@@ -73,7 +69,7 @@ export const test = base.extend<
   { hostErrors: { allow: boolean }; seed: void },
   { bridge: WorkerBridge }
 >({
-  // Each worker runs its own real bridge (own port, token file and DB).
+  // Each worker runs its own real bridge (own port, agent token file and DB).
   bridge: [
     // Playwright requires the destructured first argument.
     // eslint-disable-next-line no-empty-pattern

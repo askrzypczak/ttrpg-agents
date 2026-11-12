@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { bridgeMessageSchema } from "./protocol.js";
+import { PROTOCOL_VERSION, bridgeMessageSchema } from "./protocol.js";
 
 describe("instance-edit schema", () => {
   it("an edit with no field fails with a message naming the fields", () => {
     const result = bridgeMessageSchema.safeParse({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "instance-edit",
       payload: { instanceId: "i1" },
     });

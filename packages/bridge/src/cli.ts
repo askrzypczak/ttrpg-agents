@@ -23,11 +23,7 @@ import {
   removeStateFile,
   writeStateFile,
 } from "./state-file.js";
-import {
-  defaultAgentTokenPath,
-  defaultTokenPath,
-  loadOrCreateToken,
-} from "./token-file.js";
+import { defaultAgentTokenPath, loadOrCreateToken } from "./token-file.js";
 
 const port = process.env.BRIDGE_PORT
   ? Number(process.env.BRIDGE_PORT)
@@ -37,16 +33,8 @@ const staticDir =
   fileURLToPath(new URL("../../owlbear/dist", import.meta.url));
 const statePath = process.env.BRIDGE_STATE_FILE ?? defaultStatePath();
 const checkout = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
-const tokenPath = process.env.BRIDGE_TOKEN_FILE ?? defaultTokenPath();
 const agentTokenPath =
   process.env.BRIDGE_AGENT_TOKEN_FILE ?? defaultAgentTokenPath();
-if (resolve(tokenPath) === resolve(agentTokenPath)) {
-  console.error(
-    `BRIDGE_TOKEN_FILE and BRIDGE_AGENT_TOKEN_FILE must be different files (both are ${resolve(tokenPath)}): the extension token travels in the manifest URL and must not authorise /agent/query.`,
-  );
-  process.exit(1);
-}
-const token = await loadOrCreateToken(tokenPath);
 const agentToken = await loadOrCreateToken(agentTokenPath);
 
 // The snapshot is sent after each hello-ack. Every later change, by the MCP
@@ -61,7 +49,6 @@ const maps = new SqliteMapRepository(db);
 const server = await startBridgeServer({
   port,
   staticDir,
-  token,
   agentToken,
   snapshot: () => snapshotMessage(repo, artRepo, log),
   mapRooms: () => mapRoomsMessage(maps),
@@ -102,8 +89,8 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       .then(() => process.exit(0));
   });
 }
-// Written before the install URL is printed, so a log that ends before the
-// record exists never holds the token.
+// Written before the install URL is printed: `bridge:start` waits for this
+// record, not for the log.
 const stateWritten = writeStateFile(statePath, {
   pid: process.pid,
   port: server.port,
@@ -114,9 +101,8 @@ const stateWritten = writeStateFile(statePath, {
 await stateWritten;
 console.log(`bridge listening on http://localhost:${server.port}`);
 console.log(`serving ${staticDir}`);
-console.log(`token file: ${tokenPath}`);
 console.log(`agent token file: ${agentTokenPath}`);
 console.log(`state file: ${statePath}`);
 console.log(
-  `install in Owlbear: http://localhost:${server.port}/manifest.json?token=${token}`,
+  `install in Owlbear: http://localhost:${server.port}/manifest.json`,
 );

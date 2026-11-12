@@ -20,7 +20,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
-import { decodeMessage, encodeMessage } from "@ttrpg-agents/protocol";
+import {
+  PROTOCOL_VERSION,
+  decodeMessage,
+  encodeMessage,
+} from "@ttrpg-agents/protocol";
 import {
   bridgeStatus,
   restartBridge,
@@ -35,11 +39,10 @@ import {
 } from "../packages/bridge/src/state-file.ts";
 
 // Each test runs the lifecycle functions in-process against this checkout's
-// built bridge, isolated in a temp dir: its own state file, log, token files,
-// database and an ephemeral port. A fake build stands in for `npm run build`.
+// built bridge, isolated in a temp dir: its own state file, log, agent token
+// file, database and an ephemeral port. A fake build stands in for `npm run build`.
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(REPO, "packages/bridge/dist/cli.js");
-const EXTENSION_TOKEN = "e1".repeat(32);
 const AGENT_TOKEN = "a7".repeat(32);
 const TIMEOUT = 60_000;
 const HEAD = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -64,9 +67,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "bridge-lifecycle-"));
   statePath = join(dir, "config", "bridge-state.json");
   logPath = join(dirname(statePath), "bridge.log");
-  const tokenFile = join(dir, "bridge-token");
   const agentTokenFile = join(dir, "agent-token");
-  await writeFile(tokenFile, EXTENSION_TOKEN + "\n", { mode: 0o600 });
   await writeFile(agentTokenFile, AGENT_TOKEN + "\n", { mode: 0o600 });
   const staticDir = join(dir, "static");
   await mkdir(staticDir);
@@ -74,7 +75,6 @@ beforeEach(async () => {
     ...process.env,
     BRIDGE_PORT: "0",
     BRIDGE_STATE_FILE: statePath,
-    BRIDGE_TOKEN_FILE: tokenFile,
     BRIDGE_AGENT_TOKEN_FILE: agentTokenFile,
     BRIDGE_STATIC_DIR: staticDir,
     TTRPG_AGENTS_DB: join(dir, "encounters.db"),
@@ -317,7 +317,7 @@ async function extension(port: number): Promise<WebSocket> {
         const id = r.message.id;
         ws.send(
           encodeMessage({
-            v: 1,
+            v: PROTOCOL_VERSION,
             type: "query-result",
             ...(id !== undefined ? { id } : {}),
             payload: {
@@ -336,9 +336,9 @@ async function extension(port: number): Promise<WebSocket> {
   });
   ws.send(
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role: "gm", extensionVersion: "0", token: EXTENSION_TOKEN },
+      payload: { role: "gm", extensionVersion: "0" },
     }),
   );
   await acked;
@@ -430,16 +430,13 @@ describe("bridge lifecycle: start", () => {
   it(
     "start exits non-zero with the bridge's error line when the bridge exits before listening",
     async () => {
-      // The CLI refuses to start when both token paths name the same file.
+      // The CLI exits when its port is taken.
+      const holder = await listenOn(0);
       const code = await startBridge(
-        options({
-          env: { ...env, BRIDGE_AGENT_TOKEN_FILE: env.BRIDGE_TOKEN_FILE },
-        }),
+        options({ env: { ...env, BRIDGE_PORT: String(portOf(holder)) } }),
       );
       expect(code).not.toBe(0);
-      expect(printed()).toContain(
-        "BRIDGE_TOKEN_FILE and BRIDGE_AGENT_TOKEN_FILE must be different files",
-      );
+      expect(printed()).toContain("is already in use");
       expect(await exists(statePath)).toBe(false);
     },
     TIMEOUT,
@@ -760,14 +757,13 @@ describe("bridge lifecycle: status", () => {
   );
 
   it(
-    "start, status and stop never print the extension or agent token",
+    "start, status and stop never print the agent token",
     async () => {
       await started();
       expect(await bridgeStatus(options())).toBe(0);
       expect(await stopBridge(options())).toBe(0);
 
       const text = printed();
-      expect(text).not.toContain(EXTENSION_TOKEN);
       expect(text).not.toContain(AGENT_TOKEN);
     },
     TIMEOUT,

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import type { TokenImageUploadResponse } from "@ttrpg-agents/protocol";
+import {
+  PROTOCOL_VERSION,
+  type TokenImageUploadResponse,
+} from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { Timers } from "./reconnecting-socket.js";
@@ -103,7 +106,7 @@ describe("createEncounterSync token art upload guards", () => {
     await vi.waitFor(() => expect(uploads).toHaveLength(1));
     // A reconnect: the store's copy of the pick, without a hash yet.
     await sync.handleMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello-ack",
       payload: { serverVersion: "0" },
     });

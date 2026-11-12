@@ -33,7 +33,7 @@ Issue: [#219](https://github.com/askrzypczak/ttrpg-agents/issues/219).
   - A body cap with a margin: nothing to cover with a raw body.
   - A `store-failed` code in the bridge's kebab-case style: it would mix two styles in one enum that clients match on.
 - Where: `TOKEN_IMAGE_UPLOAD_PATH`, `tokenImageUploadResponseSchema` (`packages/protocol/src/protocol.ts`); the route handler in `packages/bridge/src/server.ts`; `docs/architecture.md` (Token and auth).
-- Status: active
+- Status: superseded in part by 446.1 (the bearer; the rest stands)
 
 ## 219.4 A failed fetch or upload of picked art is tried once, and its panel error stays until the panel reloads
 

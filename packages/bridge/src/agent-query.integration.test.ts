@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket } from "ws";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -73,9 +74,9 @@ async function extension(): Promise<{
   });
   ws.send(
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role: "gm", extensionVersion: "0", token: server.token },
+      payload: { role: "gm", extensionVersion: "0" },
     }),
   );
   await acked;
@@ -135,7 +136,7 @@ const sceneStatusResult = (tokenCount: number) => ({
 function reply(ws: WebSocket, id: string | undefined, tokenCount: number) {
   ws.send(
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "query-result",
       ...(id !== undefined ? { id } : {}),
       payload: sceneStatusResult(tokenCount),
@@ -147,12 +148,6 @@ describe("POST /agent/query", () => {
   it("POST with no token -> 401", async () => {
     await start();
     const res = await post(JSON.stringify(SCENE_STATUS));
-    expect(res.status).toBe(401);
-  });
-
-  it("POST with the extension (bridge) token -> 401", async () => {
-    await start();
-    const res = await post(JSON.stringify(SCENE_STATUS), server.token);
     expect(res.status).toBe(401);
   });
 
@@ -199,7 +194,7 @@ describe("POST /agent/query", () => {
       throw new Error("expected a query with an id");
     ext.ws.send(
       encodeMessage({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "error",
         id: sent.id,
         payload: { code: "query-failed", message: "boom", fatal: false },
@@ -248,14 +243,14 @@ describe("POST /agent/query", () => {
     expect(ext.received.some((m) => m.type === "query")).toBe(true);
   });
 
-  it("manifest.json requested with no token, with the bridge token and with the agent token never contains the agent token", async () => {
+  it("manifest.json requested with no query and with the agent token as ?token= never contains the agent token", async () => {
     await start();
     // The agent token is live on this server (no client yet, so 503 not 401).
     expect((await post(JSON.stringify(SCENE_STATUS), AGENT_TOKEN)).status).toBe(
       503,
     );
     const base = `http://127.0.0.1:${server.port}/manifest.json`;
-    for (const q of ["", `?token=${server.token}`, `?token=${AGENT_TOKEN}`]) {
+    for (const q of ["", `?token=${AGENT_TOKEN}`]) {
       const res = await fetch(base + q);
       expect(res.status, q).toBe(200);
       expect(await res.text(), q).not.toContain(AGENT_TOKEN);

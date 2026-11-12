@@ -5,7 +5,11 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket } from "ws";
-import { decodeMessage, encodeMessage } from "@ttrpg-agents/protocol";
+import {
+  PROTOCOL_VERSION,
+  decodeMessage,
+  encodeMessage,
+} from "@ttrpg-agents/protocol";
 import { createBridgeClient } from "./client.js";
 import { startBridgeServer, type BridgeServer } from "./server.js";
 
@@ -64,7 +68,7 @@ async function startWithExtension(): Promise<BridgeServer> {
       if (r.message.type === "query" && r.message.id !== undefined) {
         ws.send(
           encodeMessage({
-            v: 1,
+            v: PROTOCOL_VERSION,
             type: "query-result",
             id: r.message.id,
             payload: RESULT,
@@ -75,9 +79,9 @@ async function startWithExtension(): Promise<BridgeServer> {
   });
   ws.send(
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role: "gm", extensionVersion: "0", token: s.token },
+      payload: { role: "gm", extensionVersion: "0" },
     }),
   );
   await acked;

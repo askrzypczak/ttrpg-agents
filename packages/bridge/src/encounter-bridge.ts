@@ -8,7 +8,7 @@ import {
   type TokenArtRepository,
   type UnreadableLogEntry,
 } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import type { WriteBackResult } from "./server.js";
 
 /**
@@ -70,7 +70,7 @@ export function snapshotMessage(
   const instances = repo.listInstances();
   const restoreSeqs = repo.listRestoreSeqs();
   return {
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
     // An empty map is left out, so a store with no art sends what it always did.
     payload: {
@@ -119,7 +119,7 @@ export function broadcastLogEvents(
         }
         const { seq, event } = entry;
         target.broadcast({
-          v: 1,
+          v: PROTOCOL_VERSION,
           type: "encounter-event",
           payload: { ...event, seq },
         });

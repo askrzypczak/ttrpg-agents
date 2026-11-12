@@ -65,7 +65,7 @@ Issue: [#220](https://github.com/askrzypczak/ttrpg-agents/issues/220).
   - A 400 for a malformed hash: one more code for a request that can only mean "not stored".
   - An engine use case for the read: no rule to put in it.
 - Where: `handleTokenImageRead` and option `getTokenImage` (`packages/bridge/src/server.ts`, wired in `packages/bridge/src/cli.ts`); `tokenImagePath`, `tokenImageReadErrorSchema` (`packages/protocol/src/protocol.ts`); `downloadTokenImage` (`packages/owlbear/src/token-art.ts`).
-- Status: active
+- Status: superseded in part by 446.1 (the bearer; the rest stands)
 
 ## 220.7 A republished image is uploaded under a name derived from its hash
 

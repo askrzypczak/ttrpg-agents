@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeMessage, encodeMessage } from "./protocol.js";
+import { PROTOCOL_VERSION, decodeMessage, encodeMessage } from "./protocol.js";
 
 const instance = {
   id: "i1",
@@ -27,7 +27,7 @@ const art = {
 describe("token art on the wire", () => {
   it("a snapshot can carry an art map keyed by monster key", () => {
     const raw = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: { instances: [instance], art: { shadow: art }, seq: 0 },
     };
@@ -42,7 +42,7 @@ describe("token art on the wire", () => {
 
   it("a snapshot without an art map still decodes", () => {
     const raw = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: { instances: [instance], seq: 0 },
     };
@@ -54,7 +54,7 @@ describe("token art on the wire", () => {
 
   it("token-art-set round-trips a monster key and its art", () => {
     const raw = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "token-art-set",
       payload: { monsterKey: "shadow", art },
     };
@@ -69,7 +69,7 @@ describe("token art on the wire", () => {
 
   it("token-art-set with a non-https url is rejected", () => {
     const raw = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "token-art-set",
       payload: {
         monsterKey: "shadow",
@@ -84,7 +84,7 @@ describe("token art on the wire", () => {
   it("a snapshot can carry art with an image hash and no url", () => {
     const sha256 = "ab".repeat(32);
     const raw = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: {
         instances: [instance],
@@ -104,7 +104,7 @@ describe("token art on the wire", () => {
   it("token-art-set with art that has no url is rejected", () => {
     const sha256 = "ab".repeat(32);
     const raw = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "token-art-set",
       payload: { monsterKey: "shadow", art: { sha256 } },
     };

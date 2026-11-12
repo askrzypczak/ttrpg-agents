@@ -13,6 +13,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -135,19 +136,19 @@ async function connect(server: BridgeServer): Promise<Client> {
   };
 }
 
-function hello(token: string): string {
+function hello(): string {
   return encodeMessage({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "hello",
     id: "h1",
-    payload: { role: "gm", extensionVersion: "0", token },
+    payload: { role: "gm", extensionVersion: "0" },
   });
 }
 
 /** Raw JSON: the message type is new to the protocol. */
 function tokenArtSet(monsterKey: string, art: TokenArt): string {
   return JSON.stringify({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "token-art-set",
     payload: { monsterKey, art },
   });
@@ -156,7 +157,7 @@ function tokenArtSet(monsterKey: string, art: TokenArt): string {
 /** Connects and authenticates; resolves once the connect snapshot arrived. */
 async function authed(server: BridgeServer): Promise<Client> {
   const client = await connect(server);
-  client.ws.send(hello(server.token));
+  client.ws.send(hello());
   await waitFor(() => client.snapshots().length > 0);
   expect(client.received[0]?.type).toBe("hello-ack");
   return client;
@@ -167,7 +168,9 @@ let pings = 0;
 /** Resolves once the bridge has handled everything this client sent so far. */
 async function handled(client: Client): Promise<void> {
   const id = `handled-${++pings}`;
-  client.ws.send(encodeMessage({ v: 1, type: "ping", id, payload: {} }));
+  client.ws.send(
+    encodeMessage({ v: PROTOCOL_VERSION, type: "ping", id, payload: {} }),
+  );
   await waitFor(() =>
     client.received.some((m) => m.type === "pong" && m.id === id),
   );

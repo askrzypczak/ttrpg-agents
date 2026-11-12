@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  PROTOCOL_VERSION,
   TOKEN_IMAGE_UPLOAD_PATH,
   decodeMessage,
   encodeMessage,
@@ -26,7 +27,7 @@ describe("tokenArtMessage", () => {
     expect(decoded).toEqual({
       ok: true,
       message: {
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "token-art-set",
         payload: { monsterKey: "shadow", art },
       },
@@ -34,7 +35,6 @@ describe("tokenArtMessage", () => {
   });
 });
 
-const TOKEN = "e7".repeat(32);
 const BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 
 interface Captured {
@@ -79,21 +79,21 @@ describe("uploadTokenImage", () => {
     image: { sha256: "ab".repeat(32), mime: "image/png", width: 1, height: 1 },
   };
 
-  it("uploadTokenImage posts the bytes to /token-images with the extension token as a bearer", async () => {
+  it("uploadTokenImage posts the bytes to /token-images with no Authorization header", async () => {
     const calls = stubFetch(200, stored);
 
-    await uploadTokenImage(BYTES, TOKEN);
+    await uploadTokenImage(BYTES);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url.endsWith(TOKEN_IMAGE_UPLOAD_PATH)).toBe(true);
     expect(calls[0]?.method).toBe("POST");
-    expect(calls[0]?.authorization).toBe(`Bearer ${TOKEN}`);
+    expect(calls[0]?.authorization).toBeNull();
     expect([...(calls[0]?.body ?? [])]).toEqual([...BYTES]);
   });
 
   it("uploadTokenImage resolves with the bridge's answer, a stored image or a refusal", async () => {
     stubFetch(200, stored);
-    await expect(uploadTokenImage(BYTES, TOKEN)).resolves.toEqual(stored);
+    await expect(uploadTokenImage(BYTES)).resolves.toEqual(stored);
 
     const refused: TokenImageUploadResponse = {
       ok: false,
@@ -103,26 +103,26 @@ describe("uploadTokenImage", () => {
       },
     };
     stubFetch(422, refused);
-    await expect(uploadTokenImage(BYTES, TOKEN)).resolves.toEqual(refused);
+    await expect(uploadTokenImage(BYTES)).resolves.toEqual(refused);
 
     const unauthorized: TokenImageUploadResponse = {
       ok: false,
-      error: { code: "unauthorized", message: "bad token" },
+      error: { code: "unauthorized", message: "not from the bridge's origin" },
     };
-    stubFetch(401, unauthorized);
-    await expect(uploadTokenImage(BYTES, TOKEN)).resolves.toEqual(unauthorized);
+    stubFetch(403, unauthorized);
+    await expect(uploadTokenImage(BYTES)).resolves.toEqual(unauthorized);
   });
 
   it("uploadTokenImage rejects an answer that is not an upload response", async () => {
     const calls = stubFetch(200, { ok: true, image: { sha256: "nope" } });
 
-    await expect(uploadTokenImage(BYTES, TOKEN)).rejects.toBeDefined();
+    await expect(uploadTokenImage(BYTES)).rejects.toBeDefined();
     // The request went out: the rejection is about the answer.
     expect(calls).toHaveLength(1);
 
     // Control: a well-formed answer from the same request resolves.
     stubFetch(200, stored);
-    await expect(uploadTokenImage(BYTES, TOKEN)).resolves.toEqual(stored);
+    await expect(uploadTokenImage(BYTES)).resolves.toEqual(stored);
   });
 });
 
@@ -160,15 +160,15 @@ describe("downloadTokenImage", () => {
 
   const SHA256 = "c3".repeat(32);
 
-  it("downloadTokenImage gets /token-images/<sha256> with the extension token as a bearer and resolves with the bytes and the answered mime", async () => {
+  it("downloadTokenImage gets /token-images/<sha256> with no Authorization header and resolves with the bytes and the answered mime", async () => {
     const calls = stubFetchBody(200, BYTES, "image/webp");
 
-    const image = await downloadTokenImage(SHA256, TOKEN);
+    const image = await downloadTokenImage(SHA256);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url.endsWith(`/token-images/${SHA256}`)).toBe(true);
     expect(calls[0]?.method ?? "GET").toBe("GET");
-    expect(calls[0]?.authorization).toBe(`Bearer ${TOKEN}`);
+    expect(calls[0]?.authorization).toBeNull();
     expect(image.mime).toBe("image/webp");
     expect(image.bytes).toBeInstanceOf(Uint8Array);
     expect([...image.bytes]).toEqual([...BYTES]);
@@ -179,20 +179,11 @@ describe("downloadTokenImage", () => {
       JSON.stringify({ ok: false, error: { code, message } });
 
     stubFetchBody(
-      401,
-      json("unauthorized", "missing or invalid extension token"),
-      "application/json; charset=utf-8",
-    );
-    await expect(downloadTokenImage(SHA256, TOKEN)).rejects.toThrow(
-      "missing or invalid extension token",
-    );
-
-    stubFetchBody(
       404,
       json("not_found", "no token image with that hash"),
       "application/json; charset=utf-8",
     );
-    await expect(downloadTokenImage(SHA256, TOKEN)).rejects.toThrow(
+    await expect(downloadTokenImage(SHA256)).rejects.toThrow(
       "no token image with that hash",
     );
   });

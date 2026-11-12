@@ -10,6 +10,7 @@ import {
   PLACED_METADATA_KEY,
   type EncounterInstance,
 } from "./sync-plan.js";
+import { PROTOCOL_VERSION } from "@ttrpg-agents/protocol";
 
 const inst = (n: number): EncounterInstance =>
   makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
@@ -119,7 +120,7 @@ describe("createEncounterSync token deletion", () => {
     // Control: after the connection dropped and came back the command may
     // have been lost, so the snapshot that follows reports it again.
     await sync.handleMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello-ack",
       payload: { serverVersion: "0" },
     });

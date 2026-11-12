@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket } from "ws";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -102,9 +103,9 @@ async function extension(): Promise<{
   const acked = waitFor("hello-ack");
   ws.send(
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role: "gm", extensionVersion: "0", token: s.token },
+      payload: { role: "gm", extensionVersion: "0" },
     }),
   );
   await acked;
@@ -249,7 +250,7 @@ describe("pending queries", () => {
     const ext = await extension();
     ext.ws.send(
       encodeMessage({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "query-result",
         id: "nope",
         payload: statusResult(1),
@@ -262,7 +263,7 @@ describe("pending queries", () => {
     });
     ext.ws.send(
       encodeMessage({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "query-result",
         payload: statusResult(1),
       }),
@@ -278,7 +279,7 @@ describe("pending queries", () => {
     for (const id of ["nope", undefined]) {
       ext.ws.send(
         encodeMessage({
-          v: 1,
+          v: PROTOCOL_VERSION,
           type: "error",
           ...(id !== undefined ? { id } : {}),
           payload: { code: "x", message: "m", fatal: false },
@@ -297,7 +298,7 @@ describe("pending queries", () => {
     const sent = await ext.waitFor("query");
     ext.ws.send(
       encodeMessage({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "error",
         ...(sent.id !== undefined ? { id: sent.id } : {}),
         payload: { code: "query-failed", message: "boom!", fatal: false },
@@ -319,7 +320,7 @@ describe("pending queries", () => {
     const late = await ext.waitFor("query");
     ext.ws.send(
       encodeMessage({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "query-result",
         ...(late.id !== undefined ? { id: late.id } : {}),
         payload: statusResult(1),
@@ -334,7 +335,7 @@ describe("pending queries", () => {
     expect(next.id).not.toBe(late.id);
     ext.ws.send(
       encodeMessage({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "query-result",
         ...(next.id !== undefined ? { id: next.id } : {}),
         payload: statusResult(2),
@@ -352,7 +353,7 @@ describe("pending queries", () => {
     const pending = post(SCENE_STATUS);
     const sent = await ext.waitFor("query");
     const reply = encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "query-result",
       ...(sent.id !== undefined ? { id: sent.id } : {}),
       payload: statusResult(3),

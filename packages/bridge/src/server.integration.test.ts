@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { get } from "node:http";
 import { WebSocket } from "ws";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -64,16 +65,16 @@ function rawGet(
   });
 }
 
-function helloWith(token: string, role: "gm" | "player" = "gm"): string {
+function hello(role: "gm" | "player" = "gm"): string {
   return encodeMessage({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "hello",
     id: "h1",
-    payload: { role, extensionVersion: "0", token },
+    payload: { role, extensionVersion: "0" },
   });
 }
 
-const ping = encodeMessage({ v: 1, type: "ping", payload: {} });
+const ping = encodeMessage({ v: PROTOCOL_VERSION, type: "ping", payload: {} });
 
 /** Sends raw and resolves with the reply plus the close code that follows. */
 function requestThenClose(
@@ -97,7 +98,7 @@ function requestThenClose(
 
 async function authed(role: "gm" | "player" = "gm"): Promise<WebSocket> {
   const ws = await connect();
-  const reply = await request(ws, helloWith(server.token, role));
+  const reply = await request(ws, hello(role));
   expect(reply.type).toBe("hello-ack");
   return ws;
 }
@@ -121,37 +122,20 @@ function hostGet(
 }
 
 describe("bridge server", () => {
-  it("answers hello with a valid token with hello-ack", async () => {
+  it("admits a hello with no token on a socket from the bridge's own origin with hello-ack", async () => {
     const ws = await connect();
-    const reply = await request(ws, helloWith(server.token));
+    const reply = await request(
+      ws,
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        type: "hello",
+        id: "h1",
+        payload: { role: "gm", extensionVersion: "0" },
+      }),
+    );
     expect(reply.type).toBe("hello-ack");
     expect(reply.id).toBe("h1");
     ws.close();
-  });
-
-  it("rejects a wrong token with an error and closes the socket", async () => {
-    const ws = await connect();
-    const { reply, closeCode } = await requestThenClose(ws, helloWith("wrong"));
-    expect(reply.type).toBe("error");
-    if (reply.type === "error") expect(reply.payload.code).toBe("bad-token");
-    expect(closeCode).toBe(1008);
-  });
-
-  it("rejects an empty token", async () => {
-    const ws = await connect();
-    const { reply, closeCode } = await requestThenClose(ws, helloWith(""));
-    expect(reply.type).toBe("error");
-    expect(closeCode).toBe(1008);
-  });
-
-  it("rejects a hello with no token field", async () => {
-    const ws = await connect();
-    const { reply, closeCode } = await requestThenClose(
-      ws,
-      '{"v":1,"type":"hello","payload":{"role":"gm","extensionVersion":"0"}}',
-    );
-    expect(reply.type).toBe("error");
-    expect(closeCode).toBe(1008);
   });
 
   it("rejects messages sent before hello and closes", async () => {
@@ -177,7 +161,7 @@ describe("bridge server", () => {
       JSON.stringify({
         v: 9,
         type: "hello",
-        payload: { role: "gm", extensionVersion: "0", token: server.token },
+        payload: { role: "gm", extensionVersion: "0" },
       }),
     );
     if (reply.type !== "error") throw new Error("expected error");
@@ -186,11 +170,7 @@ describe("bridge server", () => {
     expect(closeCode).toBe(1008);
   });
 
-  it("bad-token and unauthenticated errors carry fatal true", async () => {
-    const badToken = await requestThenClose(await connect(), helloWith("x"));
-    if (badToken.reply.type !== "error") throw new Error("expected error");
-    expect(badToken.reply.payload.code).toBe("bad-token");
-    expect(badToken.reply.payload.fatal).toBe(true);
+  it("unauthenticated errors carry fatal true", async () => {
     const unauth = await requestThenClose(await connect(), ping);
     if (unauth.reply.type !== "error") throw new Error("expected error");
     expect(unauth.reply.payload.code).toBe("unauthenticated");
@@ -202,9 +182,6 @@ describe("bridge server", () => {
       const ok = await authed(role);
       expect((await request(ok, ping)).type).toBe("pong");
       ok.close();
-      const bad = await connect();
-      const { reply } = await requestThenClose(bad, helloWith("wrong", role));
-      expect(reply.type).toBe("error");
     }
   });
 
@@ -217,7 +194,7 @@ describe("bridge server", () => {
 
   it("re-acks a second hello on an authenticated socket", async () => {
     const ws = await authed();
-    const reply = await request(ws, helloWith(server.token));
+    const reply = await request(ws, hello());
     expect(reply.type).toBe("hello-ack");
     ws.close();
   });
@@ -253,21 +230,6 @@ describe("bridge server", () => {
       "https://www.owlbear.rodeo",
     );
     expect(await res.json()).toEqual(MANIFEST);
-  });
-
-  it("adds the token fragment to the popover only when the token is presented", async () => {
-    const base = `http://127.0.0.1:${server.port}/manifest.json`;
-    const withToken = await (
-      await fetch(`${base}?token=${server.token}`)
-    ).json();
-    expect(withToken).toEqual({
-      ...MANIFEST,
-      action: { popover: `/index.html#${server.token}` },
-    });
-    for (const q of ["?token=wrong", "?token=", ""]) {
-      const res = await fetch(base + q);
-      expect(await res.json()).toEqual(MANIFEST);
-    }
   });
 
   it("refuses HTTP requests with a foreign Host header", async () => {
@@ -308,7 +270,7 @@ describe("bridge server", () => {
       s.once("open", () => resolve(s));
       s.once("error", reject);
     });
-    expect((await request(ws, helloWith(server.token))).type).toBe("hello-ack");
+    expect((await request(ws, hello())).type).toBe("hello-ack");
     ws.close();
   });
 
@@ -385,12 +347,12 @@ describe("bridge server", () => {
 
 describe("bridge server broadcast and snapshot", () => {
   const snapshot: BridgeMessage = {
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
     payload: { instances: [], seq: 0 },
   };
   const cleared: BridgeMessage = {
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "encounter-event",
     payload: {
       type: "cleared",
@@ -435,9 +397,9 @@ describe("bridge server broadcast and snapshot", () => {
 
   const hello2 = () =>
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role: "gm", extensionVersion: "0", token: s2.token },
+      payload: { role: "gm", extensionVersion: "0" },
     });
 
   /** Connects, records every message and the close code, sends hello and settles. */
@@ -502,9 +464,9 @@ describe("bridge server broadcast and snapshot", () => {
       const received = record(ws);
       ws.send(
         encodeMessage({
-          v: 1,
+          v: PROTOCOL_VERSION,
           type: "hello",
-          payload: { role: "gm", extensionVersion: "0", token: s3.token },
+          payload: { role: "gm", extensionVersion: "0" },
         }),
       );
       await settle();
@@ -548,16 +510,16 @@ describe("bridge server broadcast and snapshot", () => {
       ws.once("close", () => (closed = true));
       ws.send(
         encodeMessage({
-          v: 1,
+          v: PROTOCOL_VERSION,
           type: "hello",
-          payload: { role: "gm", extensionVersion: "0", token: s3.token },
+          payload: { role: "gm", extensionVersion: "0" },
         }),
       );
       for (const raw of [
         "{nope",
         "[]",
-        '{"v":1,"type":"launch","payload":{}}',
-        '{"v":1,"type":"hello","payload":{}}',
+        '{"v":2,"type":"launch","payload":{}}',
+        '{"v":2,"type":"hello","payload":{}}',
         encodeMessage(cleared),
       ]) {
         ws.send(raw);
@@ -637,24 +599,6 @@ describe("bridge server broadcast and snapshot", () => {
     expect(first.msgs).toEqual([]);
     expect(first.closed.code).toBe(1008);
     second.ws.close();
-  });
-
-  it("a bad-token hello does not displace the active client", async () => {
-    const active = await authed2();
-    active.msgs.length = 0;
-    const { reply } = await requestThenClose(
-      await connect2(),
-      helloWith("wrong"),
-    );
-    if (reply.type !== "error") throw new Error("expected error");
-    expect(reply.payload.code).toBe("bad-token");
-    await settle();
-    expect(active.msgs).toEqual([]);
-    expect(active.closed.code).toBeUndefined();
-    s2.broadcast(cleared);
-    await settle();
-    expect(active.msgs).toEqual([cleared]);
-    active.ws.close();
   });
 
   it("a socket rejected as unauthenticated (ping before hello) does not displace the active client", async () => {

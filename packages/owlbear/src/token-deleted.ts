@@ -1,4 +1,4 @@
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 
 const ID_PREFIX = "token-deleted:";
 
@@ -9,7 +9,7 @@ const ID_PREFIX = "token-deleted:";
  */
 export function tokenDeletedMessage(instanceId: string): BridgeMessage {
   return {
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "token-deleted",
     id: `${ID_PREFIX}${instanceId}:${crypto.randomUUID()}`,
     payload: { instanceId },

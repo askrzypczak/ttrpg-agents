@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { decodeMessage, encodeMessage } from "./protocol.js";
+import { PROTOCOL_VERSION, decodeMessage, encodeMessage } from "./protocol.js";
 
 const raw = (payload: Record<string, unknown>) =>
   JSON.stringify({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "instance-edit",
     id: "instance-edit:i1",
     payload,
@@ -12,7 +12,7 @@ const raw = (payload: Record<string, unknown>) =>
 describe("instance-edit", () => {
   it("instance-edit message round-trips", () => {
     const full = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "instance-edit",
       id: "instance-edit:i1",
       payload: { instanceId: "i1", currentHp: 5, maxHp: 20, armorClass: 14 },
@@ -29,7 +29,7 @@ describe("instance-edit", () => {
     expect(decodeMessage(raw({ instanceId: "i1", armorClass: 0 }))).toEqual({
       ok: true,
       message: {
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "instance-edit",
         id: "instance-edit:i1",
         payload: { instanceId: "i1", armorClass: 0 },
@@ -68,7 +68,7 @@ describe("instance-edit", () => {
     expect(decodeMessage(raw({ instanceId: "i1", initiative: 14 }))).toEqual({
       ok: true,
       message: {
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "instance-edit",
         id: "instance-edit:i1",
         payload: { instanceId: "i1", initiative: 14 },
@@ -80,7 +80,7 @@ describe("instance-edit", () => {
     expect(decodeMessage(raw({ instanceId: "i1", initiative: null }))).toEqual({
       ok: true,
       message: {
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "instance-edit",
         id: "instance-edit:i1",
         payload: { instanceId: "i1", initiative: null },
