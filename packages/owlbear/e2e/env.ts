@@ -27,8 +27,13 @@ export async function allocateRunEnv(
 export function isolateXdgDirs(
   env: Record<string, string | undefined> = process.env,
 ): void {
-  void env;
-  throw new Error("not implemented");
+  const dir = env[DIR];
+  if (!dir)
+    throw new Error(
+      `${DIR} is not set; call allocateRunEnv before isolateXdgDirs`,
+    );
+  env.XDG_CONFIG_HOME = join(dir, "xdg-config");
+  env.XDG_DATA_HOME = join(dir, "xdg-data");
 }
 
 /** The harness server's port for this run (`e2e/serve.ts`). */
