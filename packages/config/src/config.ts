@@ -19,6 +19,8 @@ export interface Settings {
   bridgeStateFile: string;
   /** Built extension the bridge serves, absolute. */
   extensionDir: string;
+  /** Where npm run db:backup writes, absolute; outside the checkout. */
+  backupDir: string;
 }
 export type SettingName = keyof Settings;
 
@@ -38,6 +40,7 @@ export const SETTINGS: readonly SettingSpec[] = [
   { name: "agentTokenFile", env: "BRIDGE_AGENT_TOKEN_FILE" },
   { name: "bridgeStateFile", env: "BRIDGE_STATE_FILE" },
   { name: "extensionDir", env: "BRIDGE_STATIC_DIR" },
+  { name: "backupDir", env: "TTRPG_AGENTS_BACKUP_DIR", fileKey: "backupDir" },
 ];
 
 export interface ConfigProblem {
@@ -181,6 +184,7 @@ export function loadConfig(inputs: ConfigInputs): LoadedConfig {
     agentTokenFile: join(configDir, "agent-token"),
     bridgeStateFile: join(configDir, "bridge-state.json"),
     extensionDir: join(checkout, "packages", "owlbear", "dist"),
+    backupDir: join(dataDir, "backups"),
   };
 
   // Read config.json: missing is fine, anything else unreadable is an error.

@@ -1,4 +1,5 @@
 import type {
+  BackupFacts,
   BridgeFacts,
   DatabaseFacts,
   SetupFix,
@@ -33,6 +34,8 @@ function rowText(row: SetupRow): string {
       return `${row.setting.name} = ${String(row.setting.value)} (${row.setting.source})`;
     case "database":
       return databaseText(row.database);
+    case "backup":
+      return backupText(row.backups, row.ageDays);
     case "bridge":
       return bridgeText(row.bridge);
     case "gm-tab":
@@ -59,6 +62,27 @@ function databaseText(database: DatabaseFacts): string {
         ? `database ${path}: schema version ${String(file.version)}`
         : `database ${path}: schema version ${String(file.version)}, this build expects ${String(expectedVersion)}`;
   }
+}
+
+function backupText(backups: BackupFacts, ageDays: number | undefined): string {
+  const { dir, newest } = backups;
+  switch (newest.kind) {
+    case "none":
+      return `backups in ${dir}: none`;
+    case "unreadable":
+      return `backups in ${dir}: cannot be read: ${newest.reason}`;
+    case "found": {
+      // takenAt is ISO 8601 UTC: "YYYY-MM-DDTHH:MM:SS.sssZ".
+      const taken = `${newest.takenAt.slice(0, 10)} ${newest.takenAt.slice(11, 16)}`;
+      return `backup ${newest.path}, taken ${taken} UTC (${ageText(ageDays ?? 0)})`;
+    }
+  }
+}
+
+function ageText(days: number): string {
+  if (days === 0) return "less than a day ago";
+  if (days === 1) return "1 day ago";
+  return `${String(days)} days ago`;
 }
 
 function bridgeText(bridge: BridgeFacts): string {
@@ -102,5 +126,7 @@ function fixText(fix: SetupFix): string {
       return "update this checkout and rebuild (git pull, then npm run build): the database is newer than this build";
     case "check-database":
       return "point the database setting at the encounter database (see docs/settings.md)";
+    case "take-backup":
+      return "take a backup: npm run db:backup";
   }
 }

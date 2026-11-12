@@ -1,4 +1,5 @@
 import type {
+  BackupFacts,
   BridgeFacts,
   ConfigProblemFact,
   DatabaseFacts,
@@ -20,7 +21,8 @@ export type SetupFix =
   | { code: "open-gm-tab"; port: number }
   | { code: "reload-gm-tab" }
   | { code: "update-checkout" }
-  | { code: "check-database" };
+  | { code: "check-database" }
+  | { code: "take-backup" };
 export type SetupRow =
   | { item: "profile"; state: "ok"; profile: string }
   | { item: "config-file"; state: "ok"; path: string; found: boolean }
@@ -37,6 +39,13 @@ export type SetupRow =
       database: DatabaseFacts;
       fix?: SetupFix;
     }
+  | {
+      item: "backup";
+      state: "ok" | "warning";
+      backups: BackupFacts;
+      ageDays?: number;
+      fix?: SetupFix;
+    }
   | { item: "bridge"; state: SetupState; bridge: BridgeFacts; fix?: SetupFix }
   | {
       item: "gm-tab";
@@ -51,10 +60,13 @@ export interface SetupStatus {
   rows: SetupRow[];
 }
 
+const DAY_MS = 86_400_000;
+
 /** Asks both probes once and returns the rows in report order; `ready` = no row in state `problem`. */
 export async function getSetupStatus(ports: SetupPorts): Promise<SetupStatus> {
   const { settings } = ports;
   const database = ports.database.check();
+  const backups = ports.database.checkBackups();
   const bridge = await ports.bridge.check();
   const rows: SetupRow[] = [
     { item: "profile", state: "ok", profile: settings.profile },
@@ -73,6 +85,7 @@ export async function getSetupStatus(ports: SetupPorts): Promise<SetupStatus> {
       setting,
     })),
     databaseRow(database),
+    backupRow(backups, ports.now()),
     ...bridgeRows(bridge),
   ];
   return { ready: rows.every((row) => row.state !== "problem"), rows };
@@ -115,6 +128,21 @@ function databaseFix(database: DatabaseFacts): SetupFix | undefined {
       if (file.version > expectedVersion) return { code: "update-checkout" };
       return undefined;
   }
+}
+
+/** A found backup is ok with its age in whole days (rounded down, never below 0); none or unreadable is a warning. */
+function backupRow(backups: BackupFacts, now: Date): SetupRow {
+  const { newest } = backups;
+  if (newest.kind !== "found")
+    return {
+      item: "backup",
+      state: "warning",
+      backups,
+      fix: { code: "take-backup" },
+    };
+  const elapsed = now.getTime() - Date.parse(newest.takenAt);
+  const ageDays = Math.max(0, Math.floor(elapsed / DAY_MS));
+  return { item: "backup", state: "ok", backups, ageDays };
 }
 
 function bridgeRows(bridge: BridgeFacts): SetupRow[] {

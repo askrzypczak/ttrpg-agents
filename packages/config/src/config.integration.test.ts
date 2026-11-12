@@ -71,11 +71,12 @@ function scene(): Scene {
       agentTokenFile: join(configDir, "agent-token"),
       bridgeStateFile: join(configDir, "bridge-state.json"),
       extensionDir: join(checkout, "packages", "owlbear", "dist"),
+      backupDir: join(dataHome, "ttrpg-agents", "backups"),
     },
   };
 }
 
-type FileSetting = "database" | "bridgePort";
+type FileSetting = "database" | "bridgePort" | "backupDir";
 
 /** A valid file value and a valid, different environment value for each file key. */
 function fileSettingValues(
@@ -88,6 +89,17 @@ function fileSettingValues(
   fromFile: string | number;
   fromEnv: string | number;
 } {
+  if (name === "backupDir") {
+    const fromFile = join(s.home, "file-backups");
+    const fromEnv = join(s.home, "env-backups");
+    return {
+      envVar: "TTRPG_AGENTS_BACKUP_DIR",
+      fileValue: fromFile,
+      envValue: fromEnv,
+      fromFile,
+      fromEnv,
+    };
+  }
   if (name === "database") {
     const fromFile = join(s.home, "file.db");
     const fromEnv = join(s.home, "env.db");
@@ -109,7 +121,7 @@ function fileSettingValues(
 }
 
 describe("loadConfig", () => {
-  it.each<FileSetting>(["database", "bridgePort"])(
+  it.each<FileSetting>(["database", "bridgePort", "backupDir"])(
     "the environment beats config.json for %s",
     (name) => {
       const s = scene();
@@ -124,7 +136,7 @@ describe("loadConfig", () => {
     },
   );
 
-  it.each<FileSetting>(["database", "bridgePort"])(
+  it.each<FileSetting>(["database", "bridgePort", "backupDir"])(
     "config.json beats the default for %s",
     (name) => {
       const s = scene();
@@ -168,6 +180,7 @@ describe("loadConfig", () => {
       agentTokenFile: "default",
       bridgeStateFile: "default",
       extensionDir: "default",
+      backupDir: "default",
     });
     expect(loaded.configFile).toEqual({ path: s.configFile, found: false });
     expect(loaded.problems).toEqual([]);
@@ -336,6 +349,7 @@ describe("loadConfig", () => {
       agentTokenFile: join(homeConfigDir, "agent-token"),
       bridgeStateFile: join(homeConfigDir, "bridge-state.json"),
       extensionDir: s.defaults.extensionDir,
+      backupDir: join(s.home, ".local", "share", "ttrpg-agents", "backups"),
     });
   });
 
@@ -447,6 +461,7 @@ function devPaths(
       agentTokenFile: join(configDir, "agent-token"),
       bridgeStateFile: join(configDir, "bridge-state.json"),
       extensionDir: join(checkout, "packages", "owlbear", "dist"),
+      backupDir: join(dataDir, "backups"),
     },
   };
 }
@@ -539,7 +554,7 @@ describe("loadConfig profile", () => {
     }
   });
 
-  it("in dev, config.json, the database, the agent token file and the state file default to the checkout's folder in ttrpg-agents/dev/, named after the checkout folder and a short hash of its path, and the default port is 5299", () => {
+  it("in dev, config.json, the database, the backups, the agent token file and the state file default to the checkout's folder in ttrpg-agents/dev/, named after the checkout folder and a short hash of its path, and the default port is 5299", () => {
     const s = scene();
     // A folder name with characters outside [A-Za-z0-9._-].
     const checkout = join(tempDir("parent"), "my checkout+1");
@@ -563,6 +578,7 @@ describe("loadConfig profile", () => {
       agentTokenFile: join(configDir, "agent-token"),
       bridgeStateFile: join(configDir, "bridge-state.json"),
       extensionDir: join(checkout, "packages", "owlbear", "dist"),
+      backupDir: join(dataDir, "backups"),
     });
     expect(Object.values(loaded.sources)).toEqual(
       SETTINGS.map(() => "default"),
@@ -615,6 +631,7 @@ describe("loadConfig profile", () => {
       agentTokenFile: "environment",
       bridgeStateFile: "default",
       extensionDir: "default",
+      backupDir: "default",
     });
   });
 

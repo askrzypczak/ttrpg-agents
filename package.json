@@ -29,6 +29,7 @@
     "bridge:stop": "node scripts/bridge.ts stop",
     "bridge:restart": "node scripts/bridge.ts restart",
     "bridge:status": "node scripts/bridge.ts status",
+    "db:backup": "node scripts/db-backup.ts",
     "status": "node packages/mcp/bin/status.mjs"
   },
   "devDependencies": {

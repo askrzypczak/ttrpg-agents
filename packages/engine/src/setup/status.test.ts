@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { makeTestSetupPorts } from "../testing/index.js";
 import {
   getSetupStatus,
+  type BackupFacts,
   type BridgeAnswer,
   type ConfigProblemFact,
   type DatabaseFile,
@@ -31,6 +32,12 @@ function withDatabase(file: DatabaseFile) {
   );
 }
 
+const BACKUP_DIR = "/home/test/.local/share/ttrpg-agents/backups";
+
+function withBackups(backups: BackupFacts, now: string) {
+  return getSetupStatus(makeTestSetupPorts({ backups, now: new Date(now) }));
+}
+
 function withBridge(answer: BridgeAnswer) {
   return getSetupStatus(makeTestSetupPorts({ bridge: { port: 5199, answer } }));
 }
@@ -54,7 +61,7 @@ const settings: SettingFact[] = [
 ];
 
 describe("getSetupStatus", () => {
-  it("rows come in report order: profile, config file, config problems, settings, database, bridge, GM tab", async () => {
+  it("rows come in report order: profile, config file, config problems, settings, database, backup, bridge, GM tab", async () => {
     const status = await getSetupStatus(
       makeTestSetupPorts({
         settings: {
@@ -73,6 +80,7 @@ describe("getSetupStatus", () => {
       "setting",
       "setting",
       "database",
+      "backup",
       "bridge",
       "gm-tab",
     ]);
@@ -253,6 +261,91 @@ describe("getSetupStatus", () => {
       fix: { code: "check-database" },
     });
     expect(status.ready).toBe(false);
+  });
+
+  it("a found backup is an ok row carrying the backup facts and its age in whole days, rounded down", async () => {
+    const backups: BackupFacts = {
+      dir: BACKUP_DIR,
+      newest: {
+        kind: "found",
+        path: `${BACKUP_DIR}/encounters-20261108T120000Z.db`,
+        takenAt: "2026-11-08T12:00:00.000Z",
+      },
+    };
+    const cases: [string, number][] = [
+      ["2026-11-09T12:00:00.000Z", 1],
+      ["2026-11-11T11:59:59.999Z", 2],
+      ["2026-11-11T12:00:00.000Z", 3],
+      ["2026-11-12T10:00:00.000Z", 3],
+    ];
+    for (const [now, ageDays] of cases) {
+      const status = await withBackups(backups, now);
+      expect(onlyRow(status.rows, "backup"), now).toEqual({
+        item: "backup",
+        state: "ok",
+        backups,
+        ageDays,
+      });
+      expect(status.ready, now).toBe(true);
+    }
+  });
+
+  it("a backup taken less than a day before now, or stamped after now, has age 0", async () => {
+    const takenAt = "2026-11-12T09:00:00.000Z";
+    const backups: BackupFacts = {
+      dir: BACKUP_DIR,
+      newest: {
+        kind: "found",
+        path: `${BACKUP_DIR}/encounters-20261112T090000Z.db`,
+        takenAt,
+      },
+    };
+    for (const now of [
+      takenAt,
+      "2026-11-12T10:00:00.000Z",
+      "2026-11-13T08:59:59.999Z",
+      "2026-11-12T08:00:00.000Z",
+      "2026-11-01T09:00:00.000Z",
+    ]) {
+      const status = await withBackups(backups, now);
+      expect(onlyRow(status.rows, "backup"), now).toEqual({
+        item: "backup",
+        state: "ok",
+        backups,
+        ageDays: 0,
+      });
+    }
+  });
+
+  it("no backup is a warning with take-backup, and the setup stays ready", async () => {
+    const backups: BackupFacts = { dir: BACKUP_DIR, newest: { kind: "none" } };
+    const status = await withBackups(backups, "2026-11-12T10:00:00.000Z");
+    const row = onlyRow(status.rows, "backup");
+    expect(row).toEqual({
+      item: "backup",
+      state: "warning",
+      backups,
+      fix: { code: "take-backup" },
+    });
+    expect((row as { ageDays?: number }).ageDays).toBeUndefined();
+    expect(status.ready).toBe(true);
+  });
+
+  it("an unreadable backup directory is a warning with take-backup, and the setup stays ready", async () => {
+    const backups: BackupFacts = {
+      dir: BACKUP_DIR,
+      newest: { kind: "unreadable", reason: "permission denied" },
+    };
+    const status = await withBackups(backups, "2026-11-12T10:00:00.000Z");
+    const row = onlyRow(status.rows, "backup");
+    expect(row).toEqual({
+      item: "backup",
+      state: "warning",
+      backups,
+      fix: { code: "take-backup" },
+    });
+    expect((row as { ageDays?: number }).ageDays).toBeUndefined();
+    expect(status.ready).toBe(true);
   });
 
   it("a missing agent token file or an unreachable bridge is a bridge problem with start-bridge, and there is no GM tab row", async () => {

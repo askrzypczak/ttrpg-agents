@@ -28,6 +28,15 @@ export interface DatabaseFacts {
   expectedVersion: number;
   file: DatabaseFile;
 }
+/** `takenAt`: ISO 8601 UTC, the backup file's modification time. */
+export type NewestBackup =
+  | { kind: "none" }
+  | { kind: "found"; path: string; takenAt: string }
+  | { kind: "unreadable"; reason: string };
+export interface BackupFacts {
+  dir: string;
+  newest: NewestBackup;
+}
 export type BridgeAnswer =
   | { kind: "no-token-file" }
   | { kind: "unreachable" }
@@ -44,6 +53,8 @@ export interface BridgeFacts {
 /** Driven port: what is at the database path. Never creates or migrates it. */
 export interface DatabaseProbe {
   check(): DatabaseFacts;
+  /** The newest backup in the backup directory. Never creates the directory, never throws. */
+  checkBackups(): BackupFacts;
 }
 /** Driven port: what a `scene-status` query to the bridge finds. Never rejects. */
 export interface BridgeProbe {
@@ -53,4 +64,5 @@ export interface SetupPorts {
   settings: SettingsFacts;
   database: DatabaseProbe;
   bridge: BridgeProbe;
+  now: () => Date;
 }

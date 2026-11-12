@@ -62,12 +62,13 @@ flowchart LR
 - **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199, or 5299 in the dev profile (the `bridgePort` setting, see [`docs/settings.md`](settings.md)): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
 - **Extension**: runs in the GM's Owlbear tab as the bridge's client, reconciles the scene to the encounter and answers the agent's queries. It fetches images from Owlbear for token art and for the `map-image` query. Mechanics: [`packages/owlbear/README.md`](../packages/owlbear/README.md).
 - **Token art library import** (`npm run import:token-art`): a third, occasional process on the same database. See [`packages/store-sqlite/README.md`](../packages/store-sqlite/README.md), Token art library.
+- **Database backup** (`npm run db:backup`): an occasional process that copies the profile's database while the others run. See "Two halves of one save".
 
 ## Status
 
 Three surfaces, each for one question:
 
-- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, bridge with this profile's token, GM tab; one fix per problem.
+- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; one fix per problem.
 - **`table_status` tool**: does the open scene match the encounter?
 - **`npm run bridge:status`**: the bridge process: pid, port, checkout, commit, log.
 
@@ -89,6 +90,16 @@ Invariants the processes rely on:
 - A restore records, on each instance it puts back, the `seq` of the `added` event it logs. It is kept while the instance stays in the encounter and replaced by a later restore; snapshots carry it.
 - An undo record holds each instance's state before the command's first write to it. A map or room change leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes every record.
 - Token art is a VTT-neutral reference `{ url, mime, width, height }` with an optional `sha256` link to stored bytes. The reference is all present or all absent, and art without one (bytes never published to Owlbear, such as the library import's) must link an image. Stored bytes carry no monster key.
+
+### Two halves of one save
+
+A saved game has two halves. The database holds the encounter, its change log, undo records, maps, rooms and token art. Each Owlbear scene holds its tokens (position, visibility, size and art on each) and, in its metadata, the instances it placed and the change-log seq it is current as of (`com.ttrpg-agents/placed-seq`). The bridge holds its change-log position in memory. Neither half can be rebuilt from the other.
+
+Backups: `npm run db:backup` copies the profile's database with SQLite's online backup, safe while the bridge and the MCP server run, to `encounters-<UTC time>.db` in the `backupDir` setting (default `<data dir>/backups`, see [`docs/settings.md`](settings.md)). A directory it creates gets mode 0700, the file 0600. It refuses a directory inside the checkout: backups stay out of the repo. Backups are taken on demand only; `npm run status` shows the newest one and its age.
+
+There is no restore command until scene-bound encounters (Epic M) have changed what scenes record. Hand recovery of a lost database file: stop the bridge (`npm run bridge:stop`; it holds its change-log position in memory) and every Claude Code session (each MCP server holds the database open), copy a backup over the database file, remove that file's `-wal` and `-shm` files, then start the bridge.
+
+What recovery costs: the scenes are newer than the restored database. When a scene opens, tokens whose instances are missing are deleted (`planSync`), so monsters added after the backup lose their tokens. The restored change log's seqs can fall below the scene's `placed-seq`, so a later `restore_monsters` or `restore_encounter` may not recreate a token the scene already lists.
 
 ## Token and auth
 

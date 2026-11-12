@@ -11,6 +11,7 @@ import { formatSetupStatus } from "./setup-status.js";
 const CONFIG = "/cfg/ttrpg-agents/config.json";
 const DB = "/data/ttrpg-agents/encounters.db";
 const TOKEN = "/cfg/ttrpg-agents/agent-token";
+const BACKUPS = "/data/ttrpg-agents/backups";
 const POINTERS =
   "Scene sync: the table_status tool. Bridge process: npm run bridge:status.";
 
@@ -81,6 +82,7 @@ describe("formatSetupStatus", () => {
         "ok: bridgePort = 5199 (environment)",
         `ok: agentTokenFile = ${TOKEN} (default)`,
         `ok: database ${DB}: schema version 15`,
+        "ok: backup /home/test/.local/share/ttrpg-agents/backups/encounters-20261112T090000Z.db, taken 2026-11-12 09:00 UTC (less than a day ago)",
         "ok: bridge on port 5199: reached",
         "ok: GM tab: connected, room room-abc",
         POINTERS,
@@ -200,6 +202,48 @@ describe("formatSetupStatus", () => {
       }),
       `problem: ${envDetail}`,
       "correct or unset the environment variable BRIDGE_PORT (see docs/settings.md)",
+    );
+  });
+
+  it("a found backup prints its path, its UTC time to the minute and its age: less than a day ago, 1 day ago, 3 days ago", async () => {
+    const path = `${BACKUPS}/encounters-20261109T070542Z.db`;
+    const backups = {
+      dir: BACKUPS,
+      newest: {
+        kind: "found" as const,
+        path,
+        takenAt: "2026-11-09T07:05:42.123Z",
+      },
+    };
+    const cases: [string, string][] = [
+      ["2026-11-09T20:00:00.000Z", "less than a day ago"],
+      ["2026-11-10T07:05:42.123Z", "1 day ago"],
+      ["2026-11-12T10:00:00.000Z", "3 days ago"],
+    ];
+    for (const [now, age] of cases) {
+      const lines = (await report({ backups, now: new Date(now) })).split("\n");
+      expect(lines, now).toContain(
+        `ok: backup ${path}, taken 2026-11-09 07:05 UTC (${age})`,
+      );
+    }
+  });
+
+  it("no backup and an unreadable backup directory print as warnings naming the directory, each followed by the take-backup fix", async () => {
+    const takeBackup = "take a backup: npm run db:backup";
+    expectRowWithFix(
+      await report({ backups: { dir: BACKUPS, newest: { kind: "none" } } }),
+      `warning: backups in ${BACKUPS}: none`,
+      takeBackup,
+    );
+    expectRowWithFix(
+      await report({
+        backups: {
+          dir: BACKUPS,
+          newest: { kind: "unreadable", reason: "permission denied" },
+        },
+      }),
+      `warning: backups in ${BACKUPS}: cannot be read: permission denied`,
+      takeBackup,
     );
   });
 

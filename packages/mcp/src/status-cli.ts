@@ -37,12 +37,13 @@ async function main(): Promise<void> {
         source: loaded.sources[name],
       })),
     },
-    database: createDatabaseProbe(settings.database),
+    database: createDatabaseProbe(settings.database, settings.backupDir),
     bridge: createBridgeProbe({
       client,
       port: settings.bridgePort,
       tokenPath: settings.agentTokenFile,
     }),
+    now: () => new Date(),
   });
   process.stdout.write(`${formatSetupStatus(status)}\n`);
 }
