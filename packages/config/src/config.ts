@@ -2,8 +2,9 @@
 // Node built-ins only and no relative imports: root scripts load this file by
 // source path under plain node.
 
-import { readFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { createHash } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
+import { basename, isAbsolute, join, resolve } from "node:path";
 
 export type SettingSource = "environment" | "file" | "default";
 
@@ -48,7 +49,16 @@ export interface ConfigProblem {
   message: string;
 }
 
+export type ProfileName = "default" | "dev";
+/** Why: TTRPG_AGENTS_PROFILE is set, the checkout is a linked git worktree, or neither. */
+export type ProfileReason = "environment" | "worktree" | "none";
+export interface Profile {
+  name: ProfileName;
+  reason: ProfileReason;
+}
+
 export interface LoadedConfig {
+  profile: Profile;
   settings: Settings;
   sources: Record<SettingName, SettingSource>;
   configFile: { path: string; found: boolean };
@@ -58,12 +68,52 @@ export interface LoadedConfig {
 export interface ConfigInputs {
   env: Readonly<Record<string, string | undefined>>;
   home: string;
-  /** Absolute path of the checkout the process runs from. */
+  /** Absolute path of the checkout the process runs from; also decides the profile. */
   checkout: string;
 }
 
 const APP_DIR = "ttrpg-agents";
 const DEFAULT_BRIDGE_PORT = 5199;
+const DEV_BRIDGE_PORT = 5299;
+const PROFILE_ENV = "TTRPG_AGENTS_PROFILE";
+
+/** dev for a linked git worktree (its .git is a file), else default. */
+function checkoutProfile(checkout: string): Profile {
+  try {
+    if (statSync(join(resolve(checkout), ".git")).isFile())
+      return { name: "dev", reason: "worktree" };
+  } catch {
+    // No .git, or it cannot be read: not a linked worktree.
+  }
+  return { name: "default", reason: "none" };
+}
+
+/** TTRPG_AGENTS_PROFILE when set, else the checkout kind; an unknown value is a problem. */
+function resolveProfile(
+  env: ConfigInputs["env"],
+  checkout: string,
+  problems: ConfigProblem[],
+): Profile {
+  const raw = env[PROFILE_ENV];
+  if (raw === undefined || raw === "") return checkoutProfile(checkout);
+  if (raw === "default" || raw === "dev")
+    return { name: raw, reason: "environment" };
+  problems.push({
+    level: "error",
+    source: "environment",
+    key: PROFILE_ENV,
+    message: `error: environment variable ${PROFILE_ENV}=${JSON.stringify(raw)} must be "default" or "dev"`,
+  });
+  return checkoutProfile(checkout);
+}
+
+/** The checkout's own folder in ttrpg-agents/dev/: its folder name and a short hash of its path. */
+function devFolder(checkout: string): string {
+  const full = resolve(checkout);
+  const name = basename(full).replace(/[^A-Za-z0-9._-]/g, "_");
+  const hash = createHash("sha256").update(full).digest("hex").slice(0, 8);
+  return `${name}-${hash}`;
+}
 
 /** An XDG base directory: used only when set to an absolute path (XDG spec). */
 function xdgDir(value: string | undefined, fallback: string): string {
@@ -109,20 +159,25 @@ function parsePortFromEnv(raw: string): Parsed<number> {
 /** Environment, then config.json, then defaults. Reports bad input in `problems`; never throws for it. */
 export function loadConfig(inputs: ConfigInputs): LoadedConfig {
   const { env, home, checkout } = inputs;
+  // The profile decides where config.json is, so it comes first.
+  const problems: ConfigProblem[] = [];
+  const profile = resolveProfile(env, checkout, problems);
+  const profileDir = profile.name === "dev" ? ["dev", devFolder(checkout)] : [];
   const configDir = join(
     xdgDir(env["XDG_CONFIG_HOME"], join(home, ".config")),
     APP_DIR,
+    ...profileDir,
   );
   const dataDir = join(
     xdgDir(env["XDG_DATA_HOME"], join(home, ".local", "share")),
     APP_DIR,
+    ...profileDir,
   );
   const configPath = join(configDir, "config.json");
-  const problems: ConfigProblem[] = [];
 
   const defaults: Settings = {
     database: join(dataDir, "encounters.db"),
-    bridgePort: DEFAULT_BRIDGE_PORT,
+    bridgePort: profile.name === "dev" ? DEV_BRIDGE_PORT : DEFAULT_BRIDGE_PORT,
     agentTokenFile: join(configDir, "agent-token"),
     bridgeStateFile: join(configDir, "bridge-state.json"),
     extensionDir: join(checkout, "packages", "owlbear", "dist"),
@@ -236,9 +291,21 @@ export function loadConfig(inputs: ConfigInputs): LoadedConfig {
   }
 
   return {
+    profile,
     settings,
     sources,
     configFile: { path: configPath, found },
     problems,
   };
+}
+
+/** "dev (TTRPG_AGENTS_PROFILE)", "default (TTRPG_AGENTS_PROFILE)", "dev (linked git worktree)" or "default (not a linked git worktree)". */
+export function describeProfile(profile: Profile): string {
+  const why =
+    profile.reason === "environment"
+      ? PROFILE_ENV
+      : profile.reason === "worktree"
+        ? "linked git worktree"
+        : "not a linked git worktree";
+  return `${profile.name} (${why})`;
 }

@@ -23,6 +23,19 @@ export async function allocateRunEnv(
   if (!env[DIR]) env[DIR] = mkdtempSync(join(tmpdir(), "ttrpg-agents-e2e-"));
 }
 
+/** Points XDG_CONFIG_HOME and XDG_DATA_HOME inside E2E_DIR, replacing any value; throws if E2E_DIR is unset. */
+export function isolateXdgDirs(
+  env: Record<string, string | undefined> = process.env,
+): void {
+  const dir = env[DIR];
+  if (!dir)
+    throw new Error(
+      `${DIR} is not set; call allocateRunEnv before isolateXdgDirs`,
+    );
+  env.XDG_CONFIG_HOME = join(dir, "xdg-config");
+  env.XDG_DATA_HOME = join(dir, "xdg-data");
+}
+
 /** The harness server's port for this run (`e2e/serve.ts`). */
 export function harnessPort(): number {
   return Number(requireEnv(HARNESS_PORT));

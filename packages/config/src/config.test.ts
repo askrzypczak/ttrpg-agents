@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { SETTINGS } from "./config.js";
+import { describeProfile, SETTINGS } from "./config.js";
+import type { Profile } from "./config.js";
 
 const settingsPage = fileURLToPath(
   new URL("../../../docs/settings.md", import.meta.url),
@@ -41,5 +42,24 @@ describe("settings page", () => {
         ).toBe(true);
       }
     }
+  });
+});
+
+describe("describeProfile", () => {
+  it("describeProfile names the profile and why it was chosen, for each of the three reasons", () => {
+    const cases: [Profile, string][] = [
+      [{ name: "dev", reason: "environment" }, "dev (TTRPG_AGENTS_PROFILE)"],
+      [
+        { name: "default", reason: "environment" },
+        "default (TTRPG_AGENTS_PROFILE)",
+      ],
+      [{ name: "dev", reason: "worktree" }, "dev (linked git worktree)"],
+      [
+        { name: "default", reason: "none" },
+        "default (not a linked git worktree)",
+      ],
+    ];
+    for (const [profile, text] of cases)
+      expect(describeProfile(profile), JSON.stringify(profile)).toBe(text);
   });
 });

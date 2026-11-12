@@ -59,13 +59,13 @@ flowchart LR
 
 - **MCP server**: stdio, started by Claude Code from `.mcp.json` through `packages/mcp/bin/stdio.mjs`. It writes the database and asks the table through the bridge (see "Queries to the table").
 - **Browser opener**: the MCP server runs macOS `open <url>` for `open_statblock`, a short-lived process that hands a D&D Beyond page to the DM's default browser (other platforms are refused; the reply still carries the link).
-- **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199 (`BRIDGE_PORT`): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
+- **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199, or 5299 in the dev profile (the `bridgePort` setting, see [`docs/settings.md`](settings.md)): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
 - **Extension**: runs in the GM's Owlbear tab as the bridge's client, reconciles the scene to the encounter and answers the agent's queries. It fetches images from Owlbear for token art and for the `map-image` query. Mechanics: [`packages/owlbear/README.md`](../packages/owlbear/README.md).
 - **Token art library import** (`npm run import:token-art`): a third, occasional process on the same database. See [`packages/store-sqlite/README.md`](../packages/store-sqlite/README.md), Token art library.
 
 ## Shared database
 
-One SQLite file in WAL mode, named by the `database` setting ([`docs/settings.md`](settings.md)). The schema is versioned in `packages/store-sqlite/src/migrations.ts`.
+One SQLite file per profile, in WAL mode, named by the `database` setting ([`docs/settings.md`](settings.md)). The `default` profile's file is the real one. The `dev` profile, used by every process started in a linked git worktree, has one per checkout, so a branch's migrations never run on the real database. The schema is versioned in `packages/store-sqlite/src/migrations.ts`.
 
 | Data                                                                                  | Written by                                                                                         | Read by                                    |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------ |

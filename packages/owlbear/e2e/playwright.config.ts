@@ -1,12 +1,19 @@
 import { defineConfig, devices } from "@playwright/test";
 import { rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { allocateRunEnv, e2eDir, harnessOrigin } from "./env.js";
+import {
+  allocateRunEnv,
+  e2eDir,
+  harnessOrigin,
+  isolateXdgDirs,
+} from "./env.js";
 
 // Must come first: sets the run's ports and temp dir, which the webServers,
 // fixtures and (inheriting) workers all read. Each worker starts its own bridge
 // (fixtures.ts), so only the harness server is a shared webServer.
 await allocateRunEnv();
+// Keep every process of the run away from both profiles' real files.
+isolateXdgDirs();
 
 // Playwright re-evaluates this config in each worker; only the main process
 // (no TEST_WORKER_INDEX) removes the run's temp dir when the run ends.

@@ -5,7 +5,7 @@ Every process (the MCP server, the bridge, `npm run bridge:start|stop|restart|st
 | Setting           | File key     | Environment variable      | Default                                 |
 | ----------------- | ------------ | ------------------------- | --------------------------------------- |
 | `database`        | `database`   | `TTRPG_AGENTS_DB`         | `<data dir>/encounters.db`              |
-| `bridgePort`      | `bridgePort` | `BRIDGE_PORT`             | `5199`                                  |
+| `bridgePort`      | `bridgePort` | `BRIDGE_PORT`             | `5199` (`5299` in `dev`)                |
 | `agentTokenFile`  | (none)       | `BRIDGE_AGENT_TOKEN_FILE` | `<config dir>/agent-token`              |
 | `bridgeStateFile` | (none)       | `BRIDGE_STATE_FILE`       | `<config dir>/bridge-state.json`        |
 | `extensionDir`    | (none)       | `BRIDGE_STATIC_DIR`       | `packages/owlbear/dist` in the checkout |
@@ -16,9 +16,19 @@ For each setting: the environment variable, else `config.json`, else the default
 
 ## Where the files are
 
-The config directory is `$XDG_CONFIG_HOME/ttrpg-agents`, else `~/.config/ttrpg-agents`. The data directory is `$XDG_DATA_HOME/ttrpg-agents`, else `~/.local/share/ttrpg-agents`. An empty or relative `XDG_*` value is ignored.
+The config directory is `$XDG_CONFIG_HOME/ttrpg-agents`, else `~/.config/ttrpg-agents`. The data directory is `$XDG_DATA_HOME/ttrpg-agents`, else `~/.local/share/ttrpg-agents`. An empty or relative `XDG_*` value is ignored. These are the `default` profile's; the `dev` profile uses a folder inside each (see Profiles).
 
 The config file is `config.json` in the config directory. It is optional: without it every setting comes from the environment or its default. Nothing ever writes it.
+
+## Profiles
+
+There are two profiles, `default` and `dev`, and a process keeps the one it picks when it starts: `TTRPG_AGENTS_PROFILE` if set (`default` or `dev`; any other value is an error), else `dev` when its checkout is a linked git worktree (its `.git` is a file), else `default`. `npm run bridge` and `npm run bridge:status` print the profile and why.
+
+In `dev`, the config and data directories are a folder per checkout, `dev/<checkout folder name>-<hash>` inside each (the hash is the first 8 hex digits of the SHA-256 of the checkout's path). It holds that checkout's own `config.json`, agent token, state file, `bridge.log` and database, so worktrees whose branches add migrations never share a database. The default bridge port is 5299 in every checkout: one dev bridge runs at a time unless a dev `config.json` sets another `bridgePort`. Precedence is the same in both profiles.
+
+An environment variable wins in both profiles. Do not export `TTRPG_AGENTS_DB` or the other variables in your shell profile, or a process in a worktree opens the database they name; put settings in the profile's `config.json` instead.
+
+The dev folder of a removed worktree stays behind: remove it by hand.
 
 ## Format
 

@@ -18,6 +18,7 @@ export interface LifecycleOptions {
   port: number; // status probes it when no live bridge is recorded
   agentTokenPath: string; // status reads it for the GM tab line
   checkout: string; // the checkout the command runs from
+  profile: string; // describeProfile's text; bridgeStatus prints `profile: <text>` first
   env: NodeJS.ProcessEnv; // passed to the spawned bridge only (BRIDGE_STATE_FILE forced to statePath)
   build: () => Promise<void>; // throws on failure
   out: (line: string) => void;
@@ -341,6 +342,7 @@ export async function bridgeStatus(options: LifecycleOptions): Promise<number> {
   const { statePath, checkout, out } = options;
   const logPath = logPathFor(statePath);
   const record = await readStateFile(statePath);
+  out(`profile: ${options.profile}`);
 
   if (record !== null && isRecordedBridge(record)) {
     out("bridge: running");

@@ -13,7 +13,7 @@ import {
   stopBridge,
   type LifecycleOptions,
 } from "./bridge-lifecycle.ts";
-import { loadConfig } from "../packages/config/src/config.ts";
+import { describeProfile, loadConfig } from "../packages/config/src/config.ts";
 
 const checkout = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -51,7 +51,7 @@ if (command === undefined) {
   console.error("usage: node scripts/bridge.ts <start|stop|restart|status>");
   process.exitCode = 2;
 } else {
-  const { settings, problems } = loadConfig({
+  const { profile, settings, problems } = loadConfig({
     env: process.env,
     home: homedir(),
     checkout,
@@ -63,6 +63,7 @@ if (command === undefined) {
     port: settings.bridgePort,
     agentTokenPath: settings.agentTokenFile,
     checkout,
+    profile: describeProfile(profile),
     env: process.env,
     build,
     out: (line) => console.log(line),
