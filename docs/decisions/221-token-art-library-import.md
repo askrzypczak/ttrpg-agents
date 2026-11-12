@@ -42,7 +42,7 @@ Issue: [#221](https://github.com/askrzypczak/ttrpg-agents/issues/221).
   - Chosen: exit 0 after printing the summary; exit 1 with the usage line for a missing or extra argument, an unknown flag, or a directory that does not exist (checked before the database is opened). A file that cannot be read stops the run instead (221.7).
   - Exit 1 when any file was rejected: useful for scripting, which nobody does with this tool yet, and npm's error block would bury the summary.
 - Where: `packages/store-sqlite/scripts/import-token-art.ts`.
-- Status: active
+- Status: superseded in part by 369.8
 
 ## 221.5 A running extension sees imported art only after the Owlbear tab reloads; documented, not pushed live
 
