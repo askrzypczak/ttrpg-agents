@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import { createMessageFeed } from "./testing/messages.js";
@@ -10,7 +10,7 @@ import { INSTANCE_METADATA_KEY } from "./sync-plan.js";
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 const error = (id: string | undefined, fatal: boolean): BridgeMessage => ({
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "error",
   ...(id !== undefined ? { id } : {}),
   payload: { code: "unknown_instance", message: "gone", fatal },
@@ -66,7 +66,7 @@ describe("createEncounterSync reacting to errors", () => {
     [
       "a message that is not an error",
       {
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "pong",
         id: "instance-edit:i1",
         payload: {},

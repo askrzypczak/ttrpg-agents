@@ -3,6 +3,7 @@ import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
+import { PROTOCOL_VERSION } from "@ttrpg-agents/protocol";
 
 describe("replyToQuery", () => {
   it("returns the query-result carrying the id", async () => {
@@ -11,7 +12,7 @@ describe("replyToQuery", () => {
     expect(
       await replyToQuery(obr, sync, "c1", { name: "scene-status" }),
     ).toEqual({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "query-result",
       id: "c1",
       payload: {
@@ -37,7 +38,7 @@ describe("replyToQuery", () => {
     expect(
       await replyToQuery(obr, sync, "c2", { name: "scene-status" }),
     ).toEqual({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "error",
       id: "c2",
       payload: {

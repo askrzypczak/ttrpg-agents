@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChangeOrigin, InstanceEdit } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import { EDIT_SETTLE_MS, createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
@@ -29,7 +29,7 @@ const snapshot = (feed: MessageFeed, instance: EncounterInstance, seq = 0) =>
   feed.snapshot([instance], { seq });
 
 const helloAck: BridgeMessage = {
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "hello-ack",
   payload: { serverVersion: "0" },
 };
@@ -66,7 +66,7 @@ const armorClassChanged = (
   );
 
 const refusal = (id: string | undefined): BridgeMessage => ({
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "error",
   ...(id !== undefined ? { id } : {}),
   payload: { code: "unknown_instance", message: "gone", fatal: false },
@@ -777,7 +777,7 @@ describe("createEncounterSync answers to edits", () => {
     [
       "a fatal error",
       (id: string): BridgeMessage => ({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "error",
         id,
         payload: { code: "internal", message: "broken", fatal: true },
@@ -785,7 +785,12 @@ describe("createEncounterSync answers to edits", () => {
     ],
     [
       "a message that is not an error",
-      (id: string): BridgeMessage => ({ v: 1, type: "pong", id, payload: {} }),
+      (id: string): BridgeMessage => ({
+        v: PROTOCOL_VERSION,
+        type: "pong",
+        id,
+        payload: {},
+      }),
     ],
   ])(
     "%s carrying an edit's id is no refusal: the edit stays in flight",

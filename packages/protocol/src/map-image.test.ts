@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  PROTOCOL_VERSION,
   bridgeMessageSchema,
   mapImageSchema,
   queryResultSchema,
@@ -35,7 +36,7 @@ describe("map-image schemas", () => {
       const result = { ...image, mimeType };
       expect(mapImageSchema.safeParse(result).success, mimeType).toBe(true);
       const envelope = {
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "query-result",
         id: "q-1",
         payload: { name: "map-image", result },

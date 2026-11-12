@@ -12,7 +12,7 @@ import {
   SqliteEncounterRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   broadcastLogEvents,
   removeInstance,
@@ -62,7 +62,7 @@ describe("snapshotMessage", () => {
       { seq: 2, event: { type: "cleared", origin } },
     ]);
     expect(snapshotMessage(repo, noArt, log)).toEqual({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: { instances: created, seq: 2 },
     });
@@ -87,7 +87,7 @@ describe("snapshotMessage", () => {
     );
 
     expect(message).toEqual({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: { instances: [], seq: 4 },
     });
@@ -108,7 +108,7 @@ describe("snapshotMessage", () => {
     );
 
     expect(snapshotMessage(repo, noArt, log)).toStrictEqual({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: { instances: repo.listInstances(), seq: log.latestSeq() },
     });
@@ -120,7 +120,7 @@ describe("snapshotMessage", () => {
     const thirdRestore = log.latestSeq();
 
     expect(snapshotMessage(repo, noArt, log)).toEqual({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: {
         instances: repo.listInstances(),
@@ -189,7 +189,7 @@ describe("broadcastLogEvents", () => {
     event: { type: "removed", id, origin },
   });
   const message = ({ seq, event }: LoggedEvent): BridgeMessage => ({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "encounter-event",
     payload: { ...event, seq },
   });
@@ -309,7 +309,7 @@ describe("broadcastLogEvents", () => {
 
   it("broadcastLogEvents broadcasts a snapshot in place of an unreadable entry, also when it is the newest entry", () => {
     const snapshotMsg: BridgeMessage = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: { instances: [], seq: 2 },
     };
