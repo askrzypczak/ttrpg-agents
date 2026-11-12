@@ -31,7 +31,7 @@ signalling another process. The detached bridge's stdout and stderr go to
 `bridge.log` beside the state file, emptied on each start and mode 0600; the
 commands print its path.
 
-`bridge:status` reports the running bridge's pid, port, checkout, commit, start
+`bridge:status` reports the profile, then the running bridge's pid, port, checkout, commit, start
 time and log, with a warning when its checkout or commit is not this
 checkout's. It asks the bridge for `scene-status` with the agent token to say
 whether a GM tab is connected (or unknown, with the reason). With no running
@@ -49,17 +49,15 @@ query.
 Settings (port, served folder, agent token file, state file and database):
 see [`docs/settings.md`](../../docs/settings.md).
 
-## Test a branch against the real table
+## Test a branch
 
-1. From the branch's checkout (after `npm ci`), run `npm run bridge:restart`:
-   it stops the running bridge, wherever it was started, builds this checkout
-   and starts the bridge from it. `npm run bridge:status` should show this
-   checkout and its commit with no warning.
-2. Reload the GM's Owlbear tab so it loads the extension this bridge serves.
-3. Reconnect the MCP server (`/mcp` in Claude Code) so it picks up the fresh
-   build.
-4. The branch's migrations run on the shared database unless `TTRPG_AGENTS_DB`
-   points elsewhere.
+Every process started in a worktree uses the dev profile: its own database, agent token and state file, and port 5299 (see Profiles in [`docs/settings.md`](../../docs/settings.md)). The real bridge and database are untouched.
+
+1. In the branch's worktree (after `npm ci`), run `npm run bridge:start` (`bridge:restart` after a change). It starts a dev bridge beside the real one; `npm run bridge:status` shows `profile: dev` and this checkout. One dev bridge runs at a time: stop the other worktree's first.
+2. Once, add the dev extension in Owlbear from the dev bridge's install URL, `http://localhost:5299/manifest.json`, and switch it on in the test room only. Keep only one of the two extensions on in a room: both act on the same tokens.
+3. Start the Claude Code session in the worktree, so its MCP server opens the same dev database. Reconnect it (`/mcp`) after a rebuild.
+
+To drive the real table from a branch, set `TTRPG_AGENTS_PROFILE=default` for both the bridge command and the Claude Code session, for example `TTRPG_AGENTS_PROFILE=default npm run bridge:restart`. The branch's migrations then run on the real database.
 
 ## Queries
 
