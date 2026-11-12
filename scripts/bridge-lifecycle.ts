@@ -1,7 +1,6 @@
 // The logic behind `npm run bridge:start|stop|restart|status` (entry:
 // bridge.ts). Runs under Node type stripping, so it imports the bridge's
-// state-file and token-file modules by source path; both use only Node
-// built-ins.
+// state-file module by source path; it uses only Node built-ins.
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, fchmodSync, mkdirSync, openSync } from "node:fs";
 import { readFile, realpath } from "node:fs/promises";
@@ -13,20 +12,17 @@ import {
   removeStateFile,
   type BridgeState,
 } from "../packages/bridge/src/state-file.ts";
-import { defaultAgentTokenPath } from "../packages/bridge/src/token-file.ts";
 
 export interface LifecycleOptions {
   statePath: string; // the log is bridge.log beside it
+  port: number; // status probes it when no live bridge is recorded
+  agentTokenPath: string; // status reads it for the GM tab line
   checkout: string; // the checkout the command runs from
-  env: NodeJS.ProcessEnv; // passed to the spawned bridge (BRIDGE_STATE_FILE forced to statePath); status reads BRIDGE_PORT and BRIDGE_AGENT_TOKEN_FILE from it
+  env: NodeJS.ProcessEnv; // passed to the spawned bridge only (BRIDGE_STATE_FILE forced to statePath)
   build: () => Promise<void>; // throws on failure
   out: (line: string) => void;
   err: (line: string) => void;
 }
-
-// Same as DEFAULT_BRIDGE_PORT in packages/bridge/src/server.ts, which cannot
-// load under type stripping (it imports workspace packages).
-const DEFAULT_BRIDGE_PORT = 5199;
 
 const POLL_MS = 100;
 const START_TIMEOUT_MS = 15_000;
@@ -279,11 +275,7 @@ async function samePath(a: string, b: string): Promise<boolean> {
   return (await real(a)) === (await real(b));
 }
 
-async function gmTab(
-  record: BridgeState,
-  env: NodeJS.ProcessEnv,
-): Promise<string> {
-  const tokenPath = env.BRIDGE_AGENT_TOKEN_FILE ?? defaultAgentTokenPath();
+async function gmTab(record: BridgeState, tokenPath: string): Promise<string> {
   let token: string;
   try {
     token = (await readFile(tokenPath, "utf8")).trim();
@@ -341,15 +333,12 @@ function accepts(port: number): Promise<boolean> {
   });
 }
 
-function probePort(record: BridgeState | null, env: NodeJS.ProcessEnv): number {
-  if (record !== null) return record.port;
-  if (env.BRIDGE_PORT !== undefined && env.BRIDGE_PORT !== "")
-    return Number(env.BRIDGE_PORT);
-  return DEFAULT_BRIDGE_PORT;
+function probePort(record: BridgeState | null, configured: number): number {
+  return record !== null ? record.port : configured;
 }
 
 export async function bridgeStatus(options: LifecycleOptions): Promise<number> {
-  const { statePath, checkout, env, out } = options;
+  const { statePath, checkout, out } = options;
   const logPath = logPathFor(statePath);
   const record = await readStateFile(statePath);
 
@@ -366,7 +355,7 @@ export async function bridgeStatus(options: LifecycleOptions): Promise<number> {
       out(
         `warning: the running bridge's commit ${record.commit ?? "unknown"} differs from this checkout's ${here ?? "unknown"}`,
       );
-    out(`GM tab: ${await gmTab(record, env)}`);
+    out(`GM tab: ${await gmTab(record, options.agentTokenPath)}`);
     return 0;
   }
 
@@ -376,7 +365,7 @@ export async function bridgeStatus(options: LifecycleOptions): Promise<number> {
       : `bridge: not running (stale state file for pid ${String(record.pid)})`,
   );
   out(`log: ${logPath}`);
-  const port = probePort(record, env);
+  const port = probePort(record, options.port);
   if (
     Number.isInteger(port) &&
     port > 0 &&
