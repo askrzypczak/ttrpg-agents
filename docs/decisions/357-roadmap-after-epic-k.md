@@ -243,3 +243,74 @@ PR: [#357](https://github.com/askrzypczak/ttrpg-agents/pull/357). No ticket: the
 - Where: #384, #388.
 - Revisit if: most of the maintainer's imports turn out to be in the 2014 format.
 - Status: active
+
+## 357.23 Whether the D&D Beyond epic is built at all is decided after its spike
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: 357.4 allowed a small epic that shows a player's HP, AC and temp HP on their token (#432). Its writer read D&D Beyond's terms and reports that section 5.2 bans automation and extraction tools, while a 2020 staff statement called the character endpoint unsupported but not blocked.
+- Options:
+  - Chosen: the spike (#434) answers whether, how and under what terms the data can be read. Every building ticket stays blocked by it, and nothing is built without the maintainer's explicit yes afterwards.
+  - Drop the epic now: the spike is cheap and sends nothing to D&D Beyond from the agent.
+- Where: #432, #434.
+- Status: active
+
+## 357.24 Damage from a monster's attack that hits another monster is applied at once
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: The action rolls epic (#420) rolls attacks from statblock text; against a monster the engine knows the armor class and gives the verdict.
+- Options:
+  - Chosen: on a hit the damage is applied and the reply says so; `undo` reverses it, and a call can ask to only report. A hit on a player's token is never applied (357.4).
+  - Report the damage and wait for the DM to confirm: a second step for every hit.
+- Where: #423.
+- Status: active
+
+## 357.25 An attack or area out of reach or range is refused, with an override
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: The actions-on-the-grid epic (#437) checks reach and range from token positions, which can lag the fiction at the table.
+- Options:
+  - Chosen: the tool refuses, naming the distance and the limit, and takes an explicit override.
+  - Roll anyway with a warning line: a warning is easy to miss mid-session.
+- Where: #442, #443.
+- Status: active
+
+## 357.26 A monster's conditions change its own rolls by the smallest rule
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: The conditions epic (#412) stores conditions per monster. Their full rules need positions, sight and targets the model does not have.
+- Options:
+  - Chosen: only effects on the monster's own d20 rolls that need no position, sight or target are applied, and the DM can switch that off per call.
+  - Conditions are only shown, and the DM always states advantage or disadvantage: the engine would know a monster is Poisoned and roll as if it were not.
+  - The full rules: not possible before positions, sight and targets exist.
+- Where: #418.
+- Status: active
+
+## 357.27 The agent rolls bare dice expressions the DM asks for
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: The saves and checks epic (#395) adds a general roll tool; its audit asked whether a bare "roll 8d6" is wanted at all.
+- Options:
+  - Chosen: yes, through a `roll_dice` tool, so no number passes through the model.
+  - Cut the tool: an ad-hoc roll would have no engine path.
+- Where: #399.
+- Status: active
+
+## 357.28 A move to a taken cell is refused
+
+- Decided by: maintainer, 2026-11-11, in chat, against the orchestrator's suggested default.
+- Context: The movement epic (#427) lets the DM name a destination cell.
+- Options:
+  - Chosen: when the cell asked for is occupied, the move is refused and the refusal names the occupant; no other cell is picked.
+  - Use the nearest free cells and say so (the suggested default): the token would end up somewhere the DM did not ask for.
+- Where: #429.
+- Status: active
+
+## 357.29 Distance for a large token is measured from its nearest occupied square
+
+- Decided by: maintainer, 2026-11-11, in chat.
+- Context: The positions epic (#393) measures distance between tokens; Owlbear's ruler dragged from a token starts at its centre.
+- Options:
+  - Chosen: from the nearest occupied squares of each token, the D&D rule. Both options agree for Medium and smaller tokens.
+  - From token centre to token centre: a Large monster would read as five feet farther than the rules say.
+- Where: #397, #406.
+- Status: active
