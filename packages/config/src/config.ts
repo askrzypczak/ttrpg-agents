@@ -40,6 +40,7 @@ export const SETTINGS: readonly SettingSpec[] = [
   { name: "agentTokenFile", env: "BRIDGE_AGENT_TOKEN_FILE" },
   { name: "bridgeStateFile", env: "BRIDGE_STATE_FILE" },
   { name: "extensionDir", env: "BRIDGE_STATIC_DIR" },
+  { name: "backupDir", env: "TTRPG_AGENTS_BACKUP_DIR", fileKey: "backupDir" },
 ];
 
 export interface ConfigProblem {
@@ -183,8 +184,7 @@ export function loadConfig(inputs: ConfigInputs): LoadedConfig {
     agentTokenFile: join(configDir, "agent-token"),
     bridgeStateFile: join(configDir, "bridge-state.json"),
     extensionDir: join(checkout, "packages", "owlbear", "dist"),
-    // Not implemented yet: the default and the SETTINGS row come with the loader change.
-    backupDir: "",
+    backupDir: join(dataDir, "backups"),
   };
 
   // Read config.json: missing is fine, anything else unreadable is an error.
