@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "@ttrpg-agents/config";
+import { describeProfile, loadConfig } from "@ttrpg-agents/config";
 import { storeTokenImage } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterLog,
@@ -27,7 +27,7 @@ import {
 import { loadOrCreateToken } from "./token-file.js";
 
 const checkout = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
-const { settings, problems } = loadConfig({
+const { profile, settings, problems } = loadConfig({
   env: process.env,
   home: homedir(),
   checkout,
@@ -103,6 +103,7 @@ const stateWritten = writeStateFile(statePath, {
 });
 await stateWritten;
 console.log(`bridge listening on http://localhost:${server.port}`);
+console.log(`profile: ${describeProfile(profile)}`);
 console.log(`serving ${staticDir}`);
 console.log(`agent token file: ${agentTokenPath}`);
 console.log(`state file: ${statePath}`);
