@@ -32,9 +32,9 @@ Issue: [#374](https://github.com/askrzypczak/ttrpg-agents/issues/374).
 - Decided by: epic #366 orchestrator, 2026-11-12, plan gate (spec-auditor cut), not human-approved.
 - Context: The test book promises that the Ashfeather Harrier's Talons average is its only inconsistency. A test here could check damage averages only, not every rule the create-time check will cover.
 - Options:
-  - Chosen: a note in `fixtures/test-book/README.md` now; the orchestrator tells the maintainer that #384 should carry an exactly-one-finding acceptance criterion with its checker. Nothing is posted from this run.
+  - Chosen: a note in `fixtures/test-book/README.md` now. The epic #366 orchestrator proposed the exactly-one-finding acceptance criterion for #384's checker on #384, after the gate, once the maintainer allowed comments outside the epic: https://github.com/askrzypczak/ttrpg-agents/issues/384#issuecomment-6815299886.
   - A unit test in `scripts/` that parses `N (dice)` pairs: rebuilds #384's parsing and covers damage averages only.
-  - A comment on #384 or a follow-up ticket now: not chosen at the gate.
+  - A follow-up ticket now: not chosen at the gate.
 - Where: `fixtures/test-book/README.md`.
 - Revisit if: #384 lands without such a check.
 - Status: active
