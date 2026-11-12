@@ -361,6 +361,8 @@ async function isolateSettings(): Promise<(content: unknown) => Promise<void>> {
   }
   isolated.HOME = home;
   isolated.XDG_CONFIG_HOME = configHome;
+  // config.json goes in the default profile's directory, whatever the checkout.
+  isolated.TTRPG_AGENTS_PROFILE = "default";
   env = isolated;
   return async (content) => {
     const configDir = join(configHome, "ttrpg-agents");
@@ -499,6 +501,40 @@ describe("bridge CLI settings", () => {
 
       expect(code, bridge.stderr()).toBe(1);
       expect(bridge.stderr()).toMatch(/^.*bridgePort.*$/m);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "the bridge started with TTRPG_AGENTS_PROFILE=dev prints its profile and why with its start lines",
+    async () => {
+      const home = join(dir, "home");
+      const configHome = join(dir, "xdg-config");
+      const dataHome = join(dir, "xdg-data");
+      await mkdir(home);
+      await mkdir(configHome);
+      await mkdir(dataHome);
+      env.HOME = home;
+      env.XDG_CONFIG_HOME = configHome;
+      env.XDG_DATA_HOME = dataHome;
+      env.TTRPG_AGENTS_PROFILE = "dev";
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      await listeningPort(bridge);
+      await waitFor(
+        () =>
+          Promise.resolve(
+            /^install in Owlbear: /m.test(bridge.stdout()) ? true : undefined,
+          ),
+        "the install line",
+      );
+
+      const lines = bridge.stdout().split("\n");
+      const listening = lines.findIndex((line) =>
+        line.startsWith("bridge listening on "),
+      );
+      expect(listening).toBeGreaterThanOrEqual(0);
+      expect(lines[listening + 1]).toBe("profile: dev (TTRPG_AGENTS_PROFILE)");
     },
     TIMEOUT,
   );

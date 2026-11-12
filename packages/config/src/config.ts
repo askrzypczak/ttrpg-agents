@@ -48,7 +48,16 @@ export interface ConfigProblem {
   message: string;
 }
 
+export type ProfileName = "default" | "dev";
+/** Why: TTRPG_AGENTS_PROFILE is set, the checkout is a linked git worktree, or neither. */
+export type ProfileReason = "environment" | "worktree" | "none";
+export interface Profile {
+  name: ProfileName;
+  reason: ProfileReason;
+}
+
 export interface LoadedConfig {
+  profile: Profile;
   settings: Settings;
   sources: Record<SettingName, SettingSource>;
   configFile: { path: string; found: boolean };
@@ -58,7 +67,7 @@ export interface LoadedConfig {
 export interface ConfigInputs {
   env: Readonly<Record<string, string | undefined>>;
   home: string;
-  /** Absolute path of the checkout the process runs from. */
+  /** Absolute path of the checkout the process runs from; also decides the profile. */
   checkout: string;
 }
 
@@ -236,9 +245,16 @@ export function loadConfig(inputs: ConfigInputs): LoadedConfig {
   }
 
   return {
+    profile: { name: "default", reason: "none" },
     settings,
     sources,
     configFile: { path: configPath, found },
     problems,
   };
+}
+
+/** "dev (TTRPG_AGENTS_PROFILE)", "default (TTRPG_AGENTS_PROFILE)", "dev (linked git worktree)" or "default (not a linked git worktree)". */
+export function describeProfile(profile: Profile): string {
+  void profile;
+  throw new Error("not implemented");
 }

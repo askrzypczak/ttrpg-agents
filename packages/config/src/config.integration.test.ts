@@ -7,10 +7,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadConfig, SETTINGS } from "./config.js";
+import { describeProfile, loadConfig, SETTINGS } from "./config.js";
 import type { ConfigInputs, Settings } from "./config.js";
 
 const dirs: string[] = [];
@@ -398,5 +399,273 @@ describe("loadConfig", () => {
     const loaded = JSON.parse(result.stdout) as ReturnType<typeof loadConfig>;
     expect(loaded.settings).toEqual(s.defaults);
     expect(loaded.problems).toEqual([]);
+  });
+});
+
+type CheckoutKind = "worktree" | "main" | "plain";
+
+/** Gives the checkout a `.git` file (a linked worktree), a `.git` directory, or neither. */
+function markCheckout(checkout: string, kind: CheckoutKind): void {
+  if (kind === "worktree")
+    writeFileSync(
+      join(checkout, ".git"),
+      "gitdir: /elsewhere/.git/worktrees/x\n",
+    );
+  else if (kind === "main") mkdirSync(join(checkout, ".git"));
+}
+
+/** The checkout's folder name in ttrpg-agents/dev/. */
+function devFolder(checkout: string): string {
+  const full = resolve(checkout);
+  const name = basename(full).replace(/[^A-Za-z0-9._-]/g, "_");
+  const hash = createHash("sha256").update(full).digest("hex").slice(0, 8);
+  return `${name}-${hash}`;
+}
+
+interface DevPaths {
+  configDir: string;
+  dataDir: string;
+  configFile: string;
+  defaults: Settings;
+}
+
+function devPaths(
+  configHome: string,
+  dataHome: string,
+  checkout: string,
+): DevPaths {
+  const folder = devFolder(checkout);
+  const configDir = join(configHome, "ttrpg-agents", "dev", folder);
+  const dataDir = join(dataHome, "ttrpg-agents", "dev", folder);
+  return {
+    configDir,
+    dataDir,
+    configFile: join(configDir, "config.json"),
+    defaults: {
+      database: join(dataDir, "encounters.db"),
+      bridgePort: 5299,
+      agentTokenFile: join(configDir, "agent-token"),
+      bridgeStateFile: join(configDir, "bridge-state.json"),
+      extensionDir: join(checkout, "packages", "owlbear", "dist"),
+    },
+  };
+}
+
+function writeDevConfig(dev: DevPaths, content: unknown): void {
+  mkdirSync(dev.configDir, { recursive: true });
+  writeFileSync(dev.configFile, JSON.stringify(content));
+}
+
+describe("loadConfig profile", () => {
+  it("TTRPG_AGENTS_PROFILE=dev or =default wins over the checkout kind and is reported with the reason environment", () => {
+    const toDev = scene();
+    markCheckout(toDev.checkout, "main");
+    const dev = loadConfig(toDev.inputs({ TTRPG_AGENTS_PROFILE: "dev" }));
+    expect(dev.profile).toEqual({ name: "dev", reason: "environment" });
+    expect(dev.settings).toEqual(
+      devPaths(toDev.configHome, toDev.dataHome, toDev.checkout).defaults,
+    );
+    expect(dev.problems).toEqual([]);
+
+    const toDefault = scene();
+    markCheckout(toDefault.checkout, "worktree");
+    const kept = loadConfig(
+      toDefault.inputs({ TTRPG_AGENTS_PROFILE: "default" }),
+    );
+    expect(kept.profile).toEqual({ name: "default", reason: "environment" });
+    expect(kept.settings).toEqual(toDefault.defaults);
+    expect(kept.problems).toEqual([]);
+  });
+
+  it("an unknown TTRPG_AGENTS_PROFILE value is an error naming the variable, and the profile falls back to the checkout kind", () => {
+    const cases: [CheckoutKind, { name: string; reason: string }][] = [
+      ["worktree", { name: "dev", reason: "worktree" }],
+      ["main", { name: "default", reason: "none" }],
+    ];
+    for (const [kind, expected] of cases) {
+      const s = scene();
+      markCheckout(s.checkout, kind);
+
+      const loaded = loadConfig(s.inputs({ TTRPG_AGENTS_PROFILE: "staging" }));
+
+      const errors = loaded.problems.filter((p) => p.level === "error");
+      expect(errors, kind).toHaveLength(1);
+      expect(errors[0]).toMatchObject({
+        level: "error",
+        source: "environment",
+        key: "TTRPG_AGENTS_PROFILE",
+      });
+      expect(errors[0]?.message).toContain("TTRPG_AGENTS_PROFILE");
+      expect(loaded.profile, kind).toEqual(expected);
+    }
+  });
+
+  it("an empty TTRPG_AGENTS_PROFILE counts as unset", () => {
+    const s = scene();
+    markCheckout(s.checkout, "worktree");
+
+    const loaded = loadConfig(s.inputs({ TTRPG_AGENTS_PROFILE: "" }));
+
+    expect(loaded.problems).toEqual([]);
+    expect(loaded.profile).toEqual({ name: "dev", reason: "worktree" });
+  });
+
+  it("a checkout whose .git is a file resolves dev with the reason worktree", () => {
+    const s = scene();
+    markCheckout(s.checkout, "worktree");
+
+    const loaded = loadConfig(s.inputs());
+
+    expect(loaded.problems).toEqual([]);
+    expect(loaded.profile).toEqual({ name: "dev", reason: "worktree" });
+    expect(loaded.settings).toEqual(
+      devPaths(s.configHome, s.dataHome, s.checkout).defaults,
+    );
+  });
+
+  it("a checkout whose .git is a directory, or that has no .git, resolves default with the reason none", () => {
+    for (const kind of ["main", "plain"] as const) {
+      const s = scene();
+      markCheckout(s.checkout, kind);
+
+      const loaded = loadConfig(s.inputs());
+
+      expect(loaded.problems, kind).toEqual([]);
+      expect(loaded.profile, kind).toEqual({ name: "default", reason: "none" });
+      expect(loaded.settings, kind).toEqual(s.defaults);
+      expect(describeProfile(loaded.profile), kind).toBe(
+        "default (not a linked git worktree)",
+      );
+    }
+  });
+
+  it("in dev, config.json, the database, the agent token file and the state file default to the checkout's folder in ttrpg-agents/dev/, named after the checkout folder and a short hash of its path, and the default port is 5299", () => {
+    const s = scene();
+    // A folder name with characters outside [A-Za-z0-9._-].
+    const checkout = join(tempDir("parent"), "my checkout+1");
+    mkdirSync(checkout);
+    markCheckout(checkout, "worktree");
+
+    const loaded = loadConfig({ ...s.inputs(), checkout });
+
+    const folder = devFolder(checkout);
+    expect(folder).toMatch(/^my_checkout_1-[0-9a-f]{8}$/);
+    const configDir = join(s.configHome, "ttrpg-agents", "dev", folder);
+    const dataDir = join(s.dataHome, "ttrpg-agents", "dev", folder);
+    expect(loaded.problems).toEqual([]);
+    expect(loaded.configFile).toEqual({
+      path: join(configDir, "config.json"),
+      found: false,
+    });
+    expect(loaded.settings).toEqual({
+      database: join(dataDir, "encounters.db"),
+      bridgePort: 5299,
+      agentTokenFile: join(configDir, "agent-token"),
+      bridgeStateFile: join(configDir, "bridge-state.json"),
+      extensionDir: join(checkout, "packages", "owlbear", "dist"),
+    });
+    expect(Object.values(loaded.sources)).toEqual(
+      SETTINGS.map(() => "default"),
+    );
+  });
+
+  it("in dev, config.json is read from the checkout's dev folder and not from the default profile's config directory", () => {
+    const s = scene();
+    markCheckout(s.checkout, "worktree");
+    const dev = devPaths(s.configHome, s.dataHome, s.checkout);
+    s.writeConfig({ bridgePort: 6201 });
+    writeDevConfig(dev, { bridgePort: 6202 });
+
+    const loaded = loadConfig(s.inputs());
+
+    expect(loaded.problems).toEqual([]);
+    expect(loaded.configFile).toEqual({ path: dev.configFile, found: true });
+    expect(loaded.settings.bridgePort).toBe(6202);
+    expect(loaded.sources.bridgePort).toBe("file");
+  });
+
+  it("in dev, an environment variable still beats config.json and the default", () => {
+    const s = scene();
+    markCheckout(s.checkout, "worktree");
+    const dev = devPaths(s.configHome, s.dataHome, s.checkout);
+    const fileDb = join(s.home, "file.db");
+    const envDb = join(s.home, "env.db");
+    const envToken = join(s.home, "env-agent-token");
+    writeDevConfig(dev, { database: fileDb, bridgePort: 6203 });
+
+    const loaded = loadConfig(
+      s.inputs({
+        TTRPG_AGENTS_DB: envDb,
+        BRIDGE_PORT: "6204",
+        BRIDGE_AGENT_TOKEN_FILE: envToken,
+      }),
+    );
+
+    expect(loaded.problems).toEqual([]);
+    expect(loaded.configFile).toEqual({ path: dev.configFile, found: true });
+    expect(loaded.settings).toEqual({
+      ...dev.defaults,
+      database: envDb,
+      bridgePort: 6204,
+      agentTokenFile: envToken,
+    });
+    expect(loaded.sources).toEqual({
+      database: "environment",
+      bridgePort: "environment",
+      agentTokenFile: "environment",
+      bridgeStateFile: "default",
+      extensionDir: "default",
+    });
+  });
+
+  it("in dev, a relative or empty XDG_CONFIG_HOME or XDG_DATA_HOME is ignored and the dev folders fall under ~/.config and ~/.local/share", () => {
+    const variants: Record<string, string>[] = [
+      { XDG_CONFIG_HOME: "relative/config", XDG_DATA_HOME: "" },
+      { XDG_CONFIG_HOME: "", XDG_DATA_HOME: "relative/data" },
+    ];
+    for (const xdg of variants) {
+      const s = scene();
+      markCheckout(s.checkout, "worktree");
+      const dev = devPaths(
+        join(s.home, ".config"),
+        join(s.home, ".local", "share"),
+        s.checkout,
+      );
+
+      const loaded = loadConfig(s.inputs(xdg));
+
+      expect(loaded.problems).toEqual([]);
+      expect(loaded.configFile).toEqual({ path: dev.configFile, found: false });
+      expect(loaded.settings).toEqual(dev.defaults);
+    }
+  });
+
+  it("two linked worktrees at different paths resolve different dev databases and config folders and the same default port 5299", () => {
+    const s = scene();
+    // The same folder name under two parents.
+    const first = join(tempDir("first"), "worktree");
+    const second = join(tempDir("second"), "worktree");
+    for (const checkout of [first, second]) {
+      mkdirSync(checkout);
+      markCheckout(checkout, "worktree");
+    }
+
+    const a = loadConfig({ ...s.inputs(), checkout: first });
+    const b = loadConfig({ ...s.inputs(), checkout: second });
+
+    expect(a.profile).toEqual({ name: "dev", reason: "worktree" });
+    expect(b.profile).toEqual({ name: "dev", reason: "worktree" });
+    expect(a.settings.database).not.toBe(b.settings.database);
+    expect(a.configFile.path).not.toBe(b.configFile.path);
+    expect(a.settings.agentTokenFile).not.toBe(b.settings.agentTokenFile);
+    expect(a.settings.bridgeStateFile).not.toBe(b.settings.bridgeStateFile);
+    expect(a.settings).toEqual(
+      devPaths(s.configHome, s.dataHome, first).defaults,
+    );
+    expect(b.settings).toEqual(
+      devPaths(s.configHome, s.dataHome, second).defaults,
+    );
+    expect(a.settings.bridgePort).toBe(5299);
+    expect(b.settings.bridgePort).toBe(5299);
   });
 });

@@ -17,7 +17,7 @@ import {
 } from "node:fs/promises";
 import { connect, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import {
@@ -37,6 +37,7 @@ import {
   writeStateFile,
   type BridgeState,
 } from "../packages/bridge/src/state-file.ts";
+import { describeProfile, loadConfig } from "../packages/config/src/config.ts";
 
 // Each test runs the lifecycle functions in-process against this checkout's
 // built bridge, isolated in a temp dir: its own state file, log, agent token
@@ -116,6 +117,7 @@ function options(overrides: Partial<LifecycleOptions> = {}): LifecycleOptions {
     port: 0,
     agentTokenPath: agentTokenFile,
     checkout: REPO,
+    profile: "default (not a linked git worktree)",
     env,
     build: () => {
       builds += 1;
@@ -875,6 +877,77 @@ describe("bridge lifecycle: status", () => {
       expect(line).toMatch(/refused|unauthori[sz]ed|401/i);
       expect(printed()).not.toContain(wrongToken);
       expect(printed()).not.toContain(AGENT_TOKEN);
+    },
+    TIMEOUT,
+  );
+});
+
+const SETTING_VARIABLES = new Set([
+  "TTRPG_AGENTS_DB",
+  "BRIDGE_PORT",
+  "BRIDGE_AGENT_TOKEN_FILE",
+  "BRIDGE_STATE_FILE",
+  "BRIDGE_STATIC_DIR",
+]);
+
+/** Whether `path` lies strictly inside `parent`. */
+function inside(parent: string, path: string): boolean {
+  const rel = relative(parent, path);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+describe("bridge lifecycle: profile", () => {
+  it(
+    "start in the dev profile: the spawned bridge records itself in the dev state file the command resolved, and its log names profile dev and the command's dev agent token file",
+    async () => {
+      const home = join(dir, "home");
+      const configHome = join(dir, "xdg-config");
+      const dataHome = join(dir, "xdg-data");
+      await mkdir(home);
+      await mkdir(configHome);
+      await mkdir(dataHome);
+      const commandEnv: NodeJS.ProcessEnv = {};
+      for (const [name, value] of Object.entries(process.env)) {
+        if (SETTING_VARIABLES.has(name) || name.startsWith("XDG_")) continue;
+        commandEnv[name] = value;
+      }
+      commandEnv.HOME = home;
+      commandEnv.XDG_CONFIG_HOME = configHome;
+      commandEnv.XDG_DATA_HOME = dataHome;
+      commandEnv.TTRPG_AGENTS_PROFILE = "dev";
+      commandEnv.BRIDGE_PORT = "0";
+
+      const loaded = loadConfig({ env: commandEnv, home, checkout: REPO });
+      const { bridgeStateFile, agentTokenFile: devTokenFile } = loaded.settings;
+      expect(loaded.problems).toEqual([]);
+      expect(loaded.profile).toEqual({ name: "dev", reason: "environment" });
+      const devConfigDir = join(configHome, "ttrpg-agents", "dev");
+      expect(inside(devConfigDir, bridgeStateFile), bridgeStateFile).toBe(true);
+      expect(inside(devConfigDir, devTokenFile), devTokenFile).toBe(true);
+
+      const code = await startBridge(
+        options({
+          statePath: bridgeStateFile,
+          port: loaded.settings.bridgePort,
+          agentTokenPath: devTokenFile,
+          env: commandEnv,
+          profile: describeProfile(loaded.profile),
+        }),
+      );
+      expect(code, printed()).toBe(0);
+
+      const record = await readStateFile(bridgeStateFile);
+      expect(record, "the dev state file records the bridge").not.toBeNull();
+      bridgePids.add(record!.pid);
+      expect(record!.checkout).toBe(REPO);
+
+      const log = await readFile(
+        join(dirname(bridgeStateFile), "bridge.log"),
+        "utf8",
+      );
+      const lines = log.split("\n");
+      expect(lines).toContain("profile: dev (TTRPG_AGENTS_PROFILE)");
+      expect(lines).toContain(`agent token file: ${devTokenFile}`);
     },
     TIMEOUT,
   );

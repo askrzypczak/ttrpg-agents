@@ -36,6 +36,8 @@ beforeEach(async () => {
   }
   env.HOME = home;
   env.XDG_CONFIG_HOME = configHome;
+  // config.json goes in the default profile's directory, whatever the checkout.
+  env.TTRPG_AGENTS_PROFILE = "default";
 });
 
 afterEach(async () => {
@@ -86,6 +88,26 @@ describe("bridge script settings", () => {
 
       expect(result.code, result.stderr).toBe(1);
       expect(result.stderr).toMatch(/^.*bridgePort.*$/m);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "bridge:status with TTRPG_AGENTS_PROFILE=dev prints the profile and why",
+    async () => {
+      const dataHome = join(dir, "xdg-data");
+      await mkdir(dataHome);
+      env.XDG_DATA_HOME = dataHome;
+      env.TTRPG_AGENTS_PROFILE = "dev";
+      // Port 0: status probes no fixed port.
+      env.BRIDGE_PORT = "0";
+
+      const result = await runScript(["status"]);
+
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stdout.split("\n")[0]).toBe(
+        "profile: dev (TTRPG_AGENTS_PROFILE)",
+      );
     },
     TIMEOUT,
   );

@@ -77,6 +77,8 @@ function runWithConfig(args: string[], root: string, config: unknown) {
   }
   env.HOME = home;
   env.XDG_CONFIG_HOME = configHome;
+  // config.json goes in the default profile's directory, whatever the checkout.
+  env.TTRPG_AGENTS_PROFILE = "default";
   return spawnSync(process.execPath, [script, ...args], {
     encoding: "utf8",
     timeout: 30_000,

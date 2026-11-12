@@ -63,6 +63,7 @@ if (command === undefined) {
     port: settings.bridgePort,
     agentTokenPath: settings.agentTokenFile,
     checkout,
+    profile: "",
     env: process.env,
     build,
     out: (line) => console.log(line),

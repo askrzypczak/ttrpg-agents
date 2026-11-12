@@ -1,9 +1,9 @@
 import { existsSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { allocateRunEnv } from "./env.ts";
+import { allocateRunEnv, isolateXdgDirs } from "./env.ts";
 
 // Real sockets and temp dirs; process.env is never touched (fresh env objects).
 const created: string[] = [];
@@ -47,6 +47,26 @@ it("allocateRunEnv picks a free harness port and keeps preset values (AC1)", asy
   await allocateRunEnv(preset);
   expect(preset).toEqual({ E2E_HARNESS_PORT: "41002", E2E_DIR: dir });
   expect(existsSync(dir)).toBe(false);
+});
+
+it("isolateXdgDirs points XDG_CONFIG_HOME and XDG_DATA_HOME inside the run's E2E_DIR, replacing values already set", async () => {
+  const env = await allocateFresh();
+  const runDir = String(env.E2E_DIR);
+  env.XDG_CONFIG_HOME = join(tmpdir(), "inherited-config");
+  env.XDG_DATA_HOME = join(tmpdir(), "inherited-data");
+
+  isolateXdgDirs(env);
+
+  const configHome = String(env.XDG_CONFIG_HOME);
+  const dataHome = String(env.XDG_DATA_HOME);
+  for (const dir of [configHome, dataHome]) {
+    expect(isAbsolute(dir)).toBe(true);
+    const rel = relative(runDir, dir);
+    expect(rel, `${dir} is inside ${runDir}`).not.toBe("");
+    expect(rel.startsWith(".."), `${dir} is inside ${runDir}`).toBe(false);
+  }
+  expect(configHome).not.toBe(dataHome);
+  expect(env.E2E_DIR).toBe(runDir);
 });
 
 it("allocateRunEnv creates a fresh temp dir per call on an empty env", async () => {
