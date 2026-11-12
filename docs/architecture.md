@@ -33,8 +33,8 @@ flowchart LR
   store --> db[("SQLite")]
   bclient -->|"HTTP + agent token (queries only)"| bsrv
   sysbrowser --> browser["DM's browser"]
-  bsrv <-->|"WebSocket + token"| ext["Owlbear extension (protocol)"]
-  ext -->|"HTTP POST and GET /token-images + token"| bsrv
+  bsrv <-->|"WebSocket (own origin)"| ext["Owlbear extension (protocol)"]
+  ext -->|"HTTP POST and GET /token-images (own origin)"| bsrv
 ```
 
 The bridge is both sides. Its server is a driving adapter: a table edit becomes an engine command (`instance-edit` runs `applyInstanceEdit`, `token-deleted` calls `EncounterRepository.removeInstances`), snapshots come from `EncounterRepository` and `TokenArtRepository`, events from `EncounterLog`, the active map and its rooms from `MapRepository`, and the token image routes run the engine's `storeTokenImage` over `TokenImageRepository`. Its client is a driven adapter, the driven end of `TablePort`, wired in by `mcp/src/stdio.ts`. That channel carries queries only: the agent changes the game through the engine's model (the rule is in `CLAUDE.md`).
@@ -50,8 +50,8 @@ flowchart LR
   mcp -->|"TablePort via the bridge client: POST /agent/query"| bridge
   mcp -->|"open_statblock: macOS open"| browser["DM's browser"]
   bridge["Bridge"] -->|"polls"| db
-  ext["Owlbear extension"] <-->|"WebSocket + token"| bridge
-  ext -->|"HTTP POST and GET /token-images + token"| bridge
+  ext["Owlbear extension"] <-->|"WebSocket (own origin)"| bridge
+  ext -->|"HTTP POST and GET /token-images (own origin)"| bridge
   ext --> scene["Owlbear scene"]
 ```
 
@@ -84,11 +84,11 @@ Invariants the processes rely on:
 
 ## Token and auth
 
-- Two tokens, each a file created with mode 0600 on first run: the extension token (`BRIDGE_TOKEN_FILE`, default `~/.config/ttrpg-agents/bridge-token`) and the agent token (`BRIDGE_AGENT_TOKEN_FILE`, default `~/.config/ttrpg-agents/agent-token`). The bridge never serves the agent token.
-- The bridge's state file (`BRIDGE_STATE_FILE`, default `~/.config/ttrpg-agents/bridge-state.json`) and the detached bridge's `bridge.log` beside it are mode 0600 like the tokens: the log holds the install URL with the extension token. The lifecycle commands print the log's path, never a token; `bridge:status` reads the agent token only to send a `scene-status` query.
-- The extension gets its token from the manifest: a `manifest.json` request with the right `?token=` puts it in the popover URL fragment, and the extension reads `location.hash` and sends it in `hello`. A bad or missing token closes the socket. The same token, as `Authorization: Bearer`, authorises `POST /token-images` and `GET /token-images/<sha256>`.
-- The agent token, as `Authorization: Bearer`, authorises `POST /agent/query` and nothing else. The extension token is refused there, and the agent token on the image routes.
-- Tokens are compared in constant time before a body is read. The Host header must be a loopback name with the actual port (DNS-rebinding defence), and the WebSocket upgrade must come from the bridge's own loopback origin on `/ws`. No route sends CORS headers: the panel is served by the bridge, so its requests are same-origin.
+- One token, the agent token: a file created with mode 0600 on first run (`BRIDGE_AGENT_TOKEN_FILE`, default `~/.config/ttrpg-agents/agent-token`). As `Authorization: Bearer` it authorises `POST /agent/query` and nothing else, compared in constant time before the body is read. The bridge never serves it.
+- The bridge's state file (`BRIDGE_STATE_FILE`, default `~/.config/ttrpg-agents/bridge-state.json`) and the detached bridge's `bridge.log` beside it are mode 0600 like the agent token. The lifecycle commands print the log's path, never a token; `bridge:status` reads the agent token only to send a `scene-status` query.
+- The extension has no token: the bridge admits it by origin. Every request must carry a Host of `localhost:<port>` or `127.0.0.1:<port>` with the actual port (DNS-rebinding defence). The WebSocket upgrade must come from the bridge's own origin (`http://localhost:<port>` or `http://127.0.0.1:<port>`) on `/ws`, so no page the bridge did not serve can open it. `POST /token-images` must carry that `Origin` too (browsers send it on every POST, same-origin included); a missing or other `Origin` gets 403 `unauthorized` before the body is read. `GET /token-images/<sha256>` has only the Host check.
+- The image routes and `POST /agent/query` send no CORS headers: the panel is served by the bridge, so its requests are same-origin, and a page on another origin cannot read their answers.
+- A process run by the same OS user can send any Host and Origin, and could read the token files anyway. Other OS users on the GM's machine are out of scope (one machine, one GM tab).
 - The `role` in `hello` only drives the extension UI and never authorizes.
 
 ## Queries to the table
