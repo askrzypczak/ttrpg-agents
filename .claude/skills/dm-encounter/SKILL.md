@@ -5,7 +5,7 @@ description: Run D&D encounter commands at the table through the ttrpg-agents MC
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `open_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `table_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `open_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `table_status`, `setup_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
 Each tool's reply lines come back as the `summary` of its result (the same lines as its text); "relay the tool's line" below means a line of that summary, copied as it is. `get_map_image` is the exception: its result is an image block plus one text line, with no `summary`.
 
@@ -188,3 +188,8 @@ Removed monsters stay restorable until the next `clear_encounter` that clears mo
 - The reply's `noLongerFits` lists the new names of those monsters; name them when you make that offer.
 - A target that already is that monster fails the whole call: call it again without that target.
 - Give the statblock with `get_statblock` if the new monster type is new to the encounter, as after `add_monsters`.
+
+## When the table cannot be reached
+
+- When any tool fails because the bridge or the Owlbear tab cannot be reached, call `setup_status` once and relay each problem line and its fix line verbatim.
+- This is the one extra call allowed by the "relay the error and stop" rules above. Do not retry the failed call.
