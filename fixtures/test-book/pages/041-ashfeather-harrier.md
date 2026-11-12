@@ -4,7 +4,7 @@ Gray feathers drift down through the smoke above the burned fields, and the bird
 
 _Medium Monstrosity, Unaligned_
 
-**AC** 13 **Initiative** +3 (10+3)
+**AC** 13 **Initiative** +3 (13)
 
 **HP** 22 (4d8 + 4)
 

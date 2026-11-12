@@ -4,7 +4,7 @@ Reeds bend over the black water of the mire, and something patient waits beneath
 
 _Medium Monstrosity, Unaligned_
 
-**AC** 14 **Initiative** +3 (10+3)
+**AC** 14 **Initiative** +3 (13)
 
 **HP** 33 (6d8 + 6)
 

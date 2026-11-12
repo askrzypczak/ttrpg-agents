@@ -4,7 +4,7 @@ A cinder-colored figure stands guard at the furnace gate, unmoved by heat or hur
 
 _Small Elemental, Neutral_
 
-**AC** 15 **Initiative** +1 (10+1)
+**AC** 15 **Initiative** +1 (11)
 
 **HP** 65 (10d6 + 30)
 
