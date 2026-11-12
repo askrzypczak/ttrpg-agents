@@ -48,7 +48,7 @@ PR: [#357](https://github.com/askrzypczak/ttrpg-agents/pull/357). No ticket: the
   - Full character sheets in the shared state: out of scope.
 - Where: no code yet.
 - Revisit if: turn flow or the autonomy layer needs player characters as targets with known HP and AC.
-- Status: active
+- Status: superseded by 432.1 (the player-state epic only; player characters stay out of the model as named tokens)
 
 ## 357.5 Encounters are prepared by conversation and saved as Owlbear scenes, one encounter per scene
 
@@ -252,7 +252,7 @@ PR: [#357](https://github.com/askrzypczak/ttrpg-agents/pull/357). No ticket: the
   - Chosen: the spike (#434) answers whether, how and under what terms the data can be read. Every building ticket stays blocked by it, and nothing is built without the maintainer's explicit yes afterwards.
   - Drop the epic now: the spike is cheap and sends nothing to D&D Beyond from the agent.
 - Where: #432, #434.
-- Status: active
+- Status: superseded by 432.1 (the decision it deferred)
 
 ## 357.24 Damage from a monster's attack that hits another monster is applied at once
 
