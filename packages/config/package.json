@@ -1,0 +1,13 @@
+{
+  "name": "@ttrpg-agents/config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    }
+  }
+}

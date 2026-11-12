@@ -11,10 +11,21 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { createServer, type Server } from "node:net";
+import { createServer, type AddressInfo, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { WebSocket } from "ws";
+import {
+  PROTOCOL_VERSION,
+  decodeMessage,
+  encodeMessage,
+  type BridgeMessage,
+} from "@ttrpg-agents/protocol";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
 
 // The real bridge CLI as a child process, isolated in a temp dir: its own state
 // file, token files, database and an ephemeral port.
@@ -320,6 +331,174 @@ describe("bridge CLI", () => {
       const all = run.stdout() + run.stderr();
       expect(all).not.toMatch(/^\s+at /m);
       expect(all).not.toContain("npm error");
+    },
+    TIMEOUT,
+  );
+});
+
+const PROJECT_VARIABLES = new Set([
+  "TTRPG_AGENTS_DB",
+  "BRIDGE_PORT",
+  "BRIDGE_AGENT_TOKEN_FILE",
+  "BRIDGE_STATE_FILE",
+  "BRIDGE_STATIC_DIR",
+]);
+
+/**
+ * Points `env` at a temp HOME and XDG config directory with no project or
+ * other XDG variables, so only config.json (or the defaults under the temp
+ * directories) can name the database and port. Returns the config.json writer.
+ */
+async function isolateSettings(): Promise<(content: unknown) => Promise<void>> {
+  const home = join(dir, "home");
+  const configHome = join(dir, "xdg-config");
+  await mkdir(home);
+  await mkdir(configHome);
+  const isolated: NodeJS.ProcessEnv = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (PROJECT_VARIABLES.has(name) || name.startsWith("XDG_")) continue;
+    isolated[name] = value;
+  }
+  isolated.HOME = home;
+  isolated.XDG_CONFIG_HOME = configHome;
+  env = isolated;
+  return async (content) => {
+    const configDir = join(configHome, "ttrpg-agents");
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, "config.json"), JSON.stringify(content));
+  };
+}
+
+/** A loopback port nothing listens on. */
+async function freePort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>((done) => probe.listen(0, "127.0.0.1", done));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise<void>((done) => probe.close(() => done()));
+  return port;
+}
+
+/**
+ * The port from the listening line, or the exit code if the bridge exits
+ * first; at the deadline the bridge is killed and neither is set.
+ */
+async function listeningOrExit(
+  spawned: Spawned,
+  deadlineMs = 15_000,
+): Promise<{ port?: number; code?: number | null }> {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const m = /bridge listening on http:\/\/localhost:(\d+)/.exec(
+      spawned.stdout(),
+    );
+    if (m) return { port: Number(m[1]) };
+    if (spawned.child.exitCode !== null || spawned.child.signalCode !== null)
+      return { code: spawned.child.exitCode };
+    if (Date.now() > deadline) {
+      await stopChild(spawned.child);
+      return {};
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+/** Exit code, or null when the bridge was still running at the deadline and was killed. */
+async function exitWithin(
+  spawned: Spawned,
+  deadlineMs = 15_000,
+): Promise<number | null> {
+  const timer = setTimeout(() => spawned.child.kill("SIGKILL"), deadlineMs);
+  try {
+    return await exited(spawned.child);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+type Snapshot = Extract<BridgeMessage, { type: "encounter-snapshot" }>;
+
+/** Connects as a page the bridge served, says hello and returns the first snapshot. */
+async function firstSnapshot(port: number): Promise<Snapshot> {
+  const ws = new WebSocket(`ws://127.0.0.1:${String(port)}/ws`, {
+    origin: `http://localhost:${String(port)}`,
+  });
+  try {
+    return await new Promise<Snapshot>((done, fail) => {
+      const timer = setTimeout(
+        () => fail(new Error("no snapshot after hello")),
+        10_000,
+      );
+      ws.once("error", fail);
+      ws.on("message", (data: Buffer) => {
+        const r = decodeMessage(data.toString());
+        if (r.ok && r.message.type === "encounter-snapshot") {
+          clearTimeout(timer);
+          done(r.message);
+        }
+      });
+      ws.once("open", () =>
+        ws.send(
+          encodeMessage({
+            v: PROTOCOL_VERSION,
+            type: "hello",
+            id: "h1",
+            payload: { role: "gm", extensionVersion: "0" },
+          }),
+        ),
+      );
+    });
+  } finally {
+    ws.close();
+  }
+}
+
+describe("bridge CLI settings", () => {
+  it(
+    "the bridge spawned with no project environment variables listens on the port config.json names and serves the encounter in the database it names",
+    async () => {
+      const writeConfig = await isolateSettings();
+      const port = await freePort();
+      const database = join(dir, "configured", "encounters.db");
+      const db = openDatabase(database);
+      try {
+        new SqliteEncounterRepository(db).addInstances(
+          () => [
+            {
+              monsterKey: "srd-2024_shadow",
+              displayName: "Configured Shadow",
+              maxHp: 16,
+            },
+          ],
+          { source: "mcp", commandId: "seed" },
+        );
+      } finally {
+        db.close();
+      }
+      await writeConfig({ database, bridgePort: port });
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const started = await listeningOrExit(bridge);
+
+      expect(started, bridge.stderr()).toEqual({ port });
+      const snapshot = await firstSnapshot(port);
+      expect(snapshot.payload.instances.map((i) => i.displayName)).toEqual([
+        "Configured Shadow",
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "the bridge exits 1 with a stderr line naming bridgePort when config.json has an invalid bridgePort",
+    async () => {
+      const writeConfig = await isolateSettings();
+      await writeConfig({ bridgePort: "abc" });
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const code = await exitWithin(bridge);
+
+      expect(code, bridge.stderr()).toBe(1);
+      expect(bridge.stderr()).toMatch(/^.*bridgePort.*$/m);
     },
     TIMEOUT,
   );

@@ -20,9 +20,17 @@ const CLIENT_MESSAGE =
   "bridge/src/client.ts is imported by mcp: it may use only Node builtins, @ttrpg-agents/engine, @ttrpg-agents/protocol and ./token-file.js (no ws, no server code).";
 const BRIDGE_MESSAGE =
   "@ttrpg-agents/bridge must not import mcp; the two are separate entry points.";
+const CONFIG_IMPORT_MESSAGE =
+  "Only composition roots (mcp/src/stdio.ts, bridge/src/cli.ts) read settings; pass plain values to everything else.";
+const CONFIG_MESSAGE =
+  "@ttrpg-agents/config is loaded by source path under plain node: it may import only Node built-ins.";
 const TESTING_MESSAGE =
   "The engine's testing module is test data (makeTestInstance): only test files may import it.";
 
+const configPattern = {
+  group: ["@ttrpg-agents/config", "@ttrpg-agents/config/*"],
+  message: CONFIG_IMPORT_MESSAGE,
+};
 const sdkPath = { name: "@owlbear-rodeo/sdk", message: SDK_MESSAGE };
 const sdkPattern = { group: ["@owlbear-rodeo/sdk/*"], message: SDK_MESSAGE };
 const nodeBuiltinsPattern = {
@@ -188,6 +196,7 @@ export default tseslint.config(
               group: ["@ttrpg-agents/bridge", "@ttrpg-agents/bridge/*"],
               message: MCP_MESSAGE,
             },
+            configPattern,
           ],
         },
       ],
@@ -207,6 +216,7 @@ export default tseslint.config(
               group: ["@ttrpg-agents/bridge", "@ttrpg-agents/bridge/*"],
               message: MCP_MESSAGE,
             },
+            configPattern,
             testingPattern,
           ],
         },
@@ -246,6 +256,7 @@ export default tseslint.config(
               group: ["@ttrpg-agents/mcp", "@ttrpg-agents/mcp/**"],
               message: BRIDGE_MESSAGE,
             },
+            configPattern,
             testingPattern,
           ],
         },
@@ -272,9 +283,42 @@ export default tseslint.config(
               group: ["./*", "../*", "!./token-file.js"],
               message: CLIENT_MESSAGE,
             },
+            configPattern,
             testingPattern,
           ],
         },
+      ],
+    },
+  },
+  {
+    // The bridge's composition root reads the settings. Later configs replace
+    // earlier rule options, so restate the bridge ban, minus the config ban.
+    files: ["packages/bridge/src/cli.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@ttrpg-agents/mcp", "@ttrpg-agents/mcp/**"],
+              message: BRIDGE_MESSAGE,
+            },
+            testingPattern,
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The settings loader is loaded by source path from root scripts, so it
+    // imports Node built-ins only: no workspace package, no relative path and
+    // no third-party module.
+    files: ["packages/config/src/**/*.ts"],
+    ignores: ["packages/config/src/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [{ regex: "^(?!node:)", message: CONFIG_MESSAGE }] },
       ],
     },
   },

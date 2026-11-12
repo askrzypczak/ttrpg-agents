@@ -65,7 +65,7 @@ flowchart LR
 
 ## Shared database
 
-One SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else `~/.local/share/ttrpg-agents/encounters.db`. The schema is versioned in `packages/store-sqlite/src/migrations.ts`.
+One SQLite file in WAL mode, named by the `database` setting ([`docs/settings.md`](settings.md)). The schema is versioned in `packages/store-sqlite/src/migrations.ts`.
 
 | Data                                                                                  | Written by                                                                                         | Read by                                    |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------ |
@@ -84,8 +84,8 @@ Invariants the processes rely on:
 
 ## Token and auth
 
-- One token, the agent token: a file created with mode 0600 on first run (`BRIDGE_AGENT_TOKEN_FILE`, default `~/.config/ttrpg-agents/agent-token`). As `Authorization: Bearer` it authorises `POST /agent/query` and nothing else, compared in constant time before the body is read. The bridge never serves it.
-- The bridge's state file (`BRIDGE_STATE_FILE`, default `~/.config/ttrpg-agents/bridge-state.json`) and the detached bridge's `bridge.log` beside it are mode 0600 like the agent token. The lifecycle commands print the log's path, never a token; `bridge:status` reads the agent token only to send a `scene-status` query.
+- One token, the agent token: a file created with mode 0600 on first run (the `agentTokenFile` setting, see [`docs/settings.md`](settings.md)). As `Authorization: Bearer` it authorises `POST /agent/query` and nothing else, compared in constant time before the body is read. The bridge never serves it.
+- The bridge's state file (the `bridgeStateFile` setting) and the detached bridge's `bridge.log` beside it are mode 0600 like the agent token. The lifecycle commands print the log's path, never a token; `bridge:status` reads the agent token only to send a `scene-status` query.
 - The extension has no token: the bridge admits it by origin. Every request must carry a Host of `localhost:<port>` or `127.0.0.1:<port>` with the actual port (DNS-rebinding defence). The WebSocket upgrade must come from the bridge's own origin (`http://localhost:<port>` or `http://127.0.0.1:<port>`) on `/ws`, so no page the bridge did not serve can open it. `POST /token-images` must carry that `Origin` too (browsers send it on every POST, same-origin included); a missing or other `Origin` gets 403 `unauthorized` before the body is read. `GET /token-images/<sha256>` has only the Host check.
 - The image routes and `POST /agent/query` send no CORS headers: the panel is served by the bridge, so its requests are same-origin, and a page on another origin cannot read their answers.
 - A process run by the same OS user can send any Host and Origin, and could read the token files anyway. Other OS users on the GM's machine are out of scope (one machine, one GM tab).

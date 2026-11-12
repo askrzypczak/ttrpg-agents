@@ -53,6 +53,7 @@ const HEAD = execFileSync("git", ["rev-parse", "HEAD"], {
 let dir: string;
 let statePath: string;
 let logPath: string;
+let agentTokenFile: string;
 let env: NodeJS.ProcessEnv;
 let out: string[];
 let err: string[];
@@ -67,7 +68,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "bridge-lifecycle-"));
   statePath = join(dir, "config", "bridge-state.json");
   logPath = join(dirname(statePath), "bridge.log");
-  const agentTokenFile = join(dir, "agent-token");
+  agentTokenFile = join(dir, "agent-token");
   await writeFile(agentTokenFile, AGENT_TOKEN + "\n", { mode: 0o600 });
   const staticDir = join(dir, "static");
   await mkdir(staticDir);
@@ -112,6 +113,8 @@ afterEach(async () => {
 function options(overrides: Partial<LifecycleOptions> = {}): LifecycleOptions {
   return {
     statePath,
+    port: 0,
+    agentTokenPath: agentTokenFile,
     checkout: REPO,
     env,
     build: () => {
@@ -809,11 +812,7 @@ describe("bridge lifecycle: status", () => {
       const holder = await listenOn(0);
       const port = portOf(holder);
 
-      expect(
-        await bridgeStatus(
-          options({ env: { ...env, BRIDGE_PORT: String(port) } }),
-        ),
-      ).toBe(0);
+      expect(await bridgeStatus(options({ port }))).toBe(0);
 
       expect(printed()).toMatch(/not running/i);
       const line = [...out, ...err].find((l) => l.includes(`port ${port}`));
@@ -834,11 +833,7 @@ describe("bridge lifecycle: status", () => {
         mode: 0o600,
       });
 
-      expect(
-        await bridgeStatus(
-          options({ env: { ...env, BRIDGE_AGENT_TOKEN_FILE: bad } }),
-        ),
-      ).toBe(0);
+      expect(await bridgeStatus(options({ agentTokenPath: bad }))).toBe(0);
 
       expect(gmTabLine([...out, ...err])).toMatch(/unknown/i);
       expect(printed()).not.toContain("first-secret-part");
@@ -854,11 +849,7 @@ describe("bridge lifecycle: status", () => {
       err = [];
       const missing = join(dir, "no-such-agent-token");
 
-      expect(
-        await bridgeStatus(
-          options({ env: { ...env, BRIDGE_AGENT_TOKEN_FILE: missing } }),
-        ),
-      ).toBe(0);
+      expect(await bridgeStatus(options({ agentTokenPath: missing }))).toBe(0);
 
       const line = gmTabLine([...out, ...err]);
       expect(line).toMatch(/unknown/i);
@@ -877,11 +868,7 @@ describe("bridge lifecycle: status", () => {
       const wrong = join(dir, "wrong-agent-token");
       await writeFile(wrong, wrongToken + "\n", { mode: 0o600 });
 
-      expect(
-        await bridgeStatus(
-          options({ env: { ...env, BRIDGE_AGENT_TOKEN_FILE: wrong } }),
-        ),
-      ).toBe(0);
+      expect(await bridgeStatus(options({ agentTokenPath: wrong }))).toBe(0);
 
       const line = gmTabLine([...out, ...err]);
       expect(line).toMatch(/unknown/i);

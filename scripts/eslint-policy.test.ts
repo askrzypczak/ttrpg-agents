@@ -119,3 +119,47 @@ describe("lint policy for .tsx files", () => {
     );
   });
 });
+
+// The settings loader hands plain values to composition roots; no other file in
+// packages/*/src may import it. Every path must exist on disk (see above).
+const CONFIG_IMPORT =
+  'import { loadConfig } from "@ttrpg-agents/config";\nexport const load = loadConfig;\n';
+
+function restrictedImports(messages: Awaited<ReturnType<typeof lint>>) {
+  return messages.filter((m) => m.ruleId === "no-restricted-imports");
+}
+
+describe("lint policy for the settings loader", () => {
+  it.each([
+    "packages/mcp/src/server.ts",
+    "packages/bridge/src/server.ts",
+    "packages/bridge/src/client.ts",
+  ])(
+    "a non-root file (%s) may not import @ttrpg-agents/config",
+    async (file) => {
+      const messages = await lint(CONFIG_IMPORT, file);
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          ruleId: "no-restricted-imports",
+          severity: 2,
+        }),
+      );
+    },
+  );
+
+  it.each([
+    ["packages/mcp/src/stdio.ts", "packages/mcp/src/server.ts"],
+    ["packages/bridge/src/cli.ts", "packages/bridge/src/server.ts"],
+  ])(
+    "the composition root %s may import @ttrpg-agents/config",
+    async (rootFile, sibling) => {
+      // Control: the same import is banned in a sibling of the same package,
+      // so the root passing below shows an allowance, not a missing ban.
+      const control = await lint(CONFIG_IMPORT, sibling);
+      expect(restrictedImports(control)).not.toEqual([]);
+
+      const messages = await lint(CONFIG_IMPORT, rootFile);
+      expect(restrictedImports(messages)).toEqual([]);
+    },
+  );
+});

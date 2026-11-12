@@ -54,16 +54,20 @@ const ALLOWED: Record<string, Edges> = {
     // e2e only: packages/owlbear/e2e/db.ts seeds a SQLite file for the bridge.
     devDependencies: ["store-sqlite"],
   }),
+  // The settings loader: Node built-ins only.
+  config: edges(),
   bridge: edges({
-    dependencies: ["engine", "protocol", "store-sqlite"],
+    // config: only bridge/src/cli.ts (the composition root) imports it; lint
+    // enforces that file-level rule.
+    dependencies: ["config", "engine", "protocol", "store-sqlite"],
     // Tests only: live-sync.integration.test.ts drives the MCP server.
     devDependencies: ["mcp"],
   }),
   mcp: edges({
-    // bridge: only mcp/src/stdio.ts (the composition root) imports
+    // bridge and config: only mcp/src/stdio.ts (the composition root) imports
     // @ttrpg-agents/bridge/client, the adapter that implements the engine's
-    // TablePort; lint enforces that file-level rule.
-    dependencies: ["bridge", "engine", "srd", "store-sqlite"],
+    // TablePort, and @ttrpg-agents/config; lint enforces that file-level rule.
+    dependencies: ["bridge", "config", "engine", "srd", "store-sqlite"],
   }),
 };
 
@@ -234,6 +238,7 @@ describe("workspace package edges", () => {
     const manifests = loadManifests(root);
     expect(Object.keys(manifests).sort()).toEqual([
       "bridge",
+      "config",
       "engine",
       "mcp",
       "owlbear",
