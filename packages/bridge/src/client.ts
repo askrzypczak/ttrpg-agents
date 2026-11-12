@@ -2,9 +2,10 @@
 // module `@ttrpg-agents/mcp` may import (`@ttrpg-agents/bridge/client`, from
 // its composition root only). It imports only Node builtins,
 // `@ttrpg-agents/engine` and `@ttrpg-agents/protocol`.
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import {
   TableUnavailableError,
+  type BridgeAnswer,
   type BridgeProbe,
   type TablePort,
 } from "@ttrpg-agents/engine";
@@ -141,10 +142,39 @@ export function createBridgeProbe(options: {
   port: number;
   tokenPath: string;
 }): BridgeProbe {
-  void options;
+  const { client, port, tokenPath } = options;
   return {
-    check() {
-      return Promise.reject(new Error("not implemented"));
+    async check() {
+      return { port, tokenFile: tokenPath, answer: await ask() };
     },
   };
+
+  async function ask(): Promise<BridgeAnswer> {
+    try {
+      await stat(tokenPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return { kind: "no-token-file" };
+    }
+    const res = await client.query({ name: "scene-status" });
+    if (res.ok) {
+      if (res.result.name !== "scene-status") return { kind: "unreachable" };
+      const { roomId } = res.result.result;
+      return roomId === undefined
+        ? { kind: "gm-tab-connected" }
+        : { kind: "gm-tab-connected", roomId };
+    }
+    switch (res.error.code) {
+      case "unauthorized":
+        return { kind: "token-refused" };
+      case "not-connected":
+        return { kind: "no-gm-tab" };
+      case "timeout":
+      case "query-failed":
+        return { kind: "gm-tab-not-answering" };
+      case "bridge-unreachable":
+      case "bad-request":
+        return { kind: "unreachable" };
+    }
+  }
 }
