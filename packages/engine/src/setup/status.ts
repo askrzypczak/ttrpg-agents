@@ -1,4 +1,5 @@
 import type {
+  BackupFacts,
   BridgeFacts,
   ConfigProblemFact,
   DatabaseFacts,
@@ -20,7 +21,8 @@ export type SetupFix =
   | { code: "open-gm-tab"; port: number }
   | { code: "reload-gm-tab" }
   | { code: "update-checkout" }
-  | { code: "check-database" };
+  | { code: "check-database" }
+  | { code: "take-backup" };
 export type SetupRow =
   | { item: "profile"; state: "ok"; profile: string }
   | { item: "config-file"; state: "ok"; path: string; found: boolean }
@@ -35,6 +37,13 @@ export type SetupRow =
       item: "database";
       state: SetupState;
       database: DatabaseFacts;
+      fix?: SetupFix;
+    }
+  | {
+      item: "backup";
+      state: "ok" | "warning";
+      backups: BackupFacts;
+      ageDays?: number;
       fix?: SetupFix;
     }
   | { item: "bridge"; state: SetupState; bridge: BridgeFacts; fix?: SetupFix }

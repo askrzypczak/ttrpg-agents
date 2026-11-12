@@ -9,10 +9,17 @@ import { LATEST_VERSION, getUserVersion } from "./migrations.js";
  * `-wal` and `-shm` files beside it; that is SQLite's own housekeeping, and the
  * next read-write close removes them.
  */
-export function createDatabaseProbe(path: string): DatabaseProbe {
+export function createDatabaseProbe(
+  path: string,
+  backupDir: string,
+): DatabaseProbe {
   return {
     check() {
       return { path, expectedVersion: LATEST_VERSION, file: readFile(path) };
+    },
+    checkBackups() {
+      void backupDir;
+      throw new Error("not implemented");
     },
   };
 }

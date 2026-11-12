@@ -19,6 +19,8 @@ export interface Settings {
   bridgeStateFile: string;
   /** Built extension the bridge serves, absolute. */
   extensionDir: string;
+  /** Where npm run db:backup writes, absolute; outside the checkout. */
+  backupDir: string;
 }
 export type SettingName = keyof Settings;
 
@@ -181,6 +183,8 @@ export function loadConfig(inputs: ConfigInputs): LoadedConfig {
     agentTokenFile: join(configDir, "agent-token"),
     bridgeStateFile: join(configDir, "bridge-state.json"),
     extensionDir: join(checkout, "packages", "owlbear", "dist"),
+    // Not implemented yet: the default and the SETTINGS row come with the loader change.
+    backupDir: "",
   };
 
   // Read config.json: missing is fine, anything else unreadable is an error.

@@ -33,6 +33,8 @@ function rowText(row: SetupRow): string {
       return `${row.setting.name} = ${String(row.setting.value)} (${row.setting.source})`;
     case "database":
       return databaseText(row.database);
+    case "backup":
+      throw new Error("not implemented");
     case "bridge":
       return bridgeText(row.bridge);
     case "gm-tab":
@@ -102,5 +104,7 @@ function fixText(fix: SetupFix): string {
       return "update this checkout and rebuild (git pull, then npm run build): the database is newer than this build";
     case "check-database":
       return "point the database setting at the encounter database (see docs/settings.md)";
+    case "take-backup":
+      throw new Error("not implemented");
   }
 }

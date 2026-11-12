@@ -245,7 +245,7 @@ describe("npm run status", () => {
     expect(toolText.split("\n")[0]).toBe("Setup: ready.");
   }, 60_000);
 
-  it("npm run status with nothing set up exits 0, reports the missing database and bridge with start-bridge fixes, and creates no database", async () => {
+  it("npm run status with nothing set up exits 0, reports the missing database and bridge with start-bridge fixes and no backup with the take-backup fix, and creates no database", async () => {
     const setup = isolated();
     const port = await unusedPort();
     setup.env.BRIDGE_PORT = String(port);
@@ -266,6 +266,11 @@ describe("npm run status", () => {
       text,
       `problem: bridge on port ${String(port)}: never started in this profile (no agent token file at ${join(setup.configDir, "agent-token")})`,
       startBridge,
+    );
+    expectRowWithFix(
+      text,
+      `warning: backups in ${join(setup.database, "..", "backups")}: none`,
+      "take a backup: npm run db:backup",
     );
     expect(existsSync(setup.database), "no database file").toBe(false);
     expect(

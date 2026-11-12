@@ -1,4 +1,5 @@
 export type {
+  BackupFacts,
   BridgeAnswer,
   BridgeFacts,
   BridgeProbe,
@@ -6,6 +7,7 @@ export type {
   DatabaseFacts,
   DatabaseFile,
   DatabaseProbe,
+  NewestBackup,
   SettingFact,
   SettingsFacts,
   SetupPorts,
