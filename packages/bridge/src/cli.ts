@@ -87,15 +87,31 @@ const stopPolling = broadcastLogEvents(log, server, {
   snapshot: () => snapshotMessage(repo, artRepo, log),
 });
 const stopMapRooms = broadcastMapRooms(maps, server);
+// Registered before the state file can exist: a signal right after it appears
+// still closes the server and removes it, and one during the write waits for
+// it to land (or fail). The handler runs on a later turn, after `stateWritten`
+// is assigned below.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    stopPolling();
+    stopMapRooms();
+    void server
+      .close()
+      .then(() => stateWritten.catch(() => undefined))
+      .then(() => removeStateFile(statePath, process.pid))
+      .then(() => process.exit(0));
+  });
+}
 // Written before the install URL is printed, so a log that ends before the
 // record exists never holds the token.
-await writeStateFile(statePath, {
+const stateWritten = writeStateFile(statePath, {
   pid: process.pid,
   port: server.port,
   checkout,
   commit: checkoutCommit(checkout),
   startedAt: new Date(performance.timeOrigin).toISOString(),
 });
+await stateWritten;
 console.log(`bridge listening on http://localhost:${server.port}`);
 console.log(`serving ${staticDir}`);
 console.log(`token file: ${tokenPath}`);
@@ -104,14 +120,3 @@ console.log(`state file: ${statePath}`);
 console.log(
   `install in Owlbear: http://localhost:${server.port}/manifest.json?token=${token}`,
 );
-
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    stopPolling();
-    stopMapRooms();
-    void server
-      .close()
-      .then(() => removeStateFile(statePath, process.pid))
-      .then(() => process.exit(0));
-  });
-}

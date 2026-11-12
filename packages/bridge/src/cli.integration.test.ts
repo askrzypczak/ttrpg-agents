@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, watch } from "node:fs";
 import {
   access,
   mkdir,
@@ -187,6 +188,37 @@ describe("bridge CLI", () => {
       await recordOf(bridge);
       bridge.child.kill("SIGTERM");
       expect(await exited(bridge.child)).toBe(0);
+      expect(await exists(statePath)).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "SIGTERM sent the moment the state file appears closes the bridge and leaves no state file",
+    async () => {
+      const stateDir = dirname(statePath);
+      await mkdir(stateDir, { recursive: true });
+      let signalled = false;
+      const stopWatching = (): void => {
+        watcher.close();
+        clearInterval(poll);
+      };
+      const signalIfWritten = (): void => {
+        if (signalled || !existsSync(statePath)) return;
+        signalled = true;
+        bridge.child.kill("SIGTERM");
+        stopWatching();
+      };
+      const watcher = watch(stateDir, signalIfWritten);
+      const poll = setInterval(signalIfWritten, 100);
+
+      // Spawned in the same tick as the watch is set up, so no callback can
+      // run before `bridge` is assigned.
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      bridge.child.once("exit", stopWatching);
+
+      expect(await exited(bridge.child)).toBe(0);
+      expect(signalled).toBe(true);
       expect(await exists(statePath)).toBe(false);
     },
     TIMEOUT,
