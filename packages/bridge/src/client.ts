@@ -156,25 +156,33 @@ export function createBridgeProbe(options: {
       if ((error as NodeJS.ErrnoException).code === "ENOENT")
         return { kind: "no-token-file" };
     }
-    const res = await client.query({ name: "scene-status" });
-    if (res.ok) {
-      if (res.result.name !== "scene-status") return { kind: "unreachable" };
-      const { roomId } = res.result.result;
-      return roomId === undefined
-        ? { kind: "gm-tab-connected" }
-        : { kind: "gm-tab-connected", roomId };
+    // The port never rejects: an unexpected client failure reads as unreachable.
+    try {
+      return answerOf(await client.query({ name: "scene-status" }));
+    } catch {
+      return { kind: "unreachable" };
     }
-    switch (res.error.code) {
-      case "unauthorized":
-        return { kind: "token-refused" };
-      case "not-connected":
-        return { kind: "no-gm-tab" };
-      case "timeout":
-      case "query-failed":
-        return { kind: "gm-tab-not-answering" };
-      case "bridge-unreachable":
-      case "bad-request":
-        return { kind: "unreachable" };
-    }
+  }
+}
+
+function answerOf(res: AgentQueryResponse): BridgeAnswer {
+  if (res.ok) {
+    if (res.result.name !== "scene-status") return { kind: "unreachable" };
+    const { roomId } = res.result.result;
+    return roomId === undefined
+      ? { kind: "gm-tab-connected" }
+      : { kind: "gm-tab-connected", roomId };
+  }
+  switch (res.error.code) {
+    case "unauthorized":
+      return { kind: "token-refused" };
+    case "not-connected":
+      return { kind: "no-gm-tab" };
+    case "timeout":
+    case "query-failed":
+      return { kind: "gm-tab-not-answering" };
+    case "bridge-unreachable":
+    case "bad-request":
+      return { kind: "unreachable" };
   }
 }

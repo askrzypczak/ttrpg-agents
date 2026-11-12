@@ -188,6 +188,18 @@ describe("bridge probe", () => {
     expect(client.queries).toEqual([]);
   });
 
+  it("the bridge probe reports unreachable when the client throws", async () => {
+    const client: BridgeClient = {
+      query: () => Promise.reject(new Error("socket hang up")),
+    };
+    const facts = await createBridgeProbe({
+      client,
+      port: 5199,
+      tokenPath,
+    }).check();
+    expect(facts.answer).toEqual({ kind: "unreachable" });
+  });
+
   it("the bridge probe maps bridge-unreachable to unreachable, unauthorized to token-refused and not-connected to no-gm-tab", async () => {
     const cases: [string, string][] = [
       ["bridge-unreachable", "unreachable"],
