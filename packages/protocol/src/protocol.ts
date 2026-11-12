@@ -10,7 +10,7 @@ import {
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /**
  * The largest bridge WebSocket message, in bytes: the bridge's `maxPayload`,
@@ -19,11 +19,11 @@ export const PROTOCOL_VERSION = 1;
 export const MAX_MESSAGE_BYTES = 1024 * 1024;
 
 // `role` is self-reported by the client and must never be used for
-// authorization; it only drives UI. The `token` is what authenticates a client.
+// authorization; it only drives UI. The bridge admits a client by the Host and
+// Origin of its WebSocket upgrade, not by anything in `hello`.
 const helloPayload = z.object({
   role: z.enum(["gm", "player"]),
   extensionVersion: z.string(),
-  token: z.string(),
 });
 const helloAckPayload = z.object({ serverVersion: z.string() });
 // Extension -> bridge: the GM deleted this instance's token on the table.
@@ -199,7 +199,7 @@ export type SceneMap = z.infer<typeof sceneMapSchema>;
 export type QueryResult = z.infer<typeof queryResultSchema>;
 export type AgentQueryResponse = z.infer<typeof agentQueryResponseSchema>;
 
-/** The bridge route that stores one token image: POST, raw bytes, extension token as bearer. */
+/** The bridge route that stores one token image: POST, raw bytes, from the bridge's own origin. */
 export const TOKEN_IMAGE_UPLOAD_PATH = "/token-images";
 
 export const tokenImageUploadResponseSchema = z.discriminatedUnion("ok", [
@@ -233,7 +233,7 @@ export type TokenImageUploadResponse = z.infer<
   typeof tokenImageUploadResponseSchema
 >;
 
-/** The bridge route that answers the stored bytes of one token image: GET, extension token as bearer. */
+/** The bridge route that answers the stored bytes of one token image: GET, no credentials. */
 export function tokenImagePath(sha256: string): string {
   return `${TOKEN_IMAGE_UPLOAD_PATH}/${sha256}`;
 }
@@ -242,7 +242,7 @@ export function tokenImagePath(sha256: string): string {
 export const tokenImageReadErrorSchema = z.object({
   ok: z.literal(false),
   error: z.object({
-    code: z.enum(["unauthorized", "not_found"]),
+    code: z.enum(["not_found"]),
     message: z.string(),
   }),
 });
