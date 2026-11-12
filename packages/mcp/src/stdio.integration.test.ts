@@ -1,10 +1,21 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ToolAnnotations } from "./tools.js";
 
@@ -158,5 +169,138 @@ describe("stdio server", () => {
         expectedAnnotations[tool.name],
       );
     }
+  }, 30_000);
+});
+
+const PROJECT_VARIABLES = new Set([
+  "TTRPG_AGENTS_DB",
+  "BRIDGE_PORT",
+  "BRIDGE_AGENT_TOKEN_FILE",
+  "BRIDGE_STATE_FILE",
+  "BRIDGE_STATIC_DIR",
+]);
+
+/**
+ * A temp HOME and XDG config directory, and a child environment with no
+ * project variables and no other XDG variables, so only config.json (or the
+ * defaults under the temp HOME) can name the database and port.
+ */
+function isolatedHome(): {
+  home: string;
+  env: Record<string, string>;
+  writeConfig: (content: unknown) => void;
+} {
+  const home = mkdtempSync(join(tmpdir(), "ttrpg-mcp-home-"));
+  const configHome = mkdtempSync(join(tmpdir(), "ttrpg-mcp-xdg-"));
+  cleanup.push(() => {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(configHome, { recursive: true, force: true });
+    return Promise.resolve();
+  });
+  const env: Record<string, string> = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value === undefined || PROJECT_VARIABLES.has(name)) continue;
+    if (name.startsWith("XDG_")) continue;
+    env[name] = value;
+  }
+  env.HOME = home;
+  env.XDG_CONFIG_HOME = configHome;
+  return {
+    home,
+    env,
+    writeConfig(content) {
+      const dir = join(configHome, "ttrpg-agents");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "config.json"), JSON.stringify(content));
+    },
+  };
+}
+
+interface Finished {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/** Runs the server with stdin closed; kills it if it is still running at the deadline. */
+function runToExit(
+  env: Record<string, string>,
+  deadlineMs = 10_000,
+): Promise<Finished> {
+  const child = spawn(process.execPath, [entry], {
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  cleanup.push(() => {
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill("SIGKILL");
+    return Promise.resolve();
+  });
+  child.stdin.end();
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+  child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => child.kill("SIGKILL"), deadlineMs);
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
+describe("stdio server settings", () => {
+  it("the MCP server spawned with no project environment variables writes to the database config.json names", async () => {
+    const { home, env, writeConfig } = isolatedHome();
+    writeConfig({
+      database: "~/games/encounters.db",
+      bridgePort: await unusedPort(),
+    });
+
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [entry],
+      env,
+    });
+    const client = new Client({ name: "settings", version: "0.0.0" });
+    cleanup.push(() => client.close());
+    await client.connect(transport);
+    const added = await client.callTool({
+      name: "add_monsters",
+      arguments: { groups: [{ monster: "srd-2024_shadow", count: 1 }] },
+    });
+    expect(added.isError).toBeFalsy();
+    await client.close();
+
+    const configured = join(home, "games", "encounters.db");
+    expect(existsSync(configured), "the configured database exists").toBe(true);
+    const db = openDatabase(configured);
+    try {
+      const names = new SqliteEncounterRepository(db)
+        .listInstances()
+        .map((i) => i.displayName);
+      expect(names).toHaveLength(1);
+      expect(names[0]).toMatch(/^Shadow/);
+    } finally {
+      db.close();
+    }
+    expect(
+      existsSync(
+        join(home, ".local", "share", "ttrpg-agents", "encounters.db"),
+      ),
+      "the default database was not created",
+    ).toBe(false);
+  }, 30_000);
+
+  it("the MCP server exits 1 with a stderr line naming bridgePort and nothing on stdout when config.json has an invalid bridgePort", async () => {
+    const { env, writeConfig } = isolatedHome();
+    writeConfig({ bridgePort: "abc" });
+
+    const result = await runToExit(env);
+
+    expect(result.code, result.stderr).toBe(1);
+    expect(result.stderr).toMatch(/^.*bridgePort.*$/m);
+    expect(result.stdout).toBe("");
   }, 30_000);
 });
