@@ -8,6 +8,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -223,6 +224,22 @@ describe("db:backup", () => {
       expect(result.code).toBe(1);
       expect(result.stderr).toContain(backupDir);
       expect(existsSync(join(REPO, name))).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "db:backup exits 1 and leaves no backup file when the database is not SQLite",
+    async () => {
+      const database = join(dir, "encounters.db");
+      writeFileSync(database, "not a database\n".repeat(50));
+      const backupDir = join(dir, "backups");
+
+      const result = await runBackup(database, backupDir);
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(database);
+      expect(readdirSync(backupDir)).toEqual([]);
     },
     TIMEOUT,
   );
