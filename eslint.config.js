@@ -15,13 +15,15 @@ const PROTOCOL_MESSAGE =
 const ADAPTER_MESSAGE =
   "Adapters depend on @ttrpg-agents/engine only (and, in tests, on each other and on srd).";
 const MCP_MESSAGE =
-  "@ttrpg-agents/mcp must not import the bridge (a separate process); only mcp/src/stdio.ts, the composition root, may import @ttrpg-agents/bridge/client.";
+  "@ttrpg-agents/mcp must not import the bridge (a separate process); only mcp/src/stdio.ts and mcp/src/status-cli.ts, the composition roots, may import @ttrpg-agents/bridge/client.";
 const CLIENT_MESSAGE =
   "bridge/src/client.ts is imported by mcp: it may use only Node builtins, @ttrpg-agents/engine, @ttrpg-agents/protocol and ./token-file.js (no ws, no server code).";
 const BRIDGE_MESSAGE =
   "@ttrpg-agents/bridge must not import mcp; the two are separate entry points.";
 const CONFIG_IMPORT_MESSAGE =
-  "Only composition roots (mcp/src/stdio.ts, bridge/src/cli.ts) read settings; pass plain values to everything else.";
+  "Only composition roots (mcp/src/stdio.ts, mcp/src/status-cli.ts, bridge/src/cli.ts) read settings; pass plain values to everything else.";
+const ENV_MESSAGE =
+  "Only composition roots (mcp/src/stdio.ts, mcp/src/status-cli.ts, bridge/src/cli.ts) read settings, including process.env; pass plain values to everything else.";
 const CONFIG_MESSAGE =
   "@ttrpg-agents/config is loaded by source path under plain node: it may import only Node built-ins.";
 const TESTING_MESSAGE =
@@ -185,7 +187,7 @@ export default tseslint.config(
   {
     // The MCP server and the bridge are separate entry points. The bridge
     // imports nothing from mcp; mcp imports nothing from the bridge except in
-    // its composition root (stdio.ts, next block).
+    // its composition roots (stdio.ts and status-cli.ts, next block).
     files: ["packages/mcp/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [
@@ -224,10 +226,10 @@ export default tseslint.config(
     },
   },
   {
-    // The composition root wires the bridge client in as the TablePort. Later
-    // configs replace earlier rule options, so restate the ban, minus
-    // `@ttrpg-agents/bridge/client`.
-    files: ["packages/mcp/src/stdio.ts"],
+    // The composition roots wire the bridge client in as the TablePort and the
+    // bridge probe. Later configs replace earlier rule options, so restate the
+    // ban, minus `@ttrpg-agents/bridge/client`.
+    files: ["packages/mcp/src/stdio.ts", "packages/mcp/src/status-cli.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -306,6 +308,23 @@ export default tseslint.config(
             testingPattern,
           ],
         },
+      ],
+    },
+  },
+  {
+    // Only composition roots read settings, so only they may read
+    // process.env. A new composition root joins this list with a plan line.
+    files: ["packages/*/src/**/*.{ts,tsx}"],
+    ignores: [
+      "packages/*/src/**/*.test.{ts,tsx}",
+      "packages/mcp/src/stdio.ts",
+      "packages/mcp/src/status-cli.ts",
+      "packages/bridge/src/cli.ts",
+    ],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        { object: "process", property: "env", message: ENV_MESSAGE },
       ],
     },
   },
