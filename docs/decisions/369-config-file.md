@@ -52,7 +52,7 @@ The loader itself (one optional `config.json`, environment then file then defaul
   - Chosen: each root writes every problem's message to stderr, then exits 1 if any is an error, before it opens the database or a port. The MCP server writes nothing to stdout.
   - Start with the next source's value and only warn: the process would run against a database or port the DM did not choose.
 - Where: `packages/mcp/src/stdio.ts`; `packages/bridge/src/cli.ts`; `scripts/bridge.ts`; `packages/store-sqlite/scripts/import-token-art.ts`.
-- Status: active
+- Status: superseded in part by 371.5 (`npm run status` reports config errors as rows and exits 0; the other roots keep this rule)
 
 ## 369.6 An empty or relative `XDG_*` value is ignored, and an empty project variable counts as unset
 
@@ -115,7 +115,7 @@ The loader itself (one optional `config.json`, environment then file then defaul
   - Add the lint rule and a scan for 5199 now: enforced, but outside this ticket's scope.
 - Where: the PR body (Test proof).
 - Revisit if: #371's plan gate decides on the lint rule.
-- Status: active
+- Status: superseded by 371.9
 
 ## 369.12 The exported `SETTINGS` table drives the loader and the settings-page test
 
