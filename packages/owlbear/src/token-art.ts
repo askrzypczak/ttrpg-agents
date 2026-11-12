@@ -1,5 +1,6 @@
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import {
+  PROTOCOL_VERSION,
   TOKEN_IMAGE_UPLOAD_PATH,
   tokenImagePath,
   tokenImageReadErrorSchema,
@@ -16,25 +17,26 @@ export function tokenArtMessage(
   monsterKey: string,
   art: PublishedTokenArt,
 ): BridgeMessage {
-  return { v: 1, type: "token-art-set", payload: { monsterKey, art } };
+  return {
+    v: PROTOCOL_VERSION,
+    type: "token-art-set",
+    payload: { monsterKey, art },
+  };
 }
 
 /**
- * Posts image bytes to the bridge's token image route with the extension
- * token as a bearer. Resolves with the bridge's answer, a stored image or a
- * refusal; rejects when the answer is not an upload response.
+ * Posts image bytes to the bridge's token image route. The bridge admits it by
+ * the request's `Origin`, which the browser sets to the panel's (the bridge's
+ * own). Resolves with the bridge's answer, a stored image or a refusal;
+ * rejects when the answer is not an upload response.
  */
 export async function uploadTokenImage(
   bytes: Uint8Array,
-  token: string,
 ): Promise<TokenImageUploadResponse> {
   // Relative: the panel is served by the bridge, so this stays same-origin.
   const response = await fetch(TOKEN_IMAGE_UPLOAD_PATH, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/octet-stream",
-    },
+    headers: { "Content-Type": "application/octet-stream" },
     // A copy over a plain ArrayBuffer, the only kind fetch takes as a body.
     body: new Uint8Array(bytes),
   });
@@ -46,17 +48,14 @@ export async function uploadTokenImage(
 export type StoredTokenImage = { bytes: Uint8Array; mime: string };
 
 /**
- * Gets the stored bytes of a token image from the bridge with the extension
- * token as a bearer. Rejects with the bridge's message when it refuses.
+ * Gets the stored bytes of a token image from the bridge. Rejects with the
+ * bridge's message when it refuses.
  */
 export async function downloadTokenImage(
   sha256: string,
-  token: string,
 ): Promise<StoredTokenImage> {
   // Relative: the panel is served by the bridge, so this stays same-origin.
-  const response = await fetch(tokenImagePath(sha256), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const response = await fetch(tokenImagePath(sha256));
   if (response.ok)
     return {
       bytes: new Uint8Array(await response.arrayBuffer()),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -68,20 +69,20 @@ class FakeTimers implements Timers {
 }
 
 const hello: BridgeMessage = {
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "hello",
-  payload: { role: "gm", extensionVersion: "0", token: "t" },
+  payload: { role: "gm", extensionVersion: "0" },
 };
 const ack = encodeMessage({
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "hello-ack",
   payload: { serverVersion: "1" },
 });
-const pong = encodeMessage({ v: 1, type: "pong", payload: {} });
+const pong = encodeMessage({ v: PROTOCOL_VERSION, type: "pong", payload: {} });
 
 function errorReply(code: string, fatal: boolean): string {
   return encodeMessage({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "error",
     payload: { code, message: "bad", fatal },
   });
@@ -209,7 +210,7 @@ describe("ReconnectingSocket", () => {
     expect(sockets[0]!.closed).toBe(false);
     expect(messages).toEqual([]);
     sockets[0]!.serverMessage(
-      '{"v":2,"type":"hello-ack","payload":{"serverVersion":"1"}}',
+      '{"v":1,"type":"hello-ack","payload":{"serverVersion":"1"}}',
     );
     expect(rs.state).toBe("rejected");
     expect(rs.rejection).toBe("unsupported-version");
@@ -222,7 +223,11 @@ describe("ReconnectingSocket", () => {
   it("forwards valid messages and sends only when open", () => {
     const { rs, sockets, messages } = setup();
     rs.start();
-    const ping: BridgeMessage = { v: 1, type: "ping", payload: {} };
+    const ping: BridgeMessage = {
+      v: PROTOCOL_VERSION,
+      type: "ping",
+      payload: {},
+    };
     expect(rs.send(ping)).toBe(false);
     sockets[0]!.serverMessage(ack);
     expect(rs.send(ping)).toBe(true);
@@ -266,21 +271,6 @@ describe("ReconnectingSocket", () => {
     expect(sockets[0]!.closed).toBe(false);
     expect(rs.state).toBe("open");
     expect(retryDelays(timers)).toEqual([]);
-    expect(sockets).toHaveLength(1);
-  });
-
-  it("a fatal bad-token error stops retrying and ends rejected with rejection bad-token", () => {
-    const { rs, sockets, timers, messages, states } = setup();
-    rs.start();
-    sockets[0]!.onopen?.();
-    sockets[0]!.serverMessage(errorReply("bad-token", true));
-    expect(messages.map((m) => m.type)).toEqual(["error"]);
-    expect(sockets[0]!.closed).toBe(true);
-    expect(rs.state).toBe("rejected");
-    expect(states.at(-1)).toBe("rejected");
-    expect(rs.rejection).toBe("bad-token");
-    expect(timers.pending.size).toBe(0);
-    timers.fireAll();
     expect(sockets).toHaveLength(1);
   });
 
@@ -421,7 +411,7 @@ describe("ReconnectingSocket", () => {
     const d = setupOpen();
     d.timers.fire(PING_INTERVAL_MS);
     expect(d.sockets[0]!.sentTypes().at(-1)).toBe("ping");
-    d.sockets[0]!.serverMessage(errorReply("bad-token", true));
+    d.sockets[0]!.serverMessage(errorReply("superseded", true));
     expect(d.rs.state).toBe("rejected");
     expect(d.timers.pending.size).toBe(0);
   });
