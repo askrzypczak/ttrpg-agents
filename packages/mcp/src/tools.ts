@@ -8,6 +8,7 @@ import {
   dndBeyondUrl,
   formatColumnLabel,
   getMapImage,
+  getSetupStatus,
   getTableStatus,
   listRooms,
   moveMonstersIntoRoom,
@@ -39,6 +40,7 @@ import {
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolContext } from "./context.js";
+import { formatSetupStatus } from "./setup-status.js";
 import { formatStatblock, signed } from "./statblock.js";
 
 export type ToolContent =
@@ -1051,6 +1053,21 @@ const tableStatusTool = defineTool({
   },
 });
 
+const setupStatusTool = defineTool({
+  name: "setup_status",
+  annotations: { readOnlyHint: true },
+  description:
+    "Check whether this setup is ready: profile, config file and its problems, settings, the encounter database, the bridge (with this profile's agent token) and the Owlbear GM tab, with one fix per problem. Does not need the bridge running: a missing bridge or tab is a row. For scene sync use table_status.",
+  inputSchema: {},
+  async run(ctx) {
+    const status = await getSetupStatus(ctx.setup);
+    return ok(formatSetupStatus(status), {
+      ready: status.ready,
+      rows: status.rows,
+    });
+  },
+});
+
 /**
  * One line per art step the table waits on the GM for, naming its monster
  * types and what the GM does: the fresh picker, then the re-uploads.
@@ -1690,6 +1707,7 @@ export const tools: readonly ToolDefinition[] = [
   restoreEncounterTool,
   undoTool,
   tableStatusTool,
+  setupStatusTool,
   useMapTool,
   setRoomsTool,
   listRoomsTool,

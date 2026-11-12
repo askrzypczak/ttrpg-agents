@@ -7,6 +7,7 @@ export { SqliteTokenArtRepository } from "./token-art-repository.js";
 export { SqliteTokenImageRepository } from "./token-image-repository.js";
 export { SqliteMapRepository } from "./map-repository.js";
 export { openDatabase } from "./db.js";
+export { createDatabaseProbe } from "./database-probe.js";
 export {
   formatTokenArtImportSummary,
   importTokenArtLibrary,

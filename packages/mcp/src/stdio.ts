@@ -7,14 +7,16 @@ import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   createBridgeClient,
+  createBridgeProbe,
   createBridgeTable,
 } from "@ttrpg-agents/bridge/client";
-import { loadConfig } from "@ttrpg-agents/config";
+import { SETTINGS, describeProfile, loadConfig } from "@ttrpg-agents/config";
 import type { Rng } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterRepository,
   SqliteMapRepository,
+  createDatabaseProbe,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { createServer } from "./server.js";
@@ -23,24 +25,24 @@ import { createSystemBrowser } from "./system-browser.js";
 const rng: Rng = { nextInt: (maxExclusive) => randomInt(maxExclusive) };
 
 async function main(): Promise<void> {
-  const { settings, problems } = loadConfig({
+  const loaded = loadConfig({
     env: process.env,
     home: homedir(),
     checkout: resolve(fileURLToPath(new URL("../../..", import.meta.url))),
   });
+  const { settings, problems } = loaded;
   for (const problem of problems) process.stderr.write(`${problem.message}\n`);
   if (problems.some((p) => p.level === "error")) {
     process.exitCode = 1;
     return;
   }
   const db = openDatabase(settings.database);
+  const client = createBridgeClient({
+    port: settings.bridgePort,
+    tokenPath: settings.agentTokenFile,
+  });
   const server = createServer({
-    table: createBridgeTable(
-      createBridgeClient({
-        port: settings.bridgePort,
-        tokenPath: settings.agentTokenFile,
-      }),
-    ),
+    table: createBridgeTable(client),
     browser: createSystemBrowser(),
     repo: new SqliteEncounterRepository(db),
     maps: new SqliteMapRepository(db),
@@ -49,6 +51,24 @@ async function main(): Promise<void> {
     now: () => new Date(),
     newGroupId: randomUUID,
     newCommandId: randomUUID,
+    setup: {
+      settings: {
+        profile: describeProfile(loaded.profile),
+        configFile: loaded.configFile,
+        problems: loaded.problems,
+        settings: SETTINGS.map(({ name }) => ({
+          name,
+          value: loaded.settings[name],
+          source: loaded.sources[name],
+        })),
+      },
+      database: createDatabaseProbe(settings.database),
+      bridge: createBridgeProbe({
+        client,
+        port: settings.bridgePort,
+        tokenPath: settings.agentTokenFile,
+      }),
+    },
   });
   await server.connect(new StdioServerTransport());
 }

@@ -2,8 +2,13 @@
 // module `@ttrpg-agents/mcp` may import (`@ttrpg-agents/bridge/client`, from
 // its composition root only). It imports only Node builtins,
 // `@ttrpg-agents/engine` and `@ttrpg-agents/protocol`.
-import { readFile } from "node:fs/promises";
-import { TableUnavailableError, type TablePort } from "@ttrpg-agents/engine";
+import { readFile, stat } from "node:fs/promises";
+import {
+  TableUnavailableError,
+  type BridgeAnswer,
+  type BridgeProbe,
+  type TablePort,
+} from "@ttrpg-agents/engine";
 import {
   agentQueryResponseSchema,
   type AgentQueryResponse,
@@ -129,4 +134,55 @@ export function createBridgeTable(client: BridgeClient): TablePort {
       return { mimeType, data, width, height };
     },
   };
+}
+
+/** Asks the bridge on `port` for `scene-status` through `client`, after checking the token file at `tokenPath` exists; maps the answer to facts. */
+export function createBridgeProbe(options: {
+  client: BridgeClient;
+  port: number;
+  tokenPath: string;
+}): BridgeProbe {
+  const { client, port, tokenPath } = options;
+  return {
+    async check() {
+      return { port, tokenFile: tokenPath, answer: await ask() };
+    },
+  };
+
+  async function ask(): Promise<BridgeAnswer> {
+    try {
+      await stat(tokenPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return { kind: "no-token-file" };
+    }
+    // The port never rejects: an unexpected client failure reads as unreachable.
+    try {
+      return answerOf(await client.query({ name: "scene-status" }));
+    } catch {
+      return { kind: "unreachable" };
+    }
+  }
+}
+
+function answerOf(res: AgentQueryResponse): BridgeAnswer {
+  if (res.ok) {
+    if (res.result.name !== "scene-status") return { kind: "unreachable" };
+    const { roomId } = res.result.result;
+    return roomId === undefined
+      ? { kind: "gm-tab-connected" }
+      : { kind: "gm-tab-connected", roomId };
+  }
+  switch (res.error.code) {
+    case "unauthorized":
+      return { kind: "token-refused" };
+    case "not-connected":
+      return { kind: "no-gm-tab" };
+    case "timeout":
+    case "query-failed":
+      return { kind: "gm-tab-not-answering" };
+    case "bridge-unreachable":
+    case "bad-request":
+      return { kind: "unreachable" };
+  }
 }

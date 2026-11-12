@@ -149,6 +149,7 @@ describe("lint policy for the settings loader", () => {
 
   it.each([
     ["packages/mcp/src/stdio.ts", "packages/mcp/src/server.ts"],
+    ["packages/mcp/src/status-cli.ts", "packages/mcp/src/server.ts"],
     ["packages/bridge/src/cli.ts", "packages/bridge/src/server.ts"],
   ])(
     "the composition root %s may import @ttrpg-agents/config",
@@ -162,4 +163,81 @@ describe("lint policy for the settings loader", () => {
       expect(restrictedImports(messages)).toEqual([]);
     },
   );
+});
+
+// Only the mcp composition roots may import the bridge client or the settings
+// loader; every other mcp file is refused, with a message naming both roots.
+const BRIDGE_CLIENT_IMPORT =
+  'import { createBridgeClient } from "@ttrpg-agents/bridge/client";\nexport const make = createBridgeClient;\n';
+const MCP_ROOTS = [
+  "packages/mcp/src/stdio.ts",
+  "packages/mcp/src/status-cli.ts",
+];
+
+describe("lint policy for the mcp composition roots", () => {
+  it("the composition roots stdio.ts and status-cli.ts may import @ttrpg-agents/bridge/client", async () => {
+    // Control: a sibling is refused, so the roots passing is an allowance.
+    const control = await lint(
+      BRIDGE_CLIENT_IMPORT,
+      "packages/mcp/src/server.ts",
+    );
+    expect(restrictedImports(control)).not.toEqual([]);
+
+    for (const rootFile of MCP_ROOTS) {
+      const messages = await lint(BRIDGE_CLIENT_IMPORT, rootFile);
+      expect(restrictedImports(messages), rootFile).toEqual([]);
+    }
+  });
+
+  it("an mcp file other than stdio.ts and status-cli.ts may not import @ttrpg-agents/bridge/client or @ttrpg-agents/config", async () => {
+    for (const text of [BRIDGE_CLIENT_IMPORT, CONFIG_IMPORT]) {
+      const refused = restrictedImports(
+        await lint(text, "packages/mcp/src/server.ts"),
+      );
+      expect(refused, text).toContainEqual(
+        expect.objectContaining({ severity: 2 }),
+      );
+      for (const m of refused) {
+        expect(m.message, text).toContain("stdio.ts");
+        expect(m.message, text).toContain("status-cli.ts");
+      }
+    }
+  });
+});
+
+// Only composition roots read settings: process.env is refused elsewhere in
+// packages/*/src (tests excepted). Every path must exist on disk (see above).
+const ENV_READ = "export const x = process.env.HOME;\n";
+
+function envReads(messages: Awaited<ReturnType<typeof lint>>) {
+  return messages.filter((m) => m.ruleId === "no-restricted-properties");
+}
+
+describe("lint policy for process.env", () => {
+  it("a file in packages/*/src other than the three composition roots may not read process.env (control: a non-root sibling in each of mcp and bridge is refused)", async () => {
+    for (const file of [
+      "packages/mcp/src/server.ts",
+      "packages/bridge/src/server.ts",
+    ]) {
+      const messages = await lint(ENV_READ, file);
+      expect(messages, file).toContainEqual(
+        expect.objectContaining({
+          ruleId: "no-restricted-properties",
+          severity: 2,
+        }),
+      );
+    }
+  });
+
+  it("each composition root (mcp/src/stdio.ts, mcp/src/status-cli.ts, bridge/src/cli.ts) may read process.env", async () => {
+    for (const [rootFile, sibling] of [
+      ["packages/mcp/src/stdio.ts", "packages/mcp/src/server.ts"],
+      ["packages/mcp/src/status-cli.ts", "packages/mcp/src/server.ts"],
+      ["packages/bridge/src/cli.ts", "packages/bridge/src/server.ts"],
+    ] as const) {
+      // Control: the same read is refused in a sibling of the same package.
+      expect(envReads(await lint(ENV_READ, sibling)), sibling).not.toEqual([]);
+      expect(envReads(await lint(ENV_READ, rootFile)), rootFile).toEqual([]);
+    }
+  });
 });

@@ -15,7 +15,7 @@ flowchart LR
   end
   subgraph core["Engine (no I/O)"]
     uc["use cases: addMonsters, getTableStatus, useMap, ..."]
-    ports["ports: EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort"]
+    ports["ports: EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
   end
   subgraph driven["Driven adapters"]
     store["store-sqlite"]
@@ -37,7 +37,7 @@ flowchart LR
   ext -->|"HTTP POST and GET /token-images (own origin)"| bsrv
 ```
 
-The bridge is both sides. Its server is a driving adapter: a table edit becomes an engine command (`instance-edit` runs `applyInstanceEdit`, `token-deleted` calls `EncounterRepository.removeInstances`), snapshots come from `EncounterRepository` and `TokenArtRepository`, events from `EncounterLog`, the active map and its rooms from `MapRepository`, and the token image routes run the engine's `storeTokenImage` over `TokenImageRepository`. Its client is a driven adapter, the driven end of `TablePort`, wired in by `mcp/src/stdio.ts`. That channel carries queries only: the agent changes the game through the engine's model (the rule is in `CLAUDE.md`).
+The bridge is both sides. Its server is a driving adapter: a table edit becomes an engine command (`instance-edit` runs `applyInstanceEdit`, `token-deleted` calls `EncounterRepository.removeInstances`), snapshots come from `EncounterRepository` and `TokenArtRepository`, events from `EncounterLog`, the active map and its rooms from `MapRepository`, and the token image routes run the engine's `storeTokenImage` over `TokenImageRepository`. Its client is a driven adapter, the driven end of `TablePort` and `BridgeProbe`, wired in by `mcp/src/stdio.ts` and `mcp/src/status-cli.ts`. That channel carries queries only: the agent changes the game through the engine's model (the rule is in `CLAUDE.md`).
 
 ## Runtime (processes)
 
@@ -63,6 +63,14 @@ flowchart LR
 - **Extension**: runs in the GM's Owlbear tab as the bridge's client, reconciles the scene to the encounter and answers the agent's queries. It fetches images from Owlbear for token art and for the `map-image` query. Mechanics: [`packages/owlbear/README.md`](../packages/owlbear/README.md).
 - **Token art library import** (`npm run import:token-art`): a third, occasional process on the same database. See [`packages/store-sqlite/README.md`](../packages/store-sqlite/README.md), Token art library.
 
+## Status
+
+Three surfaces, each for one question:
+
+- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, bridge with this profile's token, GM tab; one fix per problem.
+- **`table_status` tool**: does the open scene match the encounter?
+- **`npm run bridge:status`**: the bridge process: pid, port, checkout, commit, log.
+
 ## Shared database
 
 One SQLite file per profile, in WAL mode, named by the `database` setting ([`docs/settings.md`](settings.md)). The `default` profile's file is the real one. The `dev` profile, used by every process started in a linked git worktree, has one per checkout, so a branch's migrations never run on the real database. The schema is versioned in `packages/store-sqlite/src/migrations.ts`.
@@ -85,7 +93,7 @@ Invariants the processes rely on:
 ## Token and auth
 
 - One token, the agent token: a file created with mode 0600 on first run (the `agentTokenFile` setting, see [`docs/settings.md`](settings.md)). As `Authorization: Bearer` it authorises `POST /agent/query` and nothing else, compared in constant time before the body is read. The bridge never serves it.
-- The bridge's state file (the `bridgeStateFile` setting) and the detached bridge's `bridge.log` beside it are mode 0600 like the agent token. The lifecycle commands print the log's path, never a token; `bridge:status` reads the agent token only to send a `scene-status` query.
+- The bridge's state file (the `bridgeStateFile` setting) and the detached bridge's `bridge.log` beside it are mode 0600 like the agent token. The lifecycle commands print the log's path, never a token; `bridge:status`, `npm run status` and `setup_status` read the agent token only to send a `scene-status` query.
 - The extension has no token: the bridge admits it by origin. Every request must carry a Host of `localhost:<port>` or `127.0.0.1:<port>` with the actual port (DNS-rebinding defence). The WebSocket upgrade must come from the bridge's own origin (`http://localhost:<port>` or `http://127.0.0.1:<port>`) on `/ws`, so no page the bridge did not serve can open it. `POST /token-images` must carry that `Origin` too (browsers send it on every POST, same-origin included); a missing or other `Origin` gets 403 `unauthorized` before the body is read. `GET /token-images/<sha256>` has only the Host check.
 - The image routes and `POST /agent/query` send no CORS headers: the panel is served by the bridge, so its requests are same-origin, and a page on another origin cannot read their answers.
 - A process run by the same OS user can send any Host and Origin, and could read the token files anyway. Other OS users on the GM's machine are out of scope (one machine, one GM tab).

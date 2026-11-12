@@ -1,6 +1,6 @@
 # Settings
 
-Every process (the MCP server, the bridge, `npm run bridge:start|stop|restart|status` and the token art import) reads its settings the same way, through `@ttrpg-agents/config` (`packages/config/src/config.ts`). Only the composition roots read them; everything else gets plain values.
+Every process (the MCP server, the bridge, `npm run bridge:start|stop|restart|status`, `npm run status` and the token art import) reads its settings the same way, through `@ttrpg-agents/config` (`packages/config/src/config.ts`). Only the composition roots read them; everything else gets plain values.
 
 | Setting           | File key     | Environment variable      | Default                                 |
 | ----------------- | ------------ | ------------------------- | --------------------------------------- |
@@ -43,7 +43,11 @@ A JSON object with the file keys from the table: `database` is a path, `bridgePo
 
 ## Errors and warnings
 
-Each process prints every problem to stderr when it starts; the MCP server keeps stdout for its protocol. An error stops the process with exit code 1 before it opens the database or a port: a file that cannot be read, text that is not a JSON object, or an invalid value. A value is checked even when a higher source overrides it. An unknown key in `config.json` is a warning: the key is ignored and the process goes on.
+Each process prints every problem to stderr when it starts; the MCP server keeps stdout for its protocol. An error stops the process with exit code 1 before it opens the database or a port: a file that cannot be read, text that is not a JSON object, or an invalid value. A value is checked even when a higher source overrides it. An unknown key in `config.json` is a warning: the key is ignored and the process goes on. `npm run status` is the exception: it reports problems as rows of its report and does not stop (see Check a setup).
+
+## Check a setup
+
+`npm run status`, or the `setup_status` MCP tool, lists the profile, the config file and its problems, every setting with its source, the database, the bridge (reached with this profile's agent token) and the GM tab, with a fix under each problem. `npm run status` always exits 0, whatever it finds.
 
 ## No secrets
 
