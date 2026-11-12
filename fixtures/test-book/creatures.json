@@ -7,7 +7,7 @@
     "type": "monstrosity",
     "alignment": "unaligned",
     "ac": 14,
-    "armorDetail": "natural armor",
+    "armorDetail": "",
     "hp": {
       "average": 33,
       "dice": "6d8 + 6"
@@ -77,7 +77,7 @@
     "type": "elemental",
     "alignment": "neutral",
     "ac": 15,
-    "armorDetail": "natural armor",
+    "armorDetail": "",
     "hp": {
       "average": 65,
       "dice": "10d6 + 30"
