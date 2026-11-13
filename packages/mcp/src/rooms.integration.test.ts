@@ -3,8 +3,10 @@ import {
   cellCenter,
   displayGrid,
   parseCellLabel,
+  resolveEncounter,
   type MapPlacement,
   type MapRegistration,
+  type MapRepository,
   type SavedRoom,
   type TableMapItem,
   type TablePort,
@@ -14,7 +16,6 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -64,8 +65,12 @@ function contextWith(
   sceneTokens: TablePort["sceneTokens"] = () =>
     Promise.reject(new Error("not stubbed")),
 ): ToolContext {
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  if (active) maps.registerMap(active);
+  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  if (active) {
+    encounters
+      .mapRepositoryFor(resolveEncounter(encounters).id)
+      .registerMap(active);
+  }
   return {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -73,8 +78,7 @@ function contextWith(
       sceneTokens,
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
-    maps,
+    encounters,
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -95,6 +99,11 @@ async function call(
 
 function text(r: ToolResult): string {
   return r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+}
+
+/** The current encounter's map repository, resolved as a tool call does. */
+function mapsOf(ctx: ToolContext): MapRepository {
+  return ctx.encounters.mapRepositoryFor(resolveEncounter(ctx.encounters).id);
 }
 
 describe("room tools", () => {
@@ -122,7 +131,9 @@ describe("room tools", () => {
       mapMoved: false,
     });
     expect(
-      ctx.maps.getRooms("map-1").map((room) => [room.name, room.status]),
+      mapsOf(ctx)
+        .getRooms("map-1")
+        .map((room) => [room.name, room.status]),
     ).toEqual([
       ["Taproom", "confirmed"],
       ["Kitchen", "confirmed"],
@@ -135,7 +146,7 @@ describe("room tools", () => {
     expect(proposed.isError).toBeFalsy();
     expect(text(proposed)).toContain("on Trollskull Manor (proposed)");
     expect(text(proposed)).toContain("Cellar A20:C24");
-    expect(ctx.maps.getRooms("map-1").at(-1)?.status).toBe("proposed");
+    expect(mapsOf(ctx).getRooms("map-1").at(-1)?.status).toBe("proposed");
   });
 
   it("`set_rooms` and `list_rooms` add the map-moved line when the live transform differs from the registered one", async () => {
@@ -203,9 +214,11 @@ describe("room tools", () => {
     expect(text(r)).toContain(
       "Removed 2 rooms from Trollskull Manor: Attic, Cellar.",
     );
-    expect(ctx.maps.getRooms("map-1").map((room) => room.name)).toEqual([
-      "Taproom",
-    ]);
+    expect(
+      mapsOf(ctx)
+        .getRooms("map-1")
+        .map((room) => room.name),
+    ).toEqual(["Taproom"]);
   });
 
   it("propose_rooms returns each room with its shrunk ranges and saves nothing", async () => {
@@ -232,7 +245,7 @@ describe("room tools", () => {
       ],
     });
     expect(sceneCalls).toBe(0);
-    expect(ctx.maps.getRooms("map-1")).toEqual([]);
+    expect(mapsOf(ctx).getRooms("map-1")).toEqual([]);
     const listed = await call(ctx, "list_rooms");
     expect(text(listed)).toContain("No rooms saved for Trollskull Manor yet.");
   });

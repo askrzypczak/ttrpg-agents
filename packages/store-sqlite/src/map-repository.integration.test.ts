@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import type { MapRegistration, SavedRoom } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
@@ -100,27 +101,40 @@ const cellar: SavedRoom = {
   ],
 };
 
+/** A new encounter's id in `db`. */
+function newEncounterId(db: DatabaseSync): string {
+  return new SqliteEncounterDirectory(db).createEncounter("Tavern").id;
+}
+
+/** The map repository of a new encounter in `db`. */
+function newEncounterMaps(db: DatabaseSync): SqliteMapRepository {
+  return new SqliteMapRepository(db, newEncounterId(db));
+}
+
 describe("SqliteMapRepository", () => {
-  it("a new store has no active map", () => {
-    const repo = new SqliteMapRepository(openDatabase(":memory:"));
+  it("a new encounter has no map", () => {
+    const repo = newEncounterMaps(openDatabase(":memory:"));
     expect(repo.getActiveMap()).toBeUndefined();
   });
 
-  it("a registered map survives reopening the store as the active map", () => {
+  it("a registered map survives reopening the store as its encounter's map", () => {
     const dir = mkdtempSync(join(tmpdir(), "ttrpg-map-"));
     dirs.push(dir);
     const path = join(dir, "enc.db");
     const first = openDatabase(path);
-    new SqliteMapRepository(first).registerMap(trollskull);
+    const encounterId = newEncounterId(first);
+    new SqliteMapRepository(first, encounterId).registerMap(trollskull);
     first.close();
 
     const second = openDatabase(path);
-    expect(new SqliteMapRepository(second).getActiveMap()).toEqual(trollskull);
+    expect(new SqliteMapRepository(second, encounterId).getActiveMap()).toEqual(
+      trollskull,
+    );
     second.close();
   });
 
-  it("re-registering the same map item replaces its transform and makes it active again", () => {
-    const repo = new SqliteMapRepository(openDatabase(":memory:"));
+  it("re-registering the same map item replaces its transform and makes it its encounter's map again", () => {
+    const repo = newEncounterMaps(openDatabase(":memory:"));
     repo.registerMap(trollskull);
     repo.registerMap(sewers);
     expect(repo.getActiveMap()).toEqual(sewers);
@@ -130,7 +144,7 @@ describe("SqliteMapRepository", () => {
 
   it("re-registering the same map item updates its row in place (the row is not deleted)", () => {
     const db = openDatabase(":memory:");
-    const repo = new SqliteMapRepository(db);
+    const repo = newEncounterMaps(db);
     const rowid = (): unknown =>
       (
         db
@@ -146,13 +160,13 @@ describe("SqliteMapRepository", () => {
   });
 
   it("a map item without saved rooms has no rooms", () => {
-    const repo = new SqliteMapRepository(openDatabase(":memory:"));
+    const repo = newEncounterMaps(openDatabase(":memory:"));
     repo.registerMap(trollskull);
     expect(repo.getRooms("map-1")).toEqual([]);
   });
 
   it("replaceRooms stores each room's name, status and image-px polygons, and getRooms returns them in the order saved", () => {
-    const repo = new SqliteMapRepository(openDatabase(":memory:"));
+    const repo = newEncounterMaps(openDatabase(":memory:"));
     repo.registerMap(trollskull);
     repo.replaceRooms("map-1", [taproom, kitchen, cellar]);
     expect(repo.getRooms("map-1")).toEqual([taproom, kitchen, cellar]);
@@ -161,7 +175,7 @@ describe("SqliteMapRepository", () => {
   });
 
   it("replaceRooms replaces only that map item's rooms; another map's rooms are untouched", () => {
-    const repo = new SqliteMapRepository(openDatabase(":memory:"));
+    const repo = newEncounterMaps(openDatabase(":memory:"));
     repo.registerMap(trollskull);
     repo.registerMap(sewers);
     repo.replaceRooms("map-1", [taproom, kitchen]);
@@ -176,13 +190,14 @@ describe("SqliteMapRepository", () => {
     dirs.push(dir);
     const path = join(dir, "enc.db");
     const first = openDatabase(path);
-    const before = new SqliteMapRepository(first);
+    const encounterId = newEncounterId(first);
+    const before = new SqliteMapRepository(first, encounterId);
     before.registerMap(trollskull);
     before.replaceRooms("map-1", [taproom, kitchen]);
     first.close();
 
     const second = openDatabase(path);
-    const after = new SqliteMapRepository(second);
+    const after = new SqliteMapRepository(second, encounterId);
     expect(after.getRooms("map-1")).toEqual([taproom, kitchen]);
     after.registerMap(sewers);
     after.registerMap(trollskullRealigned);

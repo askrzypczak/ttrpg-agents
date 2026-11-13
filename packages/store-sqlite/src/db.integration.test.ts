@@ -655,7 +655,7 @@ describe("migration to scene-bound encounters", () => {
     const maps = rows(db, "SELECT * FROM map_registrations");
     const rooms = rows(db, "SELECT * FROM map_rooms");
 
-    migrate(db);
+    migrateToVersion(db, 17);
 
     expect(getUserVersion(db)).toBe(17);
     expect(new SqliteEncounterDirectory(db).listEncounters()).toEqual([]);

@@ -178,9 +178,11 @@ describe("broadcastMapRooms", () => {
   });
 
   it("broadcastMapRooms broadcasts map-rooms when the active map's rooms change, and nothing while they stay the same", () => {
-    const maps = new MemoryMaps(trollskull);
+    const encounters = new MemoryEncounters();
+    const maps = encounters.use("tavern", trollskull);
+    encounters.current = "tavern";
     maps.replaceRooms("trollskull", [room("Taproom")]);
-    stop = broadcastMapRooms(maps, target);
+    stop = broadcastMapRooms(encounters, target);
 
     vi.advanceTimersByTime(POLL_MS * 4);
     expect(sent).toEqual([]);
@@ -194,11 +196,13 @@ describe("broadcastMapRooms", () => {
     expect(sent).toEqual([mapRooms("trollskull", changed)]);
   });
 
-  it("broadcastMapRooms broadcasts when another map becomes active", () => {
-    const maps = new MemoryMaps(trollskull);
+  it("broadcastMapRooms broadcasts when the current encounter uses another map", () => {
+    const encounters = new MemoryEncounters();
+    const maps = encounters.use("tavern", trollskull);
+    encounters.current = "tavern";
     maps.replaceRooms("trollskull", [room("Taproom")]);
     maps.replaceRooms("cellar-map", [room("Vault")]);
-    stop = broadcastMapRooms(maps, target);
+    stop = broadcastMapRooms(encounters, target);
 
     maps.registerMap(cellarMap);
     vi.advanceTimersByTime(POLL_MS);
@@ -234,8 +238,10 @@ describe("broadcastMapRooms", () => {
   });
 
   it("broadcastMapRooms retries a failing read on the next tick", () => {
-    const maps = new MemoryMaps(trollskull);
-    stop = broadcastMapRooms(maps, target);
+    const encounters = new MemoryEncounters();
+    const maps = encounters.use("tavern", trollskull);
+    encounters.current = "tavern";
+    stop = broadcastMapRooms(encounters, target);
 
     const changed = [room("Taproom")];
     maps.replaceRooms("trollskull", changed);
@@ -248,8 +254,10 @@ describe("broadcastMapRooms", () => {
   });
 
   it("broadcastMapRooms stops polling after stop() is called", () => {
-    const maps = new MemoryMaps(trollskull);
-    const stopPolling = broadcastMapRooms(maps, target);
+    const encounters = new MemoryEncounters();
+    const maps = encounters.use("tavern", trollskull);
+    encounters.current = "tavern";
+    const stopPolling = broadcastMapRooms(encounters, target);
     vi.advanceTimersByTime(POLL_MS);
 
     stopPolling();

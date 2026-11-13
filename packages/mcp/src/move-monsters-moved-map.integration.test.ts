@@ -1,8 +1,11 @@
-import type { MapRegistration, TableMapItem } from "@ttrpg-agents/engine";
+import {
+  resolveEncounter,
+  type MapRegistration,
+  type TableMapItem,
+} from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -43,8 +46,10 @@ const movedLine =
   "The map moved since it was registered; cells are read where it is now. Use the map again to confirm the new position.";
 
 function context(): ToolContext {
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  maps.registerMap(registered);
+  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  encounters
+    .mapRepositoryFor(resolveEncounter(encounters).id)
+    .registerMap(registered);
   return {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -56,8 +61,7 @@ function context(): ToolContext {
       sceneTokens: () => Promise.resolve({ tokens: [] }),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
-    maps,
+    encounters,
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
