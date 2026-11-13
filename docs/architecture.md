@@ -15,7 +15,7 @@ flowchart LR
   end
   subgraph core["Engine (no I/O)"]
     uc["use cases: addMonsters, getTableStatus, useMap, ..."]
-    ports["ports: EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
+    ports["ports: EncounterDirectory, EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
   end
   subgraph driven["Driven adapters"]
     store["store-sqlite"]
@@ -24,7 +24,7 @@ flowchart LR
     sysbrowser["mcp system browser (macOS open)"]
   end
   mcp --> uc
-  bsrv -->|"reads EncounterRepository and MapRepository, reads and writes TokenArtRepository and TokenImageRepository"| ports
+  bsrv -->|"reads EncounterDirectory, EncounterRepository and MapRepository, reads and writes TokenArtRepository and TokenImageRepository"| ports
   uc --> ports
   ports -.implemented by.-> store
   ports -.implemented by.-> srd
@@ -37,7 +37,7 @@ flowchart LR
   ext -->|"HTTP POST and GET /token-images (own origin)"| bsrv
 ```
 
-The bridge is both sides. Its server is a driving adapter: a table edit becomes an engine command (`instance-edit` runs `applyInstanceEdit`, `token-deleted` calls `EncounterRepository.removeInstances`), snapshots come from `EncounterRepository` and `TokenArtRepository`, events from `EncounterLog`, the active map and its rooms from `MapRepository`, and the token image routes run the engine's `storeTokenImage` over `TokenImageRepository`. Its client is a driven adapter, the driven end of `TablePort` and `BridgeProbe`, wired in by `mcp/src/stdio.ts` and `mcp/src/status-cli.ts`. That channel carries queries only: the agent changes the game through the engine's model (the rule is in `CLAUDE.md`).
+The bridge is both sides. Its server is a driving adapter: a table edit becomes an engine command on the encounter that holds the instance, current or not (`instance-edit` runs `applyInstanceEdit`, `token-deleted` calls `EncounterRepository.removeInstances`, on the repository `EncounterDirectory` hands out for it), snapshots come from the current encounter and `TokenArtRepository`, events from `EncounterLog`, the active map and its rooms from `MapRepository`, and the token image routes run the engine's `storeTokenImage` over `TokenImageRepository`. Its client is a driven adapter, the driven end of `TablePort` and `BridgeProbe`, wired in by `mcp/src/stdio.ts` and `mcp/src/status-cli.ts`. That channel carries queries only: the agent changes the game through the engine's model (the rule is in `CLAUDE.md`).
 
 ## Runtime (processes)
 
@@ -76,6 +76,8 @@ Three surfaces, each for one question:
 
 One SQLite file per profile, in WAL mode, named by the `database` setting ([`docs/settings.md`](settings.md)). The `default` profile's file is the real one. The `dev` profile, used by every process started in a linked git worktree, has one per checkout, so a branch's migrations never run on the real database. The schema is versioned in `packages/store-sqlite/src/migrations.ts`.
 
+Upgrading to scene-bound encounters (migration 17) discards every existing encounter with its instances and undo records; the change log (each row keeps its `seq`, with no encounter), maps, rooms and token art are kept. Tokens left in scenes from before belong to no encounter: delete them from the scenes by hand.
+
 | Data                                                                                  | Written by                                                                                         | Read by                                    |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------ |
 | Encounter (`monster_instances`, `encounters`) and its change log (`encounter_events`) | MCP server; the bridge for a table edit (`instance-edit`) or a GM token deletion (`token-deleted`) | bridge (event poll, snapshots); MCP server |
@@ -88,7 +90,7 @@ Invariants the processes rely on:
 
 - A removed instance keeps its row, marked removed, so `restore_monsters` puts it back with its id and state. A clear keeps the set it removed for `restore_encounter` and deletes the instances removed before it: only the last clear's set is restorable.
 - A restore records, on each instance it puts back, the `seq` of the `added` event it logs. It is kept while the instance stays in the encounter and replaced by a later restore; snapshots carry it.
-- An undo record holds each instance's state before the command's first write to it. A map or room change leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes every record.
+- An undo record holds each instance's state before the command's first write to it. A map or room change leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes its encounter's records.
 - Token art is a VTT-neutral reference `{ url, mime, width, height }` with an optional `sha256` link to stored bytes. The reference is all present or all absent, and art without one (bytes never published to Owlbear, such as the library import's) must link an image. Stored bytes carry no monster key.
 
 ### Two halves of one save

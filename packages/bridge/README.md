@@ -138,7 +138,9 @@ nothing is sent.
 An authenticated client can send `token-deleted` (`{ instanceId }`, sent by the
 extension when the GM deletes one of our tokens). The server's optional
 `removeInstance` option performs the removal (`cli.ts` wires
-`removeInstance(repo, id)` from `encounter-bridge.ts`). An accepted request gets
+`removeInstance(encounters, id)` from `encounter-bridge.ts`). The removal, like
+an `instance-edit`, acts on the encounter that holds the instance, current or
+not; an id no encounter holds is refused. An accepted request gets
 no reply of its own: the poll's `table` event for the removal carries the
 request id as its command id, and the extension takes it as the
 acknowledgement. An accepted `instance-edit` is answered the same way, by its
