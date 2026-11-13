@@ -100,10 +100,8 @@ export class SqliteEncounterRepository
 
   getOrCreateActiveEncounter(): Encounter {
     return this.transaction(() => {
-      const existing = this.db
-        .prepare("SELECT id, created_at FROM encounters WHERE active = 1")
-        .get() as { id: string; created_at: number } | undefined;
-      if (existing) return { id: existing.id, createdAt: existing.created_at };
+      const existing = this.getActiveEncounter();
+      if (existing) return existing;
       const encounter = { id: this.newId(), createdAt: this.now() };
       this.db
         .prepare(
