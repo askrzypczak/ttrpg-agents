@@ -48,7 +48,7 @@ Issue: [#361](https://github.com/askrzypczak/ttrpg-agents/issues/361). Part of E
   - Keep a create-on-demand method on the repository: a repository could then act on an encounter other than its own.
 - Where: `packages/store-sqlite/src/sqlite-repository.ts`; `resolveEncounter` in `packages/engine/src/encounter/directory.ts`.
 - Revisit if: #363's resolution rule lands (it replaces `resolveEncounter`).
-- Status: active
+- Status: superseded by 363.3
 - Supersedes: 360.2
 
 ## 361.5 The MCP resolves the encounter lazily, once per tool call; a tool that never reads the encounter resolves none
@@ -94,4 +94,4 @@ Issue: [#361](https://github.com/askrzypczak/ttrpg-agents/issues/361). Part of E
   - No re-read inside the transaction: two processes that both find none would create "Encounter 1" and "Encounter 2", and the second would switch the current encounter.
 - Where: `resolveEncounter` in `packages/engine/src/encounter/directory.ts`; test "resolveEncounter returns the encounter another process made current after its first read, and creates none" in `directory.test.ts`.
 - Revisit if: #363's resolution rule replaces `resolveEncounter`.
-- Status: active
+- Status: superseded by 363.3
