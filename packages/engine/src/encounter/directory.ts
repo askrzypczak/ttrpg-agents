@@ -1,3 +1,4 @@
+import { UnknownInstanceError } from "./errors.js";
 import type { EncounterRepository } from "./repository.js";
 import type { Encounter } from "./types.js";
 
@@ -21,14 +22,26 @@ export interface EncounterDirectory {
 
 /** "Encounter N" with the lowest N >= 1 that none of `names` takes, ignoring case. */
 export function nextEncounterName(names: readonly string[]): string {
-  void names;
-  throw new Error("not implemented");
+  const taken = new Set(names.map((name) => name.toLowerCase()));
+  let n = 1;
+  while (taken.has(`encounter ${String(n)}`)) n++;
+  return `Encounter ${String(n)}`;
 }
 
 /** The encounter a command acts on: the current one; when none is, a new one named by nextEncounterName and made current, in one transaction. */
 export function resolveEncounter(directory: EncounterDirectory): Encounter {
-  void directory;
-  throw new Error("not implemented");
+  const current = directory.getCurrentEncounter();
+  if (current) return current;
+  return directory.transaction(() => {
+    // Re-read inside the write transaction: another process may have made
+    // one current since the read above.
+    const raced = directory.getCurrentEncounter();
+    if (raced) return raced;
+    const names = directory.listEncounters().map((e) => e.name);
+    const created = directory.createEncounter(nextEncounterName(names));
+    directory.setCurrentEncounter(created.id);
+    return created;
+  });
 }
 
 /** The repository of the encounter that holds the instance; throws UnknownInstanceError when no encounter does. */
@@ -36,7 +49,8 @@ export function repositoryForInstance(
   directory: EncounterDirectory,
   instanceId: string,
 ): EncounterRepository {
-  void directory;
-  void instanceId;
-  throw new Error("not implemented");
+  const holder = directory.findEncounterOfInstance(instanceId);
+  if (!holder)
+    throw new UnknownInstanceError(`Unknown monster instance: ${instanceId}`);
+  return directory.repositoryFor(holder.id);
 }

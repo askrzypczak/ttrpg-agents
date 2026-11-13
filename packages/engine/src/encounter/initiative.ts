@@ -117,7 +117,7 @@ export interface RollInitiativeResult {
 }
 
 /**
- * Rolls initiative for existing instances of the active encounter and writes
+ * Rolls initiative for existing instances of the repository's encounter and writes
  * each value through `setInitiative` with the one origin. Every id is checked
  * before the first roll, and every monster before the first roll or write, so
  * a failure changes nothing.

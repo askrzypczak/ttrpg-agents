@@ -11,7 +11,7 @@ export class InvalidAmountError extends DomainError {
   }
 }
 
-/** No instance with that id in the active encounter. */
+/** No instance with that id in the encounter. */
 export class UnknownInstanceError extends DomainError {
   constructor(message: string) {
     super("unknown_instance", message);

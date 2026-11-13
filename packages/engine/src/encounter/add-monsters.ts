@@ -31,7 +31,7 @@ export interface AddMonstersGroup {
   /** Spawn positions (scene units) for the group's instances, in order; instances past the last get none. */
   spawnPositions?: readonly Point[];
   /**
-   * An instance of the active encounter, by id, else by exact display name:
+   * An instance of the repository's encounter, by id, else by exact display name:
    * the group's monsters join its initiative group and take its current
    * initiative (null included) instead of rolling. Absent: a new group.
    */
@@ -109,7 +109,7 @@ export function createNumberedNaming(): NamingStrategy {
 }
 
 /**
- * Adds groups of monsters to the active encounter: rolls (or averages) HP and
+ * Adds groups of monsters to the repository's encounter: rolls (or averages) HP and
  * initiative, assigns numbered names, and persists everything in one
  * transaction. A group with `join` takes its member's initiative group and
  * current initiative instead, and rolls no initiative. All input, and every
