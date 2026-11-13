@@ -134,6 +134,40 @@ describe("snapshotMessage", () => {
   });
 });
 
+describe("snapshotMessage encounter id", () => {
+  it("snapshotMessage carries the active encounter's id", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteEncounterRepository(db);
+    const log = new SqliteEncounterLog(db);
+    repo.addInstances(
+      () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
+      origin,
+    );
+    const encounterId = repo.getOrCreateActiveEncounter().id;
+
+    expect(snapshotMessage(repo, noArt, log)).toMatchObject({
+      type: "encounter-snapshot",
+      payload: { encounterId },
+    });
+  });
+
+  it("snapshotMessage carries a null encounterId on a store with no encounter, and creates none", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteEncounterRepository(db);
+    const log = new SqliteEncounterLog(db);
+
+    const message = snapshotMessage(repo, noArt, log);
+
+    expect(message).toMatchObject({
+      type: "encounter-snapshot",
+      payload: { instances: [], encounterId: null },
+    });
+    expect(db.prepare("SELECT COUNT(*) AS c FROM encounters").get()).toEqual({
+      c: 0,
+    });
+  });
+});
+
 describe("removeInstance", () => {
   const addTwo = (repo: EncounterRepository) =>
     repo.addInstances(
@@ -332,6 +366,44 @@ describe("broadcastLogEvents", () => {
       snapshotMsg,
       message(cleared(4)),
       message(cleared(5)),
+    ]);
+    stop();
+  });
+
+  it("broadcastLogEvents sends each event with its log entry's encounterId, null included", () => {
+    const { log } = stubLog();
+    const stop = broadcastLogEvents(log, target);
+    const fromEncounter: LoggedEvent = {
+      seq: 1,
+      encounterId: "e1",
+      event: { type: "cleared", origin },
+    };
+    const fromNoEncounter: LoggedEvent = {
+      seq: 2,
+      encounterId: null,
+      event: { type: "removed", id: "i1", origin },
+    };
+
+    log.events.push(fromEncounter, fromNoEncounter);
+    vi.advanceTimersByTime(POLL_MS);
+
+    expect(sent).toEqual([
+      {
+        v: PROTOCOL_VERSION,
+        type: "encounter-event",
+        payload: { type: "cleared", origin, seq: 1, encounterId: "e1" },
+      },
+      {
+        v: PROTOCOL_VERSION,
+        type: "encounter-event",
+        payload: {
+          type: "removed",
+          id: "i1",
+          origin,
+          seq: 2,
+          encounterId: null,
+        },
+      },
     ]);
     stop();
   });

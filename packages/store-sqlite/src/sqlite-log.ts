@@ -36,6 +36,8 @@ export class SqliteEncounterLog implements EncounterLog {
       try {
         return {
           seq: row.seq,
+          // Placeholder so the contract builds; the implementer reads encounter_id.
+          encounterId: undefined as unknown as string | null,
           event: encounterEventSchema.parse(JSON.parse(row.event)),
         };
       } catch (e) {

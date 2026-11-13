@@ -5,6 +5,7 @@ export type {
 } from "./types.js";
 export { monsterInstanceSchema } from "./types.js";
 export type {
+  ActiveEncounterReader,
   EncounterRepository,
   HpChange,
   InstanceBuilder,

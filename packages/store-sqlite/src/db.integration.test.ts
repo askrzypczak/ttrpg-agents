@@ -11,6 +11,7 @@ import {
   migrate,
   migrations,
 } from "./migrations.js";
+import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 import { SqliteTokenArtRepository } from "./token-art-repository.js";
 import type { ChangeOrigin } from "@ttrpg-agents/engine";
@@ -457,6 +458,28 @@ describe("migrations", () => {
         createdAt: 200,
         spawnPosition: null,
       }),
+    ]);
+    db.close();
+  });
+
+  it("a version 15 database migrates keeping its change-log rows and their seqs, each with a null encounter id", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 15)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 15");
+    const cleared = { type: "cleared", origin };
+    const removed = { type: "removed", id: "i1", origin };
+    const insert = db.prepare(
+      "INSERT INTO encounter_events (seq, event) VALUES (?, ?)",
+    );
+    insert.run(4, JSON.stringify(removed));
+    insert.run(9, JSON.stringify(cleared));
+
+    migrate(db);
+
+    expect(new SqliteEncounterLog(db).eventsSince(0)).toEqual([
+      { seq: 4, encounterId: null, event: removed },
+      { seq: 9, encounterId: null, event: cleared },
     ]);
     db.close();
   });

@@ -12,6 +12,7 @@ import {
   validateInstanceName,
 } from "@ttrpg-agents/engine";
 import type {
+  ActiveEncounterReader,
   ChangeOrigin,
   Encounter,
   EncounterEvent,
@@ -84,7 +85,9 @@ function unknownMessage(id: string): string {
   return `Unknown monster instance: ${id}`;
 }
 
-export class SqliteEncounterRepository implements EncounterRepository {
+export class SqliteEncounterRepository
+  implements EncounterRepository, ActiveEncounterReader
+{
   private readonly db: DatabaseSync;
   private readonly now: () => number;
   private readonly newId: () => string;
@@ -109,6 +112,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
         .run(encounter.id, encounter.createdAt);
       return encounter;
     });
+  }
+
+  getActiveEncounter(): Encounter | undefined {
+    throw new Error("not implemented");
   }
 
   addInstances(

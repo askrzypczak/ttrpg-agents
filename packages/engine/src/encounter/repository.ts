@@ -57,6 +57,12 @@ export interface UndoRecord {
   events: EncounterEvent[];
 }
 
+/** Reads the active encounter without creating one. */
+export interface ActiveEncounterReader {
+  /** The active encounter, or undefined when the store has none; never creates one. */
+  getActiveEncounter(): Encounter | undefined;
+}
+
 /**
  * Every mutation with an `mcp` origin stores, in its transaction, each written
  * instance's state before the command's first write to it; `clearEncounter`

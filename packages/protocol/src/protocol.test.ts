@@ -444,4 +444,57 @@ describe("protocol", () => {
     }
     expect(decoded.message.payload.instances[0]?.spawnPosition).toBeNull();
   });
+
+  it("an encounter-event round-trips its encounterId, a string or null", () => {
+    for (const encounterId of ["e1", null]) {
+      const message = {
+        v: PROTOCOL_VERSION,
+        type: "encounter-event",
+        payload: {
+          type: "cleared",
+          origin: { source: "mcp", commandId: "c1" },
+          seq: 3,
+          encounterId,
+        },
+      };
+
+      expect(decodeMessage(JSON.stringify(message))).toEqual({
+        ok: true,
+        message,
+      });
+    }
+  });
+
+  it("an encounter-snapshot round-trips its encounterId, a string or null", () => {
+    for (const encounterId of ["e1", null]) {
+      const message = {
+        v: PROTOCOL_VERSION,
+        type: "encounter-snapshot",
+        payload: { instances: [instance], seq: 4, encounterId },
+      };
+
+      expect(decodeMessage(JSON.stringify(message))).toEqual({
+        ok: true,
+        message,
+      });
+    }
+  });
+
+  it.each([
+    [
+      "encounter-event",
+      { type: "cleared", origin: { source: "mcp", commandId: "c1" }, seq: 1 },
+    ],
+    ["encounter-snapshot", { instances: [], seq: 1 }],
+  ])(
+    "an encounter-event or encounter-snapshot without encounterId is invalid-payload (%s)",
+    (type, payload) => {
+      const r = decodeMessage(
+        JSON.stringify({ v: PROTOCOL_VERSION, type, payload }),
+      );
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("invalid-payload");
+    },
+  );
 });

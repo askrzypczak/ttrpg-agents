@@ -2,6 +2,7 @@ import {
   DomainError,
   UnknownInstanceError,
   applyInstanceEdit,
+  type ActiveEncounterReader,
   type EncounterLog,
   type EncounterRepository,
   type InstanceEdit,
@@ -61,7 +62,7 @@ export function editInstance(
  * they reflect is listed; like an empty art map, an empty list is left out.
  */
 export function snapshotMessage(
-  repo: EncounterRepository,
+  repo: EncounterRepository & ActiveEncounterReader,
   artRepo: TokenArtRepository,
   log: EncounterLog,
 ): BridgeMessage {
