@@ -137,6 +137,25 @@ describe("resolveEncounter", () => {
       { call: "setCurrentEncounter", inTransaction: true },
     ]);
   });
+
+  it("resolveEncounter returns the encounter another process made current after its first read, and creates none", () => {
+    const directory = new FakeDirectory();
+    const other = directory.add("Encounter 1");
+    const transaction = directory.transaction.bind(directory);
+    // Another process makes an encounter current between the first read and
+    // the write lock.
+    directory.transaction = <T>(fn: () => T): T =>
+      transaction(() => {
+        directory.currentId = other.id;
+        return fn();
+      });
+
+    const resolved = resolveEncounter(directory);
+
+    expect(resolved).toEqual(other);
+    expect(directory.listEncounters()).toEqual([other]);
+    expect(directory.writes).toEqual([]);
+  });
 });
 
 describe("repositoryForInstance", () => {
