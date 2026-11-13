@@ -230,6 +230,23 @@ export const migrations: Migration[] = [
       ALTER TABLE map_registrations DROP COLUMN active;
     `,
   },
+  {
+    // Each encounter records the scene bound to it; the unique index lets a
+    // scene bind at most one encounter (SQLite NULLs are distinct, so any
+    // number stay unbound; SQLite cannot ADD COLUMN with UNIQUE). The open
+    // scene is one row or none; its scene id may be bound to no encounter.
+    // Nothing is copied: no encounter is bound and no scene is open. No room
+    // id is stored.
+    version: 19,
+    sql: `
+      ALTER TABLE encounters ADD COLUMN scene_id TEXT;
+      CREATE UNIQUE INDEX encounters_scene ON encounters (scene_id);
+      CREATE TABLE open_scene (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        scene_id TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

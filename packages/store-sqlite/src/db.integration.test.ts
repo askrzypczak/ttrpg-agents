@@ -741,7 +741,7 @@ describe("migration to per-encounter maps", () => {
     });
     const rooms = rows(db, "SELECT * FROM map_rooms");
 
-    migrate(db);
+    migrateToVersion(db, 18);
 
     expect(getUserVersion(db)).toBe(18);
     expect(rows(db, "SELECT * FROM map_registrations")).toEqual(maps);
