@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type ActiveEncounterReader,
   type ChangeOrigin,
   type EncounterLog,
   type EncounterRepository,
@@ -57,31 +58,41 @@ describe("snapshotMessage", () => {
       () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
       origin,
     );
+    const encounterId = repo.getOrCreateActiveEncounter().id;
     const { log } = stubLog([
-      { seq: 1, event: { type: "added", instances: created, origin } },
-      { seq: 2, event: { type: "cleared", origin } },
+      {
+        seq: 1,
+        encounterId,
+        event: { type: "added", instances: created, origin },
+      },
+      { seq: 2, encounterId, event: { type: "cleared", origin } },
     ]);
     expect(snapshotMessage(repo, noArt, log)).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: created, seq: 2 },
+      payload: { instances: created, seq: 2, encounterId },
     });
   });
 
   it("snapshotMessage carries the log's latest seq, read before the instances, and reads the restore seqs after them", () => {
     const { log, calls } = stubLog([
-      { seq: 4, event: { type: "cleared", origin } },
+      { seq: 4, encounterId: "e1", event: { type: "cleared", origin } },
     ]);
     const repoStub: Pick<
       EncounterRepository,
       "listInstances" | "listRestoreSeqs"
-    > = {
+    > &
+      ActiveEncounterReader = {
       listInstances: () => (calls.push("listInstances"), []),
+      getActiveEncounter: () => (
+        calls.push("getActiveEncounter"),
+        { id: "e1", createdAt: 0 }
+      ),
       listRestoreSeqs: () => (calls.push("listRestoreSeqs"), {}),
     };
 
     const message = snapshotMessage(
-      repoStub as EncounterRepository,
+      repoStub as EncounterRepository & ActiveEncounterReader,
       noArt,
       log,
     );
@@ -89,9 +100,14 @@ describe("snapshotMessage", () => {
     expect(message).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [], seq: 4 },
+      payload: { instances: [], seq: 4, encounterId: "e1" },
     });
-    expect(calls).toEqual(["latestSeq", "listInstances", "listRestoreSeqs"]);
+    expect(calls).toEqual([
+      "latestSeq",
+      "listInstances",
+      "getActiveEncounter",
+      "listRestoreSeqs",
+    ]);
   });
 
   it("snapshotMessage carries the restore seq of each restored instance and leaves the field out when none was restored", () => {
@@ -107,10 +123,16 @@ describe("snapshotMessage", () => {
       origin,
     );
 
+    const encounterId = repo.getOrCreateActiveEncounter().id;
+
     expect(snapshotMessage(repo, noArt, log)).toStrictEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: repo.listInstances(), seq: log.latestSeq() },
+      payload: {
+        instances: repo.listInstances(),
+        seq: log.latestSeq(),
+        encounterId,
+      },
     });
 
     repo.removeInstances([second!.id, third!.id], origin);
@@ -129,7 +151,42 @@ describe("snapshotMessage", () => {
           [third!.id]: thirdRestore,
         },
         seq: thirdRestore,
+        encounterId,
       },
+    });
+  });
+});
+
+describe("snapshotMessage encounter id", () => {
+  it("snapshotMessage carries the active encounter's id", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteEncounterRepository(db);
+    const log = new SqliteEncounterLog(db);
+    repo.addInstances(
+      () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
+      origin,
+    );
+    const encounterId = repo.getOrCreateActiveEncounter().id;
+
+    expect(snapshotMessage(repo, noArt, log)).toMatchObject({
+      type: "encounter-snapshot",
+      payload: { encounterId },
+    });
+  });
+
+  it("snapshotMessage carries a null encounterId on a store with no encounter, and creates none", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteEncounterRepository(db);
+    const log = new SqliteEncounterLog(db);
+
+    const message = snapshotMessage(repo, noArt, log);
+
+    expect(message).toMatchObject({
+      type: "encounter-snapshot",
+      payload: { instances: [], encounterId: null },
+    });
+    expect(db.prepare("SELECT COUNT(*) AS c FROM encounters").get()).toEqual({
+      c: 0,
     });
   });
 });
@@ -182,16 +239,22 @@ describe("broadcastLogEvents", () => {
   const POLL_MS = 250;
   const cleared = (seq: number): LoggedEvent => ({
     seq,
+    encounterId: "e1",
     event: { type: "cleared", origin },
   });
   const removedEvent = (seq: number, id: string): LoggedEvent => ({
     seq,
+    encounterId: "e1",
     event: { type: "removed", id, origin },
   });
-  const message = ({ seq, event }: LoggedEvent): BridgeMessage => ({
+  const message = ({
+    seq,
+    encounterId,
+    event,
+  }: LoggedEvent): BridgeMessage => ({
     v: PROTOCOL_VERSION,
     type: "encounter-event",
-    payload: { ...event, seq },
+    payload: { ...event, seq, encounterId },
   });
 
   const unreadable = (seq: number): UnreadableLogEntry => ({
@@ -311,7 +374,7 @@ describe("broadcastLogEvents", () => {
     const snapshotMsg: BridgeMessage = {
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [], seq: 2 },
+      payload: { instances: [], seq: 2, encounterId: "e1" },
     };
     const { log } = stubLog();
     const stop = broadcastLogEvents(log, target, {
@@ -332,6 +395,44 @@ describe("broadcastLogEvents", () => {
       snapshotMsg,
       message(cleared(4)),
       message(cleared(5)),
+    ]);
+    stop();
+  });
+
+  it("broadcastLogEvents sends each event with its log entry's encounterId, null included", () => {
+    const { log } = stubLog();
+    const stop = broadcastLogEvents(log, target);
+    const fromEncounter: LoggedEvent = {
+      seq: 1,
+      encounterId: "e1",
+      event: { type: "cleared", origin },
+    };
+    const fromNoEncounter: LoggedEvent = {
+      seq: 2,
+      encounterId: null,
+      event: { type: "removed", id: "i1", origin },
+    };
+
+    log.events.push(fromEncounter, fromNoEncounter);
+    vi.advanceTimersByTime(POLL_MS);
+
+    expect(sent).toEqual([
+      {
+        v: PROTOCOL_VERSION,
+        type: "encounter-event",
+        payload: { type: "cleared", origin, seq: 1, encounterId: "e1" },
+      },
+      {
+        v: PROTOCOL_VERSION,
+        type: "encounter-event",
+        payload: {
+          type: "removed",
+          id: "i1",
+          origin,
+          seq: 2,
+          encounterId: null,
+        },
+      },
     ]);
     stop();
   });

@@ -3,6 +3,8 @@ import type { EncounterEvent } from "./events.js";
 /** An encounter event with its position in the ordered change log. */
 export interface LoggedEvent {
   seq: number;
+  /** The id of the encounter the event changed; null for a row that belongs to no encounter. */
+  encounterId: string | null;
   event: EncounterEvent;
 }
 

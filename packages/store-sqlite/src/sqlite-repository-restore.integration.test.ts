@@ -133,6 +133,7 @@ describe("restoreInstances", () => {
     const before = repo.applyDamage(b!.id, 5, seedOrigin).after;
     repo.removeInstances([b!.id], removeOrigin);
     const seq = log.latestSeq();
+    const encounterId = repo.getOrCreateActiveEncounter().id;
 
     const restored = repo.restoreInstances([b!.id], keepName, restoreOrigin);
 
@@ -142,6 +143,7 @@ describe("restoreInstances", () => {
     expect(log.eventsSince(seq)).toEqual([
       {
         seq: seq + 1,
+        encounterId,
         event: { type: "added", instances: [before], origin: restoreOrigin },
       },
     ]);

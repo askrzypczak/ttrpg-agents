@@ -194,6 +194,12 @@ export const migrations: Migration[] = [
     version: 15,
     sql: "ALTER TABLE monster_instances ADD COLUMN restored_seq INTEGER;",
   },
+  {
+    // The id of the encounter a change-log event changed. NULL: the row was
+    // written before this migration, so it has no recorded encounter.
+    version: 16,
+    sql: "ALTER TABLE encounter_events ADD COLUMN encounter_id TEXT;",
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

@@ -81,6 +81,7 @@ describe("clearEncounter keeps the cleared set", () => {
     );
     const damaged = repo.applyDamage(b!.id, 5, seedOrigin).after;
     const seq = log.latestSeq();
+    const encounterId = repo.getOrCreateActiveEncounter().id;
 
     const cleared = repo.clearEncounter(clearOrigin);
 
@@ -90,7 +91,11 @@ describe("clearEncounter keeps the cleared set", () => {
       clearedBy(clearOrigin, a!, damaged, c!),
     );
     expect(log.eventsSince(seq)).toEqual([
-      { seq: seq + 1, event: { type: "cleared", origin: clearOrigin } },
+      {
+        seq: seq + 1,
+        encounterId,
+        event: { type: "cleared", origin: clearOrigin },
+      },
     ]);
   });
 
@@ -130,13 +135,18 @@ describe("clearEncounter keeps the cleared set", () => {
     const [a, b] = seed(shadow("Shadow 1"), shadow("Shadow 2"));
     repo.clearEncounter(clearOrigin);
     const seq = log.latestSeq();
+    const encounterId = repo.getOrCreateActiveEncounter().id;
 
     const cleared = repo.clearEncounter(secondClearOrigin);
 
     expect(cleared).toEqual([]);
     expect(repo.listRemovedInstances()).toEqual(clearedBy(clearOrigin, a!, b!));
     expect(log.eventsSince(seq)).toEqual([
-      { seq: seq + 1, event: { type: "cleared", origin: secondClearOrigin } },
+      {
+        seq: seq + 1,
+        encounterId,
+        event: { type: "cleared", origin: secondClearOrigin },
+      },
     ]);
   });
 

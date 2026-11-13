@@ -12,6 +12,7 @@ import {
   validateInstanceName,
 } from "@ttrpg-agents/engine";
 import type {
+  ActiveEncounterReader,
   ChangeOrigin,
   Encounter,
   EncounterEvent,
@@ -84,7 +85,9 @@ function unknownMessage(id: string): string {
   return `Unknown monster instance: ${id}`;
 }
 
-export class SqliteEncounterRepository implements EncounterRepository {
+export class SqliteEncounterRepository
+  implements EncounterRepository, ActiveEncounterReader
+{
   private readonly db: DatabaseSync;
   private readonly now: () => number;
   private readonly newId: () => string;
@@ -97,10 +100,8 @@ export class SqliteEncounterRepository implements EncounterRepository {
 
   getOrCreateActiveEncounter(): Encounter {
     return this.transaction(() => {
-      const existing = this.db
-        .prepare("SELECT id, created_at FROM encounters WHERE active = 1")
-        .get() as { id: string; created_at: number } | undefined;
-      if (existing) return { id: existing.id, createdAt: existing.created_at };
+      const existing = this.getActiveEncounter();
+      if (existing) return existing;
       const encounter = { id: this.newId(), createdAt: this.now() };
       this.db
         .prepare(
@@ -109,6 +110,13 @@ export class SqliteEncounterRepository implements EncounterRepository {
         .run(encounter.id, encounter.createdAt);
       return encounter;
     });
+  }
+
+  getActiveEncounter(): Encounter | undefined {
+    const row = this.db
+      .prepare("SELECT id, created_at FROM encounters WHERE active = 1")
+      .get() as { id: string; created_at: number } | undefined;
+    return row ? { id: row.id, createdAt: row.created_at } : undefined;
   }
 
   addInstances(
@@ -679,15 +687,19 @@ export class SqliteEncounterRepository implements EncounterRepository {
   }
 
   /**
-   * Appends an event to the change log and returns its seq; call it inside the
+   * Appends an event to the change log, tagged with the active encounter's id
+   * (created if the store has none), and returns its seq; call it inside the
    * mutation's transaction. The origin is logged without its command name.
    */
   private record(event: EncounterEvent): number {
     const { source, commandId } = event.origin;
     const logged = { ...event, origin: { source, commandId } };
+    const encounter = this.getOrCreateActiveEncounter();
     const { lastInsertRowid } = this.db
-      .prepare("INSERT INTO encounter_events (event) VALUES (?)")
-      .run(JSON.stringify(logged));
+      .prepare(
+        "INSERT INTO encounter_events (event, encounter_id) VALUES (?, ?)",
+      )
+      .run(JSON.stringify(logged), encounter.id);
     return Number(lastInsertRowid);
   }
 

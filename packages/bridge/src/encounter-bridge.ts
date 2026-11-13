@@ -2,6 +2,7 @@ import {
   DomainError,
   UnknownInstanceError,
   applyInstanceEdit,
+  type ActiveEncounterReader,
   type EncounterLog,
   type EncounterRepository,
   type InstanceEdit,
@@ -59,15 +60,19 @@ export function editInstance(
  * never misses it. Each instance a restore put back is listed in `restoreSeqs`
  * with the seq of its last restore, read after the instances so every restore
  * they reflect is listed; like an empty art map, an empty list is left out.
+ * The active encounter's id is read after the instances, so an encounter
+ * created between the reads gives an empty snapshot that names it, never
+ * instances under a null id.
  */
 export function snapshotMessage(
-  repo: EncounterRepository,
+  repo: EncounterRepository & ActiveEncounterReader,
   artRepo: TokenArtRepository,
   log: EncounterLog,
 ): BridgeMessage {
   const seq = log.latestSeq();
   const art = artRepo.listTokenArt();
   const instances = repo.listInstances();
+  const encounterId = repo.getActiveEncounter()?.id ?? null;
   const restoreSeqs = repo.listRestoreSeqs();
   return {
     v: PROTOCOL_VERSION,
@@ -78,6 +83,7 @@ export function snapshotMessage(
       ...(Object.keys(art).length > 0 ? { art } : {}),
       ...(Object.keys(restoreSeqs).length > 0 ? { restoreSeqs } : {}),
       seq,
+      encounterId,
     },
   };
 }
@@ -87,16 +93,17 @@ const LOG_POLL_INTERVAL_MS = 250;
 /**
  * Polls the change log and broadcasts every event committed after the log's
  * latest `seq` at the time of the call, as an `encounter-event` carrying its
- * `seq`, oldest first. Rows from before the bridge started are never read
- * (a client that connects gets a snapshot instead), so an old row this code
- * cannot parse cannot stall it. A row it cannot parse, for example one written
- * by a newer MCP server, is passed over: it is reported once through
- * `onUnreadable`, and when `snapshot` is given it is replaced by a snapshot to
- * every client (the tick's batch ends there and the next tick resumes after
- * the row). Without `snapshot`, the next event's `seq` shows the gap and the
- * extension reconnects for a snapshot. The poll also sees this process's own
- * commits, such as an applied write-back. A failed read or broadcast is retried
- * on the next tick from the last event sent. Returns a stop function.
+ * `seq` and `encounterId`, oldest first. Rows from before the bridge started
+ * are never read (a client that connects gets a snapshot instead), so an old
+ * row this code cannot parse cannot stall it. A row it cannot parse, for
+ * example one written by a newer MCP server, is passed over: it is reported
+ * once through `onUnreadable`, and when `snapshot` is given it is replaced by a
+ * snapshot to every client (the tick's batch ends there and the next tick
+ * resumes after the row). Without `snapshot`, the next event's `seq` shows the
+ * gap and the extension reconnects for a snapshot. The poll also sees this
+ * process's own commits, such as an applied write-back. A failed read or
+ * broadcast is retried on the next tick from the last event sent. Returns a
+ * stop function.
  */
 export function broadcastLogEvents(
   log: EncounterLog,
@@ -117,11 +124,11 @@ export function broadcastLogEvents(
           target.broadcast(options.snapshot());
           break;
         }
-        const { seq, event } = entry;
+        const { seq, encounterId, event } = entry;
         target.broadcast({
           v: PROTOCOL_VERSION,
           type: "encounter-event",
-          payload: { ...event, seq },
+          payload: { ...event, seq, encounterId },
         });
         lastSent = seq;
       }

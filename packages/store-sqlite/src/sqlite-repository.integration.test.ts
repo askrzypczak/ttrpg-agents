@@ -43,6 +43,20 @@ describe("getOrCreateActiveEncounter", () => {
     });
   });
 
+  it("getActiveEncounter returns undefined on an empty store and the active encounter once one exists, without creating one", () => {
+    const count = () =>
+      db.prepare("SELECT COUNT(*) AS c FROM encounters").get() as {
+        c: number;
+      };
+
+    expect(repo.getActiveEncounter()).toBeUndefined();
+    expect(count()).toEqual({ c: 0 });
+
+    const created = repo.getOrCreateActiveEncounter();
+    expect(repo.getActiveEncounter()).toEqual(created);
+    expect(count()).toEqual({ c: 1 });
+  });
+
   it("allows only one active encounter at the database level", () => {
     repo.getOrCreateActiveEncounter();
     expect(() =>

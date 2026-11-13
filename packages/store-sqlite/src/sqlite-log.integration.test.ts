@@ -205,6 +205,55 @@ const mutations: MutationCase[] = [
     },
   },
   {
+    name: "setSpawnPositions",
+    run: (o) => {
+      repo.setSpawnPositions(
+        [{ id: first.id, spawnPosition: { x: 3, y: 4 } }],
+        o,
+      );
+      return [
+        {
+          type: "position-changed",
+          id: first.id,
+          spawnPosition: { x: 3, y: 4 },
+          origin: o,
+        },
+      ];
+    },
+  },
+  {
+    name: "changeMonsters",
+    run: (o) => {
+      const change = {
+        id: first.id,
+        monsterKey: "orc",
+        displayName: "Orc 1",
+        maxHp: 15,
+        currentHp: 15,
+        armorClass: 13,
+        initiative: 9,
+        footprint: 1,
+      };
+      repo.changeMonsters([change], o);
+      return [{ type: "monster-changed", ...change, origin: o }];
+    },
+  },
+  {
+    name: "restoreInstances",
+    run: (o) => {
+      repo.removeInstances([second.id], o);
+      const instances = repo.restoreInstances(
+        [second.id],
+        (instance) => instance.displayName,
+        o,
+      );
+      return [
+        { type: "removed", id: second.id, origin: o },
+        { type: "added", instances, origin: o },
+      ];
+    },
+  },
+  {
     name: "clearEncounter",
     run: (o) => {
       repo.clearEncounter(o);
@@ -220,6 +269,40 @@ describe("SqliteEncounterLog", () => {
       const expected = run({ source: "table", commandId: `cmd-${name}` });
       expect(eventsAfter(before)).toEqual(expected);
     });
+  });
+
+  describe("each mutation logs its event with the id of the encounter it changed", () => {
+    it.each(mutations)("$name", ({ name, run }) => {
+      const encounterId = repo.getOrCreateActiveEncounter().id;
+      const before = log.latestSeq();
+      const expected = run(origin(`cmd-${name}`));
+      expect(log.eventsSince(before)).toEqual(
+        expected.map((event) => ({
+          seq: expect.any(Number),
+          encounterId,
+          event,
+        })),
+      );
+    });
+  });
+
+  it("a clear of a store with no encounter creates the active encounter and logs its event with that id", () => {
+    const emptyDb = openDatabase(":memory:");
+    const emptyRepo = new SqliteEncounterRepository(emptyDb);
+    const emptyLog = new SqliteEncounterLog(emptyDb);
+    const o = origin("clear-empty");
+
+    emptyRepo.clearEncounter(o);
+
+    const encounter = emptyRepo.getActiveEncounter();
+    expect(encounter).toBeDefined();
+    expect(emptyLog.eventsSince(0)).toEqual([
+      {
+        seq: expect.any(Number),
+        encounterId: encounter!.id,
+        event: { type: "cleared", origin: o },
+      },
+    ]);
   });
 
   it("removing several instances records one removed event per id, in the order given", () => {
@@ -292,12 +375,14 @@ describe("SqliteEncounterLog", () => {
         raw,
       );
       const o = origin("after-bad-row");
+      const encounterId = repo.getOrCreateActiveEncounter().id;
       repo.setHp(first.id, 1, o);
 
       expect(log.eventsSince(before)).toEqual([
         { seq: before + 1, error: expect.stringMatching(/./) },
         {
           seq: before + 2,
+          encounterId,
           event: expect.objectContaining({ type: "hp-changed", origin: o }),
         },
       ]);
