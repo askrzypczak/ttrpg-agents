@@ -17,6 +17,7 @@ import {
   removeRooms,
   mergeInitiative,
   resetMaxHp,
+  resolveEncounter,
   resolveTargets,
   restoreEncounter,
   restoreMonsters,
@@ -129,10 +130,17 @@ function defineTool<S extends z.ZodRawShape>(def: {
         };
         return minted;
       };
+      // The call's encounter is resolved on the first access of `repo` and
+      // kept for the rest of the call, so a tool that never reads it creates
+      // none and a switch of the current encounter mid-call does not move it.
+      let repo: EncounterRepository | undefined;
       const callCtx: ToolCallContext = {
         ...ctx,
         get repo(): EncounterRepository {
-          throw new Error("not implemented");
+          repo ??= ctx.encounters.repositoryFor(
+            resolveEncounter(ctx.encounters).id,
+          );
+          return repo;
         },
       };
       try {
