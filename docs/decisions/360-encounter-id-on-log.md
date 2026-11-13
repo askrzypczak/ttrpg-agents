@@ -24,7 +24,7 @@ Issue: [#360](https://github.com/askrzypczak/ttrpg-agents/issues/360). Part of E
   - Log nothing for an empty clear: changes 282.2 (a clear that finds no live instance still writes the change log).
 - Where: `record` in `packages/store-sqlite/src/sqlite-repository.ts`.
 - Revisit if: #361's scoped repository lands (it carries its own encounter id).
-- Status: active
+- Status: superseded by 361.4
 
 ## 360.3 The snapshot reads the active encounter through a new engine interface `ActiveEncounterReader`
 
@@ -36,7 +36,7 @@ Issue: [#360](https://github.com/askrzypczak/ttrpg-agents/issues/360). Part of E
   - (C) A closure wired in `cli.ts`: no engine change, but the bridge would read the store outside the engine's ports.
 - Where: `packages/engine/src/encounter/repository.ts` and `encounter/index.ts`; `getActiveEncounter` in `packages/store-sqlite/src/sqlite-repository.ts`; `snapshotMessage` in `packages/bridge/src/encounter-bridge.ts`.
 - Revisit if: #361's directory port absorbs, extends or replaces the interface (its plan says which).
-- Status: active
+- Status: superseded by 361.3
 
 ## 360.4 Both wire fields are required and nullable, with no `PROTOCOL_VERSION` bump
 

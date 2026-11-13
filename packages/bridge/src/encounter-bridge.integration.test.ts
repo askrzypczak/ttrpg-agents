@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  type ActiveEncounterReader,
+  resolveEncounter,
   type ChangeOrigin,
+  type EncounterDirectory,
   type EncounterLog,
   type EncounterRepository,
   type LoggedEvent,
@@ -9,6 +10,7 @@ import {
   type UnreadableLogEntry,
 } from "@ttrpg-agents/engine";
 import {
+  SqliteEncounterDirectory,
   SqliteEncounterLog,
   SqliteEncounterRepository,
   openDatabase,
@@ -16,6 +18,7 @@ import {
 import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   broadcastLogEvents,
+  editInstance,
   removeInstance,
   snapshotMessage,
 } from "./encounter-bridge.js";
@@ -28,8 +31,15 @@ const noArt: TokenArtRepository = {
 
 const origin: ChangeOrigin = { source: "table", commandId: "test" };
 
-function setup(): SqliteEncounterRepository {
-  return new SqliteEncounterRepository(openDatabase(":memory:"));
+/** A store with one current encounter: its directory and the encounter's repository. */
+function setup(store = openDatabase(":memory:")) {
+  const directory = new SqliteEncounterDirectory(store);
+  const encounterId = resolveEncounter(directory).id;
+  const repo: SqliteEncounterRepository = new SqliteEncounterRepository(
+    store,
+    encounterId,
+  );
+  return { directory, encounterId, repo };
 }
 
 /** A log that serves whatever is in `events`; `calls` records its reads. */
@@ -53,12 +63,11 @@ function stubLog(events: (LoggedEvent | UnreadableLogEntry)[] = []) {
 
 describe("snapshotMessage", () => {
   it("contains the current instances", () => {
-    const repo = setup();
+    const { directory, encounterId, repo } = setup();
     const created = repo.addInstances(
       () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
       origin,
     );
-    const encounterId = repo.getOrCreateActiveEncounter().id;
     const { log } = stubLog([
       {
         seq: 1,
@@ -67,7 +76,7 @@ describe("snapshotMessage", () => {
       },
       { seq: 2, encounterId, event: { type: "cleared", origin } },
     ]);
-    expect(snapshotMessage(repo, noArt, log)).toEqual({
+    expect(snapshotMessage(directory, noArt, log)).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: { instances: created, seq: 2, encounterId },
@@ -81,18 +90,23 @@ describe("snapshotMessage", () => {
     const repoStub: Pick<
       EncounterRepository,
       "listInstances" | "listRestoreSeqs"
-    > &
-      ActiveEncounterReader = {
+    > = {
       listInstances: () => (calls.push("listInstances"), []),
-      getActiveEncounter: () => (
-        calls.push("getActiveEncounter"),
-        { id: "e1", createdAt: 0 }
-      ),
       listRestoreSeqs: () => (calls.push("listRestoreSeqs"), {}),
+    };
+    const directoryStub: Pick<
+      EncounterDirectory,
+      "getCurrentEncounter" | "repositoryFor"
+    > = {
+      getCurrentEncounter: () => (
+        calls.push("getCurrentEncounter"),
+        { id: "e1", name: "Encounter 1", createdAt: 0 }
+      ),
+      repositoryFor: () => repoStub as EncounterRepository,
     };
 
     const message = snapshotMessage(
-      repoStub as EncounterRepository & ActiveEncounterReader,
+      directoryStub as EncounterDirectory,
       noArt,
       log,
     );
@@ -104,15 +118,15 @@ describe("snapshotMessage", () => {
     });
     expect(calls).toEqual([
       "latestSeq",
+      "getCurrentEncounter",
       "listInstances",
-      "getActiveEncounter",
       "listRestoreSeqs",
     ]);
   });
 
   it("snapshotMessage carries the restore seq of each restored instance and leaves the field out when none was restored", () => {
     const db = openDatabase(":memory:");
-    const repo = new SqliteEncounterRepository(db);
+    const { directory, encounterId, repo } = setup(db);
     const log = new SqliteEncounterLog(db);
     const [, second, third] = repo.addInstances(
       () => [
@@ -123,9 +137,7 @@ describe("snapshotMessage", () => {
       origin,
     );
 
-    const encounterId = repo.getOrCreateActiveEncounter().id;
-
-    expect(snapshotMessage(repo, noArt, log)).toStrictEqual({
+    expect(snapshotMessage(directory, noArt, log)).toStrictEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: {
@@ -141,7 +153,7 @@ describe("snapshotMessage", () => {
     repo.restoreInstances([third!.id], (i) => i.displayName, origin);
     const thirdRestore = log.latestSeq();
 
-    expect(snapshotMessage(repo, noArt, log)).toEqual({
+    expect(snapshotMessage(directory, noArt, log)).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: {
@@ -158,17 +170,16 @@ describe("snapshotMessage", () => {
 });
 
 describe("snapshotMessage encounter id", () => {
-  it("snapshotMessage carries the active encounter's id", () => {
+  it("snapshotMessage carries the current encounter's id", () => {
     const db = openDatabase(":memory:");
-    const repo = new SqliteEncounterRepository(db);
+    const { directory, encounterId, repo } = setup(db);
     const log = new SqliteEncounterLog(db);
     repo.addInstances(
       () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
       origin,
     );
-    const encounterId = repo.getOrCreateActiveEncounter().id;
 
-    expect(snapshotMessage(repo, noArt, log)).toMatchObject({
+    expect(snapshotMessage(directory, noArt, log)).toMatchObject({
       type: "encounter-snapshot",
       payload: { encounterId },
     });
@@ -176,10 +187,10 @@ describe("snapshotMessage encounter id", () => {
 
   it("snapshotMessage carries a null encounterId on a store with no encounter, and creates none", () => {
     const db = openDatabase(":memory:");
-    const repo = new SqliteEncounterRepository(db);
+    const directory = new SqliteEncounterDirectory(db);
     const log = new SqliteEncounterLog(db);
 
-    const message = snapshotMessage(repo, noArt, log);
+    const message = snapshotMessage(directory, noArt, log);
 
     expect(message).toMatchObject({
       type: "encounter-snapshot",
@@ -202,16 +213,16 @@ describe("removeInstance", () => {
     );
 
   it("removes and returns ok", () => {
-    const repo = setup();
+    const { directory, repo } = setup();
     const [first, second] = addTwo(repo);
-    expect(removeInstance(repo, first!.id, "test")).toEqual({ ok: true });
+    expect(removeInstance(directory, first!.id, "test")).toEqual({ ok: true });
     expect(repo.listInstances().map((i) => i.id)).toEqual([second!.id]);
   });
 
   it("maps UnknownInstanceError to unknown-instance", () => {
-    const repo = setup();
+    const { directory, repo } = setup();
     const before = addTwo(repo);
-    const result = removeInstance(repo, "no-such-instance", "test");
+    const result = removeInstance(directory, "no-such-instance", "test");
     expect(result).toMatchObject({ ok: false, code: "unknown-instance" });
     if (result.ok) return;
     expect(typeof result.message).toBe("string");
@@ -225,9 +236,17 @@ describe("removeInstance", () => {
         throw boom;
       },
     };
+    const encounter = { id: "e1", name: "Encounter 1", createdAt: 0 };
+    const directoryStub: Pick<
+      EncounterDirectory,
+      "findEncounterOfInstance" | "repositoryFor"
+    > = {
+      findEncounterOfInstance: () => encounter,
+      repositoryFor: () => stub as EncounterRepository,
+    };
     let caught: unknown;
     try {
-      removeInstance(stub as EncounterRepository, "i1", "test");
+      removeInstance(directoryStub as EncounterDirectory, "i1", "test");
     } catch (e) {
       caught = e;
     }
@@ -450,5 +469,114 @@ describe("broadcastLogEvents", () => {
 
     expect(calls).toEqual([]);
     expect(sent).toEqual([]);
+  });
+});
+
+describe("table changes and snapshots with several encounters", () => {
+  /** Two named encounters, B current, one shadow in A and one ghoul in B. */
+  function twoEncounters() {
+    const store = openDatabase(":memory:");
+    const directory = new SqliteEncounterDirectory(store);
+    const a = directory.createEncounter("Encounter A");
+    const b = directory.createEncounter("Encounter B");
+    directory.setCurrentEncounter(b.id);
+    const repoA = directory.repositoryFor(a.id);
+    const repoB = directory.repositoryFor(b.id);
+    const [shadow] = repoA.addInstances(
+      () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
+      origin,
+    );
+    const [ghoul] = repoB.addInstances(
+      () => [{ monsterKey: "ghoul", displayName: "Ghoul 1", maxHp: 22 }],
+      origin,
+    );
+    return {
+      store,
+      directory,
+      a,
+      b,
+      repoA,
+      repoB,
+      shadow: shadow!,
+      ghoul: ghoul!,
+    };
+  }
+
+  it("removeInstance removes the instance from the encounter that holds it while another encounter is current", () => {
+    const { directory, b, repoA, repoB, shadow, ghoul } = twoEncounters();
+
+    expect(removeInstance(directory, shadow.id, "remove-1")).toEqual({
+      ok: true,
+    });
+
+    expect(repoA.listInstances()).toEqual([]);
+    expect(repoA.listRemovedInstances()).toEqual([
+      {
+        instance: shadow,
+        removedBy: { source: "table", commandId: "remove-1" },
+        cleared: false,
+      },
+    ]);
+    expect(repoB.listInstances()).toEqual([ghoul]);
+    expect(directory.getCurrentEncounter()).toEqual(b);
+  });
+
+  it("editInstance edits the instance in the encounter that holds it while another encounter is current", () => {
+    const { directory, b, repoA, repoB, shadow, ghoul } = twoEncounters();
+
+    expect(
+      editInstance(
+        directory,
+        { instanceId: shadow.id, currentHp: 9, armorClass: 14 },
+        "edit-1",
+      ),
+    ).toEqual({ ok: true });
+
+    expect(repoA.listInstances()).toEqual([
+      { ...shadow, currentHp: 9, armorClass: 14 },
+    ]);
+    expect(repoB.listInstances()).toEqual([ghoul]);
+    expect(directory.getCurrentEncounter()).toEqual(b);
+  });
+
+  it("snapshotMessage lists only the current encounter's instances and restore seqs, and carries its id", () => {
+    const { store, directory, a, b, repoA, repoB, ghoul } = twoEncounters();
+    const keepName = (i: { displayName: string }) => i.displayName;
+    const log = new SqliteEncounterLog(store);
+    const [, ghoul2] = repoB.addInstances(
+      () => [
+        { monsterKey: "ghoul", displayName: "Ghoul 2", maxHp: 22 },
+        { monsterKey: "ghoul", displayName: "Ghoul 3", maxHp: 22 },
+      ],
+      origin,
+    );
+    repoB.removeInstances([ghoul2!.id], origin);
+    const [restoredB] = repoB.restoreInstances([ghoul2!.id], keepName, origin);
+    const restoreSeqB = log.latestSeq();
+    const [shadow2] = repoA.addInstances(
+      () => [{ monsterKey: "shadow", displayName: "Shadow 2", maxHp: 16 }],
+      origin,
+    );
+    repoA.removeInstances([shadow2!.id], origin);
+    repoA.restoreInstances([shadow2!.id], keepName, origin);
+
+    const snapshot = snapshotMessage(directory, noArt, log);
+
+    expect(snapshot).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "encounter-snapshot",
+      payload: {
+        instances: repoB.listInstances(),
+        restoreSeqs: { [restoredB!.id]: restoreSeqB },
+        seq: log.latestSeq(),
+        encounterId: b.id,
+      },
+    });
+    const listed = (
+      snapshot.payload as { instances: { id: string; encounterId: string }[] }
+    ).instances;
+    expect(listed.map((i) => i.encounterId)).toEqual([b.id, b.id, b.id]);
+    expect(listed.map((i) => i.id)).toContain(ghoul.id);
+    expect(directory.listEncounters()).toEqual([a, b]);
   });
 });

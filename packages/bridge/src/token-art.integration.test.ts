@@ -4,8 +4,13 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import type { TokenArt, ChangeOrigin } from "@ttrpg-agents/engine";
 import {
+  resolveEncounter,
+  type TokenArt,
+  type ChangeOrigin,
+} from "@ttrpg-agents/engine";
+import {
+  SqliteEncounterDirectory,
   SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
@@ -37,6 +42,7 @@ const shadowArt: TokenArt = {
 let dir: string;
 let dbPath: string;
 let db: DatabaseSync;
+let encounters: SqliteEncounterDirectory;
 let repo: SqliteEncounterRepository;
 let artRepo: SqliteTokenArtRepository;
 let servers: BridgeServer[];
@@ -46,13 +52,12 @@ let sockets: WebSocket[];
 async function startServer(
   options: Partial<BridgeServerOptions> = {},
 ): Promise<BridgeServer> {
-  const encounters = repo;
+  const directory = encounters;
   const art = artRepo;
   const server = await startBridgeServer({
     port: 0,
     staticDir: dir,
-    snapshot: () =>
-      snapshotMessage(encounters, art, new SqliteEncounterLog(db)),
+    snapshot: () => snapshotMessage(directory, art, new SqliteEncounterLog(db)),
     setTokenArt: (monsterKey, value) => art.setTokenArt(monsterKey, value),
     ...options,
   });
@@ -62,7 +67,8 @@ async function startServer(
 
 function openStore(): void {
   db = openDatabase(dbPath);
-  repo = new SqliteEncounterRepository(db);
+  encounters = new SqliteEncounterDirectory(db);
+  repo = new SqliteEncounterRepository(db, resolveEncounter(encounters).id);
   artRepo = new SqliteTokenArtRepository(db);
 }
 

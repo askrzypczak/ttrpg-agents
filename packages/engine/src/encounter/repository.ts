@@ -1,11 +1,7 @@
 import type { Point } from "../map/types.js";
 import type { EncounterEvent } from "./events.js";
 import type { ChangeOrigin } from "./origin.js";
-import type {
-  Encounter,
-  MonsterInstance,
-  NewMonsterInstance,
-} from "./types.js";
+import type { MonsterInstance, NewMonsterInstance } from "./types.js";
 
 /** An instance as read inside one HP write: before and after the change. */
 export interface HpChange {
@@ -25,7 +21,7 @@ export interface MonsterChange {
   footprint: number;
 }
 
-/** Builds the items to insert from the display names already in the active encounter. */
+/** Builds the items to insert from the display names already in its encounter. */
 export type InstanceBuilder = (existingNames: string[]) => NewMonsterInstance[];
 
 /** A removed instance kept for restoring, with the change that removed it. */
@@ -57,21 +53,16 @@ export interface UndoRecord {
   events: EncounterEvent[];
 }
 
-/** Reads the active encounter without creating one. */
-export interface ActiveEncounterReader {
-  /** The active encounter, or undefined when the store has none; never creates one. */
-  getActiveEncounter(): Encounter | undefined;
-}
-
 /**
+ * The instances, removals and undo records of one encounter, its encounter:
+ * every method reads and changes that encounter only.
+ *
  * Every mutation with an `mcp` origin stores, in its transaction, each written
  * instance's state before the command's first write to it; `clearEncounter`
- * stores none and, when it clears at least one instance, deletes the active
+ * stores none and, when it clears at least one instance, deletes its
  * encounter's undo records.
  */
 export interface EncounterRepository {
-  /** Returns the single active encounter, creating it if none exists. */
-  getOrCreateActiveEncounter(): Encounter;
   /**
    * In one write transaction: reads the existing display names, calls `build`
    * with them and inserts the items it returns (all or nothing; rolls back if
@@ -84,23 +75,23 @@ export interface EncounterRepository {
   applyHealing(id: string, amount: number, origin: ChangeOrigin): HpChange;
   /**
    * Removes all given instances in one transaction and returns them. Throws
-   * UnknownInstanceError, removing nothing, if any id is not in the active encounter.
+   * UnknownInstanceError, removing nothing, if any id is not in its encounter.
    */
   removeInstances(
     ids: readonly string[],
     origin: ChangeOrigin,
   ): MonsterInstance[];
   /**
-   * Removed instances of the active encounter not restored since, newest
+   * Removed instances of its encounter not restored since, newest
    * removal first, a clear's set in creation order; kept until the next clear
    * that clears at least one instance.
    */
   listRemovedInstances(): RemovedInstance[];
   /**
-   * In one transaction puts removed instances of the active encounter back with the state they had when removed,
+   * In one transaction puts removed instances of its encounter back with the state they had when removed,
    * each named by `name` from the names in use (the encounter's plus those restored before it in this call),
    * records one `added` event for them and returns them in the order given. Throws UnknownInstanceError for an id
-   * that is not a removed instance of the active encounter, InvalidNameError for a picked name that is empty or in
+   * that is not a removed instance of its encounter, InvalidNameError for a picked name that is empty or in
    * use; nothing changes on a throw.
    */
   restoreInstances(
@@ -109,9 +100,9 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance[];
   /**
-   * Renames an instance of the active encounter in one transaction and returns
+   * Renames an instance of its encounter in one transaction and returns
    * it updated; the name is trimmed. Throws UnknownInstanceError for an id not
-   * in the active encounter, InvalidNameError for an empty name or one another
+   * in its encounter, InvalidNameError for an empty name or one another
    * instance has; nothing changes on a throw.
    */
   renameInstance(
@@ -120,9 +111,9 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance;
   /**
-   * Sets the absolute initiative of an instance of the active encounter in one
+   * Sets the absolute initiative of an instance of its encounter in one
    * transaction and returns it updated; `null` clears it. Throws
-   * InvalidInitiativeError for a non-integer number, UnknownInstanceError for an id not in the active
+   * InvalidInitiativeError for a non-integer number, UnknownInstanceError for an id not in its
    * encounter; nothing changes on a throw.
    */
   setInitiative(
@@ -131,9 +122,9 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance;
   /**
-   * Sets the initiative group of an instance of the active encounter in one
+   * Sets the initiative group of an instance of its encounter in one
    * transaction and returns it updated. Throws UnknownInstanceError for an id
-   * not in the active encounter; nothing changes on a throw.
+   * not in its encounter; nothing changes on a throw.
    */
   setGroupId(
     id: string,
@@ -141,24 +132,24 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance;
   /**
-   * Sets the absolute current HP of an instance of the active encounter in one
+   * Sets the absolute current HP of an instance of its encounter in one
    * transaction, clamped to 0..maxHp. Throws InvalidAmountError for a
-   * non-integer value, UnknownInstanceError for an id not in the active
+   * non-integer value, UnknownInstanceError for an id not in its
    * encounter; nothing changes on a throw.
    */
   setHp(id: string, hp: number, origin: ChangeOrigin): HpChange;
   /**
-   * Sets the max HP of an instance of the active encounter in one transaction
+   * Sets the max HP of an instance of its encounter in one transaction
    * (at least 1), lowering current HP if it is above the new max. Throws
    * InvalidAmountError for a non-integer value, UnknownInstanceError for an id
-   * not in the active encounter; nothing changes on a throw.
+   * not in its encounter; nothing changes on a throw.
    */
   setMaxHp(id: string, maxHp: number, origin: ChangeOrigin): HpChange;
   /**
-   * Sets the armor class of an instance of the active encounter in one
+   * Sets the armor class of an instance of its encounter in one
    * transaction (at least 0) and returns it updated. Throws
    * InvalidArmorClassError for a non-integer value, UnknownInstanceError for
-   * an id not in the active encounter; nothing changes on a throw.
+   * an id not in its encounter; nothing changes on a throw.
    */
   setArmorClass(
     id: string,
@@ -166,9 +157,9 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance;
   /**
-   * Sets whether players see the stats of an instance of the active encounter
-   * and returns it updated. Throws UnknownInstanceError for an id not in the
-   * active encounter; nothing changes on a throw.
+   * Sets whether players see the stats of an instance of its encounter
+   * and returns it updated. Throws UnknownInstanceError for an id not in its
+   * encounter; nothing changes on a throw.
    */
   setStatsVisible(
     id: string,
@@ -176,12 +167,12 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance;
   /**
-   * Sets the spawn position of each given instance of the active encounter in
+   * Sets the spawn position of each given instance of its encounter in
    * one transaction, appending one `position-changed` event per entry, and
    * returns the instances updated, in input order. The only way an existing
    * instance's spawn position changes (the move tool and undo); null clears
    * it. Throws
-   * UnknownInstanceError, changing nothing, if any id is not in the active
+   * UnknownInstanceError, changing nothing, if any id is not in its
    * encounter.
    */
   setSpawnPositions(
@@ -189,13 +180,13 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance[];
   /**
-   * Changes the monster type of each given live instance of the active
+   * Changes the monster type of each given live instance of its
    * encounter in one transaction: writes the monster key, display name, max
    * HP, current HP, armor class, initiative and footprint as given, keeping
    * id, group, stats visibility, spawn position and creation time; appends one
    * `monster-changed` event per entry and returns the instances updated, in
    * input order. Throws UnknownInstanceError for an id that is not a live
-   * instance of the active encounter, InvalidNameError for a name that is
+   * instance of its encounter, InvalidNameError for a name that is
    * empty or used by another instance (or given earlier in the call); nothing
    * changes on a throw.
    */
@@ -204,16 +195,16 @@ export interface EncounterRepository {
     origin: ChangeOrigin,
   ): MonsterInstance[];
   /**
-   * Marks every live instance of the active encounter removed by this clear
+   * Marks every live instance of its encounter removed by this clear
    * and returns them in creation order. When it clears at least one, the
    * instances removed before (an earlier clear's included) are deleted; with
    * no live instance it changes nothing but the change log.
    */
   clearEncounter(origin: ChangeOrigin): MonsterInstance[];
-  /** Instances of the active encounter, ordered by creation. */
+  /** Instances of its encounter, ordered by creation. */
   listInstances(): MonsterInstance[];
   /**
-   * For each live instance of the active encounter that a restore put back,
+   * For each live instance of its encounter that a restore put back,
    * the change-log seq of the `added` event of its last restore. An instance
    * never restored (or restored before migration 15) is left out.
    */
@@ -229,7 +220,7 @@ export interface EncounterRepository {
    * throw rolls them all back and is rethrown.
    */
   transaction<T>(fn: () => T): T;
-  /** The active encounter's newest undo record. */
+  /** Its encounter's newest undo record. */
   latestUndoRecord(): UndoRecord | undefined;
   /** Deletes those commands' undo records; unknown ids are ignored. */
   forgetCommands(commandIds: readonly string[]): void;

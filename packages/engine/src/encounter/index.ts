@@ -5,7 +5,6 @@ export type {
 } from "./types.js";
 export { monsterInstanceSchema } from "./types.js";
 export type {
-  ActiveEncounterReader,
   EncounterRepository,
   HpChange,
   InstanceBuilder,
@@ -15,6 +14,7 @@ export type {
   UndoRecord,
 } from "./repository.js";
 export * from "./add-monsters.js";
+export * from "./directory.js";
 export * from "./change-monster.js";
 export * from "./edit.js";
 export * from "./events.js";

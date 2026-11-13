@@ -1,12 +1,14 @@
-import type {
-  ChangeOrigin,
-  EncounterRepository,
-  NewMonsterInstance,
-  Rng,
+import {
+  type ChangeOrigin,
+  type EncounterDirectory,
+  type EncounterRepository,
+  type NewMonsterInstance,
+  type Rng,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -34,7 +36,6 @@ function recordingRepo(
     writes.push({ method, origin });
   };
   return {
-    getOrCreateActiveEncounter: () => inner.getOrCreateActiveEncounter(),
     listInstances: () => inner.listInstances(),
     addInstances: (build, origin) => (
       record("addInstances", origin),
@@ -108,6 +109,22 @@ function recordingRepo(
   };
 }
 
+/** Delegates to `inner`, handing out each repository wrapped by `recordingRepo`. */
+function recordingDirectory(
+  inner: EncounterDirectory,
+  writes: Write[],
+): EncounterDirectory {
+  return {
+    listEncounters: () => inner.listEncounters(),
+    createEncounter: (name) => inner.createEncounter(name),
+    getCurrentEncounter: () => inner.getCurrentEncounter(),
+    setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
+    findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    repositoryFor: (id) => recordingRepo(inner.repositoryFor(id), writes),
+    transaction: (fn) => inner.transaction(fn),
+  };
+}
+
 let ctx: ToolContext;
 let writes: Write[];
 let issuedCommandIds: string[];
@@ -115,7 +132,7 @@ let issuedCommandIds: string[];
 beforeEach(() => {
   writes = [];
   issuedCommandIds = [];
-  const inner = new SqliteEncounterRepository(openDatabase(":memory:"));
+  const inner = new SqliteEncounterDirectory(openDatabase(":memory:"));
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("table not stubbed")),
@@ -123,7 +140,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: recordingRepo(inner, writes),
+    encounters: recordingDirectory(inner, writes),
     maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng,
@@ -153,8 +170,15 @@ function seed(...names: string[]): void {
     maxHp: 20,
     initiative: 10,
   }));
-  ctx.repo.addInstances(() => items, seedOrigin);
+  repoOf(ctx).addInstances(() => items, seedOrigin);
   writes.length = 0;
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
 }
 
 describe("tool write origin", () => {
@@ -328,8 +352,8 @@ describe("tool write origin", () => {
     ];
     for (const [name, args, methods] of cases) {
       if (name === "merge_initiative") {
-        const [, second] = ctx.repo.listInstances();
-        ctx.repo.setInitiative(second?.id ?? "", 1, seedOrigin);
+        const [, second] = repoOf(ctx).listInstances();
+        repoOf(ctx).setInitiative(second?.id ?? "", 1, seedOrigin);
       }
       writes.length = 0;
       issuedCommandIds.length = 0;
@@ -381,8 +405,8 @@ describe("tool write origin", () => {
 
   it("every mutating tool passes its own name as the origin's command", async () => {
     seed("Shadow 1", "Shadow 2", "Shadow 3");
-    const [, , third] = ctx.repo.listInstances();
-    ctx.repo.setInitiative(third?.id ?? "", 1, seedOrigin);
+    const [, , third] = repoOf(ctx).listInstances();
+    repoOf(ctx).setInitiative(third?.id ?? "", 1, seedOrigin);
 
     const calls: [string, unknown][] = [
       ["add_monsters", { groups: [{ monster: SHADOW, count: 1 }] }],

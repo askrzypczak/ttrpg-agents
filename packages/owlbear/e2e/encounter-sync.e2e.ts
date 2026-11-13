@@ -3,7 +3,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import type { SceneItem } from "../src/scene-model.js";
-import { SHADOW_IDS } from "./db.js";
+import { E2E_ENCOUNTER_ID, SHADOW_IDS } from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { controlBridgeSocket, readItems } from "./helpers.js";
 import type { ChangeOrigin } from "@ttrpg-agents/engine";
@@ -155,7 +155,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     const before = await readItems(page);
 
     const db = openDatabase(bridge.dbPath);
-    const repo = new SqliteEncounterRepository(db);
+    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID);
     let renamed = false;
     try {
       // The bridge's change-log poll pushes an event after this commit.
@@ -242,7 +242,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     );
 
     const db = openDatabase(bridge.dbPath);
-    const repo = new SqliteEncounterRepository(db);
+    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID);
     let damaged = false;
     let renamed = false;
     try {
@@ -299,7 +299,11 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     const db = openDatabase(bridge.dbPath);
     try {
       // Nobody is listening: the change reaches the store, not the table.
-      new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 7, origin);
+      new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID).setHp(
+        SHADOW_IDS[0]!,
+        7,
+        origin,
+      );
       await page.waitForTimeout(500);
       expect(await health()).toBe(16);
 
@@ -322,7 +326,11 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       await expect(panel.locator("#sync-error")).toHaveText("");
     } finally {
       try {
-        new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 16, origin);
+        new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID).setHp(
+          SHADOW_IDS[0]!,
+          16,
+          origin,
+        );
       } finally {
         db.close();
       }

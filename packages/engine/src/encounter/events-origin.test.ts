@@ -126,7 +126,6 @@ describe("encounterEventSchema origin", () => {
 
 type MutationName = Exclude<
   keyof EncounterRepository,
-  | "getOrCreateActiveEncounter"
   | "listInstances"
   | "listRemovedInstances"
   | "listRestoreSeqs"

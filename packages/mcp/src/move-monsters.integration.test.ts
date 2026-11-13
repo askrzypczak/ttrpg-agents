@@ -9,10 +9,12 @@ import {
   type TablePort,
   type TableSceneMap,
   type TableToken,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -66,7 +68,7 @@ function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
       sceneTokens,
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     maps,
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
@@ -120,11 +122,15 @@ async function seed(
   expect(added.isError).toBeFalsy();
   const saved = await call(ctx, "set_rooms", { rooms });
   expect(saved.isError).toBeFalsy();
-  return ctx.repo.listInstances().map((i) => i.id);
+  return repoOf(ctx)
+    .listInstances()
+    .map((i) => i.id);
 }
 
 function spawnOf(ctx: ToolContext, id: string): unknown {
-  return ctx.repo.listInstances().find((i) => i.id === id)?.spawnPosition;
+  return repoOf(ctx)
+    .listInstances()
+    .find((i) => i.id === id)?.spawnPosition;
 }
 
 type Placement = {
@@ -133,6 +139,13 @@ type Placement = {
   room: string;
   cell: string | null;
 };
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
+}
 
 describe("move_monsters", () => {
   it("move_monsters by id reports each monster's new cell in the room", async () => {
@@ -206,7 +219,7 @@ describe("move_monsters", () => {
     expect(text(unknown).endsWith(". Nothing was moved.")).toBe(true);
     expect(spawnOf(ctx, first ?? "")).toBeNull();
 
-    ctx.repo.addInstances(
+    repoOf(ctx).addInstances(
       () => [
         { monsterKey: GOBLIN, displayName: "Twin", maxHp: 10 },
         { monsterKey: GOBLIN, displayName: "Twin", maxHp: 10 },
@@ -220,11 +233,11 @@ describe("move_monsters", () => {
     expect(ambiguous.isError).toBe(true);
     expect(text(ambiguous)).toContain("Ambiguous");
     expect(text(ambiguous).endsWith(". Nothing was moved.")).toBe(true);
-    expect(ctx.repo.listInstances().map((i) => i.spawnPosition)).toEqual([
-      null,
-      null,
-      null,
-    ]);
+    expect(
+      repoOf(ctx)
+        .listInstances()
+        .map((i) => i.spawnPosition),
+    ).toEqual([null, null, null]);
   });
 
   it("move_monsters lists the monsters left without a free cell and says they stay where they are", async () => {

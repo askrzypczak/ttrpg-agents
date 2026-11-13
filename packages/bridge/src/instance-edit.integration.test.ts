@@ -4,8 +4,13 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import type { MonsterInstance, ChangeOrigin } from "@ttrpg-agents/engine";
 import {
+  resolveEncounter,
+  type MonsterInstance,
+  type ChangeOrigin,
+} from "@ttrpg-agents/engine";
+import {
+  SqliteEncounterDirectory,
   SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
@@ -29,6 +34,7 @@ const origin: ChangeOrigin = { source: "table", commandId: "test" };
 
 let dir: string;
 let db: DatabaseSync;
+let encounters: SqliteEncounterDirectory;
 let repo: SqliteEncounterRepository;
 let shadows: MonsterInstance[];
 let servers: BridgeServer[];
@@ -40,12 +46,14 @@ async function startServer(): Promise<BridgeServer> {
     staticDir: dir,
     snapshot: () =>
       snapshotMessage(
-        repo,
+        encounters,
         new SqliteTokenArtRepository(db),
         new SqliteEncounterLog(db),
       ),
-    editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
-    removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
+    editInstance: (edit, commandId) =>
+      editInstance(encounters, edit, commandId),
+    removeInstance: (id, commandId) =>
+      removeInstance(encounters, id, commandId),
     setTokenArt: (monsterKey, art) =>
       new SqliteTokenArtRepository(db).setTokenArt(monsterKey, art),
   });
@@ -56,7 +64,8 @@ async function startServer(): Promise<BridgeServer> {
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "instance-edit-"));
   db = openDatabase(join(dir, "test.db"));
-  repo = new SqliteEncounterRepository(db);
+  encounters = new SqliteEncounterDirectory(db);
+  repo = new SqliteEncounterRepository(db, resolveEncounter(encounters).id);
   shadows = repo.addInstances(
     () => [
       {

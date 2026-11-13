@@ -17,6 +17,7 @@ import {
   removeRooms,
   mergeInitiative,
   resetMaxHp,
+  resolveEncounter,
   resolveTargets,
   restoreEncounter,
   restoreMonsters,
@@ -28,6 +29,7 @@ import {
   undoLastCommand,
   useMap,
   type ChangeOrigin,
+  type EncounterRepository,
   type MonsterInstance,
   type PreviewInstance,
   type PreviewPlacement,
@@ -39,7 +41,7 @@ import {
   type UndoNext,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
-import type { ToolContext } from "./context.js";
+import type { ToolCallContext, ToolContext } from "./context.js";
 import { formatSetupStatus } from "./setup-status.js";
 import { formatStatblock, signed } from "./statblock.js";
 
@@ -94,7 +96,7 @@ function defineTool<S extends z.ZodRawShape>(def: {
    * command id minted on first use, and the tool's name as its command.
    */
   run(
-    ctx: ToolContext,
+    ctx: ToolCallContext,
     args: z.infer<z.ZodObject<S>>,
     origin: () => ChangeOrigin,
   ): ToolResult | Promise<ToolResult>;
@@ -128,8 +130,21 @@ function defineTool<S extends z.ZodRawShape>(def: {
         };
         return minted;
       };
+      // The call's encounter is resolved on the first access of `repo` and
+      // kept for the rest of the call, so a tool that never reads it creates
+      // none and a switch of the current encounter mid-call does not move it.
+      let repo: EncounterRepository | undefined;
+      const callCtx: ToolCallContext = {
+        ...ctx,
+        get repo(): EncounterRepository {
+          repo ??= ctx.encounters.repositoryFor(
+            resolveEncounter(ctx.encounters).id,
+          );
+          return repo;
+        },
+      };
       try {
-        const result = def.run(ctx, parsed.data, origin);
+        const result = def.run(callCtx, parsed.data, origin);
         return result instanceof Promise
           ? result.catch(domainErrorToResult)
           : result;

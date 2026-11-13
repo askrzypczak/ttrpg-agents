@@ -1,12 +1,14 @@
-import type {
-  ChangeOrigin,
-  MonsterInstance,
-  NewMonsterInstance,
-  Rng,
+import {
+  type ChangeOrigin,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  type Rng,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -34,7 +36,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
       now: () => tick++,
     }),
     maps: new SqliteMapRepository(openDatabase(":memory:")),
@@ -59,7 +61,7 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, origin);
+  return repoOf(ctx).addInstances(() => items, origin);
 }
 
 function wolf(displayName: string, initiative: number): NewMonsterInstance {
@@ -75,11 +77,13 @@ function names(items: unknown): string[] {
 }
 
 function liveNames(): string[] {
-  return ctx.repo.listInstances().map((i) => i.displayName);
+  return repoOf(ctx)
+    .listInstances()
+    .map((i) => i.displayName);
 }
 
 function restorable(): [string, boolean][] {
-  return ctx.repo
+  return repoOf(ctx)
     .listRemovedInstances()
     .map((r) => [r.instance.displayName, r.cleared]);
 }
@@ -88,6 +92,13 @@ async function clear(): Promise<ToolResult> {
   const r = await call("clear_encounter");
   expect(r.isError).toBeUndefined();
   return r;
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
 }
 
 describe("clear_encounter", () => {
@@ -157,7 +168,7 @@ describe("restore_encounter", () => {
       wolf("Wolf 2", 9),
       goblin("Goblin Warrior 1", 15),
     );
-    ctx.repo.applyDamage(wolf2!.id, 6, origin);
+    repoOf(ctx).applyDamage(wolf2!.id, 6, origin);
     await clear();
     const [addedGoblin] = seed(goblin("Goblin Warrior 1", 3));
 
@@ -196,28 +207,27 @@ describe("restore_encounter", () => {
         renamedFrom: "Goblin Warrior 1",
       },
     ]);
-    expect(ctx.repo.listInstances().map((i) => i.id)).toEqual([
-      wolf1!.id,
-      wolf2!.id,
-      goblin1!.id,
-      addedGoblin!.id,
-    ]);
-    expect(ctx.repo.listRemovedInstances()).toEqual([]);
+    expect(
+      repoOf(ctx)
+        .listInstances()
+        .map((i) => i.id),
+    ).toEqual([wolf1!.id, wolf2!.id, goblin1!.id, addedGoblin!.id]);
+    expect(repoOf(ctx).listRemovedInstances()).toEqual([]);
   });
 
   it("restore_encounter with nothing cleared fails and restores nothing", async () => {
     seed(wolf("Wolf 1", 12), wolf("Wolf 2", 9));
     const removed = await call("remove_monsters", { targets: ["Wolf 2"] });
     expect(removed.isError).toBeUndefined();
-    const live = ctx.repo.listInstances();
-    const removedBefore = ctx.repo.listRemovedInstances();
+    const live = repoOf(ctx).listInstances();
+    const removedBefore = repoOf(ctx).listRemovedInstances();
 
     const r = await call("restore_encounter");
 
     expect(r.isError).toBe(true);
     expect(text(r)).toContain("No cleared monsters to restore");
-    expect(ctx.repo.listInstances()).toEqual(live);
-    expect(ctx.repo.listRemovedInstances()).toEqual(removedBefore);
+    expect(repoOf(ctx).listInstances()).toEqual(live);
+    expect(repoOf(ctx).listRemovedInstances()).toEqual(removedBefore);
   });
 
   it("restore_monsters brings back one monster of the cleared encounter by name", async () => {

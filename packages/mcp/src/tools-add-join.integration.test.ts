@@ -1,7 +1,11 @@
-import type { Rng } from "@ttrpg-agents/engine";
+import {
+  type Rng,
+  resolveEncounter,
+  type EncounterRepository,
+} from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -36,7 +40,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters,
     rng: cycleRng(0, 3, 5, 7),
@@ -59,7 +63,9 @@ function text(r: ToolResult): string {
 }
 
 function stored(name: string) {
-  const found = ctx.repo.listInstances().find((i) => i.displayName === name);
+  const found = repoOf(ctx)
+    .listInstances()
+    .find((i) => i.displayName === name);
   if (!found) throw new Error(`no instance ${name}`);
   return found;
 }
@@ -69,10 +75,17 @@ async function seedShadows(count: number): Promise<void> {
   expect(r.isError).toBeUndefined();
 }
 
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
+}
+
 describe("add_monsters with join", () => {
   it("add_monsters with join adds the monsters to the member's group at its initiative, with no initiative roll in the Rolls lines", async () => {
     await seedShadows(2);
-    ctx.repo.setInitiative(stored("Shadow 1").id, 14, {
+    repoOf(ctx).setInitiative(stored("Shadow 1").id, 14, {
       source: "mcp",
       commandId: "seed",
     });
@@ -124,7 +137,7 @@ describe("add_monsters with join", () => {
 
   it("add_monsters with an unknown join fails with the unknown-group message and stores nothing", async () => {
     await seedShadows(1);
-    const before = ctx.repo.listInstances();
+    const before = repoOf(ctx).listInstances();
 
     const r = await addMonsters({
       groups: [{ monster: SHADOW, count: 1, join: "Shadow 9" }],
@@ -133,6 +146,6 @@ describe("add_monsters with join", () => {
     expect(text(r)).toContain(
       `Group 1 (${SHADOW}): no monster "Shadow 9" in the encounter to join`,
     );
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
   });
 });

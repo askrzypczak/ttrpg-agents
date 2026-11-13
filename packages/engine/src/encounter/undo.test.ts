@@ -70,7 +70,6 @@ function fakeRepo(state: {
     return structuredClone(after);
   };
   const repo: EncounterRepository = {
-    getOrCreateActiveEncounter: unexpected,
     addInstances: unexpected,
     applyDamage: unexpected,
     applyHealing: unexpected,

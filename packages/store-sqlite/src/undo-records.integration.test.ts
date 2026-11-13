@@ -4,8 +4,10 @@ import type {
   MonsterInstance,
   NewMonsterInstance,
 } from "@ttrpg-agents/engine";
+import { resolveEncounter } from "@ttrpg-agents/engine";
 import { beforeEach, describe, expect, it } from "vitest";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const table: ChangeOrigin = { source: "table", commandId: "table-1" };
@@ -21,7 +23,12 @@ let tick: number;
 beforeEach(() => {
   tick = 1000;
   db = openDatabase(":memory:");
-  repo = new SqliteEncounterRepository(db, { now: () => tick++ });
+  const options = { now: () => tick++ };
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(new SqliteEncounterDirectory(db, options)).id,
+    options,
+  );
 });
 
 function item(displayName: string): NewMonsterInstance {
@@ -315,5 +322,111 @@ describe("undo records", () => {
 
     expect(repo.listInstances()).toEqual([a]);
     expect(repo.latestUndoRecord()).toBeUndefined();
+  });
+});
+
+describe("undo records of scoped repositories", () => {
+  /** Two named encounters, B current, a repository scoped to each and one wolf seeded in each. */
+  function twoEncounters() {
+    const store = openDatabase(":memory:");
+    let n = 0;
+    let t = 1000;
+    const options = { newId: () => `sc-${String(++n)}`, now: () => ++t };
+    const directory = new SqliteEncounterDirectory(store, options);
+    const a = directory.createEncounter("Encounter A");
+    const b = directory.createEncounter("Encounter B");
+    directory.setCurrentEncounter(b.id);
+    const repoA = new SqliteEncounterRepository(store, a.id, options);
+    const repoB = new SqliteEncounterRepository(store, b.id, options);
+    const [wolfA] = repoA.addInstances(() => [item("Wolf 1")], table);
+    const [wolfB] = repoB.addInstances(() => [item("Wolf 1")], table);
+    return { store, repoA, repoB, wolfA: wolfA!, wolfB: wolfB! };
+  }
+
+  it("latestUndoRecord, noteCommand and forgetCommands of a scoped repository read and change only that encounter's undo records", () => {
+    const { store, repoA, repoB, wolfA, wolfB } = twoEncounters();
+
+    repoA.applyDamage(wolfA.id, 1, mcp("a-1"));
+    repoB.applyDamage(wolfB.id, 1, mcp("b-1"));
+    expect(repoA.latestUndoRecord()?.commandId).toBe("a-1");
+    expect(repoA.latestUndoRecord()?.instances).toEqual([
+      { instanceId: wolfA.id, before: wolfA },
+    ]);
+    expect(repoB.latestUndoRecord()?.commandId).toBe("b-1");
+
+    repoA.noteCommand(mcp("a-note", "set_rooms"));
+    expect(repoA.latestUndoRecord()?.commandId).toBe("a-note");
+    expect(repoB.latestUndoRecord()?.commandId).toBe("b-1");
+
+    repoB.noteCommand(mcp("b-note", "set_rooms"));
+    expect(repoA.latestUndoRecord()?.commandId).toBe("a-note");
+    expect(repoB.latestUndoRecord()?.commandId).toBe("b-note");
+
+    repoA.forgetCommands(["a-note", "b-note", "b-1"]);
+    expect(repoA.latestUndoRecord()?.commandId).toBe("a-1");
+    expect(repoB.latestUndoRecord()?.commandId).toBe("b-note");
+
+    repoA.forgetCommands(["a-1"]);
+    expect(repoA.latestUndoRecord()).toBeUndefined();
+    expect(repoB.latestUndoRecord()?.commandId).toBe("b-note");
+    store.close();
+  });
+
+  it("an undo record never lists a table event of another encounter", () => {
+    const { store, repoA, repoB, wolfA, wolfB } = twoEncounters();
+
+    repoA.applyDamage(wolfA.id, 2, mcp("a-1", "apply_damage"));
+    repoB.setHp(wolfB.id, 4, table);
+    repoB.removeInstances([wolfB.id], table);
+    repoA.setHp(wolfA.id, 8, table);
+
+    expect(repoA.latestUndoRecord()?.events).toEqual([
+      {
+        type: "hp-changed",
+        id: wolfA.id,
+        currentHp: 9,
+        maxHp: 11,
+        origin: { source: "mcp", commandId: "a-1" },
+      },
+      {
+        type: "hp-changed",
+        id: wolfA.id,
+        currentHp: 8,
+        maxHp: 11,
+        origin: table,
+      },
+    ]);
+    store.close();
+  });
+});
+
+describe("undo records and rows with no encounter", () => {
+  it("an undo record never lists a change-log row with no encounter", () => {
+    const [a] = seed("Wolf 1");
+    repo.applyDamage(a!.id, 2, mcp("c1", "apply_damage"));
+    const orphan = {
+      type: "hp-changed",
+      id: a!.id,
+      currentHp: 1,
+      maxHp: 11,
+      origin: table,
+    };
+    // As a row from before migration 16 or an art event would be stored.
+    db.prepare(
+      "INSERT INTO encounter_events (event, encounter_id) VALUES (?, NULL)",
+    ).run(JSON.stringify(orphan));
+
+    const events = repo.latestUndoRecord()?.events ?? [];
+
+    expect(events).not.toContainEqual(orphan);
+    expect(events).toEqual([
+      {
+        type: "hp-changed",
+        id: a!.id,
+        currentHp: 9,
+        maxHp: 11,
+        origin: { source: "mcp", commandId: "c1" },
+      },
+    ]);
   });
 });

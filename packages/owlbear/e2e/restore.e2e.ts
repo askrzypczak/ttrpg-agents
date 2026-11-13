@@ -6,7 +6,7 @@ import {
 } from "@ttrpg-agents/store-sqlite";
 import { dirname } from "node:path";
 import type { SceneItem } from "../src/scene-model.js";
-import { SHADOW_IDS, seedE2eTokenArt } from "./db.js";
+import { E2E_ENCOUNTER_ID, SHADOW_IDS, seedE2eTokenArt } from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems } from "./helpers.js";
 
@@ -51,7 +51,7 @@ async function withRepo<T>(
 ): Promise<T> {
   const db = openDatabase(dbPath);
   try {
-    return await use(new SqliteEncounterRepository(db));
+    return await use(new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID));
   } finally {
     db.close();
   }

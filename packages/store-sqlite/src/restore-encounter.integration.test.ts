@@ -7,9 +7,11 @@ import {
   type MonsterInstance,
   type NewMonsterInstance,
   type RestoreMonstersDeps,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const seedOrigin: ChangeOrigin = { source: "mcp", commandId: "seed" };
@@ -25,10 +27,16 @@ let repo: SqliteEncounterRepository;
 beforeEach(() => {
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(openDatabase(":memory:"), {
+  const store = openDatabase(":memory:");
+  const options = {
     newId: () => `id-${String(++n)}`,
     now: () => ++t,
-  });
+  };
+  repo = new SqliteEncounterRepository(
+    store,
+    resolveEncounter(new SqliteEncounterDirectory(store, options)).id,
+    options,
+  );
 });
 
 function deps(): RestoreMonstersDeps {

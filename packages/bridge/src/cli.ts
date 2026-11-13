@@ -5,7 +5,7 @@ import { describeProfile, loadConfig } from "@ttrpg-agents/config";
 import { storeTokenImage } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterLog,
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   SqliteTokenArtRepository,
   SqliteTokenImageRepository,
@@ -44,7 +44,7 @@ const agentToken = await loadOrCreateToken(agentTokenPath);
 // server process or by this one, reaches the client as an event polled from the
 // change log.
 const db = openDatabase(settings.database);
-const repo = new SqliteEncounterRepository(db);
+const encounters = new SqliteEncounterDirectory(db);
 const artRepo = new SqliteTokenArtRepository(db);
 const imageRepo = new SqliteTokenImageRepository(db);
 const log = new SqliteEncounterLog(db);
@@ -53,10 +53,10 @@ const server = await startBridgeServer({
   port,
   staticDir,
   agentToken,
-  snapshot: () => snapshotMessage(repo, artRepo, log),
+  snapshot: () => snapshotMessage(encounters, artRepo, log),
   mapRooms: () => mapRoomsMessage(maps),
-  removeInstance: (id, commandId) => removeInstance(repo, id, commandId),
-  editInstance: (edit, commandId) => editInstance(repo, edit, commandId),
+  removeInstance: (id, commandId) => removeInstance(encounters, id, commandId),
+  editInstance: (edit, commandId) => editInstance(encounters, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
   storeTokenImage: (bytes) => storeTokenImage(imageRepo, bytes),
   getTokenImage: (sha256) => imageRepo.getTokenImage(sha256),
@@ -74,7 +74,7 @@ const stopPolling = broadcastLogEvents(log, server, {
     console.error(
       `change log row ${seq} could not be read and was skipped: ${error.replace(/\s+/g, " ")}`,
     ),
-  snapshot: () => snapshotMessage(repo, artRepo, log),
+  snapshot: () => snapshotMessage(encounters, artRepo, log),
 });
 const stopMapRooms = broadcastMapRooms(maps, server);
 // Registered before the state file can exist: a signal right after it appears

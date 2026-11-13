@@ -2,9 +2,9 @@ import {
   DomainError,
   UnknownInstanceError,
   applyInstanceEdit,
-  type ActiveEncounterReader,
+  repositoryForInstance,
+  type EncounterDirectory,
   type EncounterLog,
-  type EncounterRepository,
   type InstanceEdit,
   type TokenArtRepository,
   type UnreadableLogEntry,
@@ -13,17 +13,21 @@ import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import type { WriteBackResult } from "./server.js";
 
 /**
- * Removes one instance for a `token-deleted` request: an unknown id is a
+ * Removes one instance for a `token-deleted` request from the encounter that
+ * holds it, current or not: an id no encounter holds as a live instance is a
  * refusal (`unknown-instance`), any other failure is rethrown. The write
  * carries origin source `table` and `commandId`.
  */
 export function removeInstance(
-  repo: EncounterRepository,
+  encounters: EncounterDirectory,
   instanceId: string,
   commandId: string,
 ): WriteBackResult {
   try {
-    repo.removeInstances([instanceId], { source: "table", commandId });
+    repositoryForInstance(encounters, instanceId).removeInstances(
+      [instanceId],
+      { source: "table", commandId },
+    );
     return { ok: true };
   } catch (e) {
     if (e instanceof UnknownInstanceError)
@@ -33,17 +37,22 @@ export function removeInstance(
 }
 
 /**
- * Applies a table edit for an `instance-edit` request: a domain error (unknown
- * instance, invalid value) is a refusal carrying its code, anything else is
+ * Applies a table edit for an `instance-edit` request to the encounter that
+ * holds the instance, current or not: a domain error (unknown instance,
+ * invalid value) is a refusal carrying its code, anything else is
  * rethrown. The writes carry origin source `table` and `commandId`.
  */
 export function editInstance(
-  repo: EncounterRepository,
+  encounters: EncounterDirectory,
   edit: InstanceEdit,
   commandId: string,
 ): WriteBackResult {
   try {
-    applyInstanceEdit(repo, edit, { source: "table", commandId });
+    applyInstanceEdit(
+      repositoryForInstance(encounters, edit.instanceId),
+      edit,
+      { source: "table", commandId },
+    );
     return { ok: true };
   } catch (e) {
     if (e instanceof DomainError)
@@ -53,27 +62,27 @@ export function editInstance(
 }
 
 /**
- * Full current instance list and token art, for a client that just connected,
- * plus the log position it is current as of. The position is read before the
+ * The current encounter's instance list and id, and the token art, for a
+ * client that just connected, plus the log position it is current as of. The position is read before the
  * instances, so a commit in between makes the snapshot newer than its `seq`
  * and the client sees that event again as a duplicate or a harmless re-fold,
  * never misses it. Each instance a restore put back is listed in `restoreSeqs`
  * with the seq of its last restore, read after the instances so every restore
  * they reflect is listed; like an empty art map, an empty list is left out.
- * The active encounter's id is read after the instances, so an encounter
- * created between the reads gives an empty snapshot that names it, never
- * instances under a null id.
+ * With no current encounter the snapshot has no instances and a null id; it
+ * creates none.
  */
 export function snapshotMessage(
-  repo: EncounterRepository & ActiveEncounterReader,
+  encounters: EncounterDirectory,
   artRepo: TokenArtRepository,
   log: EncounterLog,
 ): BridgeMessage {
   const seq = log.latestSeq();
   const art = artRepo.listTokenArt();
-  const instances = repo.listInstances();
-  const encounterId = repo.getActiveEncounter()?.id ?? null;
-  const restoreSeqs = repo.listRestoreSeqs();
+  const current = encounters.getCurrentEncounter();
+  const repo = current ? encounters.repositoryFor(current.id) : undefined;
+  const instances = repo?.listInstances() ?? [];
+  const restoreSeqs = repo?.listRestoreSeqs() ?? {};
   return {
     v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
@@ -83,7 +92,7 @@ export function snapshotMessage(
       ...(Object.keys(art).length > 0 ? { art } : {}),
       ...(Object.keys(restoreSeqs).length > 0 ? { restoreSeqs } : {}),
       seq,
-      encounterId,
+      encounterId: current?.id ?? null,
     },
   };
 }

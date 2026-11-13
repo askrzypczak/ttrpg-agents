@@ -13,7 +13,6 @@ import {
   type AddMonstersOptions,
   type ChangeOrigin,
   type EncounterRepository,
-  type Encounter,
   type HpChange,
   type InstanceBuilder,
   type MapPlacement,
@@ -133,10 +132,6 @@ function mapsWith(
 class MemoryEncounter implements EncounterRepository {
   readonly stored: MonsterInstance[] = [];
   addCalls = 0;
-
-  getOrCreateActiveEncounter(): Encounter {
-    return { id: "e1", createdAt: 0 };
-  }
 
   addInstances(build: InstanceBuilder): MonsterInstance[] {
     this.addCalls += 1;

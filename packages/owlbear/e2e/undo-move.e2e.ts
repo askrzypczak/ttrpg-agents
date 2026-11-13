@@ -4,7 +4,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import type { SceneItem, Vec2 } from "../src/scene-model.js";
-import { SHADOW_IDS } from "./db.js";
+import { E2E_ENCOUNTER_ID, SHADOW_IDS } from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems } from "./helpers.js";
 
@@ -44,7 +44,7 @@ function withRepo<T>(
 ): T {
   const db = openDatabase(dbPath);
   try {
-    return use(new SqliteEncounterRepository(db));
+    return use(new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID));
   } finally {
     db.close();
   }

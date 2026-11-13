@@ -11,10 +11,11 @@ import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { DatabaseSync } from "node:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -284,9 +285,7 @@ describe("stdio server settings", () => {
     expect(existsSync(configured), "the configured database exists").toBe(true);
     const db = openDatabase(configured);
     try {
-      const names = new SqliteEncounterRepository(db)
-        .listInstances()
-        .map((i) => i.displayName);
+      const names = currentNames(db);
       expect(names).toHaveLength(1);
       expect(names[0]).toMatch(/^Shadow/);
     } finally {
@@ -335,13 +334,22 @@ async function addShadowWith(env: Record<string, string>): Promise<void> {
   await client.close();
 }
 
-/** Display names of the encounter in the database at `path`. */
+/** Display names of the current encounter in `db`; none when no encounter is current. */
+function currentNames(db: DatabaseSync): string[] {
+  const encounters = new SqliteEncounterDirectory(db);
+  const current = encounters.getCurrentEncounter();
+  if (!current) return [];
+  return encounters
+    .repositoryFor(current.id)
+    .listInstances()
+    .map((i) => i.displayName);
+}
+
+/** Display names of the current encounter in the database at `path`. */
 function namesIn(path: string): string[] {
   const db = openDatabase(path);
   try {
-    return new SqliteEncounterRepository(db)
-      .listInstances()
-      .map((i) => i.displayName);
+    return currentNames(db);
   } finally {
     db.close();
   }

@@ -6,7 +6,7 @@ import {
 } from "@ttrpg-agents/store-sqlite";
 import type { ChangeOrigin } from "@ttrpg-agents/engine";
 import type { ItemPatch, SceneItem } from "../src/scene-model.js";
-import { SHADOW_IDS, seedE2eTokenArt } from "./db.js";
+import { E2E_ENCOUNTER_ID, SHADOW_IDS, seedE2eTokenArt } from "./db.js";
 import { e2eDir } from "./env.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems } from "./helpers.js";
@@ -80,7 +80,7 @@ test.describe("changing a monster's type", () => {
     const token = tokenOf(before, SHADOW_IDS[0]!);
 
     const db = openDatabase(bridge.dbPath);
-    const repo = new SqliteEncounterRepository(db);
+    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID);
     const instance = repo.listInstances().find((i) => i.id === SHADOW_IDS[0]);
     if (!instance) throw new Error("seeded shadow missing");
     let changed = false;
@@ -178,7 +178,7 @@ test.describe("changing a monster's type", () => {
       .toBe(45);
 
     const db = openDatabase(bridge.dbPath);
-    const repo = new SqliteEncounterRepository(db);
+    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID);
     const instance = repo.listInstances().find((i) => i.id === SHADOW_IDS[0]);
     if (!instance) throw new Error("seeded shadow missing");
     let changed = false;

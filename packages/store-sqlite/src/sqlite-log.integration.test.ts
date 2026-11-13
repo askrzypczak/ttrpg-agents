@@ -7,7 +7,9 @@ import type {
   MonsterInstance,
   UnreadableLogEntry,
 } from "@ttrpg-agents/engine";
+import { resolveEncounter } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
@@ -18,6 +20,7 @@ const origin = (commandId: string): ChangeOrigin => ({
 
 let db: DatabaseSync;
 let repo: SqliteEncounterRepository;
+let encounterId: string;
 let log: SqliteEncounterLog;
 let first: MonsterInstance;
 let second: MonsterInstance;
@@ -26,10 +29,12 @@ beforeEach(() => {
   db = openDatabase(":memory:");
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(db, {
+  const options = {
     newId: () => `id-${++n}`,
     now: () => ++t,
-  });
+  };
+  encounterId = resolveEncounter(new SqliteEncounterDirectory(db, options)).id;
+  repo = new SqliteEncounterRepository(db, encounterId, options);
   log = new SqliteEncounterLog(db);
   [first, second] = repo.addInstances(
     () => [
@@ -273,7 +278,6 @@ describe("SqliteEncounterLog", () => {
 
   describe("each mutation logs its event with the id of the encounter it changed", () => {
     it.each(mutations)("$name", ({ name, run }) => {
-      const encounterId = repo.getOrCreateActiveEncounter().id;
       const before = log.latestSeq();
       const expected = run(origin(`cmd-${name}`));
       expect(log.eventsSince(before)).toEqual(
@@ -286,23 +290,26 @@ describe("SqliteEncounterLog", () => {
     });
   });
 
-  it("a clear of a store with no encounter creates the active encounter and logs its event with that id", () => {
-    const emptyDb = openDatabase(":memory:");
-    const emptyRepo = new SqliteEncounterRepository(emptyDb);
-    const emptyLog = new SqliteEncounterLog(emptyDb);
+  it("a clear of an encounter with no instances logs its event with that encounter's id", () => {
+    const store = openDatabase(":memory:");
+    const directory = new SqliteEncounterDirectory(store);
+    const empty = directory.createEncounter("Encounter 1");
+    const other = directory.createEncounter("Encounter 2");
+    directory.setCurrentEncounter(other.id);
+    const storeLog = new SqliteEncounterLog(store);
     const o = origin("clear-empty");
 
-    emptyRepo.clearEncounter(o);
+    new SqliteEncounterRepository(store, empty.id).clearEncounter(o);
 
-    const encounter = emptyRepo.getActiveEncounter();
-    expect(encounter).toBeDefined();
-    expect(emptyLog.eventsSince(0)).toEqual([
+    expect(storeLog.eventsSince(0)).toEqual([
       {
         seq: expect.any(Number),
-        encounterId: encounter!.id,
+        encounterId: empty.id,
         event: { type: "cleared", origin: o },
       },
     ]);
+    expect(directory.listEncounters()).toEqual([empty, other]);
+    store.close();
   });
 
   it("removing several instances records one removed event per id, in the order given", () => {
@@ -375,7 +382,6 @@ describe("SqliteEncounterLog", () => {
         raw,
       );
       const o = origin("after-bad-row");
-      const encounterId = repo.getOrCreateActiveEncounter().id;
       repo.setHp(first.id, 1, o);
 
       expect(log.eventsSince(before)).toEqual([
