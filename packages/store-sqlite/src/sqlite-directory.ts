@@ -10,6 +10,7 @@ import {
   SqliteEncounterRepository,
   type RepositoryOptions,
 } from "./sqlite-repository.js";
+import { SqliteMapRepository } from "./map-repository.js";
 
 interface EncounterRow {
   id: string;
@@ -96,8 +97,7 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
   }
 
   mapRepositoryFor(encounterId: string): MapRepository {
-    void encounterId;
-    throw new Error("not implemented");
+    return new SqliteMapRepository(this.db, encounterId);
   }
 
   /** Runs fn in a transaction; nests by joining an already-open one. */

@@ -218,6 +218,18 @@ export const migrations: Migration[] = [
       CREATE UNIQUE INDEX encounters_name ON encounters (name COLLATE NOCASE);
     `,
   },
+  {
+    // Each encounter records the map it uses; deleting the registration sets
+    // it to NULL. Nothing is copied: every encounter starts with no map. The
+    // registrations' global active flag and its unique index are dropped, as
+    // nothing reads them; registrations and their rooms are kept.
+    version: 18,
+    sql: `
+      ALTER TABLE encounters ADD COLUMN map_item_id TEXT REFERENCES map_registrations (item_id) ON DELETE SET NULL;
+      DROP INDEX map_registrations_one_active;
+      ALTER TABLE map_registrations DROP COLUMN active;
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

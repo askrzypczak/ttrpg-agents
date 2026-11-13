@@ -30,7 +30,10 @@ interface MapRow {
   scene_dpi: number;
 }
 
-/** Registered maps and the active one, in the `map_registrations` table of the shared database. */
+/**
+ * One encounter's map (`encounters.map_item_id`), and the registered maps and
+ * their rooms (`map_registrations`, `map_rooms`) shared by every encounter.
+ */
 export class SqliteMapRepository implements MapRepository {
   private readonly db: DatabaseSync;
   private readonly encounterId: string;
@@ -44,15 +47,12 @@ export class SqliteMapRepository implements MapRepository {
     const { itemId, name, placement: p } = registration;
     this.transaction(() => {
       this.db
-        .prepare("UPDATE map_registrations SET active = 0 WHERE active = 1")
-        .run();
-      this.db
         .prepare(
           `INSERT INTO map_registrations (
              item_id, name, position_x, position_y, rotation, scale_x, scale_y,
              image_offset_x, image_offset_y, image_width, image_height, image_dpi,
-             scene_dpi, active
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+             scene_dpi
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (item_id) DO UPDATE SET
              name = excluded.name,
              position_x = excluded.position_x,
@@ -65,8 +65,7 @@ export class SqliteMapRepository implements MapRepository {
              image_width = excluded.image_width,
              image_height = excluded.image_height,
              image_dpi = excluded.image_dpi,
-             scene_dpi = excluded.scene_dpi,
-             active = 1`,
+             scene_dpi = excluded.scene_dpi`,
         )
         .run(
           itemId,
@@ -83,18 +82,23 @@ export class SqliteMapRepository implements MapRepository {
           p.imageDpi,
           p.sceneDpi,
         );
+      this.db
+        .prepare("UPDATE encounters SET map_item_id = ? WHERE id = ?")
+        .run(itemId, this.encounterId);
     });
   }
 
   getActiveMap(): MapRegistration | undefined {
     const row = this.db
       .prepare(
-        `SELECT item_id, name, position_x, position_y, rotation, scale_x, scale_y,
-                image_offset_x, image_offset_y, image_width, image_height, image_dpi,
-                scene_dpi
-           FROM map_registrations WHERE active = 1`,
+        `SELECT m.item_id, m.name, m.position_x, m.position_y, m.rotation,
+                m.scale_x, m.scale_y, m.image_offset_x, m.image_offset_y,
+                m.image_width, m.image_height, m.image_dpi, m.scene_dpi
+           FROM encounters e
+           JOIN map_registrations m ON m.item_id = e.map_item_id
+          WHERE e.id = ?`,
       )
-      .get() as MapRow | undefined;
+      .get(this.encounterId) as MapRow | undefined;
     if (!row) return undefined;
     return {
       itemId: row.item_id,
