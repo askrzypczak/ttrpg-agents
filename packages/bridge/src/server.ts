@@ -41,7 +41,6 @@ import {
   type TokenImageStoreResult,
 } from "@ttrpg-agents/engine";
 
-export const DEFAULT_BRIDGE_PORT = 5199;
 export const SERVER_VERSION = "0.0.0";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -65,12 +64,10 @@ const ALLOWED_ORIGINS = new Set([
 
 export interface BridgeServerOptions {
   /** 0 picks an ephemeral port. */
-  port?: number;
+  port: number;
   /** Directory of the built extension (contains manifest.json). */
   staticDir: string;
   host?: string;
-  /** Shared secret clients must present in `hello`. Defaults to a random one. */
-  token?: string;
   /** Message sent to a client right after each `hello-ack`, so it converges on current state. */
   snapshot?: () => BridgeMessage;
   /**
@@ -108,7 +105,6 @@ export type WriteBackResult =
 
 export interface BridgeServer {
   port: number;
-  token: string;
   clientCount(): number;
   /** Sends to the active (newest authenticated) client; unauthenticated sockets get nothing. */
   broadcast(message: BridgeMessage): void;
@@ -120,7 +116,6 @@ function send(ws: WebSocket, message: BridgeMessage): void {
 }
 
 const FATAL_ERROR_CODES = new Set([
-  "bad-token",
   "unauthenticated",
   "unsupported-version",
   "superseded",
@@ -161,7 +156,6 @@ interface Pending {
 }
 
 interface Hooks {
-  token: string;
   pending: Map<string, Pending>;
   snapshot: (() => BridgeMessage) | undefined;
   mapRooms: (() => BridgeMessage) | undefined;
@@ -210,15 +204,16 @@ function commandIdOf(id: string | undefined): string {
   return id === undefined || id === "" ? randomUUID() : id;
 }
 
-// Authorization is decided only by the token. The client-supplied `role` in
-// `hello` is never read here; it only drives the extension UI.
+// Admission is decided by the upgrade's Host and Origin checks: a socket that
+// reaches this handler came from a page the bridge served. The first message
+// must still be `hello`. The client-supplied `role` in `hello` is never read
+// here; it only drives the extension UI.
 function handleMessage(
   ws: WebSocket,
   session: Session,
   hooks: Hooks,
   raw: string,
 ): void {
-  const { token } = hooks;
   const result = decodeMessage(raw);
   if (!result.ok && result.reason === "unsupported-version") {
     rejectAndClose(ws, "unsupported-version", result.detail);
@@ -226,15 +221,7 @@ function handleMessage(
   }
   if (!session.authenticated) {
     if (!result.ok || result.message.type !== "hello") {
-      rejectAndClose(
-        ws,
-        "unauthenticated",
-        "send hello with a valid token first",
-      );
-      return;
-    }
-    if (!tokenMatches(token, result.message.payload.token)) {
-      rejectAndClose(ws, "bad-token", "invalid token");
+      rejectAndClose(ws, "unauthenticated", "send hello first");
       return;
     }
     session.authenticated = true;
@@ -399,10 +386,9 @@ export async function startBridgeServer(
   options: BridgeServerOptions,
 ): Promise<BridgeServer> {
   const {
-    port = DEFAULT_BRIDGE_PORT,
+    port,
     staticDir,
     host = "127.0.0.1",
-    token = randomBytes(32).toString("hex"),
     snapshot,
     mapRooms,
     agentToken = randomBytes(32).toString("hex"),
@@ -475,6 +461,15 @@ export async function startBridgeServer(
     );
   };
 
+  // Only a page the bridge served carries one of its own origins.
+  const ownOrigin = (originHeader: string | undefined): boolean => {
+    const actualPort = (http.address() as AddressInfo).port;
+    return (
+      originHeader === `http://localhost:${actualPort}` ||
+      originHeader === `http://127.0.0.1:${actualPort}`
+    );
+  };
+
   const http: Server = createServer((req, res) => {
     if (!hostAllowed(req.headers.host)) {
       res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
@@ -494,7 +489,12 @@ export async function startBridgeServer(
       req.url === TOKEN_IMAGE_UPLOAD_PATH
     ) {
       // A body aborted mid-request rejects the read; the uploader is gone.
-      handleTokenImageUpload(req, res, token, storeTokenImage).catch(() => {
+      handleTokenImageUpload(
+        req,
+        res,
+        ownOrigin(req.headers.origin),
+        storeTokenImage,
+      ).catch(() => {
         res.destroy();
       });
       return;
@@ -505,7 +505,7 @@ export async function startBridgeServer(
       req.url?.startsWith(`${TOKEN_IMAGE_UPLOAD_PATH}/`) === true
     ) {
       try {
-        handleTokenImageRead(req, res, token, getTokenImage);
+        handleTokenImageRead(req, res, getTokenImage);
       } catch {
         // The store could not be read: the reader sees a dropped connection.
         res.destroy();
@@ -531,12 +531,10 @@ export async function startBridgeServer(
       res.writeHead(405).end();
       return;
     }
-    void serveStatic(req.url ?? "/", root, token).then(
-      ({ status, body, type }) => {
-        res.writeHead(status, { "Content-Type": type });
-        res.end(req.method === "HEAD" ? undefined : body);
-      },
-    );
+    void serveStatic(req.url ?? "/", root).then(({ status, body, type }) => {
+      res.writeHead(status, { "Content-Type": type });
+      res.end(req.method === "HEAD" ? undefined : body);
+    });
   });
 
   const wss = new WebSocketServer({
@@ -550,12 +548,7 @@ export async function startBridgeServer(
       return;
     }
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
-    const actualPort = (http.address() as AddressInfo).port;
-    const allowedOrigins = [
-      `http://localhost:${actualPort}`,
-      `http://127.0.0.1:${actualPort}`,
-    ];
-    if (path !== "/ws" || !allowedOrigins.includes(req.headers.origin ?? "")) {
+    if (path !== "/ws" || !ownOrigin(req.headers.origin)) {
       socket.destroy();
       return;
     }
@@ -567,7 +560,6 @@ export async function startBridgeServer(
         if (active === ws) active = null;
       };
       const hooks: Hooks = {
-        token,
         pending,
         snapshot,
         mapRooms,
@@ -599,7 +591,6 @@ export async function startBridgeServer(
 
   return {
     port: (http.address() as AddressInfo).port,
-    token,
     clientCount: () => clients.size,
     broadcast: (message) => {
       const encoded = encodeMessage(message);
@@ -727,24 +718,25 @@ function refuseUpload(
 }
 
 /**
- * `POST /token-images`: stores the raw body as a token image. Only the
- * extension token is accepted, checked before the body is read. The body is
- * the image itself: its claimed Content-Type is ignored, nothing in it is
- * read as a URL, and no request goes out. No CORS headers: the extension page
- * is served by the bridge, so its upload is same-origin.
+ * `POST /token-images`: stores the raw body as a token image. Only a request
+ * whose `Origin` is the bridge's own is accepted, checked before the body is
+ * read; `Authorization` is not read. The body is the image itself: its claimed
+ * Content-Type is ignored, nothing in it is read as a URL, and no request goes
+ * out. No CORS headers: the extension page is served by the bridge, so its
+ * upload is same-origin.
  */
 async function handleTokenImageUpload(
   req: IncomingMessage,
   res: ServerResponse,
-  token: string,
+  fromOwnOrigin: boolean,
   storeTokenImage: (bytes: Uint8Array) => TokenImageStoreResult,
 ): Promise<void> {
-  if (!tokenMatches(token, bearerOf(req))) {
+  if (!fromOwnOrigin) {
     refuseUpload(
       res,
-      401,
+      403,
       "unauthorized",
-      "missing or invalid extension token",
+      "uploads are accepted only from the bridge's own origin",
     );
     return;
   }
@@ -788,22 +780,17 @@ function refuseRead(
 
 /**
  * `GET /token-images/<sha256>`: answers the stored bytes of one token image,
- * with its stored mime as Content-Type. Only the extension token is accepted,
- * checked before the hash is looked up. The rest of the path must be exactly
+ * with its stored mime as Content-Type. It asks for no credentials: like every
+ * request, it must pass the Host check. The rest of the path must be exactly
  * the hash (64 lowercase hex characters, no query string); anything else is
  * not found. No CORS headers: the extension page is served by the bridge, so
- * its read is same-origin.
+ * its read is same-origin, and a page on another origin cannot read the bytes.
  */
 function handleTokenImageRead(
   req: IncomingMessage,
   res: ServerResponse,
-  token: string,
   getTokenImage: (sha256: string) => TokenImage | undefined,
 ): void {
-  if (!tokenMatches(token, bearerOf(req))) {
-    refuseRead(res, 401, "unauthorized", "missing or invalid extension token");
-    return;
-  }
   const hash = (req.url ?? "").slice(`${TOKEN_IMAGE_UPLOAD_PATH}/`.length);
   const image = TOKEN_IMAGE_HASH.test(hash) ? getTokenImage(hash) : undefined;
   if (image === undefined) {
@@ -817,32 +804,14 @@ function handleTokenImageRead(
   res.end(image.bytes);
 }
 
-function withTokenPopover(manifestJson: string, token: string): string {
-  try {
-    const manifest = JSON.parse(manifestJson) as {
-      action?: { popover?: unknown };
-    };
-    if (manifest.action && typeof manifest.action.popover === "string") {
-      manifest.action.popover = `/index.html#${token}`;
-    }
-    return JSON.stringify(manifest);
-  } catch {
-    return manifestJson;
-  }
-}
-
 async function serveStatic(
   url: string,
   root: string,
-  token: string,
 ): Promise<{ status: number; body: string | Buffer; type: string }> {
   const text = "text/plain; charset=utf-8";
   let pathname: string;
-  let presentedToken: string | null;
   try {
-    const parsed = new URL(url, "http://localhost");
-    pathname = decodeURIComponent(parsed.pathname);
-    presentedToken = parsed.searchParams.get("token");
+    pathname = decodeURIComponent(new URL(url, "http://localhost").pathname);
   } catch {
     return { status: 400, body: "bad request", type: text };
   }
@@ -852,16 +821,7 @@ async function serveStatic(
     return { status: 403, body: "forbidden", type: text };
   }
   try {
-    let body: string | Buffer = await readFile(file);
-    // Only a request that already presents the token learns it (as a URL
-    // fragment, which the browser never sends back over HTTP).
-    if (
-      pathname === "/manifest.json" &&
-      presentedToken !== null &&
-      tokenMatches(token, presentedToken)
-    ) {
-      body = withTokenPopover(body.toString("utf8"), token);
-    }
+    const body = await readFile(file);
     return {
       status: 200,
       body,

@@ -12,6 +12,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -136,12 +137,12 @@ async function connect(server: BridgeServer): Promise<Client> {
   };
 }
 
-function hello(token: string, role: "gm" | "player" = "gm"): string {
+function hello(role: "gm" | "player" = "gm"): string {
   return encodeMessage({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "hello",
     id: "h1",
-    payload: { role, extensionVersion: "0", token },
+    payload: { role, extensionVersion: "0" },
   });
 }
 
@@ -155,7 +156,7 @@ type EditFields = {
 /** Raw JSON, as the extension sends it. */
 function instanceEdit(instanceId: string, fields: EditFields): string {
   return JSON.stringify({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "instance-edit",
     id: `instance-edit:${instanceId}`,
     payload: { instanceId, ...fields },
@@ -168,7 +169,7 @@ async function authed(
   role: "gm" | "player" = "gm",
 ): Promise<Client> {
   const client = await connect(server);
-  client.ws.send(hello(server.token, role));
+  client.ws.send(hello(role));
   await waitFor(() => client.snapshots().length > 0);
   expect(client.received[0]?.type).toBe("hello-ack");
   return client;
@@ -179,7 +180,9 @@ let pings = 0;
 /** Resolves once the bridge has handled everything this client sent so far. */
 async function handled(client: Client): Promise<void> {
   const id = `handled-${++pings}`;
-  client.ws.send(encodeMessage({ v: 1, type: "ping", id, payload: {} }));
+  client.ws.send(
+    encodeMessage({ v: PROTOCOL_VERSION, type: "ping", id, payload: {} }),
+  );
   await waitFor(() =>
     client.received.some((m) => m.type === "pong" && m.id === id),
   );
@@ -285,7 +288,7 @@ describe("instance-edit over the bridge", () => {
       "token-deleted",
       (id: string) =>
         JSON.stringify({
-          v: 1,
+          v: PROTOCOL_VERSION,
           type: "token-deleted",
           id: `token-deleted:${id}`,
           payload: { instanceId: id },
@@ -295,7 +298,7 @@ describe("instance-edit over the bridge", () => {
       "token-art-set",
       () =>
         JSON.stringify({
-          v: 1,
+          v: PROTOCOL_VERSION,
           type: "token-art-set",
           payload: {
             monsterKey: "shadow",

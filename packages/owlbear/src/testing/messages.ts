@@ -4,7 +4,7 @@ import type {
   MonsterInstance,
   TokenArt,
 } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 
 /** Each `EncounterEvent` without its `origin`, which is optional here. */
 export type TestEvent = EncounterEvent extends infer T
@@ -42,7 +42,7 @@ export function createMessageFeed(): MessageFeed {
       const { art, restoreSeqs, seq = position } = options;
       position = seq;
       return {
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
         payload: {
           instances,
@@ -60,7 +60,7 @@ export function createMessageFeed(): MessageFeed {
         origin: event.origin ?? DEFAULT_ORIGIN,
         seq,
       } as Extract<BridgeMessage, { type: "encounter-event" }>["payload"];
-      return { v: 1, type: "encounter-event", payload };
+      return { v: PROTOCOL_VERSION, type: "encounter-event", payload };
     },
   };
 }

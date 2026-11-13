@@ -5,7 +5,7 @@ import type {
   MapRepository,
   SavedRoom,
 } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import { broadcastMapRooms, mapRoomsMessage } from "./map-rooms.js";
 
 const POLL_MS = 250;
@@ -86,7 +86,7 @@ const mapRooms = (
   itemId: string | null,
   rooms: SavedRoom[],
 ): BridgeMessage => ({
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "map-rooms",
   payload: { itemId, rooms },
 });

@@ -48,6 +48,45 @@ function run(args: string[], env: Record<string, string>, cwd?: string) {
   });
 }
 
+const PROJECT_VARIABLES = new Set([
+  "TTRPG_AGENTS_DB",
+  "BRIDGE_PORT",
+  "BRIDGE_AGENT_TOKEN_FILE",
+  "BRIDGE_STATE_FILE",
+  "BRIDGE_STATIC_DIR",
+  "TTRPG_AGENTS_BACKUP_DIR",
+]);
+
+/**
+ * Runs the script with a temp HOME and XDG config directory holding `config`
+ * as config.json, and no project or other XDG variables.
+ */
+function runWithConfig(args: string[], root: string, config: unknown) {
+  const home = join(root, "home");
+  const configHome = join(root, "xdg-config");
+  mkdirSync(home);
+  mkdirSync(join(configHome, "ttrpg-agents"), { recursive: true });
+  writeFileSync(
+    join(configHome, "ttrpg-agents", "config.json"),
+    JSON.stringify(config),
+  );
+  const env: Record<string, string> = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value === undefined || PROJECT_VARIABLES.has(name)) continue;
+    if (name.startsWith("XDG_")) continue;
+    env[name] = value;
+  }
+  env.HOME = home;
+  env.XDG_CONFIG_HOME = configHome;
+  // config.json goes in the default profile's directory, whatever the checkout.
+  env.TTRPG_AGENTS_PROFILE = "default";
+  return spawnSync(process.execPath, [script, ...args], {
+    encoding: "utf8",
+    timeout: 30_000,
+    env,
+  });
+}
+
 function artIn(dbPath: string) {
   const db = openDatabase(dbPath);
   try {
@@ -118,5 +157,14 @@ describe("import-token-art script", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(`Imported token art from ${library} into`);
     expect(artIn(dbPath)).toEqual({ goblin: { sha256: sha256Of(PNG_1X1) } });
+  });
+
+  it("the script exits 1 with a stderr line naming database when config.json has an invalid database", () => {
+    const { root, library } = setup({ "goblin.png": PNG_1X1 });
+
+    const result = runWithConfig([library], root, { database: "relative.db" });
+
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toMatch(/^.*database.*$/m);
   });
 });

@@ -1,16 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-
-export function defaultTokenPath(): string {
-  return join(homedir(), ".config", "ttrpg-agents", "bridge-token");
-}
-
-/** `~/.config/ttrpg-agents/agent-token`: authorises `POST /agent/query` only. */
-export function defaultAgentTokenPath(): string {
-  return join(homedir(), ".config", "ttrpg-agents", "agent-token");
-}
+import { dirname } from "node:path";
 
 /** Reads the persistent bridge token, creating it (mode 0600) on first use. */
 export async function loadOrCreateToken(path: string): Promise<string> {

@@ -1,5 +1,5 @@
 import type { MapRepository } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 
 const MAP_ROOMS_POLL_INTERVAL_MS = 250;
 
@@ -12,7 +12,7 @@ export function mapRoomsMessage(
 ): BridgeMessage {
   const active = maps.getActiveMap();
   return {
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "map-rooms",
     payload: active
       ? { itemId: active.itemId, rooms: maps.getRooms(active.itemId) }

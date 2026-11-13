@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   createEncounterSync,
   PLACED_SEQ_METADATA_KEY,
@@ -28,7 +28,7 @@ const foreign: SceneItem = {
 };
 
 const helloAck: BridgeMessage = {
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "hello-ack",
   payload: { serverVersion: "0" },
 };

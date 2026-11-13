@@ -419,7 +419,7 @@ Chromium. First time: `npx playwright install chromium`. Not part of `npm run ch
   the run ends; never your real database) in a per-worker subdir of the run
   temp dir. A tiny shared server
   (`e2e/serve.ts`, 127.0.0.1 on another ephemeral port) serves the harness
-  (`dist-e2e`) on a different origin, which iframes the extension with a proper `?obrref=`.
+  (`dist-e2e`) on a different origin, which iframes the extension with a proper `?obrref=`. The run also points `XDG_CONFIG_HOME` and `XDG_DATA_HOME` inside the run temp dir (`isolateXdgDirs`), so nothing reaches either profile's real files.
 - `e2e/fake-host.ts` plays Owlbear over `postMessage` (OBR_READY, then
   `<id>_RESPONSE<nonce>`), backed by `SceneModel`. It answers only the calls
   the extension makes. Any other id gets an `_ERROR` reply and is recorded in

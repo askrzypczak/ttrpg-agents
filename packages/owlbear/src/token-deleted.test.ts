@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import { tokenDeletedErrorText, tokenDeletedMessage } from "./token-deleted.js";
 
 const error = (
@@ -7,7 +7,7 @@ const error = (
   fatal = false,
   message = "no such instance",
 ): BridgeMessage => ({
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "error",
   ...(id !== undefined ? { id } : {}),
   payload: { code: "unknown-instance", message, fatal },
@@ -16,7 +16,7 @@ const error = (
 describe("token-deleted", () => {
   it("tokenDeletedMessage carries the instance id in payload", () => {
     expect(tokenDeletedMessage("i7")).toMatchObject({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "token-deleted",
       payload: { instanceId: "i7" },
     });
@@ -44,7 +44,7 @@ describe("token-deleted", () => {
     expect(tokenDeletedErrorText(error(undefined))).toBe(undefined);
     expect(
       tokenDeletedErrorText({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "pong",
         id: request.id,
         payload: {},

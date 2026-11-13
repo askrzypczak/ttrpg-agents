@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import { bridgeMessageSchema } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, bridgeMessageSchema } from "@ttrpg-agents/protocol";
 import { createMessageFeed } from "./messages.js";
 
 describe("createMessageFeed", () => {
@@ -12,13 +12,13 @@ describe("createMessageFeed", () => {
     const event = feed.event({ type: "removed", id: "i1" });
 
     expect(snapshot).toEqual({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
       payload: { instances, seq: 0 },
     });
     expect("art" in snapshot.payload).toBe(false);
     expect(event).toEqual({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-event",
       payload: {
         type: "removed",

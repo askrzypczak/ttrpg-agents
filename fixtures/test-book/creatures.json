@@ -1,0 +1,275 @@
+[
+  {
+    "key": "test-book_mirewick-lurker",
+    "name": "Mirewick Lurker",
+    "source": "private",
+    "size": "medium",
+    "type": "monstrosity",
+    "alignment": "unaligned",
+    "ac": 14,
+    "armorDetail": "",
+    "hp": {
+      "average": 33,
+      "dice": "6d8 + 6"
+    },
+    "speeds": {
+      "walk": 30,
+      "climb": 30
+    },
+    "abilities": {
+      "str": 14,
+      "dex": 16,
+      "con": 13,
+      "int": 6,
+      "wis": 12,
+      "cha": 7
+    },
+    "initiativeModifier": 3,
+    "cr": 2,
+    "saves": {
+      "str": 2,
+      "dex": 5,
+      "con": 1,
+      "int": -2,
+      "wis": 1,
+      "cha": -2
+    },
+    "skills": {
+      "perception": 3,
+      "stealth": 5
+    },
+    "senses": {
+      "darkvision": 60,
+      "passivePerception": 13
+    },
+    "languages": "",
+    "damageVulnerabilities": [],
+    "damageResistances": [],
+    "damageImmunities": [],
+    "conditionImmunities": [],
+    "sections": {
+      "traits": [
+        {
+          "name": "Bog Camouflage",
+          "desc": "The lurker has Advantage on Dexterity (Stealth) checks made in swamps and marshes."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Multiattack",
+          "desc": "The lurker makes two Claw attacks."
+        },
+        {
+          "name": "Claw",
+          "desc": "Melee Attack Roll: +5, reach 5 ft. Hit: 8 (2d4 + 3) Slashing damage."
+        }
+      ],
+      "bonusActions": [],
+      "reactions": [],
+      "legendaryActions": []
+    }
+  },
+  {
+    "key": "test-book_cinderling-sentry",
+    "name": "Cinderling Sentry",
+    "source": "private",
+    "size": "small",
+    "type": "elemental",
+    "alignment": "neutral",
+    "ac": 15,
+    "armorDetail": "",
+    "hp": {
+      "average": 65,
+      "dice": "10d6 + 30"
+    },
+    "speeds": {
+      "walk": 30
+    },
+    "abilities": {
+      "str": 15,
+      "dex": 12,
+      "con": 16,
+      "int": 8,
+      "wis": 11,
+      "cha": 9
+    },
+    "initiativeModifier": 1,
+    "cr": 3,
+    "saves": {
+      "str": 2,
+      "dex": 1,
+      "con": 5,
+      "int": -1,
+      "wis": 0,
+      "cha": -1
+    },
+    "skills": {},
+    "senses": {
+      "darkvision": 60,
+      "passivePerception": 10
+    },
+    "languages": "Primordial",
+    "damageVulnerabilities": ["Cold"],
+    "damageResistances": [],
+    "damageImmunities": ["Fire", "Poison"],
+    "conditionImmunities": ["Poisoned"],
+    "sections": {
+      "traits": [
+        {
+          "name": "Smoldering Body",
+          "desc": "A creature that touches the sentry or hits it with a melee attack while within 5 feet of it takes 5 (2d4) Fire damage."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Slam",
+          "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 9 (2d6 + 2) Bludgeoning damage plus 5 (2d4) Fire damage."
+        },
+        {
+          "name": "Cinder Breath",
+          "desc": "Dexterity Saving Throw: DC 13, each creature in a 15-foot Cone. Failure: 21 (6d6) Fire damage. Success: Half damage.",
+          "usage": {
+            "type": "RECHARGE_ON_ROLL",
+            "param": 5
+          }
+        }
+      ],
+      "bonusActions": [],
+      "reactions": [],
+      "legendaryActions": []
+    }
+  },
+  {
+    "key": "test-book_ashfeather-harrier",
+    "name": "Ashfeather Harrier",
+    "source": "private",
+    "size": "medium",
+    "type": "monstrosity",
+    "alignment": "unaligned",
+    "ac": 13,
+    "armorDetail": "",
+    "hp": {
+      "average": 22,
+      "dice": "4d8 + 4"
+    },
+    "speeds": {
+      "walk": 10,
+      "fly": 60
+    },
+    "abilities": {
+      "str": 10,
+      "dex": 17,
+      "con": 12,
+      "int": 4,
+      "wis": 14,
+      "cha": 8
+    },
+    "initiativeModifier": 3,
+    "cr": 1,
+    "saves": {
+      "str": 0,
+      "dex": 3,
+      "con": 1,
+      "int": -3,
+      "wis": 2,
+      "cha": -1
+    },
+    "skills": {
+      "perception": 4
+    },
+    "senses": {
+      "passivePerception": 14
+    },
+    "languages": "",
+    "damageVulnerabilities": [],
+    "damageResistances": [],
+    "damageImmunities": [],
+    "conditionImmunities": [],
+    "sections": {
+      "traits": [
+        {
+          "name": "Ash Veil",
+          "desc": "While the harrier is in smoke or falling ash, attack rolls against it have Disadvantage."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Talons",
+          "desc": "Melee Attack Roll: +5, reach 5 ft. Hit: 9 (2d6 + 3) Slashing damage."
+        },
+        {
+          "name": "Ash Shriek",
+          "desc": "Wisdom Saving Throw: DC 12, each creature in a 20-foot Emanation originating from the harrier. Failure: The target has the Frightened condition until the end of its next turn.",
+          "usage": {
+            "type": "PER_DAY",
+            "param": 1
+          }
+        }
+      ],
+      "bonusActions": [],
+      "reactions": [],
+      "legendaryActions": []
+    }
+  },
+  {
+    "key": "test-book_gloomcap-shambler",
+    "name": "Gloomcap Shambler",
+    "source": "private",
+    "size": "medium",
+    "type": "plant",
+    "alignment": "unaligned",
+    "ac": 11,
+    "armorDetail": "natural armor",
+    "hp": {
+      "average": 26,
+      "dice": "4d8 + 8"
+    },
+    "speeds": {
+      "walk": 20
+    },
+    "abilities": {
+      "str": 14,
+      "dex": 8,
+      "con": 14,
+      "int": 3,
+      "wis": 10,
+      "cha": 5
+    },
+    "initiativeModifier": -1,
+    "cr": 0.5,
+    "saves": {
+      "str": 2,
+      "dex": -1,
+      "con": 2,
+      "int": -4,
+      "wis": 0,
+      "cha": -3
+    },
+    "skills": {},
+    "senses": {
+      "blindsight": 30,
+      "passivePerception": 10
+    },
+    "languages": "",
+    "damageVulnerabilities": [],
+    "damageResistances": [],
+    "damageImmunities": [],
+    "conditionImmunities": ["Blinded", "Deafened"],
+    "sections": {
+      "traits": [],
+      "actions": [
+        {
+          "name": "Slam",
+          "desc": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 9 (2d6 + 2) bludgeoning damage."
+        },
+        {
+          "name": "Spore Puff",
+          "desc": "Each creature within 10 feet of the shambler must succeed on a DC 12 Constitution saving throw or be poisoned until the end of its next turn."
+        }
+      ],
+      "bonusActions": [],
+      "reactions": [],
+      "legendaryActions": []
+    }
+  }
+]

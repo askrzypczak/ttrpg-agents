@@ -17,6 +17,7 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
+import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
 
 // SRD 5.2: Wolf AC 12, HP 11; Dire Wolf large, AC 14, HP 22.
 const WOLF = "srd-2024_wolf";
@@ -124,6 +125,7 @@ beforeEach(() => {
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${String(tick)}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
+    setup: makeTestSetupPorts(),
     newCommandId: () => {
       const id = `command-${String(issuedCommandIds.length + 1)}`;
       issuedCommandIds.push(id);

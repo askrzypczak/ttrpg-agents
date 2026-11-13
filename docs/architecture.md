@@ -15,7 +15,7 @@ flowchart LR
   end
   subgraph core["Engine (no I/O)"]
     uc["use cases: addMonsters, getTableStatus, useMap, ..."]
-    ports["ports: EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort"]
+    ports["ports: EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
   end
   subgraph driven["Driven adapters"]
     store["store-sqlite"]
@@ -33,11 +33,11 @@ flowchart LR
   store --> db[("SQLite")]
   bclient -->|"HTTP + agent token (queries only)"| bsrv
   sysbrowser --> browser["DM's browser"]
-  bsrv <-->|"WebSocket + token"| ext["Owlbear extension (protocol)"]
-  ext -->|"HTTP POST and GET /token-images + token"| bsrv
+  bsrv <-->|"WebSocket (own origin)"| ext["Owlbear extension (protocol)"]
+  ext -->|"HTTP POST and GET /token-images (own origin)"| bsrv
 ```
 
-The bridge is both sides. Its server is a driving adapter: a table edit becomes an engine command (`instance-edit` runs `applyInstanceEdit`, `token-deleted` calls `EncounterRepository.removeInstances`), snapshots come from `EncounterRepository` and `TokenArtRepository`, events from `EncounterLog`, the active map and its rooms from `MapRepository`, and the token image routes run the engine's `storeTokenImage` over `TokenImageRepository`. Its client is a driven adapter, the driven end of `TablePort`, wired in by `mcp/src/stdio.ts`. That channel carries queries only: the agent changes the game through the engine's model (the rule is in `CLAUDE.md`).
+The bridge is both sides. Its server is a driving adapter: a table edit becomes an engine command (`instance-edit` runs `applyInstanceEdit`, `token-deleted` calls `EncounterRepository.removeInstances`), snapshots come from `EncounterRepository` and `TokenArtRepository`, events from `EncounterLog`, the active map and its rooms from `MapRepository`, and the token image routes run the engine's `storeTokenImage` over `TokenImageRepository`. Its client is a driven adapter, the driven end of `TablePort` and `BridgeProbe`, wired in by `mcp/src/stdio.ts` and `mcp/src/status-cli.ts`. That channel carries queries only: the agent changes the game through the engine's model (the rule is in `CLAUDE.md`).
 
 ## Runtime (processes)
 
@@ -50,8 +50,8 @@ flowchart LR
   mcp -->|"TablePort via the bridge client: POST /agent/query"| bridge
   mcp -->|"open_statblock: macOS open"| browser["DM's browser"]
   bridge["Bridge"] -->|"polls"| db
-  ext["Owlbear extension"] <-->|"WebSocket + token"| bridge
-  ext -->|"HTTP POST and GET /token-images + token"| bridge
+  ext["Owlbear extension"] <-->|"WebSocket (own origin)"| bridge
+  ext -->|"HTTP POST and GET /token-images (own origin)"| bridge
   ext --> scene["Owlbear scene"]
 ```
 
@@ -59,13 +59,22 @@ flowchart LR
 
 - **MCP server**: stdio, started by Claude Code from `.mcp.json` through `packages/mcp/bin/stdio.mjs`. It writes the database and asks the table through the bridge (see "Queries to the table").
 - **Browser opener**: the MCP server runs macOS `open <url>` for `open_statblock`, a short-lived process that hands a D&D Beyond page to the DM's default browser (other platforms are refused; the reply still carries the link).
-- **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199 (`BRIDGE_PORT`): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
+- **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199, or 5299 in the dev profile (the `bridgePort` setting, see [`docs/settings.md`](settings.md)): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
 - **Extension**: runs in the GM's Owlbear tab as the bridge's client, reconciles the scene to the encounter and answers the agent's queries. It fetches images from Owlbear for token art and for the `map-image` query. Mechanics: [`packages/owlbear/README.md`](../packages/owlbear/README.md).
 - **Token art library import** (`npm run import:token-art`): a third, occasional process on the same database. See [`packages/store-sqlite/README.md`](../packages/store-sqlite/README.md), Token art library.
+- **Database backup** (`npm run db:backup`): an occasional process that copies the profile's database while the others run. See "Two halves of one save".
+
+## Status
+
+Three surfaces, each for one question:
+
+- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; one fix per problem.
+- **`table_status` tool**: does the open scene match the encounter?
+- **`npm run bridge:status`**: the bridge process: pid, port, checkout, commit, log.
 
 ## Shared database
 
-One SQLite file in WAL mode: `TTRPG_AGENTS_DB`, else `$XDG_DATA_HOME/ttrpg-agents/encounters.db`, else `~/.local/share/ttrpg-agents/encounters.db`. The schema is versioned in `packages/store-sqlite/src/migrations.ts`.
+One SQLite file per profile, in WAL mode, named by the `database` setting ([`docs/settings.md`](settings.md)). The `default` profile's file is the real one. The `dev` profile, used by every process started in a linked git worktree, has one per checkout, so a branch's migrations never run on the real database. The schema is versioned in `packages/store-sqlite/src/migrations.ts`.
 
 | Data                                                                                  | Written by                                                                                         | Read by                                    |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------ |
@@ -82,13 +91,23 @@ Invariants the processes rely on:
 - An undo record holds each instance's state before the command's first write to it. A map or room change leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes every record.
 - Token art is a VTT-neutral reference `{ url, mime, width, height }` with an optional `sha256` link to stored bytes. The reference is all present or all absent, and art without one (bytes never published to Owlbear, such as the library import's) must link an image. Stored bytes carry no monster key.
 
+### Two halves of one save
+
+A saved game has two halves. The database holds the encounter, its change log, undo records, maps, rooms and token art. Each Owlbear scene holds its tokens (position, visibility, size and art on each) and, in its metadata, the instances it placed and the change-log seq it is current as of (`com.ttrpg-agents/placed-seq`). The bridge holds its change-log position in memory. Neither half can be rebuilt from the other.
+
+Backups: `npm run db:backup` copies the profile's database with SQLite's online backup, safe while the bridge and the MCP server run, to `encounters-<UTC time>.db` in the `backupDir` setting (default `<data dir>/backups`, see [`docs/settings.md`](settings.md)). A directory it creates gets mode 0700, the file 0600. It refuses a directory inside the checkout: backups stay out of the repo. Backups are taken on demand only; `npm run status` shows the newest one and its age.
+
+There is no restore command until scene-bound encounters (Epic M) have changed what scenes record. Hand recovery of a lost database file: stop the bridge (`npm run bridge:stop`; it holds its change-log position in memory) and every Claude Code session (each MCP server holds the database open), copy a backup over the database file, remove that file's `-wal` and `-shm` files, then start the bridge.
+
+What recovery costs: the scenes are newer than the restored database. When a scene opens, tokens whose instances are missing are deleted (`planSync`), so monsters added after the backup lose their tokens. The restored change log's seqs can fall below the scene's `placed-seq`, so a later `restore_monsters` or `restore_encounter` may not recreate a token the scene already lists.
+
 ## Token and auth
 
-- Two tokens, each a file created with mode 0600 on first run: the extension token (`BRIDGE_TOKEN_FILE`, default `~/.config/ttrpg-agents/bridge-token`) and the agent token (`BRIDGE_AGENT_TOKEN_FILE`, default `~/.config/ttrpg-agents/agent-token`). The bridge never serves the agent token.
-- The bridge's state file (`BRIDGE_STATE_FILE`, default `~/.config/ttrpg-agents/bridge-state.json`) and the detached bridge's `bridge.log` beside it are mode 0600 like the tokens: the log holds the install URL with the extension token. The lifecycle commands print the log's path, never a token; `bridge:status` reads the agent token only to send a `scene-status` query.
-- The extension gets its token from the manifest: a `manifest.json` request with the right `?token=` puts it in the popover URL fragment, and the extension reads `location.hash` and sends it in `hello`. A bad or missing token closes the socket. The same token, as `Authorization: Bearer`, authorises `POST /token-images` and `GET /token-images/<sha256>`.
-- The agent token, as `Authorization: Bearer`, authorises `POST /agent/query` and nothing else. The extension token is refused there, and the agent token on the image routes.
-- Tokens are compared in constant time before a body is read. The Host header must be a loopback name with the actual port (DNS-rebinding defence), and the WebSocket upgrade must come from the bridge's own loopback origin on `/ws`. No route sends CORS headers: the panel is served by the bridge, so its requests are same-origin.
+- One token, the agent token: a file created with mode 0600 on first run (the `agentTokenFile` setting, see [`docs/settings.md`](settings.md)). As `Authorization: Bearer` it authorises `POST /agent/query` and nothing else, compared in constant time before the body is read. The bridge never serves it.
+- The bridge's state file (the `bridgeStateFile` setting) and the detached bridge's `bridge.log` beside it are mode 0600 like the agent token. The lifecycle commands print the log's path, never a token; `bridge:status`, `npm run status` and `setup_status` read the agent token only to send a `scene-status` query.
+- The extension has no token: the bridge admits it by origin. Every request must carry a Host of `localhost:<port>` or `127.0.0.1:<port>` with the actual port (DNS-rebinding defence). The WebSocket upgrade must come from the bridge's own origin (`http://localhost:<port>` or `http://127.0.0.1:<port>`) on `/ws`, so no page the bridge did not serve can open it. `POST /token-images` must carry that `Origin` too (browsers send it on every POST, same-origin included); a missing or other `Origin` gets 403 `unauthorized` before the body is read. `GET /token-images/<sha256>` has only the Host check.
+- The image routes and `POST /agent/query` send no CORS headers: the panel is served by the bridge, so its requests are same-origin, and a page on another origin cannot read their answers.
+- A process run by the same OS user can send any Host and Origin, and could read the token files anyway. Other OS users on the GM's machine are out of scope (one machine, one GM tab).
 - The `role` in `hello` only drives the extension UI and never authorizes.
 
 ## Queries to the table

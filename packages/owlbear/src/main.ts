@@ -48,10 +48,6 @@ const obr = createObrAdapter();
 obr.onReady(async () => {
   const role = await obr.getRole();
 
-  // The bridge serves the manifest with the token as the popover URL fragment.
-  const token = /^#([0-9a-f]{64})/.exec(location.hash)?.[1] ?? "";
-  const tokenMissing = token === "";
-
   let socketState: SocketState = "connecting";
   let streakStart = Date.now();
   let syncError: string | undefined;
@@ -83,7 +79,6 @@ obr.onReady(async () => {
   const render = () => {
     const view = panelView({
       role,
-      tokenMissing,
       socketState,
       ...(rejection ? { rejection } : {}),
       syncError,
@@ -103,7 +98,7 @@ obr.onReady(async () => {
     );
   };
 
-  if (role !== "gm" || tokenMissing) {
+  if (role !== "gm") {
     render();
     return;
   }
@@ -152,12 +147,12 @@ obr.onReady(async () => {
         editNote = text;
         render();
       },
-      storeImage: (bytes) => uploadTokenImage(bytes, token),
+      storeImage: (bytes) => uploadTokenImage(bytes),
       onArtStoreFailed: (text) => {
         artError = text;
         render();
       },
-      loadImage: (sha256) => downloadTokenImage(sha256, token),
+      loadImage: (sha256) => downloadTokenImage(sha256),
       onArtRepublishFailed: (text) => {
         artError = text;
         render();
@@ -200,7 +195,7 @@ obr.onReady(async () => {
     hello: () => ({
       v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role, extensionVersion: EXTENSION_VERSION, token },
+      payload: { role, extensionVersion: EXTENSION_VERSION },
     }),
     onMessage: (message) => {
       if (message.type === "map-rooms") {

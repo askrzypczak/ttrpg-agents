@@ -41,11 +41,11 @@ The `owlbear` package is an Owlbear Rodeo extension served from a local bridge s
 
 1. `npm run build` (builds the extension into `packages/owlbear/dist`).
 2. `npm run bridge` (serves the extension and `ws://localhost:5199/ws`; override with `BRIDGE_PORT`).
-3. In Owlbear Rodeo, Profile > Add Custom Extension, and enter the `install in Owlbear` URL the bridge prints: `http://localhost:5199/manifest.json?token=<token>`.
+3. In Owlbear Rodeo, Profile > Add Custom Extension, and enter the `install in Owlbear` URL the bridge prints: `http://localhost:5199/manifest.json`.
 4. Switch the extension on for each room that should use it: on the Owlbear profile page, click the pencil on the room's card, open Extensions and switch it on. Adding it to the account is not enough; it does not load in a room until then.
 5. Chrome may ask for local network access for `owlbear.rodeo`; allow it, or the panel stays on "Connecting" and shows a hint after a few seconds.
 
-The token lives in a file; see [`packages/bridge/README.md`](packages/bridge/README.md) for its path and `BRIDGE_TOKEN_FILE`. To rotate it, delete the token file, restart the bridge, and reinstall the extension.
+The bridge's agent token, which the MCP server sends with its queries to the table, lives in a file; see [`packages/bridge/README.md`](packages/bridge/README.md) for its path and `BRIDGE_AGENT_TOKEN_FILE`. To rotate it, delete the file and restart the bridge. The extension needs no token. An extension installed with an older URL ending in `?token=...` keeps working, because the bridge ignores the query, and that token grants nothing now. The old token file, `~/.config/ttrpg-agents/bridge-token`, can be deleted.
 
 Warning: `BRIDGE_STATIC_DIR` overrides the served folder, and the bridge serves whatever it points at, readable by owlbear.rodeo pages; only point it at the built extension.
 

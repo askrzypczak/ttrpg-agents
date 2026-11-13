@@ -1,10 +1,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import { defaultDbPath, openDatabase } from "./db.js";
+import { openDatabase } from "./db.js";
 import {
   LATEST_VERSION,
   getUserVersion,
@@ -495,34 +495,6 @@ describe("migrations", () => {
         .map((i) => [i.id, i.spawnPosition]),
     ).toEqual([["i3", { x: 225, y: 375 }]]);
     db.close();
-  });
-});
-
-describe("defaultDbPath", () => {
-  it("honours TTRPG_AGENTS_DB", () => {
-    expect(defaultDbPath({ TTRPG_AGENTS_DB: "/tmp/x.db" }, "/home/u")).toBe(
-      "/tmp/x.db",
-    );
-  });
-
-  it("uses XDG_DATA_HOME when set", () => {
-    expect(defaultDbPath({ XDG_DATA_HOME: "/xdg" }, "/home/u")).toBe(
-      join("/xdg", "ttrpg-agents", "encounters.db"),
-    );
-  });
-
-  it("falls back to ~/.local/share", () => {
-    expect(defaultDbPath({}, "/home/u")).toBe(
-      join("/home/u", ".local", "share", "ttrpg-agents", "encounters.db"),
-    );
-  });
-
-  it("real default is not inside the repo", () => {
-    const p = defaultDbPath({}, homedir());
-    expect(p).toBe(
-      join(homedir(), ".local", "share", "ttrpg-agents", "encounters.db"),
-    );
-    expect(resolve(p).startsWith(resolve(process.cwd()) + sep)).toBe(false);
   });
 });
 

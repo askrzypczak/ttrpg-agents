@@ -1,7 +1,9 @@
 // `npm run bridge:start|stop|restart|status`: runs the bridge detached from the
 // terminal and reports on it. The logic lives in bridge-lifecycle.ts; this
-// entry wires the real state file, this checkout and the real build.
+// entry wires the settings from the config (docs/settings.md), this checkout
+// and the real build.
 import { spawn } from "node:child_process";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -11,7 +13,7 @@ import {
   stopBridge,
   type LifecycleOptions,
 } from "./bridge-lifecycle.ts";
-import { defaultStatePath } from "../packages/bridge/src/state-file.ts";
+import { describeProfile, loadConfig } from "../packages/config/src/config.ts";
 
 const checkout = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -49,9 +51,19 @@ if (command === undefined) {
   console.error("usage: node scripts/bridge.ts <start|stop|restart|status>");
   process.exitCode = 2;
 } else {
-  process.exitCode = await command({
-    statePath: process.env.BRIDGE_STATE_FILE ?? defaultStatePath(),
+  const { profile, settings, problems } = loadConfig({
+    env: process.env,
+    home: homedir(),
     checkout,
+  });
+  for (const problem of problems) console.error(problem.message);
+  if (problems.some((p) => p.level === "error")) process.exit(1);
+  process.exitCode = await command({
+    statePath: settings.bridgeStateFile,
+    port: settings.bridgePort,
+    agentTokenPath: settings.agentTokenFile,
+    checkout,
+    profile: describeProfile(profile),
     env: process.env,
     build,
     out: (line) => console.log(line),

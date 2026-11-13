@@ -14,6 +14,7 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
+import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
 
 const WOLF = "srd-2024_wolf";
 const DIRE_WOLF = "srd-2024_dire-wolf";
@@ -75,6 +76,7 @@ beforeEach(() => {
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${String(tick)}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
+    setup: makeTestSetupPorts(),
     newCommandId: () => `command-${String(++commands)}`,
   };
 });

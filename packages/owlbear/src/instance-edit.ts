@@ -1,5 +1,5 @@
 import type { InstanceEdit } from "@ttrpg-agents/engine";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 
 export const INSTANCE_EDIT_ID_PREFIX = "instance-edit:";
 
@@ -10,7 +10,7 @@ export const INSTANCE_EDIT_ID_PREFIX = "instance-edit:";
  */
 export function instanceEditMessage(edit: InstanceEdit): BridgeMessage {
   return {
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "instance-edit",
     id: `${INSTANCE_EDIT_ID_PREFIX}${edit.instanceId}:${crypto.randomUUID()}`,
     payload: edit,

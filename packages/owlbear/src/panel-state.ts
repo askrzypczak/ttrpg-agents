@@ -17,8 +17,6 @@ export interface PanelInput {
   disconnectedMs: number;
   /** Show the stalled hint once disconnected this long. */
   stalledAfterMs?: number;
-  /** True when the panel URL carried no bridge token. */
-  tokenMissing?: boolean;
   /** Description of the latest encounter sync failure, if not yet recovered. */
   syncError?: string;
   /** The bridge's refusal of the latest token deletion, if any (see token-deleted.ts). */
@@ -46,12 +44,10 @@ export interface PanelInput {
 export interface PanelView {
   kind:
     | "gm-only"
-    | "token-missing"
     | "connected"
     | "connecting"
     | "reconnecting"
     | "closed"
-    | "rejected-token"
     | "rejected-version"
     | "superseded";
   message: string;
@@ -113,7 +109,7 @@ export const STALLED_HINT =
 
 export function panelView(input: PanelInput): PanelView {
   const view = connectionView(input);
-  if (view.kind === "gm-only" || view.kind === "token-missing") return view;
+  if (view.kind === "gm-only") return view;
   const errors = [
     input.syncError ? `Encounter sync failed: ${input.syncError}` : undefined,
     input.removeError,
@@ -198,12 +194,6 @@ function connectionView(input: PanelInput): PanelView {
       message: "This extension is only available to the GM.",
     };
   }
-  if (input.tokenMissing) {
-    return {
-      kind: "token-missing",
-      message: "Token missing: reinstall via the URL the bridge printed.",
-    };
-  }
   const stalledAfter = input.stalledAfterMs ?? DEFAULT_STALLED_AFTER_MS;
   switch (input.socketState) {
     case "open":
@@ -216,17 +206,11 @@ function connectionView(input: PanelInput): PanelView {
           action: "use-this-tab",
         };
       }
-      return input.rejection === "unsupported-version"
-        ? {
-            kind: "rejected-version",
-            message:
-              "Bridge and extension versions differ: rebuild the extension and the bridge.",
-          }
-        : {
-            kind: "rejected-token",
-            message:
-              "The bridge rejected the token: reinstall via the URL the bridge printed.",
-          };
+      return {
+        kind: "rejected-version",
+        message:
+          "Bridge and extension versions differ: rebuild the extension and the bridge.",
+      };
     case "closed":
       return { kind: "closed", message: "Disconnected." };
     case "connecting":

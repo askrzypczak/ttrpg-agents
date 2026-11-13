@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
@@ -48,7 +48,7 @@ const instanceIds = (scene: SceneModel): string[] =>
 
 /** The bridge's non-fatal refusal of the command with envelope id `id`. */
 const refusal = (id: string): BridgeMessage => ({
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "error",
   id,
   payload: { code: "refused", message: "could not remove", fatal: false },

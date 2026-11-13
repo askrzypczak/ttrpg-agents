@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { decodeMessage, encodeMessage } from "./protocol.js";
+import {
+  PROTOCOL_VERSION,
+  decodeMessage,
+  encodeMessage,
+  type BridgeMessage,
+} from "./protocol.js";
 
 describe("encounter-event origin", () => {
   it("an encounter-event without origin fails decodeMessage", () => {
     const withOrigin = {
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "encounter-event",
       payload: {
         type: "removed",
@@ -24,8 +29,8 @@ describe("encounter-event origin", () => {
   });
 
   it("an encounter-event with origin round-trips through decodeMessage", () => {
-    const message = {
-      v: 1 as const,
+    const message: BridgeMessage = {
+      v: PROTOCOL_VERSION,
       type: "encounter-event" as const,
       payload: {
         type: "instance-changed" as const,

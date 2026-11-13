@@ -7,13 +7,14 @@ Tests are 75-85% of the added lines in recent PRs, and feature PRs are vertical 
 Read, commit and review in this order:
 
 1. `engine`: domain core (rules, use cases, ports)
-2. `store-sqlite`: encounter store, a driven adapter
-3. `srd`: monster data, a driven adapter
-4. `protocol`: bridge wire contract
-5. `bridge`: HTTP and WebSocket server, and the client `mcp` uses for queries
-6. `mcp`: driving adapter (tools and formatting)
-7. `owlbear`: browser extension, a client of the bridge
-8. docs and skills
+2. `config`: settings loader for the composition roots
+3. `store-sqlite`: encounter store, a driven adapter
+4. `srd`: monster data, a driven adapter
+5. `protocol`: bridge wire contract
+6. `bridge`: HTTP and WebSocket server, and the client `mcp` uses for queries
+7. `mcp`: driving adapter (tools and formatting)
+8. `owlbear`: browser extension, a client of the bridge
+9. docs and skills
 
 Each layer imports only layers above it. The exception is test-only imports, such as the `store-sqlite` tests using `srd`. Reading top-down, every type is met before the code that uses it, so a reviewer meets the engine's rules before any adapter that translates them, and the adapter code can be read as translation.
 

@@ -1,17 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
 import { e2eDbPath, seedE2eDatabase } from "./db.js";
-import {
-  E2E_AGENT_TOKEN,
-  E2E_TOKEN,
-  writeE2eAgentTokenFile,
-  writeE2eTokenFile,
-} from "./token.js";
+import { E2E_AGENT_TOKEN, writeE2eAgentTokenFile } from "./token.js";
 
 /** A real bridge child process owned by one Playwright worker. */
 export interface WorkerBridge {
   origin: string;
-  token: string;
   /** Bearer token for `POST /agent/query`. */
   agentToken: string;
   /** The seeded SQLite file the bridge serves (`e2eDbPath(dir)`). */
@@ -24,7 +18,7 @@ const LISTENING = /bridge listening on (http:\/\/localhost:\d+)/;
 
 /**
  * Starts the real bridge CLI (`packages/bridge/dist/cli.js`, cwd `repo`) on an
- * ephemeral port, serving `staticDir`, with its token file and seeded DB in
+ * ephemeral port, serving `staticDir`, with its agent token file and seeded DB in
  * `dir`. Resolves once the bridge reports its listening origin.
  */
 export async function startWorkerBridge(options: {
@@ -33,7 +27,6 @@ export async function startWorkerBridge(options: {
   dir: string;
 }): Promise<WorkerBridge> {
   const { repo, staticDir, dir } = options;
-  const tokenFile = writeE2eTokenFile(dir);
   const agentTokenFile = writeE2eAgentTokenFile(dir);
   seedE2eDatabase(dir);
   const dbPath = e2eDbPath(dir);
@@ -47,7 +40,6 @@ export async function startWorkerBridge(options: {
         ...process.env,
         BRIDGE_PORT: "0",
         BRIDGE_STATIC_DIR: staticDir,
-        BRIDGE_TOKEN_FILE: tokenFile,
         BRIDGE_AGENT_TOKEN_FILE: agentTokenFile,
         BRIDGE_STATE_FILE: join(dir, "bridge-state.json"),
         TTRPG_AGENTS_DB: dbPath,
@@ -73,7 +65,6 @@ export async function startWorkerBridge(options: {
   }
   return {
     origin,
-    token: E2E_TOKEN,
     agentToken: E2E_AGENT_TOKEN,
     dbPath,
     stop,

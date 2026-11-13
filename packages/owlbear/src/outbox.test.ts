@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import { createOutbox } from "./outbox.js";
 
 const command = (id: string): BridgeMessage => ({
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "token-deleted",
   id,
   payload: { instanceId: "i1" },

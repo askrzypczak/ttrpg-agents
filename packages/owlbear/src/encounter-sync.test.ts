@@ -19,6 +19,7 @@ import {
   SYNCED_METADATA_KEY,
   type EncounterInstance,
 } from "./sync-plan.js";
+import { PROTOCOL_VERSION } from "@ttrpg-agents/protocol";
 
 const inst = (n: number): EncounterInstance =>
   makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
@@ -648,7 +649,11 @@ describe("createEncounterSync", () => {
     await sync.handleMessage(snapshot(feed, 1));
     expect(applied).toBe(1);
     calls.length = 0;
-    await sync.handleMessage({ v: 1, type: "pong", payload: {} });
+    await sync.handleMessage({
+      v: PROTOCOL_VERSION,
+      type: "pong",
+      payload: {},
+    });
     expect(calls).toEqual([]);
     expect(applied).toBe(1);
     expect(instanceIds(scene)).toEqual(["i1"]);

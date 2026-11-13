@@ -28,51 +28,36 @@ port, checkout, commit, start time; mode 0600 in a 0700 directory) and removes
 it when it stops. The commands read it, and check with `ps` that the pid is
 still that bridge before signalling it, so a stale file never leads to
 signalling another process. The detached bridge's stdout and stderr go to
-`bridge.log` beside the state file, emptied on each start and mode 0600: it
-holds the install URL, so the commands print its path, never a token.
+`bridge.log` beside the state file, emptied on each start and mode 0600; the
+commands print its path.
 
-`bridge:status` reports the running bridge's pid, port, checkout, commit, start
+`bridge:status` reports the profile, then the running bridge's pid, port, checkout, commit, start
 time and log, with a warning when its checkout or commit is not this
 checkout's. It asks the bridge for `scene-status` with the agent token to say
 whether a GM tab is connected (or unknown, with the reason). With no running
 bridge it says whether the port still accepts connections, held by another
 process. It changes nothing and exits 0.
 
-The bridge prints an `install in Owlbear` URL (`.../manifest.json?token=...`).
+The bridge prints an `install in Owlbear` URL (`.../manifest.json`).
 In Owlbear Rodeo, Profile > Add Custom Extension, enter that URL. Then switch
 the extension on for each room that should use it: on the profile page, click
 the pencil on the room's card, open Extensions and switch it on. Adding it to
-the account is not enough; it does not load in a room until then.
+the account is not enough; it does not load in a room until then. An extension
+installed with an older `?token=` URL keeps working: the bridge ignores the
+query.
 
-Environment:
+Settings (port, served folder, agent token file, state file and database):
+see [`docs/settings.md`](../../docs/settings.md).
 
-- `BRIDGE_PORT`: port to listen on (default `5199`).
-- `BRIDGE_STATIC_DIR`: folder to serve (default `packages/owlbear/dist`). The
-  bridge serves whatever it points at, readable by owlbear.rodeo pages, so only
-  point it at the built extension.
-- `BRIDGE_TOKEN_FILE`: persistent token, created with mode 0600 on first run
-  (default `~/.config/ttrpg-agents/bridge-token`).
-- `BRIDGE_AGENT_TOKEN_FILE`: agent token for `POST /agent/query`, created
-  with mode 0600 on first run (default `~/.config/ttrpg-agents/agent-token`).
-  It is never served and is separate from the extension token.
-- `BRIDGE_STATE_FILE`: the state file (default
-  `~/.config/ttrpg-agents/bridge-state.json`); the log is `bridge.log` in the
-  same directory. Set it to run a second bridge, or tests, without touching
-  the first one's record.
-- `TTRPG_AGENTS_DB`: the encounter database to watch, the same file the MCP
-  server writes (see `packages/mcp/README.md` for the default location).
+## Test a branch
 
-## Test a branch against the real table
+Every process started in a worktree uses the dev profile: its own database, agent token and state file, and port 5299 (see Profiles in [`docs/settings.md`](../../docs/settings.md)). The real bridge and database are untouched.
 
-1. From the branch's checkout (after `npm ci`), run `npm run bridge:restart`:
-   it stops the running bridge, wherever it was started, builds this checkout
-   and starts the bridge from it. `npm run bridge:status` should show this
-   checkout and its commit with no warning.
-2. Reload the GM's Owlbear tab so it loads the extension this bridge serves.
-3. Reconnect the MCP server (`/mcp` in Claude Code) so it picks up the fresh
-   build.
-4. The branch's migrations run on the shared database unless `TTRPG_AGENTS_DB`
-   points elsewhere.
+1. In the branch's worktree (after `npm ci`), run `npm run bridge:start` (`bridge:restart` after a change). It starts a dev bridge beside the real one; `npm run bridge:status` shows `profile: dev` and this checkout. One dev bridge runs at a time: stop the other worktree's first.
+2. Once, add the dev extension in Owlbear from the dev bridge's install URL, `http://localhost:5299/manifest.json`, and switch it on in the test room only. Keep only one of the two extensions on in a room: both act on the same tokens.
+3. Start the Claude Code session in the worktree, so its MCP server opens the same dev database. Reconnect it (`/mcp`) after a rebuild.
+
+To drive the real table from a branch, set `TTRPG_AGENTS_PROFILE=default` for both the bridge command and the Claude Code session, for example `TTRPG_AGENTS_PROFILE=default npm run bridge:restart`. The branch's migrations then run on the real database.
 
 ## Queries
 
@@ -172,27 +157,30 @@ Without the option the type is `unexpected-type`.
 
 ## Token images
 
-`POST /token-images` (`Authorization: Bearer <extension token>`, body the raw
-image bytes) stores the image the GM picked, sent by the extension after the
-pick. The token is checked before the body is read, and the agent token is
-refused. The body is at most 1 MiB; its Content-Type is ignored, nothing in it
-is read as a URL, and the bridge makes no outbound request. The server's
-optional `storeTokenImage` option validates and stores it (`cli.ts` wires the
-engine's `storeTokenImage` over `SqliteTokenImageRepository`). The answer is
-`{ ok: true, image: { sha256, mime, width, height } }` (200), or
-`{ ok: false, error: { code, message } }`: 401 `unauthorized`, 413
+`POST /token-images` (body the raw image bytes) stores the image the GM picked,
+sent by the extension after the pick. The request's `Origin` must be the
+bridge's own, `http://localhost:<port>` or `http://127.0.0.1:<port>`, as it is
+for the extension's page; it is checked before the body is read, and
+`Authorization` is not read. The body is at most 1 MiB; its Content-Type is
+ignored, nothing in it is read as a URL, and the bridge makes no outbound
+request. The server's optional `storeTokenImage` option validates and stores it
+(`cli.ts` wires the engine's `storeTokenImage` over
+`SqliteTokenImageRepository`).
+
+The answer is `{ ok: true, image: { sha256, mime, width, height } }` (200), or
+`{ ok: false, error: { code, message } }`: 403 `unauthorized`, 413
 `too_large`, 422 `svg`, `unsupported_type`, `unreadable` or
 `dimensions_too_large`, 500 `store_failed`. A wrong Host gets the plain 403 of
 every route. Without the option the route does not exist (405). See "Token and
 auth" in [`docs/architecture.md`](../../docs/architecture.md).
 
-`GET /token-images/<sha256>` (`Authorization: Bearer <extension token>`,
-checked in constant time before the hash is looked up; the agent token is
-refused) answers the stored bytes of one image, for the extension to upload to
-Owlbear again. The rest of the path must be exactly 64 lowercase hex
-characters, with no query string. The answer carries the stored mime as
-Content-Type and `X-Content-Type-Options: nosniff`; refusals are
-`{ ok: false, error: { code, message } }`: 401 `unauthorized`, 404 `not_found`
-(a malformed hash or one the bridge does not hold). The bytes are read through
+`GET /token-images/<sha256>` (no credentials: the Host check only, and no CORS
+headers, so a page on another origin cannot read the bytes) answers the stored
+bytes of one image, for the extension to upload to Owlbear again. The rest of
+the path must be exactly 64 lowercase hex characters, with no query string.
+The answer carries the stored mime as Content-Type and
+`X-Content-Type-Options: nosniff`; refusals are
+`{ ok: false, error: { code, message } }`: 404 `not_found` (a malformed hash
+or one the bridge does not hold). The bytes are read through
 the engine's `TokenImageRepository` port (`cli.ts` wires
 `SqliteTokenImageRepository`).

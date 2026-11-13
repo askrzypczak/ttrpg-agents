@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   instanceEditErrorText,
   instanceEditMessage,
@@ -11,7 +11,7 @@ const error = (
   fatal = false,
   message = "no such instance",
 ): BridgeMessage => ({
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "error",
   ...(id !== undefined ? { id } : {}),
   payload: { code: "unknown_instance", message, fatal },
@@ -21,7 +21,7 @@ describe("instance-edit", () => {
   it("instanceEditMessage and instanceEditErrorText share the message id", () => {
     const request = instanceEditMessage({ instanceId: "i7", currentHp: 5 });
     expect(request).toMatchObject({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "instance-edit",
       payload: { instanceId: "i7", currentHp: 5 },
     });
@@ -37,7 +37,7 @@ describe("instance-edit", () => {
     expect(instanceEditErrorText(error(undefined))).toBe(undefined);
     expect(
       instanceEditErrorText({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "pong",
         id: request.id,
         payload: {},

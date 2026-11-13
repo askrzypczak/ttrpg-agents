@@ -10,8 +10,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 export interface BridgeState {
   pid: number;
@@ -22,11 +21,6 @@ export interface BridgeState {
   commit: string | null;
   /** ISO time the process started. */
   startedAt: string;
-}
-
-/** `~/.config/ttrpg-agents/bridge-state.json`, beside the token files. */
-export function defaultStatePath(): string {
-  return join(homedir(), ".config", "ttrpg-agents", "bridge-state.json");
 }
 
 /** Writes the record atomically, mode 0600 (directory 0700). */

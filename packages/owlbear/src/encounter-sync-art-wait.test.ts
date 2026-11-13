@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PublishedTokenArt, TokenArt } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
-import type { BridgeMessage } from "@ttrpg-agents/protocol";
+import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr, type FakePick } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
@@ -74,7 +74,7 @@ const idleTimers: Timers = {
 };
 
 const helloAck: BridgeMessage = {
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "hello-ack",
   payload: { serverVersion: "0" },
 };

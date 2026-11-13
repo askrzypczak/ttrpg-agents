@@ -11,10 +11,21 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { createServer, type Server } from "node:net";
+import { createServer, type AddressInfo, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { WebSocket } from "ws";
+import {
+  PROTOCOL_VERSION,
+  decodeMessage,
+  encodeMessage,
+  type BridgeMessage,
+} from "@ttrpg-agents/protocol";
+import {
+  SqliteEncounterRepository,
+  openDatabase,
+} from "@ttrpg-agents/store-sqlite";
 
 // The real bridge CLI as a child process, isolated in a temp dir: its own state
 // file, token files, database and an ephemeral port.
@@ -146,6 +157,74 @@ async function exists(path: string): Promise<boolean> {
 
 describe("bridge CLI", () => {
   it(
+    "the bridge prints the install URL with no token",
+    async () => {
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const port = await listeningPort(bridge);
+      const line = await waitFor(() => {
+        const m = /^install in Owlbear: .*$/m.exec(bridge.stdout());
+        return Promise.resolve(m ? m[0] : undefined);
+      }, "the install line");
+
+      expect(line).toBe(
+        `install in Owlbear: http://localhost:${String(port)}/manifest.json`,
+      );
+      expect(bridge.stdout()).not.toContain(EXTENSION_TOKEN);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "the bridge creates no extension token file, neither at BRIDGE_TOKEN_FILE nor at the default path under HOME",
+    async () => {
+      const home = join(dir, "home");
+      await mkdir(home);
+      env.HOME = home;
+      const named = join(dir, "missing", "bridge-token");
+      const defaultPath = join(home, ".config", "ttrpg-agents", "bridge-token");
+
+      env.BRIDGE_TOKEN_FILE = named;
+      const withVariable = spawnTracked(process.execPath, [CLI]);
+      await listeningPort(withVariable);
+      await recordOf(withVariable);
+      await stopChild(withVariable.child);
+      expect(await exists(named)).toBe(false);
+      expect(await exists(defaultPath)).toBe(false);
+
+      delete env.BRIDGE_TOKEN_FILE;
+      const withoutVariable = spawnTracked(process.execPath, [CLI]);
+      await listeningPort(withoutVariable);
+      await recordOf(withoutVariable);
+      await stopChild(withoutVariable.child);
+      expect(await exists(defaultPath)).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a manifest request with an old install URL's ?token= gets the manifest as built, even when BRIDGE_TOKEN_FILE holds that token",
+    async () => {
+      const built =
+        JSON.stringify(
+          { name: "t", action: { popover: "/index.html" } },
+          null,
+          2,
+        ) + "\n";
+      await writeFile(join(dir, "static", "manifest.json"), built);
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const port = await listeningPort(bridge);
+
+      const res = await fetch(
+        `http://127.0.0.1:${String(port)}/manifest.json?token=${EXTENSION_TOKEN}`,
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(built);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "once listening, the bridge records its pid, port, checkout, commit and start time in the state file",
     async () => {
       const spawnedAt = Date.now();
@@ -252,6 +331,211 @@ describe("bridge CLI", () => {
       const all = run.stdout() + run.stderr();
       expect(all).not.toMatch(/^\s+at /m);
       expect(all).not.toContain("npm error");
+    },
+    TIMEOUT,
+  );
+});
+
+const PROJECT_VARIABLES = new Set([
+  "TTRPG_AGENTS_DB",
+  "BRIDGE_PORT",
+  "BRIDGE_AGENT_TOKEN_FILE",
+  "BRIDGE_STATE_FILE",
+  "BRIDGE_STATIC_DIR",
+  "TTRPG_AGENTS_BACKUP_DIR",
+]);
+
+/**
+ * Points `env` at a temp HOME and XDG config directory with no project or
+ * other XDG variables, so only config.json (or the defaults under the temp
+ * directories) can name the database and port. Returns the config.json writer.
+ */
+async function isolateSettings(): Promise<(content: unknown) => Promise<void>> {
+  const home = join(dir, "home");
+  const configHome = join(dir, "xdg-config");
+  await mkdir(home);
+  await mkdir(configHome);
+  const isolated: NodeJS.ProcessEnv = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (PROJECT_VARIABLES.has(name) || name.startsWith("XDG_")) continue;
+    isolated[name] = value;
+  }
+  isolated.HOME = home;
+  isolated.XDG_CONFIG_HOME = configHome;
+  // config.json goes in the default profile's directory, whatever the checkout.
+  isolated.TTRPG_AGENTS_PROFILE = "default";
+  env = isolated;
+  return async (content) => {
+    const configDir = join(configHome, "ttrpg-agents");
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, "config.json"), JSON.stringify(content));
+  };
+}
+
+/** A loopback port nothing listens on. */
+async function freePort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>((done) => probe.listen(0, "127.0.0.1", done));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise<void>((done) => probe.close(() => done()));
+  return port;
+}
+
+/**
+ * The port from the listening line, or the exit code if the bridge exits
+ * first; at the deadline the bridge is killed and neither is set.
+ */
+async function listeningOrExit(
+  spawned: Spawned,
+  deadlineMs = 15_000,
+): Promise<{ port?: number; code?: number | null }> {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const m = /bridge listening on http:\/\/localhost:(\d+)/.exec(
+      spawned.stdout(),
+    );
+    if (m) return { port: Number(m[1]) };
+    if (spawned.child.exitCode !== null || spawned.child.signalCode !== null)
+      return { code: spawned.child.exitCode };
+    if (Date.now() > deadline) {
+      await stopChild(spawned.child);
+      return {};
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+/** Exit code, or null when the bridge was still running at the deadline and was killed. */
+async function exitWithin(
+  spawned: Spawned,
+  deadlineMs = 15_000,
+): Promise<number | null> {
+  const timer = setTimeout(() => spawned.child.kill("SIGKILL"), deadlineMs);
+  try {
+    return await exited(spawned.child);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+type Snapshot = Extract<BridgeMessage, { type: "encounter-snapshot" }>;
+
+/** Connects as a page the bridge served, says hello and returns the first snapshot. */
+async function firstSnapshot(port: number): Promise<Snapshot> {
+  const ws = new WebSocket(`ws://127.0.0.1:${String(port)}/ws`, {
+    origin: `http://localhost:${String(port)}`,
+  });
+  try {
+    return await new Promise<Snapshot>((done, fail) => {
+      const timer = setTimeout(
+        () => fail(new Error("no snapshot after hello")),
+        10_000,
+      );
+      ws.once("error", fail);
+      ws.on("message", (data: Buffer) => {
+        const r = decodeMessage(data.toString());
+        if (r.ok && r.message.type === "encounter-snapshot") {
+          clearTimeout(timer);
+          done(r.message);
+        }
+      });
+      ws.once("open", () =>
+        ws.send(
+          encodeMessage({
+            v: PROTOCOL_VERSION,
+            type: "hello",
+            id: "h1",
+            payload: { role: "gm", extensionVersion: "0" },
+          }),
+        ),
+      );
+    });
+  } finally {
+    ws.close();
+  }
+}
+
+describe("bridge CLI settings", () => {
+  it(
+    "the bridge spawned with no project environment variables listens on the port config.json names and serves the encounter in the database it names",
+    async () => {
+      const writeConfig = await isolateSettings();
+      const port = await freePort();
+      const database = join(dir, "configured", "encounters.db");
+      const db = openDatabase(database);
+      try {
+        new SqliteEncounterRepository(db).addInstances(
+          () => [
+            {
+              monsterKey: "srd-2024_shadow",
+              displayName: "Configured Shadow",
+              maxHp: 16,
+            },
+          ],
+          { source: "mcp", commandId: "seed" },
+        );
+      } finally {
+        db.close();
+      }
+      await writeConfig({ database, bridgePort: port });
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const started = await listeningOrExit(bridge);
+
+      expect(started, bridge.stderr()).toEqual({ port });
+      const snapshot = await firstSnapshot(port);
+      expect(snapshot.payload.instances.map((i) => i.displayName)).toEqual([
+        "Configured Shadow",
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "the bridge exits 1 with a stderr line naming bridgePort when config.json has an invalid bridgePort",
+    async () => {
+      const writeConfig = await isolateSettings();
+      await writeConfig({ bridgePort: "abc" });
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const code = await exitWithin(bridge);
+
+      expect(code, bridge.stderr()).toBe(1);
+      expect(bridge.stderr()).toMatch(/^.*bridgePort.*$/m);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "the bridge started with TTRPG_AGENTS_PROFILE=dev prints its profile and why with its start lines",
+    async () => {
+      const home = join(dir, "home");
+      const configHome = join(dir, "xdg-config");
+      const dataHome = join(dir, "xdg-data");
+      await mkdir(home);
+      await mkdir(configHome);
+      await mkdir(dataHome);
+      env.HOME = home;
+      env.XDG_CONFIG_HOME = configHome;
+      env.XDG_DATA_HOME = dataHome;
+      env.TTRPG_AGENTS_PROFILE = "dev";
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      await listeningPort(bridge);
+      await waitFor(
+        () =>
+          Promise.resolve(
+            /^install in Owlbear: /m.test(bridge.stdout()) ? true : undefined,
+          ),
+        "the install line",
+      );
+
+      const lines = bridge.stdout().split("\n");
+      const listening = lines.findIndex((line) =>
+        line.startsWith("bridge listening on "),
+      );
+      expect(listening).toBeGreaterThanOrEqual(0);
+      expect(lines[listening + 1]).toBe("profile: dev (TTRPG_AGENTS_PROFILE)");
     },
     TIMEOUT,
   );

@@ -28,7 +28,9 @@
     "bridge:start": "node scripts/bridge.ts start",
     "bridge:stop": "node scripts/bridge.ts stop",
     "bridge:restart": "node scripts/bridge.ts restart",
-    "bridge:status": "node scripts/bridge.ts status"
+    "bridge:status": "node scripts/bridge.ts status",
+    "db:backup": "node scripts/db-backup.ts",
+    "status": "node packages/mcp/bin/status.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

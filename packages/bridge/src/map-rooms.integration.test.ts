@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket } from "ws";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -13,13 +14,13 @@ import { startBridgeServer, type BridgeServer } from "./server.js";
 const MANIFEST = { name: "t", action: { popover: "/index.html" } };
 
 const snapshot: BridgeMessage = {
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "encounter-snapshot",
   payload: { instances: [], seq: 0 },
 };
 
 const rooms: BridgeMessage = {
-  v: 1,
+  v: PROTOCOL_VERSION,
   type: "map-rooms",
   payload: {
     itemId: "trollskull",
@@ -86,14 +87,14 @@ function connect(
   });
 }
 
-const hello = (token: string) =>
+const hello = () =>
   encodeMessage({
-    v: 1,
+    v: PROTOCOL_VERSION,
     type: "hello",
-    payload: { role: "gm", extensionVersion: "0", token },
+    payload: { role: "gm", extensionVersion: "0" },
   });
 
-const ping = encodeMessage({ v: 1, type: "ping", payload: {} });
+const ping = encodeMessage({ v: PROTOCOL_VERSION, type: "ping", payload: {} });
 
 /** Waits until `done` holds or `ms` pass, whichever is first. */
 async function waitFor(done: () => boolean, ms = 1000): Promise<void> {
@@ -110,7 +111,7 @@ describe("map-rooms after hello-ack", () => {
     const s = await start(() => rooms);
     const { ws, received } = await connect(s);
 
-    ws.send(hello(s.token));
+    ws.send(hello());
     await waitFor(() => received.length >= 3);
     await settle();
 
@@ -129,7 +130,7 @@ describe("map-rooms after hello-ack", () => {
     });
     const { ws, received } = await connect(s);
 
-    ws.send(hello(s.token));
+    ws.send(hello());
     await waitFor(() => received.length >= 2);
     await settle();
     expect(received.map((m) => m.type)).toEqual([

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 import {
+  PROTOCOL_VERSION,
   decodeMessage,
   encodeMessage,
   type BridgeMessage,
@@ -81,9 +82,9 @@ async function extension(bridge: BridgeServer): Promise<{
   });
   ws.send(
     encodeMessage({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "hello",
-      payload: { role: "gm", extensionVersion: "0", token: bridge.token },
+      payload: { role: "gm", extensionVersion: "0" },
     }),
   );
   await acked;
@@ -146,7 +147,7 @@ describe("POST /agent/query map-image", () => {
     await delay(400);
     ws.send(
       encodeMessage({
-        v: 1,
+        v: PROTOCOL_VERSION,
         type: "query-result",
         ...(query.id !== undefined ? { id: query.id } : {}),
         payload: { name: "map-image", result: IMAGE },

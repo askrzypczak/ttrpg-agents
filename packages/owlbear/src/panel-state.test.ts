@@ -17,17 +17,6 @@ describe("panelView", () => {
     expect(v.hint).toBeUndefined();
   });
 
-  it("asks the GM to reinstall when the token is missing", () => {
-    const v = panelView({
-      role: "gm",
-      socketState: "connecting",
-      disconnectedMs: 0,
-      tokenMissing: true,
-    });
-    expect(v.kind).toBe("token-missing");
-    expect(v.message).toContain("reinstall");
-  });
-
   it("shows connected for the GM when open", () => {
     const v = panelView({ role: "gm", socketState: "open", disconnectedMs: 0 });
     expect(v.kind).toBe("connected");
@@ -68,18 +57,6 @@ describe("panelView", () => {
       stalledAfterMs: 1000,
     });
     expect(v.hint).toBeDefined();
-  });
-
-  it("a bad-token rejection shows the reinstall message with no stalled hint", () => {
-    const v = panelView({
-      role: "gm",
-      socketState: "rejected",
-      rejection: "bad-token",
-      disconnectedMs: 99999,
-    });
-    expect(v.kind).toBe("rejected-token");
-    expect(v.message).toContain("reinstall");
-    expect(v.hint).toBeUndefined();
   });
 
   it("a version rejection shows the rebuild message with no stalled hint", () => {
@@ -125,7 +102,7 @@ describe("panelView sync error", () => {
     expect(v.error).toBeUndefined();
   });
 
-  it("leaves gm-only and token-missing views unaffected", () => {
+  it("leaves the gm-only view unaffected", () => {
     const base: PanelInput = {
       role: "player",
       socketState: "open",
@@ -135,14 +112,11 @@ describe("panelView sync error", () => {
     const player = panelView(base);
     expect(player.kind).toBe("gm-only");
     expect(player.error).toBeUndefined();
-    const noToken = panelView({ ...base, role: "gm", tokenMissing: true });
-    expect(noToken.kind).toBe("token-missing");
-    expect(noToken.error).toBeUndefined();
   });
 });
 
 describe("panelView remove error", () => {
-  it("a removeError shows as the panel error, together with a syncError, and not for gm-only or token-missing", () => {
+  it("a removeError shows as the panel error, together with a syncError, and not for gm-only", () => {
     const removeError = "Could not remove i7 from the encounter: gone";
     const base: PanelInput = {
       role: "gm",
@@ -161,9 +135,6 @@ describe("panelView remove error", () => {
     const player = panelView({ ...base, role: "player", syncError: "boom" });
     expect(player.kind).toBe("gm-only");
     expect(player.error).toBeUndefined();
-    const noToken = panelView({ ...base, tokenMissing: true });
-    expect(noToken.kind).toBe("token-missing");
-    expect(noToken.error).toBeUndefined();
   });
 });
 
@@ -334,21 +305,13 @@ describe("panelView note", () => {
     expect(panelView({ ...connected, editNote: "" }).note).toBeUndefined();
   });
 
-  it("panelView shows no note for the gm-only and token-missing views", () => {
+  it("panelView shows no note for the gm-only view", () => {
     // Control: a connected view shows the note.
     expect(panelView({ ...connected, editNote: "x" }).note).toBe("x");
 
     const player = panelView({ ...connected, role: "player", editNote: "x" });
     expect(player.kind).toBe("gm-only");
     expect(player.note).toBeUndefined();
-
-    const noToken = panelView({
-      ...connected,
-      tokenMissing: true,
-      editNote: "x",
-    });
-    expect(noToken.kind).toBe("token-missing");
-    expect(noToken.note).toBeUndefined();
   });
 });
 

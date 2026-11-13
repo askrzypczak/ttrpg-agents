@@ -16,6 +16,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@ttrpg-agents/bridge": "*",
+    "@ttrpg-agents/config": "*",
     "@ttrpg-agents/engine": "*",
     "@ttrpg-agents/srd": "*",
     "@ttrpg-agents/store-sqlite": "*",
