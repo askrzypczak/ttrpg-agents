@@ -136,14 +136,18 @@ function defineTool<S extends z.ZodRawShape>(def: {
         };
         return minted;
       };
-      // The call's encounter is resolved on the first access of `repo` or
-      // `maps` and kept for the rest of the call, so a tool that never reads
-      // it creates none and a switch of the current encounter mid-call moves
-      // neither repository.
+      // The call's encounter is resolved by the engine's rule on the first
+      // access of `repo` or `maps` and kept for the rest of the call, so a
+      // tool that never reads it creates none and a switch of the current
+      // encounter mid-call moves neither repository. In an open scene with no
+      // encounter only a tool that starts an encounter creates one (the write
+      // form); every other tool fails there (the read form), as a domain
+      // error reply.
       let encounterId: string | undefined;
       const callEncounterId = (): string =>
-        (encounterId ??= resolveEncounter(ctx.encounters, { writes: true })
-          .encounter.id);
+        (encounterId ??= resolveEncounter(ctx.encounters, {
+          writes: def.startsEncounter === true,
+        }).encounter.id);
       let repo: EncounterRepository | undefined;
       let maps: MapRepository | undefined;
       const callCtx: ToolCallContext = {

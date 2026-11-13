@@ -29,8 +29,12 @@ export interface ToolContext {
 
 /** What a tool's run receives: the context plus the encounter of this call. */
 export interface ToolCallContext extends ToolContext {
-  /** The encounter this call acts on, resolved on first use and kept for the call. */
+  /**
+   * The encounter this call acts on, from the engine's resolution rule (the
+   * write form for tools that start an encounter, the read form otherwise),
+   * resolved on first use and kept for the call.
+   */
   readonly repo: EncounterRepository;
-  /** The map repository of this call's encounter, resolved with `repo`. */
+  /** The map repository of this call's encounter, resolved by the same rule with `repo` and kept for the call. */
   readonly maps: MapRepository;
 }
