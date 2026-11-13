@@ -85,7 +85,9 @@ export function resolveEncounter(
     const current = directory.getCurrentEncounter();
     if (current) return { encounter: current, created: false };
   }
-  return directory.transaction(() => createUnderLock(directory));
+  return directory.transaction(() =>
+    createUnderLock(directory, request.writes),
+  );
 }
 
 /**
@@ -124,18 +126,23 @@ function namedEncounter(
 /**
  * Inside the write transaction, the encounter a command acts on when the
  * reads before it found none: in an open scene, a new one bound to the scene
- * and made current; with no scene open, a new current one. Another process
- * shares the database, so the open scene and the current encounter are read
- * again under the lock: it may have bound the scene, opened or closed one, or
- * made an encounter current since.
+ * and made current (the read form fails there instead); with no scene open,
+ * a new current one. Another process shares the database, so the open scene
+ * and the current encounter are read again under the lock: it may have bound
+ * the scene, opened or closed one, or made an encounter current since.
  */
-function createUnderLock(directory: EncounterDirectory): ResolvedEncounter {
+function createUnderLock(
+  directory: EncounterDirectory,
+  writes: boolean,
+): ResolvedEncounter {
   const open = directory.getOpenScene();
   if (open?.encounter) return { encounter: open.encounter, created: false };
   if (!open) {
     const current = directory.getCurrentEncounter();
     if (current) return { encounter: current, created: false };
   }
+  if (open && !writes)
+    throw new NoSceneEncounterError("This scene has no encounter yet.");
   const names = directory.listEncounters().map((e) => e.name);
   const created = directory.createEncounter(nextEncounterName(names));
   if (open) directory.bindScene(open.sceneId, created.id);

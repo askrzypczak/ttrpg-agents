@@ -409,6 +409,25 @@ describe("resolveEncounter", () => {
     expect(directory.listEncounters()).toEqual([other]);
     expect(directory.writes).toEqual([]);
   });
+
+  it("resolveEncounter for a read throws NoSceneEncounterError when another process opens an unbound scene after its first read, and creates none", () => {
+    const directory = new FakeDirectory();
+    const transaction = directory.transaction.bind(directory);
+    // Another process opens a scene with no encounter between the first read
+    // and the write lock.
+    directory.transaction = <T>(fn: () => T): T =>
+      transaction(() => {
+        directory.openSceneId = "scene-1";
+        return fn();
+      });
+
+    expect(() => resolveEncounter(directory, { writes: false })).toThrow(
+      NoSceneEncounterError,
+    );
+    expect(directory.listEncounters()).toEqual([]);
+    expect(directory.bindings.size).toBe(0);
+    expect(directory.writes).toEqual([]);
+  });
 });
 
 describe("openScene", () => {
