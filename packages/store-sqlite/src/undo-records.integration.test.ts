@@ -399,3 +399,34 @@ describe("undo records of scoped repositories", () => {
     store.close();
   });
 });
+
+describe("undo records and rows with no encounter", () => {
+  it("an undo record never lists a change-log row with no encounter", () => {
+    const [a] = seed("Wolf 1");
+    repo.applyDamage(a!.id, 2, mcp("c1", "apply_damage"));
+    const orphan = {
+      type: "hp-changed",
+      id: a!.id,
+      currentHp: 1,
+      maxHp: 11,
+      origin: table,
+    };
+    // As a row from before migration 16 or an art event would be stored.
+    db.prepare(
+      "INSERT INTO encounter_events (event, encounter_id) VALUES (?, NULL)",
+    ).run(JSON.stringify(orphan));
+
+    const events = repo.latestUndoRecord()?.events ?? [];
+
+    expect(events).not.toContainEqual(orphan);
+    expect(events).toEqual([
+      {
+        type: "hp-changed",
+        id: a!.id,
+        currentHp: 9,
+        maxHp: 11,
+        origin: { source: "mcp", commandId: "c1" },
+      },
+    ]);
+  });
+});
