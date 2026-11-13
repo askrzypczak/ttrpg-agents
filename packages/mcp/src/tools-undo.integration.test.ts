@@ -3,6 +3,7 @@ import {
   type EncounterDirectory,
   type EncounterRepository,
   type MapRegistration,
+  type MapRepository,
   type MonsterInstance,
   type NewMonsterInstance,
   type Rng,
@@ -13,7 +14,6 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -110,6 +110,7 @@ function recordingDirectory(
     setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
     repositoryFor: (id) => recording(inner.repositoryFor(id), writes),
+    mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -122,8 +123,12 @@ beforeEach(() => {
   let tick = 1000;
   writes = [];
   issuedCommandIds = [];
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  maps.registerMap(registered);
+  const directory = new SqliteEncounterDirectory(openDatabase(":memory:"), {
+    now: () => tick++,
+  });
+  directory
+    .mapRepositoryFor(resolveEncounter(directory).id)
+    .registerMap(registered);
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -131,13 +136,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.resolve({ tokens: [] }),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: recordingDirectory(
-      new SqliteEncounterDirectory(openDatabase(":memory:"), {
-        now: () => tick++,
-      }),
-      writes,
-    ),
-    maps,
+    encounters: recordingDirectory(directory, writes),
     monsters: loadSrdMonsters(),
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -209,6 +208,13 @@ async function saveKitchen(): Promise<void> {
 /** The current encounter's repository (created when there is none), resolved as a tool call does. */
 function repoOf(context: ToolContext): EncounterRepository {
   return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
+}
+
+/** The current encounter's map repository, resolved as a tool call does. */
+function mapsOf(context: ToolContext): MapRepository {
+  return context.encounters.mapRepositoryFor(
     resolveEncounter(context.encounters).id,
   );
 }
@@ -547,8 +553,8 @@ describe("undo", () => {
     for (const [tool, args] of mapCalls) {
       await ok("apply_damage", { target: "Wolf 1", amount: 4 });
       await ok(tool, args);
-      const rooms = ctx.maps.getRooms("map-1");
-      const active = ctx.maps.getActiveMap();
+      const rooms = mapsOf(ctx).getRooms("map-1");
+      const active = mapsOf(ctx).getActiveMap();
 
       const notCovered = await ok("undo");
       expect(text(notCovered), tool).toBe(
@@ -558,8 +564,8 @@ describe("undo", () => {
         ].join("\n"),
       );
       expect(byName("Wolf 1").currentHp, tool).toBe(7);
-      expect(ctx.maps.getRooms("map-1"), tool).toEqual(rooms);
-      expect(ctx.maps.getActiveMap(), tool).toEqual(active);
+      expect(mapsOf(ctx).getRooms("map-1"), tool).toEqual(rooms);
+      expect(mapsOf(ctx).getActiveMap(), tool).toEqual(active);
 
       const reversed = await ok("undo");
       expect(text(reversed), tool).toContain("Undid apply_damage:");

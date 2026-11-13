@@ -9,7 +9,6 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -121,6 +120,7 @@ function recordingDirectory(
     setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
     repositoryFor: (id) => recordingRepo(inner.repositoryFor(id), writes),
+    mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -141,7 +141,6 @@ beforeEach(() => {
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     encounters: recordingDirectory(inner, writes),
-    maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),

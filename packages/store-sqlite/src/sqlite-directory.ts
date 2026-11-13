@@ -4,11 +4,13 @@ import type {
   Encounter,
   EncounterDirectory,
   EncounterRepository,
+  MapRepository,
 } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
   type RepositoryOptions,
 } from "./sqlite-repository.js";
+import { SqliteMapRepository } from "./map-repository.js";
 
 interface EncounterRow {
   id: string;
@@ -92,6 +94,10 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
 
   repositoryFor(encounterId: string): EncounterRepository {
     return new SqliteEncounterRepository(this.db, encounterId, this.options);
+  }
+
+  mapRepositoryFor(encounterId: string): MapRepository {
+    return new SqliteMapRepository(this.db, encounterId);
   }
 
   /** Runs fn in a transaction; nests by joining an already-open one. */

@@ -95,6 +95,7 @@ function recordingDirectory(
     setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
     repositoryFor: () => recording,
+    mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
     transaction: (fn) => inner.transaction(fn),
   };
 }

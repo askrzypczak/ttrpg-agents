@@ -95,7 +95,7 @@ function clearTokenArt(dir: string): void {
   }
 }
 
-/** Registers `registration` as the active map in the e2e DB and saves `rooms` for its item. */
+/** Registers `registration` as the map of the seeded encounter, E2E_ENCOUNTER_ID, and saves `rooms` for its item. */
 export function seedE2eMap(
   dir: string,
   registration: MapRegistration,
@@ -103,7 +103,7 @@ export function seedE2eMap(
 ): void {
   const db = openDatabase(e2eDbPath(dir));
   try {
-    const maps = new SqliteMapRepository(db);
+    const maps = new SqliteMapRepository(db, E2E_ENCOUNTER_ID);
     maps.registerMap(registration);
     maps.replaceRooms(registration.itemId, rooms);
   } finally {

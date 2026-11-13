@@ -7,7 +7,6 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -43,7 +42,6 @@ function contextWith(sceneMap: TablePort["sceneMap"]): ToolContext {
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
-    maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -99,5 +97,55 @@ describe("use_map", () => {
     const r = await useMap(ctx);
     expect(r.isError).toBe(true);
     expect(text(r)).toContain(message);
+  });
+});
+
+describe("use_map per encounter", () => {
+  it("`use_map` in one encounter leaves another encounter's map unchanged", async () => {
+    const ctx = contextWith(() => Promise.resolve(scene(trollskull, sewers)));
+    const tavern = ctx.encounters.createEncounter("Tavern");
+    const sewerFight = ctx.encounters.createEncounter("Sewer fight");
+    ctx.encounters.setCurrentEncounter(tavern.id);
+    expect(
+      (await useMap(ctx, { name: "Trollskull Manor" })).isError,
+    ).toBeFalsy();
+
+    ctx.encounters.setCurrentEncounter(sewerFight.id);
+    const r = await useMap(ctx, { name: "Sewers" });
+
+    expect(r.isError).toBeFalsy();
+    expect(
+      ctx.encounters.mapRepositoryFor(sewerFight.id).getActiveMap()?.itemId,
+    ).toBe("map-2");
+    expect(
+      ctx.encounters.mapRepositoryFor(tavern.id).getActiveMap()?.itemId,
+    ).toBe("map-1");
+  });
+
+  it("`use_map` records its undo record on the encounter whose map it set, even when another encounter becomes current while the table is read", async () => {
+    const ctx: ToolContext = contextWith(() => {
+      ctx.encounters.setCurrentEncounter(sewerFight.id);
+      return Promise.resolve(scene(trollskull));
+    });
+    const tavern = ctx.encounters.createEncounter("Tavern");
+    const sewerFight = ctx.encounters.createEncounter("Sewer fight");
+    ctx.encounters.setCurrentEncounter(tavern.id);
+
+    const r = await useMap(ctx);
+
+    expect(r.isError).toBeFalsy();
+    expect(ctx.encounters.getCurrentEncounter()?.id).toBe(sewerFight.id);
+    expect(
+      ctx.encounters.mapRepositoryFor(tavern.id).getActiveMap()?.itemId,
+    ).toBe("map-1");
+    expect(
+      ctx.encounters.mapRepositoryFor(sewerFight.id).getActiveMap(),
+    ).toBeUndefined();
+    expect(
+      ctx.encounters.repositoryFor(tavern.id).latestUndoRecord(),
+    ).toMatchObject({ commandId: "command", command: "use_map" });
+    expect(
+      ctx.encounters.repositoryFor(sewerFight.id).latestUndoRecord(),
+    ).toBeUndefined();
   });
 });

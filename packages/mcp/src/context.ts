@@ -17,8 +17,6 @@ export interface ToolContext {
   browser: BrowserPort;
   /** Every encounter, the current one, and repositories scoped to one. */
   encounters: EncounterDirectory;
-  /** Registered maps and the active one. */
-  maps: MapRepository;
   monsters: MonsterIndex;
   rng: Rng;
   now: () => Date;
@@ -33,4 +31,6 @@ export interface ToolContext {
 export interface ToolCallContext extends ToolContext {
   /** The encounter this call acts on, resolved on first use and kept for the call. */
   readonly repo: EncounterRepository;
+  /** The map repository of this call's encounter, resolved with `repo`. */
+  readonly maps: MapRepository;
 }

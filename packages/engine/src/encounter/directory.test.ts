@@ -6,6 +6,7 @@ import {
   type EncounterDirectory,
 } from "./directory.js";
 import { UnknownInstanceError } from "./errors.js";
+import type { MapRepository } from "../map/repository.js";
 import type { EncounterRepository } from "./repository.js";
 import type { Encounter } from "./types.js";
 
@@ -74,6 +75,10 @@ class FakeDirectory implements EncounterDirectory {
     const repo = this.repositories.get(encounterId);
     if (!repo) throw new Error(`unknown encounter: ${encounterId}`);
     return repo;
+  }
+
+  mapRepositoryFor(): MapRepository {
+    throw new Error("not used by these tests");
   }
 
   transaction<T>(fn: () => T): T {

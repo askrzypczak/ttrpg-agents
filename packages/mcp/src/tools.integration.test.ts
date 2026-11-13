@@ -15,7 +15,6 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -58,7 +57,6 @@ beforeEach(() => {
     encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
       now: () => tick++,
     }),
-    maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters,
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -163,6 +161,7 @@ function handingOut(
     setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
     repositoryFor: () => repo,
+    mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -1339,7 +1338,6 @@ describe("the encounter a tool call acts on", () => {
         mapImage: () => Promise.reject(new Error("not stubbed")),
       },
       encounters,
-      maps: new SqliteMapRepository(openDatabase(":memory:")),
       monsters,
       rng: cycleRng(0, 3, 5, 7),
       now: () => new Date("2026-01-01T00:00:00Z"),
@@ -1419,6 +1417,7 @@ describe("the encounter a tool call acts on", () => {
       setCurrentEncounter: (id) => directory.setCurrentEncounter(id),
       findEncounterOfInstance: (id) => directory.findEncounterOfInstance(id),
       transaction: (fn) => directory.transaction(fn),
+      mapRepositoryFor: (id) => directory.mapRepositoryFor(id),
       repositoryFor(encounterId) {
         requested.push(encounterId);
         const inner = directory.repositoryFor(encounterId);

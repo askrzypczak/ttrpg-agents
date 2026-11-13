@@ -3,8 +3,11 @@ import {
   cellCenter,
   displayGrid,
   parseCellLabel,
+  resolveEncounter,
   type MapPlacement,
   type MapRegistration,
+  type MapRepository,
+  type SavedRoom,
   type TableMapItem,
   type TablePort,
   type TableSceneMap,
@@ -13,7 +16,6 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -63,8 +65,12 @@ function contextWith(
   sceneTokens: TablePort["sceneTokens"] = () =>
     Promise.reject(new Error("not stubbed")),
 ): ToolContext {
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  if (active) maps.registerMap(active);
+  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  if (active) {
+    encounters
+      .mapRepositoryFor(resolveEncounter(encounters).id)
+      .registerMap(active);
+  }
   return {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -72,8 +78,7 @@ function contextWith(
       sceneTokens,
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
-    maps,
+    encounters,
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -94,6 +99,11 @@ async function call(
 
 function text(r: ToolResult): string {
   return r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+}
+
+/** The current encounter's map repository, resolved as a tool call does. */
+function mapsOf(ctx: ToolContext): MapRepository {
+  return ctx.encounters.mapRepositoryFor(resolveEncounter(ctx.encounters).id);
 }
 
 describe("room tools", () => {
@@ -121,7 +131,9 @@ describe("room tools", () => {
       mapMoved: false,
     });
     expect(
-      ctx.maps.getRooms("map-1").map((room) => [room.name, room.status]),
+      mapsOf(ctx)
+        .getRooms("map-1")
+        .map((room) => [room.name, room.status]),
     ).toEqual([
       ["Taproom", "confirmed"],
       ["Kitchen", "confirmed"],
@@ -134,7 +146,7 @@ describe("room tools", () => {
     expect(proposed.isError).toBeFalsy();
     expect(text(proposed)).toContain("on Trollskull Manor (proposed)");
     expect(text(proposed)).toContain("Cellar A20:C24");
-    expect(ctx.maps.getRooms("map-1").at(-1)?.status).toBe("proposed");
+    expect(mapsOf(ctx).getRooms("map-1").at(-1)?.status).toBe("proposed");
   });
 
   it("`set_rooms` and `list_rooms` add the map-moved line when the live transform differs from the registered one", async () => {
@@ -202,9 +214,11 @@ describe("room tools", () => {
     expect(text(r)).toContain(
       "Removed 2 rooms from Trollskull Manor: Attic, Cellar.",
     );
-    expect(ctx.maps.getRooms("map-1").map((room) => room.name)).toEqual([
-      "Taproom",
-    ]);
+    expect(
+      mapsOf(ctx)
+        .getRooms("map-1")
+        .map((room) => room.name),
+    ).toEqual(["Taproom"]);
   });
 
   it("propose_rooms returns each room with its shrunk ranges and saves nothing", async () => {
@@ -231,7 +245,7 @@ describe("room tools", () => {
       ],
     });
     expect(sceneCalls).toBe(0);
-    expect(ctx.maps.getRooms("map-1")).toEqual([]);
+    expect(mapsOf(ctx).getRooms("map-1")).toEqual([]);
     const listed = await call(ctx, "list_rooms");
     expect(text(listed)).toContain("No rooms saved for Trollskull Manor yet.");
   });
@@ -461,5 +475,130 @@ describe("map-moved flag", () => {
     const used = await call(ctx, "use_map");
     expect(used.isError).toBeFalsy();
     expect(used.structuredContent).not.toHaveProperty("moved");
+  });
+});
+
+describe("room tools per encounter", () => {
+  const GOBLIN = "srd-2024_goblin-warrior";
+  const sewers: TableMapItem = { ...trollskull, id: "map-2", name: "Sewers" };
+  const sewersRegistered: MapRegistration = {
+    ...registered,
+    itemId: "map-2",
+    name: "Sewers",
+  };
+  const room = (name: string): SavedRoom => ({
+    name,
+    status: "confirmed",
+    polygons: [
+      [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 300, y: 300 },
+        { x: 0, y: 300 },
+      ],
+    ],
+  });
+
+  /** A table showing both maps, with the tavern encounter on Trollskull and the sewer fight on the Sewers. */
+  function twoEncounters(sceneTokens?: TablePort["sceneTokens"]) {
+    const ctx = contextWith(
+      () => Promise.resolve(scene(trollskull, sewers)),
+      undefined,
+      sceneTokens,
+    );
+    const { encounters } = ctx;
+    const tavern = encounters.createEncounter("Tavern");
+    const sewerFight = encounters.createEncounter("Sewer fight");
+    encounters.mapRepositoryFor(tavern.id).registerMap(registered);
+    encounters.mapRepositoryFor(sewerFight.id).registerMap(sewersRegistered);
+    return { ctx, encounters, tavern, sewerFight };
+  }
+
+  it("`list_rooms` lists the rooms of the map of the encounter it acts on, not another encounter's", async () => {
+    const { ctx, encounters, tavern, sewerFight } = twoEncounters();
+    encounters
+      .mapRepositoryFor(tavern.id)
+      .replaceRooms("map-1", [room("Kitchen")]);
+    encounters
+      .mapRepositoryFor(sewerFight.id)
+      .replaceRooms("map-2", [room("Tunnel")]);
+    encounters.setCurrentEncounter(tavern.id);
+
+    const r = await call(ctx, "list_rooms");
+
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toContain("Rooms on Trollskull Manor:");
+    expect(text(r)).toContain("| Kitchen | confirmed |");
+    expect(text(r)).not.toContain("Tunnel");
+    expect(
+      (r.structuredContent?.["rooms"] as { name: string }[]).map((x) => x.name),
+    ).toEqual(["Kitchen"]);
+  });
+
+  it("`set_rooms` saves rooms on the map of the encounter it acts on", async () => {
+    const { ctx, encounters, tavern, sewerFight } = twoEncounters();
+    encounters.setCurrentEncounter(sewerFight.id);
+
+    const r = await call(ctx, "set_rooms", {
+      rooms: [{ name: "Tunnel", ranges: ["A1:C3"] }],
+    });
+
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toContain("on Sewers");
+    expect(
+      encounters
+        .mapRepositoryFor(sewerFight.id)
+        .getRooms("map-2")
+        .map((x) => x.name),
+    ).toEqual(["Tunnel"]);
+    expect(encounters.mapRepositoryFor(tavern.id).getRooms("map-1")).toEqual(
+      [],
+    );
+  });
+
+  it("`add_monsters` with a room places monsters in that room of the map of the encounter it acts on", async () => {
+    const { ctx, encounters, tavern, sewerFight } = twoEncounters(() =>
+      Promise.resolve({ tokens: [] }),
+    );
+    encounters.setCurrentEncounter(tavern.id);
+    await call(ctx, "set_rooms", {
+      rooms: [{ name: "Kitchen", ranges: ["A1:C1"] }],
+    });
+    encounters.setCurrentEncounter(sewerFight.id);
+    await call(ctx, "set_rooms", {
+      rooms: [{ name: "Kitchen", ranges: ["A20:C20"] }],
+    });
+
+    const r = await call(ctx, "add_monsters", {
+      groups: [{ monster: GOBLIN, count: 2, room: "kitchen" }],
+    });
+
+    expect(r.isError).toBeFalsy();
+    const placements = r.structuredContent?.["placements"] as {
+      name: string;
+      room: string;
+      cell: string | null;
+    }[];
+    expect(placements).toHaveLength(2);
+    for (const placement of placements)
+      expect(placement.cell).toMatch(/^[A-C]20$/);
+    expect(
+      encounters.repositoryFor(sewerFight.id).listInstances(),
+    ).toHaveLength(2);
+    expect(encounters.repositoryFor(tavern.id).listInstances()).toEqual([]);
+  });
+
+  it('`list_rooms` in an encounter that never used a map answers "No map is in use: use the map first." while another encounter has a map', async () => {
+    const { ctx, encounters, tavern } = twoEncounters();
+    encounters
+      .mapRepositoryFor(tavern.id)
+      .replaceRooms("map-1", [room("Kitchen")]);
+    const crypt = encounters.createEncounter("Crypt");
+    encounters.setCurrentEncounter(crypt.id);
+
+    const r = await call(ctx, "list_rooms");
+
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("No map is in use: use the map first.");
   });
 });

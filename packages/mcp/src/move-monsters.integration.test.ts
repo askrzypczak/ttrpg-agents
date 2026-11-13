@@ -15,7 +15,6 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -59,8 +58,10 @@ function scene(...maps: TableMapItem[]): TableSceneMap {
 }
 
 function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  maps.registerMap(registered);
+  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  encounters
+    .mapRepositoryFor(resolveEncounter(encounters).id)
+    .registerMap(registered);
   return {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -68,8 +69,7 @@ function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
       sceneTokens,
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
-    maps,
+    encounters,
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),

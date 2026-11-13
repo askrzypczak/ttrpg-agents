@@ -445,7 +445,7 @@ Chromium. First time: `npx playwright install chromium`. Not part of `npm run ch
   rows through `e2e/db.ts`. Its upload tests answer the file chooser
   (Playwright's `filechooser`) with a PNG, cancelled or chosen, and read the
   uploads the fake host records.
-  `overlay.e2e.ts` seeds an active map and a room with `seedE2eMap`
+  `overlay.e2e.ts` seeds the seeded encounter's map and a room with `seedE2eMap`
   (`clearE2eMap` after) and checks the overlay's local items and the panel
   toggle. `map-image.e2e.ts` serves a map image cross-origin with CORS, posts `map-image` to the bridge, and checks the real extension's WEBP answer.
 - Test-only workarounds (`fixtures.ts`, `playwright.config.ts`): the bridge's

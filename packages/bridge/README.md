@@ -129,11 +129,12 @@ the next tick. A row the bridge cannot parse (for example one written by a newer
 MCP server) is skipped: `cli.ts` reports it once on stderr with its `seq`, and
 every client gets a fresh snapshot in its place.
 
-The bridge also polls the active map and its rooms every 250 ms and sends
-`map-rooms` (the active map's item id and its rooms) to every client on change
-and after each `hello-ack`, after the snapshot; no active map sends an empty
-list. A failed rooms read for the push after `hello-ack` is logged, and
-nothing is sent.
+The bridge also polls the current encounter's map and its rooms every 250 ms
+and sends `map-rooms` (that map's item id and its rooms) to every client on
+change and after each `hello-ack`, after the snapshot. With no current
+encounter, or one with no map, it sends a null item id and an empty list. A
+failed rooms read for the push after `hello-ack` is logged, and nothing is
+sent.
 
 An authenticated client can send `token-deleted` (`{ instanceId }`, sent by the
 extension when the GM deletes one of our tokens). The server's optional
