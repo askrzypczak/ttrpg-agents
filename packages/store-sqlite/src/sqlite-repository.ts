@@ -115,7 +115,10 @@ export class SqliteEncounterRepository
   }
 
   getActiveEncounter(): Encounter | undefined {
-    throw new Error("not implemented");
+    const row = this.db
+      .prepare("SELECT id, created_at FROM encounters WHERE active = 1")
+      .get() as { id: string; created_at: number } | undefined;
+    return row ? { id: row.id, createdAt: row.created_at } : undefined;
   }
 
   addInstances(
@@ -686,15 +689,19 @@ export class SqliteEncounterRepository
   }
 
   /**
-   * Appends an event to the change log and returns its seq; call it inside the
+   * Appends an event to the change log, tagged with the active encounter's id
+   * (created if the store has none), and returns its seq; call it inside the
    * mutation's transaction. The origin is logged without its command name.
    */
   private record(event: EncounterEvent): number {
     const { source, commandId } = event.origin;
     const logged = { ...event, origin: { source, commandId } };
+    const encounter = this.getOrCreateActiveEncounter();
     const { lastInsertRowid } = this.db
-      .prepare("INSERT INTO encounter_events (event) VALUES (?)")
-      .run(JSON.stringify(logged));
+      .prepare(
+        "INSERT INTO encounter_events (event, encounter_id) VALUES (?, ?)",
+      )
+      .run(JSON.stringify(logged), encounter.id);
     return Number(lastInsertRowid);
   }
 
