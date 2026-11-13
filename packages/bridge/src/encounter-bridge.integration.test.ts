@@ -36,13 +36,13 @@ const origin: ChangeOrigin = { source: "table", commandId: "test" };
 /** A store with one current encounter: its directory and the encounter's repository. */
 function setup(store = openDatabase(":memory:")) {
   const directory = new SqliteEncounterDirectory(store);
-  const encounterId = resolveEncounter(directory, { writes: true }).encounter
-    .id;
+  const encounter = resolveEncounter(directory, { writes: true }).encounter;
+  const encounterId = encounter.id;
   const repo: SqliteEncounterRepository = new SqliteEncounterRepository(
     store,
     encounterId,
   );
-  return { directory, encounterId, repo };
+  return { directory, encounterId, encounterName: encounter.name, repo };
 }
 
 /** A log that serves whatever is in `events`; `calls` records its reads. */
@@ -66,7 +66,7 @@ function stubLog(events: (LoggedEvent | UnreadableLogEntry)[] = []) {
 
 describe("snapshotMessage", () => {
   it("contains the current instances", () => {
-    const { directory, encounterId, repo } = setup();
+    const { directory, encounterId, encounterName, repo } = setup();
     const created = repo.addInstances(
       () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
       origin,
@@ -82,7 +82,13 @@ describe("snapshotMessage", () => {
     expect(snapshotMessage(directory, noArt, log)).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: created, seq: 2, encounterId },
+      payload: {
+        instances: created,
+        seq: 2,
+        encounterId,
+        sceneId: null,
+        encounterName,
+      },
     });
   });
 
@@ -99,8 +105,9 @@ describe("snapshotMessage", () => {
     };
     const directoryStub: Pick<
       EncounterDirectory,
-      "getCurrentEncounter" | "repositoryFor"
+      "getOpenScene" | "getCurrentEncounter" | "repositoryFor"
     > = {
+      getOpenScene: () => (calls.push("getOpenScene"), undefined),
       getCurrentEncounter: () => (
         calls.push("getCurrentEncounter"),
         { id: "e1", name: "Encounter 1", createdAt: 0 }
@@ -117,10 +124,17 @@ describe("snapshotMessage", () => {
     expect(message).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [], seq: 4, encounterId: "e1" },
+      payload: {
+        instances: [],
+        seq: 4,
+        encounterId: "e1",
+        sceneId: null,
+        encounterName: "Encounter 1",
+      },
     });
     expect(calls).toEqual([
       "latestSeq",
+      "getOpenScene",
       "getCurrentEncounter",
       "listInstances",
       "listRestoreSeqs",
@@ -129,7 +143,7 @@ describe("snapshotMessage", () => {
 
   it("snapshotMessage carries the restore seq of each restored instance and leaves the field out when none was restored", () => {
     const db = openDatabase(":memory:");
-    const { directory, encounterId, repo } = setup(db);
+    const { directory, encounterId, encounterName, repo } = setup(db);
     const log = new SqliteEncounterLog(db);
     const [, second, third] = repo.addInstances(
       () => [
@@ -147,6 +161,8 @@ describe("snapshotMessage", () => {
         instances: repo.listInstances(),
         seq: log.latestSeq(),
         encounterId,
+        sceneId: null,
+        encounterName,
       },
     });
 
@@ -167,6 +183,8 @@ describe("snapshotMessage", () => {
         },
         seq: thirdRestore,
         encounterId,
+        sceneId: null,
+        encounterName,
       },
     });
   });
@@ -396,7 +414,13 @@ describe("broadcastLogEvents", () => {
     const snapshotMsg: BridgeMessage = {
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [], seq: 2, encounterId: "e1" },
+      payload: {
+        instances: [],
+        seq: 2,
+        encounterId: "e1",
+        sceneId: null,
+        encounterName: "Encounter 1",
+      },
     };
     const { log } = stubLog();
     const stop = broadcastLogEvents(log, target, {
@@ -573,6 +597,8 @@ describe("table changes and snapshots with several encounters", () => {
         restoreSeqs: { [restoredB!.id]: restoreSeqB },
         seq: log.latestSeq(),
         encounterId: b.id,
+        sceneId: null,
+        encounterName: b.name,
       },
     });
     const listed = (

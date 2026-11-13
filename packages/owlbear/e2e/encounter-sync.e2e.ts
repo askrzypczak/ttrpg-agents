@@ -58,6 +58,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       expect(item.visible).toBe(false);
       expect(item.metadata[INSTANCE_KEY]).toEqual({
         instanceId: SHADOW_IDS[n],
+        encounterId: E2E_ENCOUNTER_ID,
       });
     }
     // One row: same y, distinct x.

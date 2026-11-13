@@ -49,7 +49,7 @@ const config: SyncConfig = {
     {
       key: INSTANCE_METADATA_KEY,
       mode: "owned",
-      project: (i) => ({ instanceId: i.id }),
+      project: (i) => ({ instanceId: i.id, encounterId: i.encounterId }),
     },
   ],
   tokenKind: defaultSyncConfig.tokenKind,
@@ -80,9 +80,9 @@ const token = (
   scale: { x: 1, y: 1 },
   ...look,
   metadata: {
-    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
     [SYNCED_METADATA_KEY]: {
-      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
       [NAME_BASELINE_KEY]: `Wolf ${n}`,
       ...record,
     },
@@ -96,6 +96,7 @@ const circle: Partial<SceneItem> = {
 const ctx = (ids: { reskins: string[]; restyles?: string[] }) => ({
   viewportCenter: { x: 1000, y: 500 },
   placed: new Set(["i1", "i2"]),
+  encounterId: "e1",
   art: { wolf: wolfArt },
   reskins: new Set(ids.reskins),
   restyles: new Set(ids.restyles ?? []),

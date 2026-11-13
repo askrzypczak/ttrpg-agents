@@ -349,7 +349,13 @@ describe("bridge server broadcast and snapshot", () => {
   const snapshot: BridgeMessage = {
     v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
-    payload: { instances: [], seq: 0, encounterId: "e1" },
+    payload: {
+      instances: [],
+      seq: 0,
+      encounterId: "e1",
+      sceneId: null,
+      encounterName: "Encounter 1",
+    },
   };
   const cleared: BridgeMessage = {
     v: PROTOCOL_VERSION,
@@ -519,8 +525,8 @@ describe("bridge server broadcast and snapshot", () => {
       for (const raw of [
         "{nope",
         "[]",
-        '{"v":2,"type":"launch","payload":{}}',
-        '{"v":2,"type":"hello","payload":{}}',
+        '{"v":3,"type":"launch","payload":{}}',
+        '{"v":3,"type":"hello","payload":{}}',
         encodeMessage(cleared),
       ]) {
         ws.send(raw);
@@ -659,7 +665,13 @@ describe("bridge server open scene", () => {
   const snapshot: BridgeMessage = {
     v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
-    payload: { instances: [], seq: 0, encounterId: "e1" },
+    payload: {
+      instances: [],
+      seq: 0,
+      encounterId: "e1",
+      sceneId: "s1",
+      encounterName: "Encounter 1",
+    },
   };
 
   const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
