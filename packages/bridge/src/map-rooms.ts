@@ -14,15 +14,24 @@ export function mapRoomsMessage(
     "getCurrentEncounter" | "mapRepositoryFor"
   >,
 ): BridgeMessage {
-  void encounters;
-  void PROTOCOL_VERSION;
-  throw new Error("not implemented");
+  const current = encounters.getCurrentEncounter();
+  const maps = current && encounters.mapRepositoryFor(current.id);
+  const map = maps?.getActiveMap();
+  return {
+    v: PROTOCOL_VERSION,
+    type: "map-rooms",
+    payload:
+      maps && map
+        ? { itemId: map.itemId, rooms: maps.getRooms(map.itemId) }
+        : { itemId: null, rooms: [] },
+  };
 }
 
 /**
- * Polls the active map's rooms every 250 ms and broadcasts `map-rooms` when
- * they differ from the last state sent (at first, the state read when polling
- * starts). A failed read is retried on the next tick. Returns a stop function.
+ * Polls the current encounter's map and its rooms every 250 ms and broadcasts
+ * `map-rooms` when they differ from the last state sent (at first, the state
+ * read when polling starts). A failed read is retried on the next tick.
+ * Returns a stop function.
  */
 export function broadcastMapRooms(
   encounters: Pick<
