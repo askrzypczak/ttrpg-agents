@@ -5,6 +5,7 @@ import type {
   EncounterDirectory,
   EncounterRepository,
   MapRepository,
+  OpenScene,
 } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
@@ -98,6 +99,21 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
 
   mapRepositoryFor(encounterId: string): MapRepository {
     return new SqliteMapRepository(this.db, encounterId);
+  }
+
+  getOpenScene(): OpenScene | undefined {
+    throw new Error("not implemented");
+  }
+
+  setOpenScene(sceneId: string | null): void {
+    void sceneId;
+    throw new Error("not implemented");
+  }
+
+  bindScene(sceneId: string, encounterId: string): void {
+    void sceneId;
+    void encounterId;
+    throw new Error("not implemented");
   }
 
   /** Runs fn in a transaction; nests by joining an already-open one. */

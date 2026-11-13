@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DatabaseSync } from "node:sqlite";
-import type { ChangeOrigin } from "@ttrpg-agents/engine";
+import { openScene, type ChangeOrigin } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterDirectory } from "./sqlite-directory.js";
+import { SqliteEncounterLog } from "./sqlite-log.js";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -115,6 +116,95 @@ describe("SqliteEncounterDirectory", () => {
         )
         .run(),
     ).toThrow();
+  });
+});
+
+describe("SqliteEncounterDirectory scenes", () => {
+  it("getOpenScene returns undefined when no scene is open, the open scene with no encounter when it is unbound, and undefined again after setOpenScene(null)", () => {
+    directory.createEncounter("Encounter 1");
+    expect(directory.getOpenScene()).toBeUndefined();
+
+    directory.setOpenScene("scene-1");
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter: undefined,
+    });
+
+    directory.setOpenScene(null);
+    expect(directory.getOpenScene()).toBeUndefined();
+  });
+
+  it("bindScene binds a scene to an encounter, and getOpenScene returns the open scene with that encounter", () => {
+    directory.createEncounter("Encounter 1");
+    const bound = directory.createEncounter("Encounter 2");
+
+    directory.bindScene("scene-1", bound.id);
+    directory.setOpenScene("scene-1");
+
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter: bound,
+    });
+    directory.setOpenScene("scene-2");
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-2",
+      encounter: undefined,
+    });
+  });
+
+  it("bindScene refuses a second encounter for a bound scene and a second scene for a bound encounter, and changes nothing", () => {
+    const a = directory.createEncounter("Encounter 1");
+    const b = directory.createEncounter("Encounter 2");
+    directory.bindScene("scene-1", a.id);
+
+    expect(() => directory.bindScene("scene-1", b.id)).toThrow();
+    expect(() => directory.bindScene("scene-2", a.id)).toThrow();
+    expect(() => directory.bindScene("scene-3", "no-such-encounter")).toThrow();
+
+    directory.setOpenScene("scene-1");
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter: a,
+    });
+    directory.setOpenScene("scene-2");
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-2",
+      encounter: undefined,
+    });
+    directory.setOpenScene("scene-3");
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-3",
+      encounter: undefined,
+    });
+    // Encounter 2 is still free to bind.
+    directory.bindScene("scene-2", b.id);
+    directory.setOpenScene("scene-2");
+    expect(directory.getOpenScene()?.encounter).toEqual(b);
+    expect(directory.listEncounters()).toEqual([a, b]);
+  });
+
+  it("openScene over the SQLite directory changes no instance and adds no change-log row", () => {
+    const bound = directory.createEncounter("Encounter 1");
+    const current = directory.createEncounter("Encounter 2");
+    const repo = directory.repositoryFor(bound.id);
+    repo.addInstances(() => [ogre("Ogre 1"), ogre("Ogre 2")], origin);
+    directory.bindScene("scene-1", bound.id);
+    directory.setCurrentEncounter(current.id);
+    const log = new SqliteEncounterLog(db);
+    const instancesBefore = repo.listInstances();
+    const seqBefore = log.latestSeq();
+
+    openScene(directory, "scene-1");
+
+    expect(directory.getCurrentEncounter()).toEqual(bound);
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter: bound,
+    });
+    expect(directory.repositoryFor(bound.id).listInstances()).toEqual(
+      instancesBefore,
+    );
+    expect(log.latestSeq()).toBe(seqBefore);
   });
 });
 

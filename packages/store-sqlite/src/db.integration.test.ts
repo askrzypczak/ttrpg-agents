@@ -792,3 +792,37 @@ describe("migration to per-encounter maps", () => {
     db.close();
   });
 });
+
+describe("migration to scene bindings", () => {
+  it("a version 18 database migrates keeping its encounters and the current one, with no scene bound and none open", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    migrateToVersion(db, 18);
+    db.exec(
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e1', 'Tavern', 1, 100)",
+    );
+    db.exec(
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e2', 'Cave', 0, 200)",
+    );
+
+    migrate(db);
+
+    expect(getUserVersion(db)).toBe(19);
+    const directory = new SqliteEncounterDirectory(db);
+    const tavern = { id: "e1", name: "Tavern", createdAt: 100 };
+    const cave = { id: "e2", name: "Cave", createdAt: 200 };
+    expect(directory.listEncounters()).toEqual([tavern, cave]);
+    expect(directory.getCurrentEncounter()).toEqual(tavern);
+    expect(directory.getOpenScene()).toBeUndefined();
+    // Every encounter is free to bind, so none was bound by the migration.
+    directory.bindScene("scene-1", "e1");
+    directory.bindScene("scene-2", "e2");
+    directory.setOpenScene("scene-3");
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-3",
+      encounter: undefined,
+    });
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    db.close();
+  });
+});
