@@ -68,11 +68,17 @@ const encounterSnapshotPayload = z.object({
   restoreSeqs: z.record(z.string(), z.number().int().min(1)).optional(),
   /** The change-log position this snapshot is current as of (0 for an empty log). */
   seq: z.number().int().min(0),
+  /** The active encounter's id, null when the store has none. */
+  encounterId: z.string().nullable(),
 });
-// An engine event plus its position in the change log: the extension applies
-// events in `seq` order and ignores one it already has.
+// An engine event plus its position in the change log and the id of the
+// encounter it changed: the extension applies events in `seq` order and ignores
+// one it already has. The id is null when the event belongs to no encounter.
 const encounterEventPayload = encounterEventSchema.and(
-  z.object({ seq: z.number().int().min(1) }),
+  z.object({
+    seq: z.number().int().min(1),
+    encounterId: z.string().nullable(),
+  }),
 );
 // Extension -> bridge: the GM picked this art for a monster type.
 const tokenArtSetPayload = z.object({
