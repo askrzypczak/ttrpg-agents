@@ -335,6 +335,27 @@ describe("bridge CLI", () => {
     },
     TIMEOUT,
   );
+
+  it(
+    "the bridge records no open scene when it starts",
+    async () => {
+      // An earlier run left a scene open.
+      const before = openDatabase(String(env.TTRPG_AGENTS_DB));
+      new SqliteEncounterDirectory(before).setOpenScene("s1");
+      before.close();
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      await recordOf(bridge);
+
+      const db = openDatabase(String(env.TTRPG_AGENTS_DB));
+      try {
+        expect(new SqliteEncounterDirectory(db).getOpenScene()).toBeUndefined();
+      } finally {
+        db.close();
+      }
+    },
+    TIMEOUT,
+  );
 });
 
 const PROJECT_VARIABLES = new Set([

@@ -18,6 +18,9 @@ export const PROTOCOL_VERSION = 2;
  */
 export const MAX_MESSAGE_BYTES = 1024 * 1024;
 
+/** An Owlbear scene's id, as the GM tab mints it into the scene's metadata. */
+export const sceneIdSchema = z.string().min(1).max(200);
+
 // `role` is self-reported by the client and must never be used for
 // authorization; it only drives UI. The bridge admits a client by the Host and
 // Origin of its WebSocket upgrade, not by anything in `hello`.
@@ -70,6 +73,10 @@ const encounterSnapshotPayload = z.object({
   seq: z.number().int().min(0),
   /** The active encounter's id, null when the store has none. */
   encounterId: z.string().nullable(),
+  /** The open scene this snapshot is for; null when no scene is open. */
+  sceneId: sceneIdSchema.nullable().optional(),
+  /** The snapshot encounter's name; null exactly when `encounterId` is. */
+  encounterName: z.string().min(1).nullable().optional(),
 });
 // An engine event plus its position in the change log and the id of the
 // encounter it changed: the extension applies events in `seq` order and ignores

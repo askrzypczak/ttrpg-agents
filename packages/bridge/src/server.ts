@@ -97,6 +97,11 @@ export interface BridgeServerOptions {
   storeTokenImage?: (bytes: Uint8Array) => TokenImageStoreResult;
   /** Answers the stored token image with that hash, for `GET /token-images/<sha256>`. */
   getTokenImage?: (sha256: string) => TokenImage | undefined;
+  /**
+   * Records the scene the GM tab has open (`scene-open`), or that none is
+   * (null: also on the active client's disconnect and on `close()`).
+   */
+  openScene?: (sceneId: string | null) => void;
 }
 
 /** Outcome of a write the table asked for; a refusal changes nothing. */

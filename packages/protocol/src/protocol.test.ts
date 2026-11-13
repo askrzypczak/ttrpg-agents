@@ -512,4 +512,70 @@ describe("protocol", () => {
       if (!r.ok) expect(r.reason).toBe("invalid-payload");
     },
   );
+
+  it("decodeMessage accepts a scene-open whose scene id is a string or null", () => {
+    for (const sceneId of ["s1", null]) {
+      const message = {
+        v: PROTOCOL_VERSION,
+        type: "scene-open",
+        id: "r1",
+        payload: { sceneId },
+      };
+
+      expect(decodeMessage(JSON.stringify(message))).toEqual({
+        ok: true,
+        message,
+      });
+    }
+  });
+
+  it("decodeMessage rejects a scene-open whose scene id is empty or longer than 200 characters", () => {
+    for (const sceneId of ["", "x".repeat(201)]) {
+      const r = decodeMessage(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          type: "scene-open",
+          payload: { sceneId },
+        }),
+      );
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("invalid-payload");
+    }
+    // A 200-character id is still a scene id.
+    expect(
+      decodeMessage(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          type: "scene-open",
+          payload: { sceneId: "x".repeat(200) },
+        }),
+      ).ok,
+    ).toBe(true);
+  });
+
+  it("decodeMessage rejects an encounter-snapshot without sceneId or encounterName", () => {
+    for (const fields of [
+      { encounterName: "Encounter 1" },
+      { sceneId: "s1" },
+    ]) {
+      const r = decodeMessage(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          type: "encounter-snapshot",
+          payload: { instances: [], seq: 0, encounterId: "e1", ...fields },
+        }),
+      );
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("invalid-payload");
+    }
+  });
+
+  it("decodeMessage refuses a version-2 envelope as unsupported-version", () => {
+    const r = decodeMessage('{"v":2,"type":"ping","payload":{}}');
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("unsupported-version");
+  });
 });

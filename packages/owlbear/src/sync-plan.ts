@@ -689,6 +689,8 @@ export function planSync(
   context: {
     viewportCenter: Vec2;
     placed: ReadonlySet<string>;
+    /** The encounter whose tokens the plan manages: only items whose link records it. */
+    encounterId: string;
     /** Monster key -> the art its new tokens are created with. */
     art: Readonly<Record<string, PublishedTokenArt>>;
     /** True when the reconcile follows a snapshot (connect, reconnect or gap). */

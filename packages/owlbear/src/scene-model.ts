@@ -236,6 +236,27 @@ export class SceneModel {
     return structuredClone(this.metadata);
   }
 
+  /**
+   * Switches to another scene as Owlbear does: ready false (when ready), the
+   * items and the scene metadata replaced (an items and a metadata change),
+   * then ready true. Returns the replaced scene, so a test can switch back.
+   */
+  switchScene(next: { items: SceneItem[]; metadata: Metadata }): {
+    items: SceneItem[];
+    metadata: Metadata;
+  } {
+    const previous = { items: this.getItems(), metadata: this.getMetadata() };
+    this.setReady(false);
+    this.items.clear();
+    for (const item of next.items)
+      this.items.set(item.id, structuredClone(item));
+    this.metadata = structuredClone(next.metadata);
+    this.emit({ kind: "items" });
+    this.emit({ kind: "metadata" });
+    this.setReady(true);
+    return previous;
+  }
+
   /** Shallow-merges into existing scene metadata, like the real SDK. */
   setMetadata(update: Metadata): void {
     this.metadata = { ...this.metadata, ...structuredClone(update) };

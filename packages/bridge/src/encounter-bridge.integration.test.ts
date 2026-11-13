@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  openScene,
   resolveEncounter,
   type ChangeOrigin,
   type EncounterDirectory,
@@ -18,6 +19,7 @@ import {
 import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 import {
   broadcastLogEvents,
+  createSnapshotSource,
   editInstance,
   removeInstance,
   snapshotMessage,
@@ -579,5 +581,216 @@ describe("table changes and snapshots with several encounters", () => {
     expect(listed.map((i) => i.encounterId)).toEqual([b.id, b.id, b.id]);
     expect(listed.map((i) => i.id)).toContain(ghoul.id);
     expect(directory.listEncounters()).toEqual([a, b]);
+  });
+});
+
+describe("snapshots of the open scene", () => {
+  /** Encounter A bound to scene s1 with one shadow; encounter B current with one ghoul. */
+  function sceneStore() {
+    const store = openDatabase(":memory:");
+    const directory = new SqliteEncounterDirectory(store);
+    const log = new SqliteEncounterLog(store);
+    const a = directory.createEncounter("Encounter A");
+    const b = directory.createEncounter("Encounter B");
+    directory.bindScene("s1", a.id);
+    directory.setCurrentEncounter(b.id);
+    const repoA = directory.repositoryFor(a.id);
+    const repoB = directory.repositoryFor(b.id);
+    repoA.addInstances(
+      () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
+      origin,
+    );
+    repoB.addInstances(
+      () => [{ monsterKey: "ghoul", displayName: "Ghoul 1", maxHp: 22 }],
+      origin,
+    );
+    return { store, directory, log, a, b, repoA, repoB };
+  }
+
+  it("snapshotMessage carries the open scene and its bound encounter's id, name and instances, also while another encounter is current", () => {
+    const { directory, log, a, b, repoA } = sceneStore();
+    directory.setOpenScene("s1");
+    expect(directory.getCurrentEncounter()?.id).toBe(b.id);
+
+    expect(snapshotMessage(directory, noArt, log)).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "encounter-snapshot",
+      payload: {
+        instances: repoA.listInstances(),
+        seq: log.latestSeq(),
+        encounterId: a.id,
+        sceneId: "s1",
+        encounterName: "Encounter A",
+      },
+    });
+  });
+
+  it("snapshotMessage of an open scene with no encounter carries the scene, a null encounter and no instances", () => {
+    const { directory, log, b } = sceneStore();
+    directory.setOpenScene("s2");
+
+    expect(snapshotMessage(directory, noArt, log)).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "encounter-snapshot",
+      payload: {
+        instances: [],
+        seq: log.latestSeq(),
+        encounterId: null,
+        sceneId: "s2",
+        encounterName: null,
+      },
+    });
+    // The snapshot creates and binds nothing.
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "s2",
+      encounter: undefined,
+    });
+    expect(directory.getCurrentEncounter()?.id).toBe(b.id);
+    expect(directory.listEncounters()).toHaveLength(2);
+  });
+
+  it("snapshotMessage with no scene open carries a null scene and the current encounter with its name", () => {
+    const { directory, log, b, repoB } = sceneStore();
+
+    expect(snapshotMessage(directory, noArt, log)).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "encounter-snapshot",
+      payload: {
+        instances: repoB.listInstances(),
+        seq: log.latestSeq(),
+        encounterId: b.id,
+        sceneId: null,
+        encounterName: "Encounter B",
+      },
+    });
+  });
+
+  describe("the poll's scope snapshots", () => {
+    const POLL_MS = 250;
+    let sent: BridgeMessage[];
+    const target = { broadcast: (m: BridgeMessage) => sent.push(m) };
+    const snapshots = () =>
+      sent.flatMap((m) => (m.type === "encounter-snapshot" ? [m.payload] : []));
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      sent = [];
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    type Store = ReturnType<typeof sceneStore>;
+    it.each<
+      [
+        string,
+        (s: Store) => void,
+        (s: Store) => {
+          sceneId: string | null;
+          encounterId: string | null;
+          encounterName: string | null;
+        },
+      ]
+    >([
+      [
+        "another writer binds a new encounter to the open scene",
+        ({ directory }) => {
+          directory.setOpenScene("s2");
+        },
+        ({ directory }) => {
+          const { encounter } = resolveEncounter(directory, { writes: true });
+          directory
+            .repositoryFor(encounter.id)
+            .addInstances(
+              () => [{ monsterKey: "orc", displayName: "Orc 1", maxHp: 15 }],
+              { source: "mcp", commandId: "add-1" },
+            );
+          return {
+            sceneId: "s2",
+            encounterId: encounter.id,
+            encounterName: encounter.name,
+          };
+        },
+      ],
+      [
+        "the encounter is renamed in the store",
+        ({ directory }) => {
+          directory.setOpenScene("s1");
+        },
+        ({ store, a }) => {
+          store
+            .prepare("UPDATE encounters SET name = ? WHERE id = ?")
+            .run("Crypt", a.id);
+          return { sceneId: "s1", encounterId: a.id, encounterName: "Crypt" };
+        },
+      ],
+      [
+        "another scene is opened",
+        ({ directory }) => {
+          directory.setOpenScene("s1");
+        },
+        ({ directory }) => {
+          directory.setOpenScene("s3");
+          return { sceneId: "s3", encounterId: null, encounterName: null };
+        },
+      ],
+    ])(
+      "the poll sends a fresh snapshot when the open scene, its encounter or the encounter's name changed since the last snapshot built (%s)",
+      (_case, before, change) => {
+        const s = sceneStore();
+        before(s);
+        const source = createSnapshotSource(s.directory, noArt, s.log);
+        source.snapshot();
+        const stop = broadcastLogEvents(s.log, target, {
+          snapshot: source.snapshot,
+          scopeChanged: source.changed,
+        });
+        vi.advanceTimersByTime(POLL_MS * 2);
+        expect(snapshots()).toEqual([]);
+
+        const scope = change(s);
+        vi.advanceTimersByTime(POLL_MS);
+
+        expect(snapshots()).toEqual([expect.objectContaining(scope)]);
+        // The new scope is now the last snapshot built: no further snapshot.
+        vi.advanceTimersByTime(POLL_MS * 4);
+        expect(snapshots()).toHaveLength(1);
+        stop();
+      },
+    );
+
+    it("the poll sends no snapshot while the scope matches the last snapshot built, including one built after a scene-open", () => {
+      const { directory, log, repoA } = sceneStore();
+      const source = createSnapshotSource(directory, noArt, log);
+      source.snapshot();
+      const stop = broadcastLogEvents(log, target, {
+        snapshot: source.snapshot,
+        scopeChanged: source.changed,
+      });
+      vi.advanceTimersByTime(POLL_MS * 2);
+      expect(source.changed()).toBe(false);
+
+      // A scene-open records the scene and its handler sends a snapshot.
+      openScene(directory, "s1");
+      expect(source.changed()).toBe(true);
+      const sceneSnapshot = source.snapshot();
+      expect(sceneSnapshot.payload).toEqual(
+        expect.objectContaining({
+          sceneId: "s1",
+          encounterName: "Encounter A",
+        }),
+      );
+      expect(source.changed()).toBe(false);
+      repoA.addInstances(
+        () => [{ monsterKey: "shadow", displayName: "Shadow 2", maxHp: 16 }],
+        origin,
+      );
+      vi.advanceTimersByTime(POLL_MS * 4);
+
+      expect(sent.map((m) => m.type)).toEqual(["encounter-event"]);
+      expect(snapshots()).toEqual([]);
+      stop();
+    });
   });
 });

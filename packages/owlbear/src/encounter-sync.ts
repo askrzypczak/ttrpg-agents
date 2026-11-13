@@ -123,7 +123,16 @@ export interface EncounterSync {
    * `uploadArtFile` is, and for a type with no upload this session.
    */
   pickUploadedFile(monsterKey: string): Promise<void>;
+  /** The last snapshot's scene, encounter id and encounter name; undefined before the first snapshot. */
+  heldScene(): HeldScene | undefined;
 }
+
+/** What the last snapshot was for: the open scene and its encounter's id and name. */
+export type HeldScene = {
+  sceneId: string | null;
+  encounterId: string | null;
+  encounterName: string | null;
+};
 
 // Real timers are only used in the browser; tests inject Timers.
 const defaultTimers: Timers = {
@@ -1149,6 +1158,7 @@ export function createEncounterSync(
     const context = {
       viewportCenter: await obr.getViewportCenter(),
       snapshot,
+      encounterId: "",
     };
     const first = planSync(wanted, items, defaultSyncConfig, {
       ...context,
@@ -1699,6 +1709,9 @@ export function createEncounterSync(
       // stays pending, so a later press opens the picker again.
       if (picked === undefined) return;
       await takePanelPick(monsterKey, picked);
+    },
+    heldScene() {
+      throw new Error("not implemented");
     },
   };
 }

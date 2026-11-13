@@ -1,5 +1,6 @@
 import type {
   ArtStep,
+  HeldScene,
   Reupload,
   TypeArt,
   TypeArtState,
@@ -39,6 +40,8 @@ export interface PanelInput {
   overrides?: readonly string[];
   /** Why the bridge rejected us, when socketState is "rejected". */
   rejection?: RejectionCode;
+  /** The open scene's encounter name, null when it has none; absent while not known (see sceneEncounter). */
+  sceneEncounter?: string | null;
 }
 
 export interface PanelView {
@@ -51,6 +54,8 @@ export interface PanelView {
     | "rejected-version"
     | "superseded";
   message: string;
+  /** The open scene's encounter line; absent while it is not known. */
+  encounter?: string;
   /** A user action the panel offers, e.g. reclaiming the bridge from another tab. */
   action?: "use-this-tab";
   /** Extra explanation when the connection seems stuck. */
@@ -106,6 +111,20 @@ export const STALLED_HINT =
   "Still not connected. Chrome may be asking for (or blocking) local network access: " +
   "allow it in the address bar or site settings for owlbear.rodeo, and make sure " +
   "the bridge is running (npm run bridge).";
+
+/**
+ * The held snapshot's encounter name when the snapshot is for the open scene
+ * (null when that scene has no encounter); undefined while no scene is ready
+ * or no snapshot for it has arrived.
+ */
+export function sceneEncounter(
+  openSceneId: string | null | undefined,
+  held: HeldScene | undefined,
+): string | null | undefined {
+  void openSceneId;
+  void held;
+  throw new Error("not implemented");
+}
 
 export function panelView(input: PanelInput): PanelView {
   const view = connectionView(input);

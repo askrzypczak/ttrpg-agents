@@ -97,6 +97,28 @@ export function snapshotMessage(
   };
 }
 
+/**
+ * Builds every snapshot the bridge sends and remembers the scope of the last
+ * one built (the open scene, its encounter's id and name).
+ */
+export interface SnapshotSource {
+  /** A snapshot as `snapshotMessage` builds it; its scope is remembered. */
+  snapshot(): BridgeMessage;
+  /** Whether the scope now differs from the last snapshot built (true before the first). */
+  changed(): boolean;
+}
+
+export function createSnapshotSource(
+  encounters: EncounterDirectory,
+  artRepo: TokenArtRepository,
+  log: EncounterLog,
+): SnapshotSource {
+  void encounters;
+  void artRepo;
+  void log;
+  throw new Error("not implemented");
+}
+
 const LOG_POLL_INTERVAL_MS = 250;
 
 /**
@@ -120,6 +142,7 @@ export function broadcastLogEvents(
   options: {
     onUnreadable?: (entry: UnreadableLogEntry) => void;
     snapshot?: () => BridgeMessage;
+    scopeChanged?: () => boolean;
   } = {},
 ): () => void {
   let lastSent = log.latestSeq();
