@@ -128,7 +128,10 @@ describe("db:backup", () => {
       try {
         const encounterId = resolveEncounter(
           new SqliteEncounterDirectory(live),
-        ).id;
+          {
+            writes: true,
+          },
+        ).encounter.id;
         const repo = new SqliteEncounterRepository(live, encounterId);
         repo.addInstances(
           () => [newInstance("Shadow 1", 16), newInstance("Shadow 2", 18)],

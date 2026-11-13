@@ -32,7 +32,9 @@ beforeEach(() => {
   };
   repo = new SqliteEncounterRepository(
     db,
-    resolveEncounter(new SqliteEncounterDirectory(db, options)).id,
+    resolveEncounter(new SqliteEncounterDirectory(db, options), {
+      writes: true,
+    }).encounter.id,
     options,
   );
 });
@@ -659,7 +661,9 @@ describe("listInstances", () => {
     };
     const tied = new SqliteEncounterRepository(
       store,
-      resolveEncounter(new SqliteEncounterDirectory(store, options)).id,
+      resolveEncounter(new SqliteEncounterDirectory(store, options), {
+        writes: true,
+      }).encounter.id,
       options,
     );
     tied.addInstances(

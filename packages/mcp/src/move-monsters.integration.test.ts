@@ -60,7 +60,9 @@ function scene(...maps: TableMapItem[]): TableSceneMap {
 function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
   const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
   encounters
-    .mapRepositoryFor(resolveEncounter(encounters).id)
+    .mapRepositoryFor(
+      resolveEncounter(encounters, { writes: true }).encounter.id,
+    )
     .registerMap(registered);
   return {
     table: {
@@ -143,7 +145,7 @@ type Placement = {
 /** The current encounter's repository (created when there is none), resolved as a tool call does. */
 function repoOf(context: ToolContext): EncounterRepository {
   return context.encounters.repositoryFor(
-    resolveEncounter(context.encounters).id,
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
   );
 }
 

@@ -32,7 +32,9 @@ beforeEach(() => {
     newId: () => `id-${String(++n)}`,
     now: () => ++t,
   };
-  encounterId = resolveEncounter(new SqliteEncounterDirectory(db, options)).id;
+  encounterId = resolveEncounter(new SqliteEncounterDirectory(db, options), {
+    writes: true,
+  }).encounter.id;
   repo = new SqliteEncounterRepository(db, encounterId, options);
   log = new SqliteEncounterLog(db);
 });

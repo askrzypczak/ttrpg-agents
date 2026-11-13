@@ -34,7 +34,8 @@ const origin: ChangeOrigin = { source: "table", commandId: "test" };
 /** A store with one current encounter: its directory and the encounter's repository. */
 function setup(store = openDatabase(":memory:")) {
   const directory = new SqliteEncounterDirectory(store);
-  const encounterId = resolveEncounter(directory).id;
+  const encounterId = resolveEncounter(directory, { writes: true }).encounter
+    .id;
   const repo: SqliteEncounterRepository = new SqliteEncounterRepository(
     store,
     encounterId,

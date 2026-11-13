@@ -466,16 +466,20 @@ describe("bridge CLI settings", () => {
       const db = openDatabase(database);
       try {
         const encounters = new SqliteEncounterDirectory(db);
-        encounters.repositoryFor(resolveEncounter(encounters).id).addInstances(
-          () => [
-            {
-              monsterKey: "srd-2024_shadow",
-              displayName: "Configured Shadow",
-              maxHp: 16,
-            },
-          ],
-          { source: "mcp", commandId: "seed" },
-        );
+        encounters
+          .repositoryFor(
+            resolveEncounter(encounters, { writes: true }).encounter.id,
+          )
+          .addInstances(
+            () => [
+              {
+                monsterKey: "srd-2024_shadow",
+                displayName: "Configured Shadow",
+                maxHp: 16,
+              },
+            ],
+            { source: "mcp", commandId: "seed" },
+          );
       } finally {
         db.close();
       }

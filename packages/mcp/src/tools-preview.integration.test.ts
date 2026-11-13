@@ -75,7 +75,9 @@ beforeEach(() => {
   const db = openDatabase(":memory:");
   const encounters = new SqliteEncounterDirectory(db);
   encounters
-    .mapRepositoryFor(resolveEncounter(encounters).id)
+    .mapRepositoryFor(
+      resolveEncounter(encounters, { writes: true }).encounter.id,
+    )
     .registerMap(registered);
   rng = countingRng();
   log = new SqliteEncounterLog(db);
@@ -125,7 +127,7 @@ async function saveRooms(
 /** The current encounter's repository (created when there is none), resolved as a tool call does. */
 function repoOf(context: ToolContext): EncounterRepository {
   return context.encounters.repositoryFor(
-    resolveEncounter(context.encounters).id,
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
   );
 }
 

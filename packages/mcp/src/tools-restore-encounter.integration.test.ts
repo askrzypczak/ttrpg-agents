@@ -95,7 +95,7 @@ async function clear(): Promise<ToolResult> {
 /** The current encounter's repository (created when there is none), resolved as a tool call does. */
 function repoOf(context: ToolContext): EncounterRepository {
   return context.encounters.repositoryFor(
-    resolveEncounter(context.encounters).id,
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
   );
 }
 

@@ -180,7 +180,9 @@ describe("migrations", () => {
     const db1 = openDatabase(path);
     const directory1 = new SqliteEncounterDirectory(db1);
     directory1
-      .repositoryFor(resolveEncounter(directory1).id)
+      .repositoryFor(
+        resolveEncounter(directory1, { writes: true }).encounter.id,
+      )
       .addInstances(
         () => [{ monsterKey: "orc", displayName: "Orc", maxHp: 15 }],
         origin,
@@ -592,7 +594,7 @@ describe("openDatabase concurrency settings", () => {
         return `id-${n}`;
       },
     });
-    const enc = resolveEncounter(directory);
+    const enc = resolveEncounter(directory, { writes: true }).encounter;
     expect(otherError).toBeDefined();
     expect(enc.id).toBe("id-1");
     expect(a.prepare("SELECT COUNT(*) AS c FROM encounters").get()).toEqual({
@@ -681,7 +683,7 @@ describe("migration to scene-bound encounters", () => {
     migrate(db);
     const directory = new SqliteEncounterDirectory(db);
 
-    const encounter = resolveEncounter(directory);
+    const encounter = resolveEncounter(directory, { writes: true }).encounter;
     const [added] = directory
       .repositoryFor(encounter.id)
       .addInstances(

@@ -66,7 +66,9 @@ function contextWith(answer: TableSceneMap): {
   const imageCalls: string[] = [];
   const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
   encounters
-    .mapRepositoryFor(resolveEncounter(encounters).id)
+    .mapRepositoryFor(
+      resolveEncounter(encounters, { writes: true }).encounter.id,
+    )
     .registerMap(registered);
   const ctx: ToolContext = {
     table: {

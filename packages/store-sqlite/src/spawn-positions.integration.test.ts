@@ -33,7 +33,9 @@ beforeEach(() => {
   };
   repo = new SqliteEncounterRepository(
     db,
-    resolveEncounter(new SqliteEncounterDirectory(db, options)).id,
+    resolveEncounter(new SqliteEncounterDirectory(db, options), {
+      writes: true,
+    }).encounter.id,
     options,
   );
   log = new SqliteEncounterLog(db);

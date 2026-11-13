@@ -162,6 +162,9 @@ function handingOut(
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
     repositoryFor: () => repo,
     mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
+    getOpenScene: () => inner.getOpenScene(),
+    setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
+    bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -169,7 +172,7 @@ function handingOut(
 /** The current encounter's repository (created when there is none), resolved as a tool call does. */
 function repoOf(context: ToolContext): EncounterRepository {
   return context.encounters.repositoryFor(
-    resolveEncounter(context.encounters).id,
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
   );
 }
 
@@ -1491,6 +1494,10 @@ describe("the encounter a tool call acts on", () => {
       findEncounterOfInstance: (id) => directory.findEncounterOfInstance(id),
       transaction: (fn) => directory.transaction(fn),
       mapRepositoryFor: (id) => directory.mapRepositoryFor(id),
+      getOpenScene: () => directory.getOpenScene(),
+      setOpenScene: (sceneId) => directory.setOpenScene(sceneId),
+      bindScene: (sceneId, encounterId) =>
+        directory.bindScene(sceneId, encounterId),
       repositoryFor(encounterId) {
         requested.push(encounterId);
         const inner = directory.repositoryFor(encounterId);
