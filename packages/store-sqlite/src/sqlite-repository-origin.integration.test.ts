@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { changeOriginSchema, type ChangeOrigin } from "@ttrpg-agents/engine";
+import {
+  changeOriginSchema,
+  resolveEncounter,
+  type ChangeOrigin,
+} from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 describe("SqliteEncounterRepository mutations", () => {
   it("a repository mutation called without an origin is a type error", () => {
-    const repo = new SqliteEncounterRepository(openDatabase(":memory:"));
+    const store = openDatabase(":memory:");
+    const repo = new SqliteEncounterRepository(
+      store,
+      resolveEncounter(new SqliteEncounterDirectory(store)).id,
+    );
     const origin: ChangeOrigin = { source: "table", commandId: "c1" };
 
     // The type half is checked by `npm run typecheck`: each call below must
@@ -53,7 +62,10 @@ describe("SqliteEncounterRepository mutations", () => {
 describe("SqliteEncounterRepository change log", () => {
   it("a change-log write that fails rolls the mutation back", () => {
     const db = openDatabase(":memory:");
-    const repo = new SqliteEncounterRepository(db);
+    const repo = new SqliteEncounterRepository(
+      db,
+      resolveEncounter(new SqliteEncounterDirectory(db)).id,
+    );
     const seed: ChangeOrigin = { source: "table", commandId: "seed" };
     const [, damaged] = repo.addInstances(
       () => [

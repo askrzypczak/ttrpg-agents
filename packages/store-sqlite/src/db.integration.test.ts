@@ -24,6 +24,17 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
+/**
+ * Applies the migrations after the database's version up to version 16, the
+ * last one that keeps existing encounters.
+ */
+function migrateToVersion16(db: DatabaseSync): void {
+  const from = getUserVersion(db);
+  for (const m of migrations.filter((m) => m.version > from && m.version <= 16))
+    db.exec(m.sql);
+  db.exec("PRAGMA user_version = 16");
+}
+
 describe("migrations", () => {
   it("brings a fresh database to the latest version", () => {
     const db = openDatabase(":memory:");
@@ -82,7 +93,7 @@ describe("migrations", () => {
     b.close();
   });
 
-  it("a version 1 database migrates to the latest version keeping its instances with a null armorClass", () => {
+  it("a version 1 database migrates to version 16 keeping its instances with a null armorClass", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON");
     for (const m of migrations.filter((m) => m.version === 1)) {
@@ -98,17 +109,17 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 'g1', 200)`,
     );
 
-    migrate(db);
+    migrateToVersion16(db);
 
     expect(LATEST_VERSION).toBeGreaterThan(1);
-    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    expect(getUserVersion(db)).toBe(16);
     const columns = (
       db.prepare("PRAGMA table_info(monster_instances)").all() as {
         name: string;
       }[]
     ).map((c) => c.name);
     expect(columns).toContain("armor_class");
-    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+    expect(new SqliteEncounterRepository(db, "e1").listInstances()).toEqual([
       makeTestInstance({
         currentHp: 9,
         initiative: 12,
@@ -134,9 +145,9 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 16, NULL, 13, NULL, 200)`,
     );
 
-    migrate(db);
+    migrateToVersion16(db);
 
-    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    expect(getUserVersion(db)).toBe(16);
     const column = (
       db.prepare("PRAGMA table_info(monster_instances)").all() as {
         name: string;
@@ -148,7 +159,7 @@ describe("migrations", () => {
     expect(
       db.prepare("SELECT stats_visible FROM monster_instances").all(),
     ).toEqual([{ stats_visible: 0 }]);
-    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+    expect(new SqliteEncounterRepository(db, "e1").listInstances()).toEqual([
       makeTestInstance({ armorClass: 13, createdAt: 200, statsVisible: false }),
     ]);
     db.close();
@@ -159,13 +170,19 @@ describe("migrations", () => {
     dirs.push(dir);
     const path = join(dir, "nested", "enc.db");
     const db1 = openDatabase(path);
-    new SqliteEncounterRepository(db1).addInstances(
-      () => [{ monsterKey: "orc", displayName: "Orc", maxHp: 15 }],
-      origin,
-    );
+    const directory1 = new SqliteEncounterDirectory(db1);
+    directory1
+      .repositoryFor(resolveEncounter(directory1).id)
+      .addInstances(
+        () => [{ monsterKey: "orc", displayName: "Orc", maxHp: 15 }],
+        origin,
+      );
     db1.close();
     const db2 = openDatabase(path);
-    const list = new SqliteEncounterRepository(db2).listInstances();
+    const directory2 = new SqliteEncounterDirectory(db2);
+    const list = directory2
+      .repositoryFor(directory2.getCurrentEncounter()!.id)
+      .listInstances();
     expect(list.map((i) => i.displayName)).toEqual(["Orc"]);
     db2.close();
   });
@@ -199,11 +216,12 @@ describe("migrations", () => {
     );
     old.close();
 
-    const db = openDatabase(path);
-    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    const db = new DatabaseSync(path);
+    migrateToVersion16(db);
+    expect(getUserVersion(db)).toBe(16);
     expect(tables(db)).toContain("token_art");
     expect(
-      new SqliteEncounterRepository(db)
+      new SqliteEncounterRepository(db, "e1")
         .listInstances()
         .map((i) => i.displayName),
     ).toEqual(["Shadow 1"]);
@@ -385,10 +403,10 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200)`,
     );
 
-    migrate(db);
+    migrateToVersion16(db);
 
-    expect(getUserVersion(db)).toBe(LATEST_VERSION);
-    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+    expect(getUserVersion(db)).toBe(16);
+    expect(new SqliteEncounterRepository(db, "e1").listInstances()).toEqual([
       makeTestInstance({
         currentHp: 9,
         initiative: 12,
@@ -404,7 +422,7 @@ describe("migrations", () => {
   it("the footprint column rejects a value below 1", () => {
     const db = openDatabase(":memory:");
     db.exec(
-      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e1', 'Encounter 1', 1, 100)",
     );
     const insert = (id: string, footprint: number) =>
       db
@@ -425,7 +443,7 @@ describe("migrations", () => {
     expect(error).toMatchObject({ errcode: 275 });
     insert("i2", 2);
     expect(
-      new SqliteEncounterRepository(db)
+      new SqliteEncounterRepository(db, "e1")
         .listInstances()
         .map((i) => [i.id, i.footprint]),
     ).toEqual([["i2", 2]]);
@@ -446,9 +464,9 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200, 1, 0)`,
     );
 
-    migrate(db);
+    migrateToVersion16(db);
 
-    const instances = new SqliteEncounterRepository(db).listInstances();
+    const instances = new SqliteEncounterRepository(db, "e1").listInstances();
     expect(instances[0]?.spawnPosition).toBeNull();
     expect(instances).toEqual([
       makeTestInstance({
@@ -488,7 +506,7 @@ describe("migrations", () => {
   it("the spawn columns refuse a row with only one of x and y", () => {
     const db = openDatabase(":memory:");
     db.exec(
-      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e1', 'Encounter 1', 1, 100)",
     );
     const insert = (id: string, x: number | null, y: number | null) =>
       db
@@ -514,7 +532,7 @@ describe("migrations", () => {
     }
     insert("i3", 225, 375);
     expect(
-      new SqliteEncounterRepository(db)
+      new SqliteEncounterRepository(db, "e1")
         .listInstances()
         .map((i) => [i.id, i.spawnPosition]),
     ).toEqual([["i3", { x: 225, y: 375 }]]);
@@ -540,7 +558,7 @@ describe("openDatabase concurrency settings", () => {
     expect(pragma(db, "journal_mode")).toBe("memory");
   });
 
-  it("takes the write lock up front so a concurrent writer cannot race getOrCreateActiveEncounter", () => {
+  it("takes the write lock up front so a concurrent writer cannot race the creation of the current encounter", () => {
     const dir = mkdtempSync(join(tmpdir(), "ttrpg-db-"));
     dirs.push(dir);
     const path = join(dir, "enc.db");
@@ -548,15 +566,15 @@ describe("openDatabase concurrency settings", () => {
     const other = new DatabaseSync(path, { timeout: 0 });
     let otherError: unknown;
     let n = 0;
-    const repo = new SqliteEncounterRepository(a, {
-      // Called between the SELECT and the INSERT: simulates another process
-      // trying to create the active encounter at exactly that moment.
+    const directory = new SqliteEncounterDirectory(a, {
+      // Called between the read and the INSERT: simulates another process
+      // trying to create the current encounter at exactly that moment.
       newId: () => {
         if (++n === 1) {
           try {
             other
               .prepare(
-                "INSERT INTO encounters (id, active, created_at) VALUES ('other', 1, 0)",
+                "INSERT INTO encounters (id, name, active, created_at) VALUES ('other', 'Other', 1, 0)",
               )
               .run();
           } catch (err) {
@@ -566,7 +584,7 @@ describe("openDatabase concurrency settings", () => {
         return `id-${n}`;
       },
     });
-    const enc = repo.getOrCreateActiveEncounter();
+    const enc = resolveEncounter(directory);
     expect(otherError).toBeDefined();
     expect(enc.id).toBe("id-1");
     expect(a.prepare("SELECT COUNT(*) AS c FROM encounters").get()).toEqual({

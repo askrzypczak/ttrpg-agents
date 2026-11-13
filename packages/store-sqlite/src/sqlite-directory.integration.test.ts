@@ -104,4 +104,16 @@ describe("SqliteEncounterDirectory", () => {
       directory.findEncounterOfInstance("no-such-instance"),
     ).toBeUndefined();
   });
+
+  it("allows only one active encounter at the database level", () => {
+    const encounter = directory.createEncounter("Encounter 1");
+    directory.setCurrentEncounter(encounter.id);
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO encounters (id, name, active, created_at) VALUES ('x', 'Encounter 2', 1, 0)",
+        )
+        .run(),
+    ).toThrow();
+  });
 });

@@ -10,11 +10,11 @@ import {
   type TablePort,
   type TableSceneStatus,
   type ChangeOrigin,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteEncounterRepository,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -55,7 +55,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
       now: () => tick++,
     }),
     maps: new SqliteMapRepository(openDatabase(":memory:")),
@@ -90,7 +90,7 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): void {
-  ctx.repo.addInstances(() => items, origin);
+  repoOf(ctx).addInstances(() => items, origin);
 }
 
 /** Delegates to `inner`, with some methods replaced. */
@@ -99,7 +99,6 @@ function wrapRepo(
   over: Partial<EncounterRepository>,
 ): EncounterRepository {
   return {
-    getOrCreateActiveEncounter: () => inner.getOrCreateActiveEncounter(),
     addInstances: (build) => inner.addInstances(build, origin),
     applyDamage: (id, amount) => inner.applyDamage(id, amount, origin),
     applyHealing: (id, amount) => inner.applyHealing(id, amount, origin),
@@ -147,7 +146,32 @@ function item(
 }
 
 function names(): string[] {
-  return ctx.repo.listInstances().map((i) => i.displayName);
+  return repoOf(ctx)
+    .listInstances()
+    .map((i) => i.displayName);
+}
+
+/** Delegates to `inner` but hands out `repo` as every encounter's repository. */
+function handingOut(
+  inner: EncounterDirectory,
+  repo: EncounterRepository,
+): EncounterDirectory {
+  return {
+    listEncounters: () => inner.listEncounters(),
+    createEncounter: (name) => inner.createEncounter(name),
+    getCurrentEncounter: () => inner.getCurrentEncounter(),
+    setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
+    findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    repositoryFor: () => repo,
+    transaction: (fn) => inner.transaction(fn),
+  };
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
 }
 
 describe("tool registry", () => {
@@ -447,7 +471,9 @@ describe("add_monsters", () => {
     });
     expect(r.isError).toBeUndefined();
     expect(
-      ctx.repo.listInstances().map((i) => [i.displayName, i.statsVisible]),
+      repoOf(ctx)
+        .listInstances()
+        .map((i) => [i.displayName, i.statsVisible]),
     ).toEqual([
       ["Shadow 1", true],
       ["Shadow 2", true],
@@ -488,7 +514,7 @@ describe("list_encounter", () => {
       { ...item("Shadow 1", 15), armorClass: 12 },
       { ...item("Shadow 2", 8), armorClass: 12 },
     );
-    const [first, second] = ctx.repo.listInstances();
+    const [first, second] = repoOf(ctx).listInstances();
     const firstId = first?.id ?? "";
     const secondId = second?.id ?? "";
     const set = await call("set_armor_class", {
@@ -497,7 +523,7 @@ describe("list_encounter", () => {
     });
     expect(set.isError).toBeUndefined();
     applyInstanceEdit(
-      ctx.repo,
+      repoOf(ctx),
       { instanceId: secondId, armorClass: 17 },
       { source: "table", commandId: "table-edit" },
     );
@@ -537,7 +563,7 @@ describe("list_encounter", () => {
 
   it("list_encounter shows - in the AC column and armorClass null for a monster without an armor class", async () => {
     seed(item("Shadow 1", 5));
-    const id = ctx.repo.listInstances()[0]?.id ?? "";
+    const id = repoOf(ctx).listInstances()[0]?.id ?? "";
 
     const r = await call("list_encounter");
 
@@ -559,7 +585,7 @@ describe("list_encounter", () => {
 describe("apply_damage and heal", () => {
   it("damages by id, then heals by name, with clamping", async () => {
     seed(item("Shadow 1", 5, 10));
-    const id = ctx.repo.listInstances()[0]?.id ?? "";
+    const id = repoOf(ctx).listInstances()[0]?.id ?? "";
 
     const hit = await call("apply_damage", { target: id, amount: 4 });
     expect(hit.isError).toBeUndefined();
@@ -573,7 +599,7 @@ describe("apply_damage and heal", () => {
 
     const overheal = await call("heal", { target: "Shadow 1", amount: 99 });
     expect(text(overheal)).toContain("3 -> 10/10");
-    expect(ctx.repo.listInstances()[0]?.currentHp).toBe(10);
+    expect(repoOf(ctx).listInstances()[0]?.currentHp).toBe(10);
   });
 
   it("errors on unknown or ambiguous targets", async () => {
@@ -586,7 +612,7 @@ describe("apply_damage and heal", () => {
     expect(ambiguous.isError).toBe(true);
     expect(text(ambiguous)).toContain("Ambiguous");
 
-    const id = ctx.repo.listInstances()[0]?.id ?? "";
+    const id = repoOf(ctx).listInstances()[0]?.id ?? "";
     expect(
       (await call("apply_damage", { target: id, amount: 1 })).isError,
     ).toBeUndefined();
@@ -594,11 +620,11 @@ describe("apply_damage and heal", () => {
 
   it("apply_damage reports the HP read inside the write, not the HP listed before it", async () => {
     seed(item("Shadow 1", 5, 10));
-    const inner = ctx.repo;
+    const inner = repoOf(ctx);
     const snapshot = inner.listInstances();
     // Another writer changes HP after the tool listed the encounter.
     inner.applyDamage(snapshot[0]?.id ?? "", 3, origin);
-    ctx.repo = staleRepo(inner, snapshot);
+    ctx.encounters = handingOut(ctx.encounters, staleRepo(inner, snapshot));
 
     const r = await call("apply_damage", { target: "Shadow 1", amount: 2 });
     expect(r.isError).toBeUndefined();
@@ -615,7 +641,7 @@ describe("apply_damage and heal", () => {
         expect(text(r)).toContain("Invalid arguments");
       }
     }
-    expect(ctx.repo.listInstances()[0]?.currentHp).toBe(10);
+    expect(repoOf(ctx).listInstances()[0]?.currentHp).toBe(10);
   });
 });
 
@@ -626,12 +652,12 @@ describe("tool errors", () => {
     expect(unknown.isError).toBe(true);
     expect(text(unknown)).toContain('Unknown target "Nobody"');
 
-    const inner = ctx.repo;
+    const inner = repoOf(ctx);
     const snapshot = inner.listInstances();
     const id = snapshot[0]?.id ?? "";
     // Removed by another writer after the tool resolved the target.
     inner.clearEncounter(origin);
-    ctx.repo = staleRepo(inner, snapshot);
+    ctx.encounters = handingOut(ctx.encounters, staleRepo(inner, snapshot));
     for (const name of ["apply_damage", "heal"]) {
       const r = await call(name, { target: "Shadow 1", amount: 1 });
       expect(r.isError).toBe(true);
@@ -640,11 +666,14 @@ describe("tool errors", () => {
   });
 
   it("tool handler rethrows an unexpected RangeError instead of returning isError", async () => {
-    ctx.repo = wrapRepo(ctx.repo, {
-      listInstances: () => {
-        throw new RangeError("bug");
-      },
-    });
+    ctx.encounters = handingOut(
+      ctx.encounters,
+      wrapRepo(repoOf(ctx), {
+        listInstances: () => {
+          throw new RangeError("bug");
+        },
+      }),
+    );
     await expect(call("list_encounter")).rejects.toThrow(RangeError);
   });
 });
@@ -652,7 +681,7 @@ describe("tool errors", () => {
 describe("remove_monsters", () => {
   it("removes by id and name", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
-    const idC = ctx.repo.listInstances()[2]?.id ?? "";
+    const idC = repoOf(ctx).listInstances()[2]?.id ?? "";
     const r = await call("remove_monsters", { targets: ["A", idC, "A"] });
     expect(r.isError).toBeUndefined();
     expect(text(r)).toContain("Removed 2");
@@ -688,7 +717,7 @@ describe("remove_monsters validation", () => {
 describe("rename_monster", () => {
   it("renames by id and by exact name, reports old and new name", async () => {
     seed(item("Shadow 1", 5), item("Shadow 2", 3));
-    const id = ctx.repo.listInstances()[0]?.id ?? "";
+    const id = repoOf(ctx).listInstances()[0]?.id ?? "";
 
     const byId = await call("rename_monster", { target: id, name: "Boss" });
     expect(byId.isError).toBeUndefined();
@@ -738,7 +767,10 @@ describe("rename_monster", () => {
 });
 
 describe("set_initiative", () => {
-  const initiatives = () => ctx.repo.listInstances().map((i) => i.initiative);
+  const initiatives = () =>
+    repoOf(ctx)
+      .listInstances()
+      .map((i) => i.initiative);
   const listedOrder = async () =>
     (
       (await call("list_encounter")).structuredContent?.["instances"] as {
@@ -748,7 +780,7 @@ describe("set_initiative", () => {
 
   it("set_initiative by id stores the value and reports before and after", async () => {
     seed(item("Shadow 1", 5));
-    const id = ctx.repo.listInstances()[0]?.id ?? "";
+    const id = repoOf(ctx).listInstances()[0]?.id ?? "";
 
     const r = await call("set_initiative", { target: id, initiative: 17 });
     expect(r.isError).toBeUndefined();
@@ -806,7 +838,9 @@ describe("set_initiative", () => {
 describe("roll_initiative", () => {
   const OGRE = "srd-2024_ogre";
   const initiatives = () =>
-    ctx.repo.listInstances().map((i) => [i.displayName, i.initiative]);
+    repoOf(ctx)
+      .listInstances()
+      .map((i) => [i.displayName, i.initiative]);
   const listedOrder = async () =>
     (
       (await call("list_encounter")).structuredContent?.["instances"] as {
@@ -828,8 +862,8 @@ describe("roll_initiative", () => {
       maxHp: 68,
       initiative: 4,
     });
-    const shadowId = ctx.repo.listInstances()[0]?.id ?? "";
-    const ogreId = ctx.repo.listInstances()[1]?.id ?? "";
+    const shadowId = repoOf(ctx).listInstances()[0]?.id ?? "";
+    const ogreId = repoOf(ctx).listInstances()[1]?.id ?? "";
     ctx.rng = cycleRng(12, 6);
 
     const r = await call("roll_initiative", {
@@ -973,11 +1007,13 @@ describe("roll_initiative", () => {
 
 describe("set_stats_visibility", () => {
   const visibility = () =>
-    ctx.repo.listInstances().map((i) => [i.displayName, i.statsVisible]);
+    repoOf(ctx)
+      .listInstances()
+      .map((i) => [i.displayName, i.statsVisible]);
 
   it("set_stats_visibility reveals several targets in one call", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
-    const idC = ctx.repo.listInstances()[2]?.id ?? "";
+    const idC = repoOf(ctx).listInstances()[2]?.id ?? "";
 
     const r = await call("set_stats_visibility", {
       targets: ["A", idC],

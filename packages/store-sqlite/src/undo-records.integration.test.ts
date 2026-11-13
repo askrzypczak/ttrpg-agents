@@ -4,6 +4,7 @@ import type {
   MonsterInstance,
   NewMonsterInstance,
 } from "@ttrpg-agents/engine";
+import { resolveEncounter } from "@ttrpg-agents/engine";
 import { beforeEach, describe, expect, it } from "vitest";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterDirectory } from "./sqlite-directory.js";
@@ -22,7 +23,12 @@ let tick: number;
 beforeEach(() => {
   tick = 1000;
   db = openDatabase(":memory:");
-  repo = new SqliteEncounterRepository(db, { now: () => tick++ });
+  const options = { now: () => tick++ };
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(new SqliteEncounterDirectory(db, options)).id,
+    options,
+  );
 });
 
 function item(displayName: string): NewMonsterInstance {

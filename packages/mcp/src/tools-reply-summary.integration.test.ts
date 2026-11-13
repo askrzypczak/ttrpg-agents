@@ -1,13 +1,15 @@
-import type {
-  ChangeOrigin,
-  MapRegistration,
-  MonsterInstance,
-  NewMonsterInstance,
-  TableMapItem,
+import {
+  type ChangeOrigin,
+  type MapRegistration,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  type TableMapItem,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -67,7 +69,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.resolve({ tokens: [] }),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
       now: () => tick++,
     }),
     maps,
@@ -109,7 +111,14 @@ function wolf(
 
 /** Seeds with a table origin, so the seed itself is not undoable. */
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, table);
+  return repoOf(ctx).addInstances(() => items, table);
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
 }
 
 describe("reply summary", () => {

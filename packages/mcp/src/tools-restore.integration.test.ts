@@ -1,12 +1,14 @@
-import type {
-  ChangeOrigin,
-  MonsterInstance,
-  NewMonsterInstance,
-  Rng,
+import {
+  type ChangeOrigin,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  type Rng,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -34,7 +36,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
       now: () => tick++,
     }),
     maps: new SqliteMapRepository(openDatabase(":memory:")),
@@ -59,11 +61,13 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, origin);
+  return repoOf(ctx).addInstances(() => items, origin);
 }
 
 function byName(name: string): MonsterInstance {
-  const found = ctx.repo.listInstances().find((i) => i.displayName === name);
+  const found = repoOf(ctx)
+    .listInstances()
+    .find((i) => i.displayName === name);
   if (!found) throw new Error(`no instance ${name}`);
   return found;
 }
@@ -81,6 +85,13 @@ async function remove(...targets: string[]): Promise<void> {
   expect(r.isError).toBeUndefined();
 }
 
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
+}
+
 describe("restore_monsters", () => {
   it("restore_monsters brings back removed monsters and replies with each one's name and HP, and its old name when renamed", async () => {
     seed(
@@ -91,7 +102,7 @@ describe("restore_monsters", () => {
     );
     const wolf2 = byName("Wolf 2");
     const goblin1 = byName("Goblin Warrior 1");
-    ctx.repo.applyDamage(wolf2.id, 6, origin);
+    repoOf(ctx).applyDamage(wolf2.id, 6, origin);
     await remove("Wolf 2", "Goblin Warrior 1");
     seed(goblin("Goblin Warrior 1", 3), goblin("Goblin Warrior 3", 3));
 
@@ -128,7 +139,7 @@ describe("restore_monsters", () => {
         },
       ],
     });
-    expect(ctx.repo.listRemovedInstances()).toEqual([]);
+    expect(repoOf(ctx).listRemovedInstances()).toEqual([]);
     expect(byName("Wolf 2").id).toBe(wolf2.id);
     expect(byName("Goblin Warrior 4").id).toBe(goblin1.id);
   });
@@ -136,8 +147,8 @@ describe("restore_monsters", () => {
   it("restore_monsters with a target that is not removed fails, says nothing was restored and restores nothing", async () => {
     seed(wolf("Wolf 1", 12), wolf("Wolf 2", 9));
     await remove("Wolf 2");
-    const live = ctx.repo.listInstances();
-    const removed = ctx.repo.listRemovedInstances();
+    const live = repoOf(ctx).listInstances();
+    const removed = repoOf(ctx).listRemovedInstances();
 
     for (const targets of [
       ["Wolf 2", "Wolf 1"],
@@ -148,8 +159,8 @@ describe("restore_monsters", () => {
       expect(r.isError, targets.join()).toBe(true);
       expect(text(r), targets.join()).toMatch(/Nothing was restored\.$/);
     }
-    expect(ctx.repo.listInstances()).toEqual(live);
-    expect(ctx.repo.listRemovedInstances()).toEqual(removed);
+    expect(repoOf(ctx).listInstances()).toEqual(live);
+    expect(repoOf(ctx).listRemovedInstances()).toEqual(removed);
     expect(removed).toHaveLength(1);
   });
 });
@@ -159,10 +170,10 @@ describe("list_encounter with removed monsters", () => {
     seed(wolf("Wolf 1", 12), wolf("Wolf 2", 9), goblin("Goblin Warrior 1", 15));
     await remove("Wolf 2");
     await remove("Goblin Warrior 1");
-    const goblin1 = ctx.repo
+    const goblin1 = repoOf(ctx)
       .listRemovedInstances()
       .find((r) => r.instance.displayName === "Goblin Warrior 1")?.instance;
-    const wolf2 = ctx.repo
+    const wolf2 = repoOf(ctx)
       .listRemovedInstances()
       .find((r) => r.instance.displayName === "Wolf 2")?.instance;
 

@@ -1,13 +1,15 @@
-import type {
-  MapRegistration,
-  Rng,
-  TableMapItem,
-  TableSceneMap,
+import {
+  type MapRegistration,
+  type Rng,
+  type TableMapItem,
+  type TableSceneMap,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterLog,
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -84,7 +86,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.resolve({ tokens: [] }),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(db),
+    encounters: new SqliteEncounterDirectory(db),
     maps,
     monsters,
     rng,
@@ -120,6 +122,13 @@ async function saveRooms(
   expect(r.isError).toBeFalsy();
 }
 
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
+}
+
 describe("preview_monsters", () => {
   it("preview_monsters says nothing was added and lists each would-be monster's name, AC, average HP with dice, initiative modifier and footprint", async () => {
     const r = await call("preview_monsters", {
@@ -152,7 +161,7 @@ describe("preview_monsters", () => {
   it("preview_monsters leaves the store, the change log and the tool context's rng untouched", async () => {
     await seedShadows(2);
     await saveRooms([{ name: "Attic", ranges: ["A1:B2"] }]);
-    const before = ctx.repo.listInstances();
+    const before = repoOf(ctx).listInstances();
     const seq = log.latestSeq();
     const draws = rng.draws;
 
@@ -165,18 +174,21 @@ describe("preview_monsters", () => {
       initiative: "each",
     });
     expect(r.isError).toBeUndefined();
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
     expect(log.latestSeq()).toBe(seq);
     expect(rng.draws).toBe(draws);
   });
 
   it("preview_monsters shows a joined monster's initiative as the member's current initiative with the member's name", async () => {
     await seedShadows(2);
-    const member = ctx.repo
+    const member = repoOf(ctx)
       .listInstances()
       .find((i) => i.displayName === "Shadow 1");
     if (!member) throw new Error("no instance Shadow 1");
-    ctx.repo.setInitiative(member.id, 14, { source: "mcp", commandId: "seed" });
+    repoOf(ctx).setInitiative(member.id, 14, {
+      source: "mcp",
+      commandId: "seed",
+    });
 
     const r = await call("preview_monsters", {
       groups: [{ monster: SHADOW, count: 1, join: "Shadow 1" }],
@@ -201,7 +213,7 @@ describe("preview_monsters", () => {
       { name: "Troll 1", room: "Attic", cell: "A1:B2" },
       { name: "Troll 2", room: "Attic", cell: null },
     ]);
-    expect(ctx.repo.listInstances()).toEqual([]);
+    expect(repoOf(ctx).listInstances()).toEqual([]);
   });
 
   it("preview_monsters fails with the same message as add_monsters for the same invalid arguments", async () => {
@@ -275,11 +287,11 @@ describe("preview_monsters", () => {
 
   it("preview_monsters shows a dash for a joined member with no initiative", async () => {
     await seedShadows(1);
-    const member = ctx.repo
+    const member = repoOf(ctx)
       .listInstances()
       .find((i) => i.displayName === "Shadow 1");
     if (!member) throw new Error("no instance Shadow 1");
-    ctx.repo.setInitiative(member.id, null, {
+    repoOf(ctx).setInitiative(member.id, null, {
       source: "mcp",
       commandId: "seed",
     });

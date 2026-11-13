@@ -12,7 +12,7 @@ import {
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -72,7 +72,7 @@ function contextWith(
       sceneTokens,
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     maps,
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },

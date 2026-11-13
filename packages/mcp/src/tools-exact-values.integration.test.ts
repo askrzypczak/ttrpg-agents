@@ -1,12 +1,14 @@
-import type {
-  ChangeOrigin,
-  EncounterRepository,
-  MonsterInstance,
-  NewMonsterInstance,
+import {
+  type ChangeOrigin,
+  type EncounterDirectory,
+  type EncounterRepository,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -29,7 +31,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
@@ -52,7 +54,7 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, origin);
+  return repoOf(ctx).addInstances(() => items, origin);
 }
 
 function item(
@@ -69,7 +71,6 @@ function staleRepo(
   snapshot: MonsterInstance[],
 ): EncounterRepository {
   return {
-    getOrCreateActiveEncounter: () => inner.getOrCreateActiveEncounter(),
     listInstances: () => snapshot.map((i) => ({ ...i })),
     addInstances: (build, o) => inner.addInstances(build, o),
     applyDamage: (id, amount, o) => inner.applyDamage(id, amount, o),
@@ -108,9 +109,32 @@ function view(i: MonsterInstance): Record<string, unknown> {
 }
 
 const stored = () =>
-  ctx.repo
+  repoOf(ctx)
     .listInstances()
     .map((i) => [i.displayName, i.currentHp, i.maxHp, i.armorClass]);
+
+/** Delegates to `inner` but hands out `repo` as every encounter's repository. */
+function handingOut(
+  inner: EncounterDirectory,
+  repo: EncounterRepository,
+): EncounterDirectory {
+  return {
+    listEncounters: () => inner.listEncounters(),
+    createEncounter: (name) => inner.createEncounter(name),
+    getCurrentEncounter: () => inner.getCurrentEncounter(),
+    setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
+    findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    repositoryFor: () => repo,
+    transaction: (fn) => inner.transaction(fn),
+  };
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
+}
 
 describe("set_hp", () => {
   it("set_hp by id sets the exact current HP and reports HP before and after", async () => {
@@ -121,7 +145,7 @@ describe("set_hp", () => {
 
     expect(r.isError).toBeUndefined();
     expect(text(r)).toBe("Shadow 1: HP 9 -> 4/9");
-    expect(ctx.repo.listInstances()[0]?.currentHp).toBe(4);
+    expect(repoOf(ctx).listInstances()[0]?.currentHp).toBe(4);
     expect(r.structuredContent).toEqual({
       summary: "Shadow 1: HP 9 -> 4/9",
       instance: { ...view(shadow), hp: 4 },
@@ -131,7 +155,7 @@ describe("set_hp", () => {
 
   it("set_hp by exact name above max HP reports the engine's clamped value", async () => {
     const [shadow] = seed(item("Shadow 1", 10));
-    ctx.repo.applyDamage(shadow?.id ?? "", 4, origin);
+    repoOf(ctx).applyDamage(shadow?.id ?? "", 4, origin);
 
     const r = await call("set_hp", { target: "Shadow 1", hp: 25 });
 
@@ -139,16 +163,16 @@ describe("set_hp", () => {
     expect(text(r)).toBe(
       "Shadow 1: HP 6 -> 10/10 (asked 25, lowered to max HP 10)",
     );
-    expect(ctx.repo.listInstances()[0]?.currentHp).toBe(10);
+    expect(repoOf(ctx).listInstances()[0]?.currentHp).toBe(10);
   });
 
   it("set_hp reports the HP read inside the write, not the HP listed before it", async () => {
     seed(item("Shadow 1", 10));
-    const inner = ctx.repo;
+    const inner = repoOf(ctx);
     const snapshot = inner.listInstances();
     // Another writer changes HP after the tool listed the encounter.
     inner.applyDamage(snapshot[0]?.id ?? "", 3, origin);
-    ctx.repo = staleRepo(inner, snapshot);
+    ctx.encounters = handingOut(ctx.encounters, staleRepo(inner, snapshot));
 
     const r = await call("set_hp", { target: "Shadow 1", hp: 4 });
 
@@ -160,7 +184,7 @@ describe("set_hp", () => {
   it("set_hp says the value was lowered or raised, and says nothing extra when not clamped", async () => {
     const [shadow] = seed(item("Shadow 1", 10));
     if (!shadow) throw new Error("seed failed");
-    ctx.repo.applyDamage(shadow.id, 4, origin);
+    repoOf(ctx).applyDamage(shadow.id, 4, origin);
 
     const lowered = await call("set_hp", { target: "Shadow 1", hp: 25 });
     expect(lowered.isError).toBeUndefined();
@@ -220,7 +244,7 @@ describe("reset_max_hp", () => {
     // The Shadow's statblock average is 27.
     const [full, damaged] = seed(item("Shadow 1", 20), item("Shadow 2", 30));
     if (!full || !damaged) throw new Error("seed failed");
-    ctx.repo.applyDamage(damaged.id, 10, origin);
+    repoOf(ctx).applyDamage(damaged.id, 10, origin);
 
     const r = await call("reset_max_hp", {
       targets: [full.id, "Shadow 2"],
@@ -247,7 +271,7 @@ describe("reset_max_hp", () => {
     // Shadow HP is 5d8 + 5: 1+2+3+4+5+5 = 20, then 6+7+8+1+2+5 = 29.
     const [full, damaged] = seed(item("Shadow 1", 12), item("Shadow 2", 30));
     if (!full || !damaged) throw new Error("seed failed");
-    ctx.repo.applyDamage(damaged.id, 10, origin);
+    repoOf(ctx).applyDamage(damaged.id, 10, origin);
 
     const r = await call("reset_max_hp", {
       targets: ["Shadow 1", "Shadow 2"],
@@ -298,7 +322,7 @@ describe("reset_max_hp", () => {
     // The Shadow's statblock average is 27.
     const [full, damaged] = seed(item("Shadow 1", 20), item("Shadow 2", 30));
     if (!full || !damaged) throw new Error("seed failed");
-    ctx.repo.applyDamage(damaged.id, 10, origin);
+    repoOf(ctx).applyDamage(damaged.id, 10, origin);
 
     const average = await call("reset_max_hp", {
       targets: [full.id, damaged.id],
@@ -341,7 +365,7 @@ describe("set_armor_class", () => {
 
     expect(r.isError).toBeUndefined();
     expect(text(r)).toBe("Shadow 1: AC 12 -> 15");
-    expect(ctx.repo.listInstances()[0]?.armorClass).toBe(15);
+    expect(repoOf(ctx).listInstances()[0]?.armorClass).toBe(15);
     expect(r.structuredContent).toEqual({
       summary: "Shadow 1: AC 12 -> 15",
       instance: { ...view(shadow), armorClass: 15 },
@@ -362,7 +386,7 @@ describe("set_armor_class", () => {
     expect(text(r)).toBe("Shadow 1: AC unset -> 14");
     expect(r.structuredContent?.["before"]).toBeNull();
     expect(r.structuredContent?.["armorClass"]).toBe(14);
-    expect(ctx.repo.listInstances()[0]?.armorClass).toBe(14);
+    expect(repoOf(ctx).listInstances()[0]?.armorClass).toBe(14);
   });
 
   it("set_armor_class says the value was raised when negative", async () => {
@@ -376,7 +400,7 @@ describe("set_armor_class", () => {
     expect(r.isError).toBeUndefined();
     expect(text(r)).toBe("Shadow 1: AC 12 -> 0 (asked -2, raised to 0)");
     expect(r.structuredContent?.["armorClass"]).toBe(0);
-    expect(ctx.repo.listInstances()[0]?.armorClass).toBe(0);
+    expect(repoOf(ctx).listInstances()[0]?.armorClass).toBe(0);
   });
 });
 

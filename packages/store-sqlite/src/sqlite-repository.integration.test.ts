@@ -13,6 +13,7 @@ import {
   InvalidNameError,
   UnknownInstanceError,
   type ChangeOrigin,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
@@ -25,10 +26,15 @@ beforeEach(() => {
   db = openDatabase(":memory:");
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(db, {
+  const options = {
     newId: () => `id-${++n}`,
     now: () => ++t,
-  });
+  };
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(new SqliteEncounterDirectory(db, options)).id,
+    options,
+  );
 });
 
 const goblin = (over = {}) => ({
@@ -36,42 +42,6 @@ const goblin = (over = {}) => ({
   displayName: "Goblin",
   maxHp: 7,
   ...over,
-});
-
-describe("getOrCreateActiveEncounter", () => {
-  it("creates once and returns the same encounter afterwards", () => {
-    const a = repo.getOrCreateActiveEncounter();
-    const b = repo.getOrCreateActiveEncounter();
-    expect(b).toEqual(a);
-    expect(db.prepare("SELECT COUNT(*) AS c FROM encounters").get()).toEqual({
-      c: 1,
-    });
-  });
-
-  it("getActiveEncounter returns undefined on an empty store and the active encounter once one exists, without creating one", () => {
-    const count = () =>
-      db.prepare("SELECT COUNT(*) AS c FROM encounters").get() as {
-        c: number;
-      };
-
-    expect(repo.getActiveEncounter()).toBeUndefined();
-    expect(count()).toEqual({ c: 0 });
-
-    const created = repo.getOrCreateActiveEncounter();
-    expect(repo.getActiveEncounter()).toEqual(created);
-    expect(count()).toEqual({ c: 1 });
-  });
-
-  it("allows only one active encounter at the database level", () => {
-    repo.getOrCreateActiveEncounter();
-    expect(() =>
-      db
-        .prepare(
-          "INSERT INTO encounters (id, active, created_at) VALUES ('x', 1, 0)",
-        )
-        .run(),
-    ).toThrow();
-  });
 });
 
 describe("addInstances", () => {
@@ -302,24 +272,6 @@ describe("renameInstance", () => {
     }
     expect(repo.listInstances()).toEqual(added);
     expect(db.isTransaction).toBe(false);
-  });
-
-  it("does not rename an instance outside the active encounter", () => {
-    const [old] = repo.addInstances(
-      () => [goblin({ displayName: "Old" })],
-      origin,
-    );
-    db.exec("UPDATE encounters SET active = 0");
-    repo.addInstances(() => [goblin({ displayName: "New" })], origin);
-    expect(() => repo.renameInstance(old!.id, "Boss", origin)).toThrow(
-      UnknownInstanceError,
-    );
-    expect(
-      db
-        .prepare("SELECT display_name FROM monster_instances WHERE id = ?")
-        .get(old!.id),
-    ).toEqual({ display_name: "Old" });
-    expect(repo.listInstances().map((i) => i.displayName)).toEqual(["New"]);
   });
 });
 
@@ -605,28 +557,6 @@ describe("setStatsVisible", () => {
     expect(repo.listInstances()).toEqual([hidden, b]);
     expect(db.isTransaction).toBe(false);
   });
-
-  it("setStatsVisible throws UnknownInstanceError for an id not in the active encounter", () => {
-    const [old] = repo.addInstances(() => [goblin()], origin);
-    db.exec("UPDATE encounters SET active = 0");
-    const current = repo.addInstances(
-      () => [goblin({ displayName: "New" })],
-      origin,
-    );
-
-    for (const id of ["nope", old!.id]) {
-      expect(() => repo.setStatsVisible(id, true, origin), id).toThrow(
-        UnknownInstanceError,
-      );
-    }
-    expect(repo.listInstances()).toEqual(current);
-    expect(
-      db
-        .prepare("SELECT stats_visible FROM monster_instances WHERE id = ?")
-        .get(old!.id),
-    ).toEqual({ stats_visible: 0 });
-    expect(db.isTransaction).toBe(false);
-  });
 });
 
 describe("armor class on insert", () => {
@@ -660,25 +590,6 @@ describe("armor class on insert", () => {
     }
     expect(repo.listInstances()).toEqual([]);
     expect(db.isTransaction).toBe(false);
-  });
-});
-
-describe("active-encounter scoping", () => {
-  it("ignores instances of an inactive encounter", () => {
-    const [old] = repo.addInstances(() => [goblin()], origin);
-    db.exec("UPDATE encounters SET active = 0");
-    repo.addInstances(() => [goblin({ displayName: "New" })], origin);
-    expect(() => repo.applyDamage(old!.id, 1, origin)).toThrow(/Unknown/);
-    expect(() => repo.applyHealing(old!.id, 1, origin)).toThrow(/Unknown/);
-    expect(() => repo.removeInstances([old!.id], origin)).toThrow(
-      UnknownInstanceError,
-    );
-    expect(
-      db
-        .prepare("SELECT current_hp FROM monster_instances WHERE id = ?")
-        .get(old!.id),
-    ).toEqual({ current_hp: 7 });
-    expect(repo.listInstances().map((i) => i.displayName)).toEqual(["New"]);
   });
 });
 
@@ -741,10 +652,16 @@ describe("listInstances", () => {
 
   it("preserves insertion order when created_at ties (rowid tie-break)", () => {
     let n = 0;
-    const tied = new SqliteEncounterRepository(openDatabase(":memory:"), {
+    const store = openDatabase(":memory:");
+    const options = {
       newId: () => `z${9 - ++n}`, // ids sort opposite to insertion order
       now: () => 1000,
-    });
+    };
+    const tied = new SqliteEncounterRepository(
+      store,
+      resolveEncounter(new SqliteEncounterDirectory(store, options)).id,
+      options,
+    );
     tied.addInstances(
       () => ["A", "B", "C", "D"].map((displayName) => goblin({ displayName })),
       origin,

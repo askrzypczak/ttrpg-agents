@@ -8,9 +8,11 @@ import {
   type ChangeOrigin,
   type NewMonsterInstance,
   type Rng,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
@@ -83,10 +85,16 @@ function errorCode(fn: () => unknown): string {
 beforeEach(() => {
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(openDatabase(":memory:"), {
+  const store = openDatabase(":memory:");
+  const options = {
     newId: () => `id-${++n}`,
     now: () => ++t,
-  });
+  };
+  repo = new SqliteEncounterRepository(
+    store,
+    resolveEncounter(new SqliteEncounterDirectory(store, options)).id,
+    options,
+  );
   calls = 0;
   groupN = 0;
 });

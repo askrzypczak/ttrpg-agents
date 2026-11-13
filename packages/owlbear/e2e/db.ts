@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
+  SqliteEncounterDirectory,
   SqliteEncounterRepository,
   SqliteMapRepository,
   SqliteTokenArtRepository,
@@ -8,6 +9,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
+  resolveEncounter,
   storeTokenImage,
   type ChangeOrigin,
   type MapRegistration,
@@ -30,7 +32,7 @@ export const E2E_ENCOUNTER_ID = "e2e-encounter";
 /** Deterministic ids so specs can match tokens to instances. */
 export const SHADOW_IDS = [1, 2, 3, 4, 5].map((n) => `e2e-shadow-${n}`);
 
-/** Recreates the DB file from scratch with 5 shadows in the active encounter. */
+/** Recreates the DB file from scratch with 5 shadows in the current encounter, E2E_ENCOUNTER_ID. */
 export function seedE2eDatabase(dir: string): void {
   const dbPath = e2eDbPath(dir);
   mkdirSync(dir, { recursive: true });
@@ -40,10 +42,11 @@ export function seedE2eDatabase(dir: string): void {
   try {
     // newId is also used for the encounter row (first call); the rest are shadows.
     const ids = [E2E_ENCOUNTER_ID, ...SHADOW_IDS];
-    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID, {
+    const directory = new SqliteEncounterDirectory(db, {
       newId: () => ids.shift()!,
     });
-    repo.addInstances(
+    const encounter = resolveEncounter(directory);
+    directory.repositoryFor(encounter.id).addInstances(
       () =>
         SHADOW_IDS.map((_, i) => ({
           monsterKey: "shadow",
@@ -58,7 +61,7 @@ export function seedE2eDatabase(dir: string): void {
   }
 }
 
-/** Ids of the instances in the e2e DB's active encounter, in creation order. */
+/** Ids of the instances in the e2e DB's seeded encounter, in creation order. */
 export function listE2eInstanceIds(dir: string): string[] {
   const db = openDatabase(e2eDbPath(dir));
   try {

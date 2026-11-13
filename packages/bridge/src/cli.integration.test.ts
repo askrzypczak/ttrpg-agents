@@ -22,8 +22,9 @@ import {
   encodeMessage,
   type BridgeMessage,
 } from "@ttrpg-agents/protocol";
+import { resolveEncounter } from "@ttrpg-agents/engine";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 
@@ -464,7 +465,8 @@ describe("bridge CLI settings", () => {
       const database = join(dir, "configured", "encounters.db");
       const db = openDatabase(database);
       try {
-        new SqliteEncounterRepository(db).addInstances(
+        const encounters = new SqliteEncounterDirectory(db);
+        encounters.repositoryFor(resolveEncounter(encounters).id).addInstances(
           () => [
             {
               monsterKey: "srd-2024_shadow",

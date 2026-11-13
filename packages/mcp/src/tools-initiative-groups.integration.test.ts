@@ -1,12 +1,14 @@
-import type {
-  ChangeOrigin,
-  MonsterInstance,
-  NewMonsterInstance,
-  Rng,
+import {
+  type ChangeOrigin,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  type Rng,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -51,7 +53,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     maps: new SqliteMapRepository(openDatabase(":memory:")),
     monsters,
     rng: cycleRng(6, 12),
@@ -74,7 +76,7 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, origin);
+  return repoOf(ctx).addInstances(() => items, origin);
 }
 
 function item(
@@ -99,9 +101,18 @@ function view(i: MonsterInstance): Record<string, unknown> {
 }
 
 function find(name: string): MonsterInstance {
-  const found = ctx.repo.listInstances().find((i) => i.displayName === name);
+  const found = repoOf(ctx)
+    .listInstances()
+    .find((i) => i.displayName === name);
   if (!found) throw new Error(`no instance ${name}`);
   return found;
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters).id,
+  );
 }
 
 describe("split_initiative", () => {
@@ -131,11 +142,11 @@ describe("split_initiative", () => {
       "group-2",
       "pack",
     ]);
-    expect(ctx.repo.listInstances().map((i) => i.initiative)).toEqual([
-      14,
-      null,
-      14,
-    ]);
+    expect(
+      repoOf(ctx)
+        .listInstances()
+        .map((i) => i.initiative),
+    ).toEqual([14, null, 14]);
     expect(r.structuredContent).toEqual({
       summary: text(r),
       instances: [
@@ -204,7 +215,7 @@ describe("merge_initiative", () => {
       ].join("\n"),
     );
     expect(
-      ctx.repo
+      repoOf(ctx)
         .listInstances()
         .map((i) => [i.displayName, i.initiative, i.groupId]),
     ).toEqual([
@@ -241,7 +252,7 @@ describe("merge_initiative", () => {
     );
     expect(r.structuredContent?.["initiative"]).toBeNull();
     expect(
-      ctx.repo
+      repoOf(ctx)
         .listInstances()
         .map((i) => [i.displayName, i.initiative, i.groupId]),
     ).toEqual([
@@ -258,7 +269,7 @@ describe("regrouping failures", () => {
       item(WOLF, "Twin", 9, "pair"),
       item(WOLF, "Twin", 9, "pair"),
     );
-    const before = ctx.repo.listInstances();
+    const before = repoOf(ctx).listInstances();
 
     const calls: [string, Record<string, unknown>][] = [
       ["split_initiative", {}],
@@ -282,6 +293,6 @@ describe("regrouping failures", () => {
       expect(text(ambiguous), name).toContain("Ambiguous");
       expect(text(ambiguous), name).toContain("Nothing was changed.");
     }
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
   });
 });

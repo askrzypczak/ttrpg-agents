@@ -6,7 +6,7 @@ import {
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   SqliteMapRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -76,7 +76,7 @@ function contextWith(answer: TableSceneMap): {
         return Promise.resolve(image);
       },
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     maps,
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },

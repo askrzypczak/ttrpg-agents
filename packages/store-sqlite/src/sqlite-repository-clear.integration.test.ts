@@ -6,15 +6,11 @@ import {
   type MonsterInstance,
   type NewMonsterInstance,
   type RemovedInstance,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { openDatabase } from "./db.js";
-import {
-  LATEST_VERSION,
-  getUserVersion,
-  migrate,
-  migrations,
-} from "./migrations.js";
+import { getUserVersion, migrations } from "./migrations.js";
 import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
@@ -30,16 +26,19 @@ const restoreOrigin: ChangeOrigin = { source: "mcp", commandId: "restore-1" };
 
 let db: DatabaseSync;
 let repo: SqliteEncounterRepository;
+let encounterId: string;
 let log: SqliteEncounterLog;
 
 beforeEach(() => {
   db = openDatabase(":memory:");
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(db, {
+  const options = {
     newId: () => `id-${String(++n)}`,
     now: () => ++t,
-  });
+  };
+  encounterId = resolveEncounter(new SqliteEncounterDirectory(db, options)).id;
+  repo = new SqliteEncounterRepository(db, encounterId, options);
   log = new SqliteEncounterLog(db);
 });
 
@@ -82,7 +81,6 @@ describe("clearEncounter keeps the cleared set", () => {
     );
     const damaged = repo.applyDamage(b!.id, 5, seedOrigin).after;
     const seq = log.latestSeq();
-    const encounterId = repo.getOrCreateActiveEncounter().id;
 
     const cleared = repo.clearEncounter(clearOrigin);
 
@@ -136,7 +134,6 @@ describe("clearEncounter keeps the cleared set", () => {
     const [a, b] = seed(shadow("Shadow 1"), shadow("Shadow 2"));
     repo.clearEncounter(clearOrigin);
     const seq = log.latestSeq();
-    const encounterId = repo.getOrCreateActiveEncounter().id;
 
     const cleared = repo.clearEncounter(secondClearOrigin);
 
@@ -231,6 +228,17 @@ describe("encounter scoping", () => {
   });
 });
 
+/**
+ * Applies the migrations after the database's version up to version 16, the
+ * last one that keeps existing encounters.
+ */
+function migrateToVersion16(db: DatabaseSync): void {
+  const from = getUserVersion(db);
+  for (const m of migrations.filter((m) => m.version > from && m.version <= 16))
+    db.exec(m.sql);
+  db.exec("PRAGMA user_version = 16");
+}
+
 describe("migration", () => {
   it("an encounter stored before migration 13 reads as never cleared", () => {
     const old = new DatabaseSync(":memory:");
@@ -246,9 +254,9 @@ describe("migration", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200, 1, 0, NULL, NULL, 7, 'table', 'remove-old')`,
     );
 
-    migrate(old);
+    migrateToVersion16(old);
 
-    expect(getUserVersion(old)).toBe(LATEST_VERSION);
+    expect(getUserVersion(old)).toBe(16);
     const columns = (
       old.prepare("PRAGMA table_info(encounters)").all() as { name: string }[]
     ).map((c) => c.name);
@@ -256,7 +264,7 @@ describe("migration", () => {
     expect(
       old.prepare("SELECT cleared_seq FROM encounters WHERE id = 'e1'").get(),
     ).toEqual({ cleared_seq: null });
-    const migrated = new SqliteEncounterRepository(old);
+    const migrated = new SqliteEncounterRepository(old, "e1");
     expect(migrated.listRemovedInstances()).toEqual([
       {
         instance: makeTestInstance({
