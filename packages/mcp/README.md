@@ -63,6 +63,8 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 tab open: they ask the table through the engine's `TablePort` (wired to the bridge
 client in `src/stdio.ts`), and a stopped bridge, no tab or a slow tab come back as
 `isError` results. `remove_rooms` and `propose_rooms` do not ask the table.
+Each encounter has its own map in use, and rooms are kept per map item, so
+encounters on one map share them.
 `setup_status` does not need the bridge: it reports a missing bridge or tab as a row.
 
 `open_statblock` opens the page with macOS `open` (other platforms are refused, see `src/system-browser.ts`). When the browser cannot be opened it still replies with the link, and a monster without a page (Giant Fly) gets a reply saying so.
