@@ -1,4 +1,8 @@
-import { UnknownInstanceError } from "./errors.js";
+import {
+  NoSceneEncounterError,
+  UnknownEncounterError,
+  UnknownInstanceError,
+} from "./errors.js";
 import type { MapRepository } from "../map/repository.js";
 import type { EncounterRepository } from "./repository.js";
 import type { Encounter } from "./types.js";
@@ -67,9 +71,76 @@ export function resolveEncounter(
   directory: EncounterDirectory,
   request: EncounterRequest,
 ): ResolvedEncounter {
-  void directory;
-  void request;
-  throw new Error("not implemented");
+  if (request.name !== undefined)
+    return {
+      encounter: namedEncounter(directory, request.name),
+      created: false,
+    };
+  const open = directory.getOpenScene();
+  if (open?.encounter) return { encounter: open.encounter, created: false };
+  if (open) {
+    if (!request.writes)
+      throw new NoSceneEncounterError("This scene has no encounter yet.");
+  } else {
+    const current = directory.getCurrentEncounter();
+    if (current) return { encounter: current, created: false };
+  }
+  return directory.transaction(() => createUnderLock(directory));
+}
+
+/**
+ * The named encounter, matched ignoring case. With no scene open it also
+ * becomes current; while a scene is open the current encounter stays.
+ */
+function namedEncounter(
+  directory: EncounterDirectory,
+  name: string,
+): Encounter {
+  const encounters = directory.listEncounters();
+  const wanted = name.toLowerCase();
+  const found = encounters.find((e) => e.name.toLowerCase() === wanted);
+  if (!found) {
+    const known =
+      encounters.length === 0
+        ? "there are no encounters"
+        : `known encounters: ${encounters.map((e) => e.name).join(", ")}`;
+    throw new UnknownEncounterError(`Unknown encounter "${name}"; ${known}.`);
+  }
+  if (
+    directory.getOpenScene() === undefined &&
+    directory.getCurrentEncounter()?.id !== found.id
+  ) {
+    directory.transaction(() => {
+      // Another process shares the database: read again under the write lock,
+      // as it may have opened a scene or made this encounter current since.
+      if (directory.getOpenScene() !== undefined) return;
+      if (directory.getCurrentEncounter()?.id === found.id) return;
+      directory.setCurrentEncounter(found.id);
+    });
+  }
+  return found;
+}
+
+/**
+ * Inside the write transaction, the encounter a command acts on when the
+ * reads before it found none: in an open scene, a new one bound to the scene
+ * and made current; with no scene open, a new current one. Another process
+ * shares the database, so the open scene and the current encounter are read
+ * again under the lock: it may have bound the scene, opened or closed one, or
+ * made an encounter current since.
+ */
+function createUnderLock(directory: EncounterDirectory): ResolvedEncounter {
+  const open = directory.getOpenScene();
+  if (open?.encounter) return { encounter: open.encounter, created: false };
+  if (!open) {
+    const current = directory.getCurrentEncounter();
+    if (current) return { encounter: current, created: false };
+  }
+  const names = directory.listEncounters().map((e) => e.name);
+  const created = directory.createEncounter(nextEncounterName(names));
+  if (open) directory.bindScene(open.sceneId, created.id);
+  directory.setCurrentEncounter(created.id);
+  return { encounter: created, created: true };
 }
 
 /** Records the scene open at the table (or none) and, when it is bound, makes its encounter current, in one transaction. */
@@ -77,9 +148,12 @@ export function openScene(
   directory: EncounterDirectory,
   sceneId: string | null,
 ): void {
-  void directory;
-  void sceneId;
-  throw new Error("not implemented");
+  directory.transaction(() => {
+    directory.setOpenScene(sceneId);
+    if (sceneId === null) return;
+    const bound = directory.getOpenScene()?.encounter;
+    if (bound) directory.setCurrentEncounter(bound.id);
+  });
 }
 
 /** The repository of the encounter that holds the instance; throws UnknownInstanceError when no encounter does. */
