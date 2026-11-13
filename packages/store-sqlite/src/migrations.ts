@@ -200,6 +200,24 @@ export const migrations: Migration[] = [
     version: 16,
     sql: "ALTER TABLE encounter_events ADD COLUMN encounter_id TEXT;",
   },
+  {
+    // Encounters become named and are bound to scenes. Existing encounters are
+    // discarded with their instances and undo records (children first); the
+    // change-log rows stay, with their seqs and no encounter, so seq never goes
+    // backwards. Maps, rooms and token art are kept. SQLite cannot add a NOT
+    // NULL column without a default, so a CHECK rejects NULL and the empty
+    // name. Names are unique ignoring (ASCII) case.
+    version: 17,
+    sql: `
+      DELETE FROM undo_instances;
+      DELETE FROM undo_commands;
+      DELETE FROM monster_instances;
+      DELETE FROM encounters;
+      UPDATE encounter_events SET encounter_id = NULL;
+      ALTER TABLE encounters ADD COLUMN name TEXT CHECK (name IS NOT NULL AND length(name) > 0);
+      CREATE UNIQUE INDEX encounters_name ON encounters (name COLLATE NOCASE);
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

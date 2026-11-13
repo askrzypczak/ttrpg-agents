@@ -54,9 +54,11 @@ interface RemovedRow extends InstanceRow {
   cleared: number | null;
 }
 
-/** Live rows of the active encounter; removed rows are out of scope for every per-id mutation. */
-const ACTIVE_SCOPE =
-  "removed_seq IS NULL AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)";
+/**
+ * Live rows of the repository's encounter (bind its id as the last parameter);
+ * removed rows are out of scope for every per-id mutation.
+ */
+const LIVE_SCOPE = "removed_seq IS NULL AND encounter_id = ?";
 
 function toInstance(row: InstanceRow): MonsterInstance {
   return {
@@ -83,12 +85,11 @@ function unknownMessage(id: string): string {
   return `Unknown monster instance: ${id}`;
 }
 
-/** The encounter row the repository's legacy helpers read (no name). */
-interface EncounterRow {
-  id: string;
-  createdAt: number;
-}
-
+/**
+ * The instances, removals, restores and undo records of one encounter: every
+ * statement is scoped by the encounter id it was built with, so another
+ * encounter becoming current does not move it.
+ */
 export class SqliteEncounterRepository implements EncounterRepository {
   private readonly db: DatabaseSync;
   private readonly encounterId: string;
@@ -106,33 +107,11 @@ export class SqliteEncounterRepository implements EncounterRepository {
     this.newId = options.newId ?? randomUUID;
   }
 
-  private getOrCreateActiveEncounter(): EncounterRow {
-    return this.transaction(() => {
-      const existing = this.getActiveEncounter();
-      if (existing) return existing;
-      const encounter = { id: this.newId(), createdAt: this.now() };
-      this.db
-        .prepare(
-          "INSERT INTO encounters (id, active, created_at) VALUES (?, 1, ?)",
-        )
-        .run(encounter.id, encounter.createdAt);
-      return encounter;
-    });
-  }
-
-  private getActiveEncounter(): EncounterRow | undefined {
-    const row = this.db
-      .prepare("SELECT id, created_at FROM encounters WHERE active = 1")
-      .get() as { id: string; created_at: number } | undefined;
-    return row ? { id: row.id, createdAt: row.created_at } : undefined;
-  }
-
   addInstances(
     build: InstanceBuilder,
     origin: ChangeOrigin,
   ): MonsterInstance[] {
     return this.transaction(() => {
-      const encounter = this.getOrCreateActiveEncounter();
       const names = this.listInstances().map((i) => i.displayName);
       const items = build(names);
       const insert = this.db.prepare(
@@ -166,7 +145,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         }
         const instance: MonsterInstance = {
           id: this.newId(),
-          encounterId: encounter.id,
+          encounterId: this.encounterId,
           monsterKey: item.monsterKey,
           displayName: item.displayName,
           maxHp: item.maxHp,
@@ -247,10 +226,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
       .prepare(
         `SELECT m.*, (m.removed_seq = e.cleared_seq) AS cleared FROM monster_instances m
          JOIN encounters e ON e.id = m.encounter_id
-         WHERE e.active = 1 AND m.removed_seq IS NOT NULL
+         WHERE m.encounter_id = ? AND m.removed_seq IS NOT NULL
          ORDER BY m.removed_seq DESC, m.created_at, m.rowid`,
       )
-      .all() as unknown as RemovedRow[];
+      .all(this.encounterId) as unknown as RemovedRow[];
     return rows.map((row) => ({
       instance: toInstance(row),
       removedBy: {
@@ -272,10 +251,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
         const row = this.db
           .prepare(
             `SELECT * FROM monster_instances
-             WHERE id = ? AND removed_seq IS NOT NULL
-               AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
+             WHERE id = ? AND removed_seq IS NOT NULL AND encounter_id = ?`,
           )
-          .get(id) as InstanceRow | undefined;
+          .get(id, this.encounterId) as InstanceRow | undefined;
         if (!row) throw new UnknownInstanceError(unknownMessage(id));
         this.recordBefore(origin, [{ id, before: toInstance(row) }]);
         const displayName = validateInstanceName(
@@ -310,9 +288,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const row = this.db
         .prepare(
           `SELECT * FROM monster_instances
-           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+           WHERE id = ? AND ${LIVE_SCOPE}`,
         )
-        .get(id) as InstanceRow | undefined;
+        .get(id, this.encounterId) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
       this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const others = this.listInstances()
@@ -346,9 +324,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const row = this.db
         .prepare(
           `SELECT * FROM monster_instances
-           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+           WHERE id = ? AND ${LIVE_SCOPE}`,
         )
-        .get(id) as InstanceRow | undefined;
+        .get(id, this.encounterId) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
       this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       this.db
@@ -373,9 +351,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const row = this.db
         .prepare(
           `SELECT * FROM monster_instances
-           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+           WHERE id = ? AND ${LIVE_SCOPE}`,
         )
-        .get(id) as InstanceRow | undefined;
+        .get(id, this.encounterId) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
       this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       this.db
@@ -396,9 +374,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const row = this.db
         .prepare(
           `SELECT * FROM monster_instances
-           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+           WHERE id = ? AND ${LIVE_SCOPE}`,
         )
-        .get(id) as InstanceRow | undefined;
+        .get(id, this.encounterId) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
       this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const currentHp = clampHp(hp, row.max_hp);
@@ -419,9 +397,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const row = this.db
         .prepare(
           `SELECT * FROM monster_instances
-           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+           WHERE id = ? AND ${LIVE_SCOPE}`,
         )
-        .get(id) as InstanceRow | undefined;
+        .get(id, this.encounterId) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
       this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const resized = resizeMaxHp(row.current_hp, maxHp);
@@ -452,9 +430,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const row = this.db
         .prepare(
           `SELECT * FROM monster_instances
-           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+           WHERE id = ? AND ${LIVE_SCOPE}`,
         )
-        .get(id) as InstanceRow | undefined;
+        .get(id, this.encounterId) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
       this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const value = clampArmorClass(armorClass);
@@ -480,9 +458,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const row = this.db
         .prepare(
           `SELECT * FROM monster_instances
-           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+           WHERE id = ? AND ${LIVE_SCOPE}`,
         )
-        .get(id) as InstanceRow | undefined;
+        .get(id, this.encounterId) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
       this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const value = visible ? 1 : 0;
@@ -512,7 +490,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
       });
       const update = this.db.prepare(
         `UPDATE monster_instances SET spawn_x = ?, spawn_y = ?
-         WHERE id = ? AND ${ACTIVE_SCOPE}`,
+         WHERE id = ? AND ${LIVE_SCOPE}`,
       );
       this.recordBefore(
         origin,
@@ -523,7 +501,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
           spawnPosition === null
             ? null
             : { x: spawnPosition.x, y: spawnPosition.y };
-        update.run(point?.x ?? null, point?.y ?? null, instance.id);
+        update.run(
+          point?.x ?? null,
+          point?.y ?? null,
+          instance.id,
+          this.encounterId,
+        );
         this.record({
           type: "position-changed",
           id: instance.id,
@@ -560,7 +543,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
         `UPDATE monster_instances
          SET monster_key = ?, display_name = ?, max_hp = ?, current_hp = ?,
              armor_class = ?, initiative = ?, footprint = ?
-         WHERE id = ? AND ${ACTIVE_SCOPE}`,
+         WHERE id = ? AND ${LIVE_SCOPE}`,
       );
       this.recordBefore(
         origin,
@@ -576,6 +559,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
           change.initiative,
           change.footprint,
           change.id,
+          this.encounterId,
         );
         this.record({
           type: "monster-changed",
@@ -610,28 +594,24 @@ export class SqliteEncounterRepository implements EncounterRepository {
       if (cleared.length === 0) return [];
       // Undo does not reach past a clear: the removals its records could
       // restore are purged below.
-      this.deleteUndoRecords(
-        "encounter_id IN (SELECT id FROM encounters WHERE active = 1)",
-        [],
-      );
+      this.deleteUndoRecords("encounter_id = ?", [this.encounterId]);
       // Earlier removals, an earlier clear's set included, cannot be restored any more.
       this.db
         .prepare(
           `DELETE FROM monster_instances
-           WHERE removed_seq IS NOT NULL
-             AND encounter_id IN (SELECT id FROM encounters WHERE active = 1)`,
+           WHERE removed_seq IS NOT NULL AND encounter_id = ?`,
         )
-        .run();
+        .run(this.encounterId);
       this.db
         .prepare(
           `UPDATE monster_instances
            SET removed_seq = ?, removed_source = ?, removed_command_id = ?
-           WHERE ${ACTIVE_SCOPE}`,
+           WHERE ${LIVE_SCOPE}`,
         )
-        .run(seq, origin.source, origin.commandId);
+        .run(seq, origin.source, origin.commandId, this.encounterId);
       this.db
-        .prepare("UPDATE encounters SET cleared_seq = ? WHERE active = 1")
-        .run(seq);
+        .prepare("UPDATE encounters SET cleared_seq = ? WHERE id = ?")
+        .run(seq, this.encounterId);
       return cleared;
     });
   }
@@ -640,21 +620,23 @@ export class SqliteEncounterRepository implements EncounterRepository {
     const rows = this.db
       .prepare(
         `SELECT id, restored_seq FROM monster_instances
-         WHERE restored_seq IS NOT NULL AND ${ACTIVE_SCOPE}`,
+         WHERE restored_seq IS NOT NULL AND ${LIVE_SCOPE}`,
       )
-      .all() as unknown as { id: string; restored_seq: number }[];
+      .all(this.encounterId) as unknown as {
+      id: string;
+      restored_seq: number;
+    }[];
     return Object.fromEntries(rows.map((row) => [row.id, row.restored_seq]));
   }
 
   listInstances(): MonsterInstance[] {
     const rows = this.db
       .prepare(
-        `SELECT m.* FROM monster_instances m
-         JOIN encounters e ON e.id = m.encounter_id
-         WHERE e.active = 1 AND m.removed_seq IS NULL
-         ORDER BY m.created_at, m.rowid`,
+        `SELECT * FROM monster_instances
+         WHERE ${LIVE_SCOPE}
+         ORDER BY created_at, rowid`,
       )
-      .all() as unknown as InstanceRow[];
+      .all(this.encounterId) as unknown as InstanceRow[];
     return rows.map(toInstance);
   }
 
@@ -673,9 +655,9 @@ export class SqliteEncounterRepository implements EncounterRepository {
       const row = this.db
         .prepare(
           `SELECT * FROM monster_instances
-           WHERE id = ? AND ${ACTIVE_SCOPE}`,
+           WHERE id = ? AND ${LIVE_SCOPE}`,
         )
-        .get(id) as InstanceRow | undefined;
+        .get(id, this.encounterId) as InstanceRow | undefined;
       if (!row) throw new UnknownInstanceError(unknownMessage(id));
       this.recordBefore(origin, [{ id, before: toInstance(row) }]);
       const hp = Math.min(
@@ -695,19 +677,18 @@ export class SqliteEncounterRepository implements EncounterRepository {
   }
 
   /**
-   * Appends an event to the change log, tagged with the active encounter's id
-   * (created if the store has none), and returns its seq; call it inside the
-   * mutation's transaction. The origin is logged without its command name.
+   * Appends an event to the change log, tagged with the repository's encounter
+   * id, and returns its seq; call it inside the mutation's transaction. The
+   * origin is logged without its command name.
    */
   private record(event: EncounterEvent): number {
     const { source, commandId } = event.origin;
     const logged = { ...event, origin: { source, commandId } };
-    const encounter = this.getOrCreateActiveEncounter();
     const { lastInsertRowid } = this.db
       .prepare(
         "INSERT INTO encounter_events (event, encounter_id) VALUES (?, ?)",
       )
-      .run(JSON.stringify(logged), encounter.id);
+      .run(JSON.stringify(logged), this.encounterId);
     return Number(lastInsertRowid);
   }
 
@@ -734,13 +715,12 @@ export class SqliteEncounterRepository implements EncounterRepository {
     instances: readonly { id: string; before: MonsterInstance | null }[],
   ): void {
     if (origin.source !== "mcp") return;
-    const encounter = this.getOrCreateActiveEncounter();
     this.db
       .prepare(
         `INSERT OR IGNORE INTO undo_commands (command_id, encounter_id, command, base_seq)
          VALUES (?, ?, ?, (SELECT COALESCE(MAX(seq), 0) FROM encounter_events))`,
       )
-      .run(origin.commandId, encounter.id, origin.command ?? null);
+      .run(origin.commandId, this.encounterId, origin.command ?? null);
     const insert = this.db.prepare(
       `INSERT OR IGNORE INTO undo_instances (command_id, instance_id, before)
        VALUES (?, ?, ?)`,
@@ -774,12 +754,11 @@ export class SqliteEncounterRepository implements EncounterRepository {
   latestUndoRecord(): UndoRecord | undefined {
     const command = this.db
       .prepare(
-        `SELECT c.command_id, c.command, c.base_seq FROM undo_commands c
-         JOIN encounters e ON e.id = c.encounter_id
-         WHERE e.active = 1
-         ORDER BY c.rowid DESC LIMIT 1`,
+        `SELECT command_id, command, base_seq FROM undo_commands
+         WHERE encounter_id = ?
+         ORDER BY rowid DESC LIMIT 1`,
       )
-      .get() as
+      .get(this.encounterId) as
       | { command_id: string; command: string | null; base_seq: number }
       | undefined;
     if (!command) return undefined;
@@ -803,19 +782,25 @@ export class SqliteEncounterRepository implements EncounterRepository {
         instances.push({ instanceId: row.instance_id, before: parsed.data });
       }
     }
-    // CASE guards json_extract from rows that are not valid JSON.
+    // Only this encounter's rows: another encounter's table events and
+    // rows with no encounter never enter the record. CASE guards
+    // json_extract from rows that are not valid JSON.
     const eventRows = this.db
       .prepare(
         `SELECT event FROM (
            SELECT seq, event,
              CASE WHEN json_valid(event) THEN json_extract(event, '$.origin.source') END AS source,
              CASE WHEN json_valid(event) THEN json_extract(event, '$.origin.commandId') END AS command_id
-           FROM encounter_events WHERE seq > ?
+           FROM encounter_events WHERE seq > ? AND encounter_id = ?
          )
          WHERE source = 'table' OR (source = 'mcp' AND command_id = ?)
          ORDER BY seq`,
       )
-      .all(command.base_seq, command.command_id) as unknown as {
+      .all(
+        command.base_seq,
+        this.encounterId,
+        command.command_id,
+      ) as unknown as {
       event: string;
     }[];
     const events: EncounterEvent[] = [];
@@ -834,7 +819,10 @@ export class SqliteEncounterRepository implements EncounterRepository {
   forgetCommands(commandIds: readonly string[]): void {
     this.transaction(() => {
       for (const id of commandIds) {
-        this.deleteUndoRecords("command_id = ?", [id]);
+        this.deleteUndoRecords("command_id = ? AND encounter_id = ?", [
+          id,
+          this.encounterId,
+        ]);
       }
     });
   }

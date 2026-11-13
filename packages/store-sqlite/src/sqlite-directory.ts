@@ -1,53 +1,107 @@
+import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type {
   Encounter,
   EncounterDirectory,
   EncounterRepository,
 } from "@ttrpg-agents/engine";
-import type { RepositoryOptions } from "./sqlite-repository.js";
+import {
+  SqliteEncounterRepository,
+  type RepositoryOptions,
+} from "./sqlite-repository.js";
+
+interface EncounterRow {
+  id: string;
+  name: string;
+  created_at: number;
+}
+
+function toEncounter(row: EncounterRow): Encounter {
+  return { id: row.id, name: row.name, createdAt: row.created_at };
+}
 
 /** The encounters of one database, the current one, and repositories scoped to one. */
 export class SqliteEncounterDirectory implements EncounterDirectory {
   private readonly db: DatabaseSync;
   private readonly options: RepositoryOptions;
+  private readonly now: () => number;
+  private readonly newId: () => string;
 
   constructor(db: DatabaseSync, options: RepositoryOptions = {}) {
     this.db = db;
     this.options = options;
+    this.now = options.now ?? Date.now;
+    this.newId = options.newId ?? randomUUID;
   }
 
   listEncounters(): Encounter[] {
-    throw new Error("not implemented");
+    const rows = this.db
+      .prepare(
+        "SELECT id, name, created_at FROM encounters ORDER BY created_at, rowid",
+      )
+      .all() as unknown as EncounterRow[];
+    return rows.map(toEncounter);
   }
 
   createEncounter(name: string): Encounter {
-    void name;
-    throw new Error("not implemented");
+    const encounter: Encounter = {
+      id: this.newId(),
+      name,
+      createdAt: this.now(),
+    };
+    this.db
+      .prepare(
+        "INSERT INTO encounters (id, name, active, created_at) VALUES (?, ?, 0, ?)",
+      )
+      .run(encounter.id, encounter.name, encounter.createdAt);
+    return encounter;
   }
 
   getCurrentEncounter(): Encounter | undefined {
-    throw new Error("not implemented");
+    const row = this.db
+      .prepare("SELECT id, name, created_at FROM encounters WHERE active = 1")
+      .get() as EncounterRow | undefined;
+    return row ? toEncounter(row) : undefined;
   }
 
   setCurrentEncounter(id: string): void {
-    void id;
-    throw new Error("not implemented");
+    this.transaction(() => {
+      this.db
+        .prepare("UPDATE encounters SET active = 0 WHERE active = 1")
+        .run();
+      const { changes } = this.db
+        .prepare("UPDATE encounters SET active = 1 WHERE id = ?")
+        .run(id);
+      if (Number(changes) === 0) throw new Error(`Unknown encounter: ${id}`);
+    });
   }
 
   findEncounterOfInstance(instanceId: string): Encounter | undefined {
-    void instanceId;
-    throw new Error("not implemented");
+    const row = this.db
+      .prepare(
+        `SELECT e.id, e.name, e.created_at FROM encounters e
+         JOIN monster_instances m ON m.encounter_id = e.id
+         WHERE m.id = ?`,
+      )
+      .get(instanceId) as EncounterRow | undefined;
+    return row ? toEncounter(row) : undefined;
   }
 
   repositoryFor(encounterId: string): EncounterRepository {
-    void encounterId;
-    void this.db;
-    void this.options;
-    throw new Error("not implemented");
+    return new SqliteEncounterRepository(this.db, encounterId, this.options);
   }
 
+  /** Runs fn in a transaction; nests by joining an already-open one. */
   transaction<T>(fn: () => T): T {
-    void fn;
-    throw new Error("not implemented");
+    if (this.db.isTransaction) return fn();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = fn();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
   }
 }
