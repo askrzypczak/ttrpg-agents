@@ -34,7 +34,9 @@ beforeEach(() => {
   };
   repo = new SqliteEncounterRepository(
     store,
-    resolveEncounter(new SqliteEncounterDirectory(store, options)).id,
+    resolveEncounter(new SqliteEncounterDirectory(store, options), {
+      writes: true,
+    }).encounter.id,
     options,
   );
 });

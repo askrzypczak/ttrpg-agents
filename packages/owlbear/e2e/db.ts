@@ -45,7 +45,7 @@ export function seedE2eDatabase(dir: string): void {
     const directory = new SqliteEncounterDirectory(db, {
       newId: () => ids.shift()!,
     });
-    const encounter = resolveEncounter(directory);
+    const encounter = resolveEncounter(directory, { writes: true }).encounter;
     directory.repositoryFor(encounter.id).addInstances(
       () =>
         SHADOW_IDS.map((_, i) => ({

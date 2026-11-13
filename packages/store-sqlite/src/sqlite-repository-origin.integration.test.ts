@@ -13,7 +13,8 @@ describe("SqliteEncounterRepository mutations", () => {
     const store = openDatabase(":memory:");
     const repo = new SqliteEncounterRepository(
       store,
-      resolveEncounter(new SqliteEncounterDirectory(store)).id,
+      resolveEncounter(new SqliteEncounterDirectory(store), { writes: true })
+        .encounter.id,
     );
     const origin: ChangeOrigin = { source: "table", commandId: "c1" };
 
@@ -64,7 +65,8 @@ describe("SqliteEncounterRepository change log", () => {
     const db = openDatabase(":memory:");
     const repo = new SqliteEncounterRepository(
       db,
-      resolveEncounter(new SqliteEncounterDirectory(db)).id,
+      resolveEncounter(new SqliteEncounterDirectory(db), { writes: true })
+        .encounter.id,
     );
     const seed: ChangeOrigin = { source: "table", commandId: "seed" };
     const [, damaged] = repo.addInstances(

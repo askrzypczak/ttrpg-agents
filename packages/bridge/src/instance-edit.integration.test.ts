@@ -65,7 +65,10 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "instance-edit-"));
   db = openDatabase(join(dir, "test.db"));
   encounters = new SqliteEncounterDirectory(db);
-  repo = new SqliteEncounterRepository(db, resolveEncounter(encounters).id);
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(encounters, { writes: true }).encounter.id,
+  );
   shadows = repo.addInstances(
     () => [
       {

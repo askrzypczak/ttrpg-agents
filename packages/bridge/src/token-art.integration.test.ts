@@ -68,7 +68,10 @@ async function startServer(
 function openStore(): void {
   db = openDatabase(dbPath);
   encounters = new SqliteEncounterDirectory(db);
-  repo = new SqliteEncounterRepository(db, resolveEncounter(encounters).id);
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(encounters, { writes: true }).encounter.id,
+  );
   artRepo = new SqliteTokenArtRepository(db);
 }
 

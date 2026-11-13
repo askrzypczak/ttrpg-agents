@@ -68,7 +68,9 @@ function contextWith(
   const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
   if (active) {
     encounters
-      .mapRepositoryFor(resolveEncounter(encounters).id)
+      .mapRepositoryFor(
+        resolveEncounter(encounters, { writes: true }).encounter.id,
+      )
       .registerMap(active);
   }
   return {
@@ -103,7 +105,9 @@ function text(r: ToolResult): string {
 
 /** The current encounter's map repository, resolved as a tool call does. */
 function mapsOf(ctx: ToolContext): MapRepository {
-  return ctx.encounters.mapRepositoryFor(resolveEncounter(ctx.encounters).id);
+  return ctx.encounters.mapRepositoryFor(
+    resolveEncounter(ctx.encounters, { writes: true }).encounter.id,
+  );
 }
 
 describe("room tools", () => {

@@ -48,7 +48,9 @@ const movedLine =
 function context(): ToolContext {
   const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
   encounters
-    .mapRepositoryFor(resolveEncounter(encounters).id)
+    .mapRepositoryFor(
+      resolveEncounter(encounters, { writes: true }).encounter.id,
+    )
     .registerMap(registered);
   return {
     table: {

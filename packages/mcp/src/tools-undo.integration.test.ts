@@ -111,6 +111,9 @@ function recordingDirectory(
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
     repositoryFor: (id) => recording(inner.repositoryFor(id), writes),
     mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
+    getOpenScene: () => inner.getOpenScene(),
+    setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
+    bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -127,7 +130,9 @@ beforeEach(() => {
     now: () => tick++,
   });
   directory
-    .mapRepositoryFor(resolveEncounter(directory).id)
+    .mapRepositoryFor(
+      resolveEncounter(directory, { writes: true }).encounter.id,
+    )
     .registerMap(registered);
   ctx = {
     table: {
@@ -208,14 +213,14 @@ async function saveKitchen(): Promise<void> {
 /** The current encounter's repository (created when there is none), resolved as a tool call does. */
 function repoOf(context: ToolContext): EncounterRepository {
   return context.encounters.repositoryFor(
-    resolveEncounter(context.encounters).id,
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
   );
 }
 
 /** The current encounter's map repository, resolved as a tool call does. */
 function mapsOf(context: ToolContext): MapRepository {
   return context.encounters.mapRepositoryFor(
-    resolveEncounter(context.encounters).id,
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
   );
 }
 

@@ -96,6 +96,9 @@ function recordingDirectory(
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
     repositoryFor: () => recording,
     mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
+    getOpenScene: () => inner.getOpenScene(),
+    setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
+    bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -115,7 +118,10 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "write-back-origin-"));
   db = openDatabase(join(dir, "test.db"));
   encounters = new SqliteEncounterDirectory(db);
-  repo = new SqliteEncounterRepository(db, resolveEncounter(encounters).id);
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(encounters, { writes: true }).encounter.id,
+  );
   origins = [];
   const [shadow] = repo.addInstances(
     () => [

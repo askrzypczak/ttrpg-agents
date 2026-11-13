@@ -148,4 +148,31 @@ describe("use_map per encounter", () => {
       ctx.encounters.repositoryFor(sewerFight.id).latestUndoRecord(),
     ).toBeUndefined();
   });
+
+  it("use_map in an open scene with no encounter registers the map on a new encounter bound to the scene", async () => {
+    const ctx = contextWith(() => Promise.resolve(scene(trollskull)));
+    const tavern = ctx.encounters.createEncounter("Tavern");
+    ctx.encounters.setCurrentEncounter(tavern.id);
+    ctx.encounters.setOpenScene("scene-1");
+
+    const r = await useMap(ctx);
+
+    expect(r.isError).toBeFalsy();
+    const created = ctx.encounters
+      .listEncounters()
+      .filter((e) => e.id !== tavern.id);
+    expect(created.map((e) => e.name)).toEqual(["Encounter 1"]);
+    const encounter = created[0]!;
+    expect(ctx.encounters.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter,
+    });
+    expect(ctx.encounters.getCurrentEncounter()).toEqual(encounter);
+    expect(
+      ctx.encounters.mapRepositoryFor(encounter.id).getActiveMap()?.itemId,
+    ).toBe("map-1");
+    expect(
+      ctx.encounters.mapRepositoryFor(tavern.id).getActiveMap(),
+    ).toBeUndefined();
+  });
 });

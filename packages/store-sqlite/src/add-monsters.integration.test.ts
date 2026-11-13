@@ -80,7 +80,9 @@ beforeEach(() => {
   };
   repo = new SqliteEncounterRepository(
     store,
-    resolveEncounter(new SqliteEncounterDirectory(store, options)).id,
+    resolveEncounter(new SqliteEncounterDirectory(store, options), {
+      writes: true,
+    }).encounter.id,
     options,
   );
   calls = 0;
@@ -535,7 +537,9 @@ describe("addMonsters across connections", () => {
     const a = openDatabase(path);
     // Opened directly so a locked database fails at once instead of waiting.
     const b = new DatabaseSync(path, { timeout: 0 });
-    const encounterId = resolveEncounter(new SqliteEncounterDirectory(a)).id;
+    const encounterId = resolveEncounter(new SqliteEncounterDirectory(a), {
+      writes: true,
+    }).encounter.id;
     const repoA = new SqliteEncounterRepository(a, encounterId);
     const repoB = new SqliteEncounterRepository(b, encounterId);
 

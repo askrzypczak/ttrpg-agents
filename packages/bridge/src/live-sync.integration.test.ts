@@ -131,7 +131,8 @@ function otherRepository(): SqliteEncounterRepository {
   extraDbs.push(other);
   return new SqliteEncounterRepository(
     other,
-    resolveEncounter(new SqliteEncounterDirectory(other)).id,
+    resolveEncounter(new SqliteEncounterDirectory(other), { writes: true })
+      .encounter.id,
   );
 }
 

@@ -162,6 +162,9 @@ function handingOut(
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
     repositoryFor: () => repo,
     mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
+    getOpenScene: () => inner.getOpenScene(),
+    setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
+    bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -169,7 +172,7 @@ function handingOut(
 /** The current encounter's repository (created when there is none), resolved as a tool call does. */
 function repoOf(context: ToolContext): EncounterRepository {
   return context.encounters.repositoryFor(
-    resolveEncounter(context.encounters).id,
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
   );
 }
 
@@ -1394,6 +1397,79 @@ describe("the encounter a tool call acts on", () => {
     expect(directory.getCurrentEncounter()).toBeUndefined();
   });
 
+  it('a read tool in an open scene with no encounter replies "This scene has no encounter yet." and creates none', async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const tavern = directory.createEncounter("Tavern");
+    directory.setCurrentEncounter(tavern.id);
+    directory.setOpenScene("scene-1");
+
+    const r = await callWith(contextOver(directory), "list_encounter");
+
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe("This scene has no encounter yet.");
+    expect(directory.listEncounters()).toEqual([tavern]);
+    expect(directory.getCurrentEncounter()).toEqual(tavern);
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter: undefined,
+    });
+  });
+
+  it('a writing tool that cannot start an encounter, in an open scene with no encounter, replies "This scene has no encounter yet." and creates none', async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const tavern = directory.createEncounter("Tavern");
+    directory.setCurrentEncounter(tavern.id);
+    directory
+      .repositoryFor(tavern.id)
+      .addInstances(() => [item("Shadow 1", 5, 10)], origin);
+    directory.setOpenScene("scene-1");
+
+    const r = await callWith(contextOver(directory), "clear_encounter");
+
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe("This scene has no encounter yet.");
+    expect(directory.listEncounters()).toEqual([tavern]);
+    expect(directory.getCurrentEncounter()).toEqual(tavern);
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter: undefined,
+    });
+    expect(
+      directory
+        .repositoryFor(tavern.id)
+        .listInstances()
+        .map((i) => i.displayName),
+    ).toEqual(["Shadow 1"]);
+  });
+
+  it('add_monsters in an open scene with no encounter adds to a new "Encounter N" bound to the scene and made current', async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const first = directory.createEncounter("Encounter 1");
+    directory.setCurrentEncounter(first.id);
+    directory.setOpenScene("scene-1");
+
+    const r = await callWith(contextOver(directory), "add_monsters", {
+      groups: [{ monster: SHADOW, count: 2 }],
+    });
+
+    expect(r.isError).toBeUndefined();
+    const created = directory.listEncounters().filter((e) => e.id !== first.id);
+    expect(created.map((e) => e.name)).toEqual(["Encounter 2"]);
+    const encounter = created[0]!;
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter,
+    });
+    expect(directory.getCurrentEncounter()).toEqual(encounter);
+    expect(
+      directory
+        .repositoryFor(encounter.id)
+        .listInstances()
+        .map((i) => i.displayName),
+    ).toEqual(["Shadow 1", "Shadow 2"]);
+    expect(directory.repositoryFor(first.id).listInstances()).toEqual([]);
+  });
+
   it("a tool call keeps acting on the encounter it resolved when another encounter becomes current during the call", async () => {
     const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
     const a = directory.createEncounter("Encounter A");
@@ -1418,6 +1494,10 @@ describe("the encounter a tool call acts on", () => {
       findEncounterOfInstance: (id) => directory.findEncounterOfInstance(id),
       transaction: (fn) => directory.transaction(fn),
       mapRepositoryFor: (id) => directory.mapRepositoryFor(id),
+      getOpenScene: () => directory.getOpenScene(),
+      setOpenScene: (sceneId) => directory.setOpenScene(sceneId),
+      bindScene: (sceneId, encounterId) =>
+        directory.bindScene(sceneId, encounterId),
       repositoryFor(encounterId) {
         requested.push(encounterId);
         const inner = directory.repositoryFor(encounterId);

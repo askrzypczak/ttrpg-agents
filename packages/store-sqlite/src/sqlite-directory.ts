@@ -5,6 +5,7 @@ import type {
   EncounterDirectory,
   EncounterRepository,
   MapRepository,
+  OpenScene,
 } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
@@ -17,6 +18,11 @@ interface EncounterRow {
   name: string;
   created_at: number;
 }
+
+/** The open scene, with its bound encounter's columns null when none is bound. */
+type OpenSceneRow =
+  | { scene_id: string; id: null; name: null; created_at: null }
+  | ({ scene_id: string } & EncounterRow);
 
 function toEncounter(row: EncounterRow): Encounter {
   return { id: row.id, name: row.name, createdAt: row.created_at };
@@ -98,6 +104,56 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
 
   mapRepositoryFor(encounterId: string): MapRepository {
     return new SqliteMapRepository(this.db, encounterId);
+  }
+
+  getOpenScene(): OpenScene | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT o.scene_id, e.id, e.name, e.created_at FROM open_scene o
+         LEFT JOIN encounters e ON e.scene_id = o.scene_id`,
+      )
+      .get() as OpenSceneRow | undefined;
+    if (!row) return undefined;
+    return {
+      sceneId: row.scene_id,
+      encounter:
+        row.id === null
+          ? undefined
+          : toEncounter({
+              id: row.id,
+              name: row.name,
+              created_at: row.created_at,
+            }),
+    };
+  }
+
+  setOpenScene(sceneId: string | null): void {
+    if (sceneId === null) {
+      this.db.prepare("DELETE FROM open_scene").run();
+      return;
+    }
+    this.db
+      .prepare(
+        `INSERT INTO open_scene (id, scene_id) VALUES (1, ?)
+         ON CONFLICT (id) DO UPDATE SET scene_id = excluded.scene_id`,
+      )
+      .run(sceneId);
+  }
+
+  bindScene(sceneId: string, encounterId: string): void {
+    this.transaction(() => {
+      // The unique index on scene_id throws for a scene bound to another
+      // encounter; no changed row means the encounter is unknown or bound.
+      const { changes } = this.db
+        .prepare(
+          "UPDATE encounters SET scene_id = ? WHERE id = ? AND scene_id IS NULL",
+        )
+        .run(sceneId, encounterId);
+      if (changes === 0)
+        throw new Error(
+          `Encounter ${encounterId} is unknown or already bound to a scene`,
+        );
+    });
   }
 
   /** Runs fn in a transaction; nests by joining an already-open one. */

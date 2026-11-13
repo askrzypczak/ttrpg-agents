@@ -51,6 +51,22 @@ export class InvalidArmorClassError extends DomainError {
   }
 }
 
+/** No encounter with that name; the message lists the encounters' names, or says there are none. */
+export class UnknownEncounterError extends DomainError {
+  constructor(message: string) {
+    super("unknown_encounter", message);
+    this.name = "UnknownEncounterError";
+  }
+}
+
+/** A read in an open scene that no encounter is bound to. */
+export class NoSceneEncounterError extends DomainError {
+  constructor(message: string) {
+    super("no_scene_encounter", message);
+    this.name = "NoSceneEncounterError";
+  }
+}
+
 /** A target that already is the requested monster. */
 export class SameMonsterError extends DomainError {
   constructor(message: string) {

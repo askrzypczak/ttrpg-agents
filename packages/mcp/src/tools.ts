@@ -93,6 +93,11 @@ function defineTool<S extends z.ZodRawShape>(def: {
   inputSchema: S;
   annotations?: ToolAnnotations;
   /**
+   * The call resolves its encounter with the write form, which creates one in
+   * an open scene with no encounter; otherwise with the read form.
+   */
+  startsEncounter?: boolean;
+  /**
    * `origin()` is the origin of every write in one call: source `mcp`, one
    * command id minted on first use, and the tool's name as its command.
    */
@@ -131,13 +136,18 @@ function defineTool<S extends z.ZodRawShape>(def: {
         };
         return minted;
       };
-      // The call's encounter is resolved on the first access of `repo` or
-      // `maps` and kept for the rest of the call, so a tool that never reads
-      // it creates none and a switch of the current encounter mid-call moves
-      // neither repository.
+      // The call's encounter is resolved by the engine's rule on the first
+      // access of `repo` or `maps` and kept for the rest of the call, so a
+      // tool that never reads it creates none and a switch of the current
+      // encounter mid-call moves neither repository. In an open scene with no
+      // encounter only a tool that starts an encounter creates one (the write
+      // form); every other tool fails there (the read form), as a domain
+      // error reply.
       let encounterId: string | undefined;
       const callEncounterId = (): string =>
-        (encounterId ??= resolveEncounter(ctx.encounters).id);
+        (encounterId ??= resolveEncounter(ctx.encounters, {
+          writes: def.startsEncounter === true,
+        }).encounter.id);
       let repo: EncounterRepository | undefined;
       let maps: MapRepository | undefined;
       const callCtx: ToolCallContext = {
@@ -312,6 +322,7 @@ const addMonstersInput = {
 const addMonstersTool = defineTool({
   name: "add_monsters",
   annotations: { destructiveHint: false },
+  startsEncounter: true,
   description:
     "Add groups of monsters to the encounter in one call. Rolls HP (or uses average) and initiative, and numbers names automatically. A group's optional room places its monsters on free cells of that saved room of the map in use (needs the bridge running). A group's optional join names a monster already in the encounter (id or exact name): its monsters join that monster's initiative group and take its current initiative, without a roll.",
   inputSchema: addMonstersInput,
@@ -1121,6 +1132,7 @@ function artWaitLines(waits: readonly TableArtWait[]): string[] {
 const useMapTool = defineTool({
   name: "use_map",
   annotations: { destructiveHint: false },
+  startsEncounter: true,
   description:
     "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the current encounter's map. Needs the bridge running.",
   inputSchema: { name: z.string().min(1).optional() },

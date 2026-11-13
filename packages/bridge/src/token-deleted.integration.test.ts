@@ -63,7 +63,10 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "token-deleted-"));
   db = openDatabase(join(dir, "test.db"));
   encounters = new SqliteEncounterDirectory(db);
-  repo = new SqliteEncounterRepository(db, resolveEncounter(encounters).id);
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(encounters, { writes: true }).encounter.id,
+  );
   shadows = repo.addInstances(
     () => [
       { monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 },
