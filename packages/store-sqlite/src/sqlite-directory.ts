@@ -66,13 +66,16 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
 
   setCurrentEncounter(id: string): void {
     this.transaction(() => {
+      // Checked before any write, so a caller that catches the throw inside
+      // an outer transaction keeps the current encounter it had.
+      const known = this.db
+        .prepare("SELECT 1 FROM encounters WHERE id = ?")
+        .get(id);
+      if (!known) throw new Error(`Unknown encounter: ${id}`);
       this.db
         .prepare("UPDATE encounters SET active = 0 WHERE active = 1")
         .run();
-      const { changes } = this.db
-        .prepare("UPDATE encounters SET active = 1 WHERE id = ?")
-        .run(id);
-      if (Number(changes) === 0) throw new Error(`Unknown encounter: ${id}`);
+      this.db.prepare("UPDATE encounters SET active = 1 WHERE id = ?").run(id);
     });
   }
 

@@ -117,3 +117,20 @@ describe("SqliteEncounterDirectory", () => {
     ).toThrow();
   });
 });
+
+describe("SqliteEncounterDirectory inside an outer transaction", () => {
+  it("setCurrentEncounter with an unknown id inside an outer transaction changes nothing when the caller catches the throw", () => {
+    const a = directory.createEncounter("Encounter 1");
+    directory.setCurrentEncounter(a.id);
+
+    directory.transaction(() => {
+      try {
+        directory.setCurrentEncounter("missing");
+      } catch {
+        // The caller carries on with the transaction.
+      }
+    });
+
+    expect(directory.getCurrentEncounter()).toEqual(a);
+  });
+});
