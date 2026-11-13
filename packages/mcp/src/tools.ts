@@ -131,20 +131,24 @@ function defineTool<S extends z.ZodRawShape>(def: {
         };
         return minted;
       };
-      // The call's encounter is resolved on the first access of `repo` and
-      // kept for the rest of the call, so a tool that never reads it creates
-      // none and a switch of the current encounter mid-call does not move it.
+      // The call's encounter is resolved on the first access of `repo` or
+      // `maps` and kept for the rest of the call, so a tool that never reads
+      // it creates none and a switch of the current encounter mid-call moves
+      // neither repository.
+      let encounterId: string | undefined;
+      const callEncounterId = (): string =>
+        (encounterId ??= resolveEncounter(ctx.encounters).id);
       let repo: EncounterRepository | undefined;
+      let maps: MapRepository | undefined;
       const callCtx: ToolCallContext = {
         ...ctx,
         get repo(): EncounterRepository {
-          repo ??= ctx.encounters.repositoryFor(
-            resolveEncounter(ctx.encounters).id,
-          );
+          repo ??= ctx.encounters.repositoryFor(callEncounterId());
           return repo;
         },
         get maps(): MapRepository {
-          throw new Error("not implemented");
+          maps ??= ctx.encounters.mapRepositoryFor(callEncounterId());
+          return maps;
         },
       };
       try {
@@ -1118,7 +1122,7 @@ const useMapTool = defineTool({
   name: "use_map",
   annotations: { destructiveHint: false },
   description:
-    "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the active map. Needs the bridge running.",
+    "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the current encounter's map. Needs the bridge running.",
   inputSchema: { name: z.string().min(1).optional() },
   async run(ctx, { name }, origin) {
     const { map, cols, rows } = await useMap(ctx.table, ctx.maps, name);
