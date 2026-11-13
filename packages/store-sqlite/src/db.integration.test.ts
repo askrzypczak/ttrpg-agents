@@ -11,10 +11,11 @@ import {
   migrate,
   migrations,
 } from "./migrations.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 import { SqliteTokenArtRepository } from "./token-art-repository.js";
-import type { ChangeOrigin } from "@ttrpg-agents/engine";
+import { resolveEncounter, type ChangeOrigin } from "@ttrpg-agents/engine";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -573,5 +574,105 @@ describe("openDatabase concurrency settings", () => {
     });
     other.close();
     a.close();
+  });
+});
+
+describe("migration to scene-bound encounters", () => {
+  /** A database at version 16 with one encounter, its instances, an undo record, log rows and a map with a room. */
+  function version16Database(): DatabaseSync {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 16)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 16");
+    db.exec(
+      "INSERT INTO encounters (id, active, created_at, cleared_seq) VALUES ('e1', 1, 100, 9)",
+    );
+    db.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at)
+       VALUES ('live', 'e1', 'ogre', 'Ogre 1', 59, 59, 200)`,
+    );
+    db.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at,
+         removed_seq, removed_source, removed_command_id)
+       VALUES ('gone', 'e1', 'ogre', 'Ogre 2', 59, 59, 201, 9, 'mcp', 'c1')`,
+    );
+    db.exec(
+      "INSERT INTO undo_commands (command_id, encounter_id, command, base_seq) VALUES ('c1', 'e1', 'remove_monsters', 3)",
+    );
+    db.exec(
+      "INSERT INTO undo_instances (command_id, instance_id, before) VALUES ('c1', 'gone', NULL)",
+    );
+    const insertEvent = db.prepare(
+      "INSERT INTO encounter_events (seq, event, encounter_id) VALUES (?, ?, 'e1')",
+    );
+    insertEvent.run(4, JSON.stringify({ type: "removed", id: "gone", origin }));
+    insertEvent.run(9, JSON.stringify({ type: "cleared", origin }));
+    db.exec(
+      `INSERT INTO map_registrations
+        (item_id, name, position_x, position_y, rotation, scale_x, scale_y,
+         image_offset_x, image_offset_y, image_width, image_height, image_dpi, scene_dpi, active)
+       VALUES ('map-1', 'Cave', 0, 0, 0, 1, 1, 0, 0, 1000, 800, 150, 150, 1)`,
+    );
+    db.exec(
+      `INSERT INTO map_rooms (map_item_id, name, status, polygons, position)
+       VALUES ('map-1', 'Hall', 'confirmed', '[]', 0)`,
+    );
+    return db;
+  }
+
+  const rows = (db: DatabaseSync, sql: string) => db.prepare(sql).all();
+
+  it("a version 16 database migrates deleting every encounter, instance and undo record, keeping the change-log rows with their seqs and a null encounter id and the map registrations with their rooms", () => {
+    const db = version16Database();
+    const maps = rows(db, "SELECT * FROM map_registrations");
+    const rooms = rows(db, "SELECT * FROM map_rooms");
+
+    migrate(db);
+
+    expect(getUserVersion(db)).toBe(17);
+    expect(new SqliteEncounterDirectory(db).listEncounters()).toEqual([]);
+    expect(rows(db, "SELECT id FROM encounters")).toEqual([]);
+    expect(rows(db, "SELECT id FROM monster_instances")).toEqual([]);
+    expect(rows(db, "SELECT command_id FROM undo_commands")).toEqual([]);
+    expect(rows(db, "SELECT command_id FROM undo_instances")).toEqual([]);
+    expect(new SqliteEncounterLog(db).eventsSince(0)).toEqual([
+      {
+        seq: 4,
+        encounterId: null,
+        event: { type: "removed", id: "gone", origin },
+      },
+      { seq: 9, encounterId: null, event: { type: "cleared", origin } },
+    ]);
+    expect(rows(db, "SELECT * FROM map_registrations")).toEqual(maps);
+    expect(rows(db, "SELECT * FROM map_rooms")).toEqual(rooms);
+    db.close();
+  });
+
+  it('after the migration the next encounter write creates "Encounter 1" and logs its event above the old seqs', () => {
+    const db = version16Database();
+    migrate(db);
+    const directory = new SqliteEncounterDirectory(db);
+
+    const encounter = resolveEncounter(directory);
+    const [added] = directory
+      .repositoryFor(encounter.id)
+      .addInstances(
+        () => [{ monsterKey: "ogre", displayName: "Ogre 1", maxHp: 59 }],
+        origin,
+      );
+
+    expect(encounter.name).toBe("Encounter 1");
+    expect(directory.getCurrentEncounter()).toEqual(encounter);
+    expect(directory.listEncounters()).toEqual([encounter]);
+    const events = new SqliteEncounterLog(db).eventsSince(9);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      encounterId: encounter.id,
+      event: { type: "added", instances: [added] },
+    });
+    expect(events[0]!.seq).toBeGreaterThan(9);
+    db.close();
   });
 });

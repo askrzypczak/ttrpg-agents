@@ -1,11 +1,7 @@
 import type { Point } from "../map/types.js";
 import type { EncounterEvent } from "./events.js";
 import type { ChangeOrigin } from "./origin.js";
-import type {
-  Encounter,
-  MonsterInstance,
-  NewMonsterInstance,
-} from "./types.js";
+import type { MonsterInstance, NewMonsterInstance } from "./types.js";
 
 /** An instance as read inside one HP write: before and after the change. */
 export interface HpChange {
@@ -57,12 +53,6 @@ export interface UndoRecord {
   events: EncounterEvent[];
 }
 
-/** Reads the active encounter without creating one. */
-export interface ActiveEncounterReader {
-  /** The active encounter, or undefined when the store has none; never creates one. */
-  getActiveEncounter(): Encounter | undefined;
-}
-
 /**
  * Every mutation with an `mcp` origin stores, in its transaction, each written
  * instance's state before the command's first write to it; `clearEncounter`
@@ -70,8 +60,6 @@ export interface ActiveEncounterReader {
  * encounter's undo records.
  */
 export interface EncounterRepository {
-  /** Returns the single active encounter, creating it if none exists. */
-  getOrCreateActiveEncounter(): Encounter;
   /**
    * In one write transaction: reads the existing display names, calls `build`
    * with them and inserts the items it returns (all or nothing; rolls back if

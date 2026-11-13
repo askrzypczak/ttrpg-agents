@@ -12,9 +12,7 @@ import {
   validateInstanceName,
 } from "@ttrpg-agents/engine";
 import type {
-  ActiveEncounterReader,
   ChangeOrigin,
-  Encounter,
   EncounterEvent,
   EncounterRepository,
   HpChange,
@@ -85,20 +83,30 @@ function unknownMessage(id: string): string {
   return `Unknown monster instance: ${id}`;
 }
 
-export class SqliteEncounterRepository
-  implements EncounterRepository, ActiveEncounterReader
-{
+/** The encounter row the repository's legacy helpers read (no name). */
+interface EncounterRow {
+  id: string;
+  createdAt: number;
+}
+
+export class SqliteEncounterRepository implements EncounterRepository {
   private readonly db: DatabaseSync;
+  private readonly encounterId: string;
   private readonly now: () => number;
   private readonly newId: () => string;
 
-  constructor(db: DatabaseSync, options: RepositoryOptions = {}) {
+  constructor(
+    db: DatabaseSync,
+    encounterId: string,
+    options: RepositoryOptions = {},
+  ) {
     this.db = db;
+    this.encounterId = encounterId;
     this.now = options.now ?? Date.now;
     this.newId = options.newId ?? randomUUID;
   }
 
-  getOrCreateActiveEncounter(): Encounter {
+  private getOrCreateActiveEncounter(): EncounterRow {
     return this.transaction(() => {
       const existing = this.getActiveEncounter();
       if (existing) return existing;
@@ -112,7 +120,7 @@ export class SqliteEncounterRepository
     });
   }
 
-  getActiveEncounter(): Encounter | undefined {
+  private getActiveEncounter(): EncounterRow | undefined {
     const row = this.db
       .prepare("SELECT id, created_at FROM encounters WHERE active = 1")
       .get() as { id: string; created_at: number } | undefined;

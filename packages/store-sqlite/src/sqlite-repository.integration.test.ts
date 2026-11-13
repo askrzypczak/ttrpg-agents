@@ -1,6 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
+import { SqliteEncounterLog } from "./sqlite-log.js";
 import {
   InvalidAmountError,
   InvalidArmorClassError,
@@ -750,5 +755,196 @@ describe("listInstances", () => {
       "C",
       "D",
     ]);
+  });
+});
+
+describe("encounter scoping", () => {
+  const scopeDirs: string[] = [];
+  afterEach(() => {
+    for (const d of scopeDirs.splice(0))
+      rmSync(d, { recursive: true, force: true });
+  });
+
+  /** Two named encounters in one store, B current, with a repository scoped to each. */
+  function twoEncounters() {
+    const store = openDatabase(":memory:");
+    let n = 0;
+    let t = 1000;
+    const options = { newId: () => `sc-${String(++n)}`, now: () => ++t };
+    const directory = new SqliteEncounterDirectory(store, options);
+    const a = directory.createEncounter("Encounter A");
+    const b = directory.createEncounter("Encounter B");
+    directory.setCurrentEncounter(b.id);
+    return {
+      store,
+      directory,
+      a,
+      b,
+      repoA: new SqliteEncounterRepository(store, a.id, options),
+      repoB: new SqliteEncounterRepository(store, b.id, options),
+    };
+  }
+
+  it("listInstances of a repository scoped to one encounter lists only that encounter's live instances", () => {
+    const { a, repoA, repoB } = twoEncounters();
+    const [kept, removed] = repoA.addInstances(
+      () => [
+        goblin({ displayName: "Goblin 1" }),
+        goblin({ displayName: "Goblin 2" }),
+      ],
+      origin,
+    );
+    repoA.removeInstances([removed!.id], origin);
+    const inB = repoB.addInstances(
+      () => [goblin({ displayName: "Goblin 1" })],
+      origin,
+    );
+
+    expect(repoA.listInstances()).toEqual([kept]);
+    expect(kept!.encounterId).toBe(a.id);
+    expect(repoB.listInstances()).toEqual(inB);
+  });
+
+  it("addInstances adds to its own encounter and passes only that encounter's names to the builder", () => {
+    const { a, b, repoA, repoB } = twoEncounters();
+    const inB = repoB.addInstances(
+      () => [goblin({ displayName: "Goblin 1" })],
+      origin,
+    );
+    repoA.addInstances(() => [goblin({ displayName: "Wolf 1" })], origin);
+
+    let seen: string[] | undefined;
+    const added = repoA.addInstances((names) => {
+      seen = names;
+      return [goblin({ displayName: "Wolf 2" })];
+    }, origin);
+
+    expect(seen).toEqual(["Wolf 1"]);
+    expect(added.map((i) => i.encounterId)).toEqual([a.id]);
+    expect(repoA.listInstances().map((i) => i.displayName)).toEqual([
+      "Wolf 1",
+      "Wolf 2",
+    ]);
+    expect(repoB.listInstances()).toEqual(inB);
+    expect(inB.map((i) => i.encounterId)).toEqual([b.id]);
+  });
+
+  const mutations: [
+    string,
+    (repo: SqliteEncounterRepository, id: string) => unknown,
+  ][] = [
+    ["applyDamage", (r, id) => r.applyDamage(id, 3, origin)],
+    ["applyHealing", (r, id) => r.applyHealing(id, 1, origin)],
+    ["setHp", (r, id) => r.setHp(id, 2, origin)],
+    ["setMaxHp", (r, id) => r.setMaxHp(id, 10, origin)],
+    ["setArmorClass", (r, id) => r.setArmorClass(id, 15, origin)],
+    ["setInitiative", (r, id) => r.setInitiative(id, 12, origin)],
+    ["setGroupId", (r, id) => r.setGroupId(id, "g9", origin)],
+    ["setStatsVisible", (r, id) => r.setStatsVisible(id, true, origin)],
+    ["renameInstance", (r, id) => r.renameInstance(id, "Boss", origin)],
+    ["removeInstances", (r, id) => r.removeInstances([id], origin)],
+    [
+      "setSpawnPositions",
+      (r, id) =>
+        r.setSpawnPositions([{ id, spawnPosition: { x: 1, y: 2 } }], origin),
+    ],
+    [
+      "changeMonsters",
+      (r, id) =>
+        r.changeMonsters(
+          [
+            {
+              id,
+              monsterKey: "wolf",
+              displayName: "Wolf 1",
+              maxHp: 11,
+              currentHp: 11,
+              armorClass: 13,
+              initiative: null,
+              footprint: 1,
+            },
+          ],
+          origin,
+        ),
+    ],
+  ];
+
+  it.each(mutations)(
+    "every per-instance mutation of a scoped repository refuses an instance of another encounter with UnknownInstanceError and changes nothing (%s)",
+    (_name, mutate) => {
+      const { store, repoA, repoB } = twoEncounters();
+      repoA.addInstances(() => [goblin({ displayName: "Goblin A" })], origin);
+      const [other] = repoB.addInstances(
+        () => [goblin({ displayName: "Goblin B", maxHp: 9 })],
+        origin,
+      );
+      repoB.applyDamage(other!.id, 4, origin);
+      const log = new SqliteEncounterLog(store);
+      const before = {
+        a: repoA.listInstances(),
+        b: repoB.listInstances(),
+        removedB: repoB.listRemovedInstances(),
+        undoA: repoA.latestUndoRecord(),
+        seq: log.latestSeq(),
+      };
+
+      expect(() => mutate(repoA, other!.id)).toThrow(UnknownInstanceError);
+
+      expect({
+        a: repoA.listInstances(),
+        b: repoB.listInstances(),
+        removedB: repoB.listRemovedInstances(),
+        undoA: repoA.latestUndoRecord(),
+        seq: log.latestSeq(),
+      }).toEqual(before);
+    },
+  );
+
+  it("a repository scoped to encounter A keeps reading and writing A after another connection makes B current", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ttrpg-scope-"));
+    scopeDirs.push(dir);
+    const path = join(dir, "enc.db");
+    const first = openDatabase(path);
+    const second = openDatabase(path);
+    try {
+      const firstDirectory = new SqliteEncounterDirectory(first);
+      const a = firstDirectory.createEncounter("Encounter A");
+      firstDirectory.setCurrentEncounter(a.id);
+      const repoA = new SqliteEncounterRepository(first, a.id);
+      const [ogre1] = repoA.addInstances(
+        () => [goblin({ displayName: "Ogre 1", maxHp: 59 })],
+        origin,
+      );
+
+      const secondDirectory = new SqliteEncounterDirectory(second);
+      const b = secondDirectory.createEncounter("Encounter B");
+      secondDirectory.setCurrentEncounter(b.id);
+      expect(firstDirectory.getCurrentEncounter()).toEqual(b);
+
+      const seqBefore = new SqliteEncounterLog(first).latestSeq();
+      const [ogre2] = repoA.addInstances(
+        () => [goblin({ displayName: "Ogre 2", maxHp: 59 })],
+        origin,
+      );
+      repoA.applyDamage(ogre1!.id, 5, origin);
+
+      expect(ogre2!.encounterId).toBe(a.id);
+      expect(
+        repoA.listInstances().map((i) => [i.id, i.encounterId, i.currentHp]),
+      ).toEqual([
+        [ogre1!.id, a.id, 54],
+        [ogre2!.id, a.id, 59],
+      ]);
+      expect(
+        new SqliteEncounterRepository(second, b.id).listInstances(),
+      ).toEqual([]);
+      const events = new SqliteEncounterLog(second).eventsSince(seqBefore);
+      expect(events.length).toBeGreaterThan(0);
+      for (const entry of events)
+        expect(entry).toMatchObject({ encounterId: a.id });
+    } finally {
+      second.close();
+      first.close();
+    }
   });
 });

@@ -2,9 +2,8 @@ import {
   DomainError,
   UnknownInstanceError,
   applyInstanceEdit,
-  type ActiveEncounterReader,
+  type EncounterDirectory,
   type EncounterLog,
-  type EncounterRepository,
   type InstanceEdit,
   type TokenArtRepository,
   type UnreadableLogEntry,
@@ -18,18 +17,15 @@ import type { WriteBackResult } from "./server.js";
  * carries origin source `table` and `commandId`.
  */
 export function removeInstance(
-  repo: EncounterRepository,
+  encounters: EncounterDirectory,
   instanceId: string,
   commandId: string,
 ): WriteBackResult {
-  try {
-    repo.removeInstances([instanceId], { source: "table", commandId });
-    return { ok: true };
-  } catch (e) {
-    if (e instanceof UnknownInstanceError)
-      return { ok: false, code: "unknown-instance", message: e.message };
-    throw e;
-  }
+  void encounters;
+  void instanceId;
+  void commandId;
+  void UnknownInstanceError;
+  throw new Error("not implemented");
 }
 
 /**
@@ -38,18 +34,16 @@ export function removeInstance(
  * rethrown. The writes carry origin source `table` and `commandId`.
  */
 export function editInstance(
-  repo: EncounterRepository,
+  encounters: EncounterDirectory,
   edit: InstanceEdit,
   commandId: string,
 ): WriteBackResult {
-  try {
-    applyInstanceEdit(repo, edit, { source: "table", commandId });
-    return { ok: true };
-  } catch (e) {
-    if (e instanceof DomainError)
-      return { ok: false, code: e.code, message: e.message };
-    throw e;
-  }
+  void encounters;
+  void edit;
+  void commandId;
+  void DomainError;
+  void applyInstanceEdit;
+  throw new Error("not implemented");
 }
 
 /**
@@ -65,27 +59,15 @@ export function editInstance(
  * instances under a null id.
  */
 export function snapshotMessage(
-  repo: EncounterRepository & ActiveEncounterReader,
+  encounters: EncounterDirectory,
   artRepo: TokenArtRepository,
   log: EncounterLog,
 ): BridgeMessage {
-  const seq = log.latestSeq();
-  const art = artRepo.listTokenArt();
-  const instances = repo.listInstances();
-  const encounterId = repo.getActiveEncounter()?.id ?? null;
-  const restoreSeqs = repo.listRestoreSeqs();
-  return {
-    v: PROTOCOL_VERSION,
-    type: "encounter-snapshot",
-    // An empty map is left out, so a store with no art sends what it always did.
-    payload: {
-      instances,
-      ...(Object.keys(art).length > 0 ? { art } : {}),
-      ...(Object.keys(restoreSeqs).length > 0 ? { restoreSeqs } : {}),
-      seq,
-      encounterId,
-    },
-  };
+  void encounters;
+  void artRepo;
+  void log;
+  void PROTOCOL_VERSION;
+  throw new Error("not implemented");
 }
 
 const LOG_POLL_INTERVAL_MS = 250;

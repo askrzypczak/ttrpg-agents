@@ -15,6 +15,7 @@ import {
   migrate,
   migrations,
 } from "./migrations.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
@@ -171,6 +172,62 @@ describe("clearEncounter keeps the cleared set", () => {
       { instance: restoredB, removedBy: removeOrigin, cleared: false },
       ...clearedBy(clearOrigin, a!, c!),
     ]);
+  });
+});
+
+describe("encounter scoping", () => {
+  it("clearEncounter clears only its encounter: the other encounter's live and removed instances, cleared set and undo records stay", () => {
+    const store = openDatabase(":memory:");
+    let n = 0;
+    let t = 1000;
+    const options = { newId: () => `sc-${String(++n)}`, now: () => ++t };
+    const directory = new SqliteEncounterDirectory(store, options);
+    const a = directory.createEncounter("Encounter A");
+    const b = directory.createEncounter("Encounter B");
+    directory.setCurrentEncounter(b.id);
+    const repoA = new SqliteEncounterRepository(store, a.id, options);
+    const repoB = new SqliteEncounterRepository(store, b.id, options);
+    const mcp = (commandId: string): ChangeOrigin => ({
+      source: "mcp",
+      commandId,
+    });
+
+    repoB.addInstances(
+      () => [shadow("Ghoul 1"), shadow("Ghoul 2")],
+      mcp("b-seed-1"),
+    );
+    repoB.clearEncounter(mcp("b-clear"));
+    const [, ghoul4] = repoB.addInstances(
+      () => [shadow("Ghoul 3"), shadow("Ghoul 4")],
+      mcp("b-seed-2"),
+    );
+    repoB.removeInstances([ghoul4!.id], removeOrigin);
+    const before = {
+      live: repoB.listInstances(),
+      removed: repoB.listRemovedInstances(),
+      undo: repoB.latestUndoRecord(),
+    };
+    expect(before.removed.filter((r) => r.cleared)).toHaveLength(2);
+    expect(before.undo?.commandId).toBe("b-seed-2");
+
+    const shadows = repoA.addInstances(
+      () => [shadow("Shadow 1"), shadow("Shadow 2")],
+      mcp("a-seed"),
+    );
+    const cleared = repoA.clearEncounter(mcp("a-clear"));
+
+    expect(cleared).toEqual(shadows);
+    expect(repoA.listInstances()).toEqual([]);
+    expect(repoA.listRemovedInstances()).toEqual(
+      clearedBy(mcp("a-clear"), ...shadows),
+    );
+    expect(repoA.latestUndoRecord()).toBeUndefined();
+    expect({
+      live: repoB.listInstances(),
+      removed: repoB.listRemovedInstances(),
+      undo: repoB.latestUndoRecord(),
+    }).toEqual(before);
+    store.close();
   });
 });
 

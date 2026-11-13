@@ -24,6 +24,9 @@ export function e2eDbPath(dir: string): string {
   return join(dir, "encounter.sqlite");
 }
 
+/** The id of the seeded encounter. */
+export const E2E_ENCOUNTER_ID = "e2e-encounter";
+
 /** Deterministic ids so specs can match tokens to instances. */
 export const SHADOW_IDS = [1, 2, 3, 4, 5].map((n) => `e2e-shadow-${n}`);
 
@@ -36,8 +39,8 @@ export function seedE2eDatabase(dir: string): void {
   const db = openDatabase(dbPath);
   try {
     // newId is also used for the encounter row (first call); the rest are shadows.
-    const ids = ["e2e-encounter", ...SHADOW_IDS];
-    const repo = new SqliteEncounterRepository(db, {
+    const ids = [E2E_ENCOUNTER_ID, ...SHADOW_IDS];
+    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID, {
       newId: () => ids.shift()!,
     });
     repo.addInstances(
@@ -59,7 +62,9 @@ export function seedE2eDatabase(dir: string): void {
 export function listE2eInstanceIds(dir: string): string[] {
   const db = openDatabase(e2eDbPath(dir));
   try {
-    return new SqliteEncounterRepository(db).listInstances().map((i) => i.id);
+    return new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID)
+      .listInstances()
+      .map((i) => i.id);
   } finally {
     db.close();
   }
@@ -183,7 +188,7 @@ export function restoreE2eSeed(dir: string): void {
   const db = openDatabase(e2eDbPath(dir));
   try {
     const ids = [...SHADOW_IDS];
-    const repo = new SqliteEncounterRepository(db, {
+    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID, {
       newId: () => ids.shift()!,
     });
     repo.clearEncounter(origin);

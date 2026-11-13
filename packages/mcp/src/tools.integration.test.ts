@@ -2,6 +2,7 @@ import {
   TableUnavailableError,
   applyInstanceEdit,
   getSetupStatus,
+  type EncounterDirectory,
   type EncounterRepository,
   type MonsterInstance,
   type NewMonsterInstance,
@@ -12,6 +13,7 @@ import {
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
+  SqliteEncounterDirectory,
   SqliteEncounterRepository,
   SqliteMapRepository,
   openDatabase,
@@ -1286,5 +1288,144 @@ describe("table_status", () => {
       summary:
         "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
     });
+  });
+});
+
+describe("the encounter a tool call acts on", () => {
+  /** A full tool context over `encounters`, independent of the shared one. */
+  function contextOver(encounters: EncounterDirectory): ToolContext {
+    let groups = 0;
+    return {
+      table: {
+        sceneStatus: () => Promise.reject(new Error("not stubbed")),
+        sceneMap: () => Promise.reject(new Error("not stubbed")),
+        sceneTokens: () => Promise.reject(new Error("not stubbed")),
+        mapImage: () => Promise.reject(new Error("not stubbed")),
+      },
+      encounters,
+      maps: new SqliteMapRepository(openDatabase(":memory:")),
+      monsters,
+      rng: cycleRng(0, 3, 5, 7),
+      now: () => new Date("2026-01-01T00:00:00Z"),
+      newGroupId: () => `group-${String(++groups)}`,
+      browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
+      setup: makeTestSetupPorts(),
+      newCommandId: () => "command",
+    };
+  }
+
+  async function callWith(
+    context: ToolContext,
+    name: string,
+    args: unknown = {},
+  ): Promise<ToolResult> {
+    const tool = tools.find((t) => t.name === name);
+    if (!tool) throw new Error(`no tool ${name}`);
+    return tool.handler(context, args);
+  }
+
+  it('a tool call on a store with no encounter creates "Encounter 1", makes it current and acts on it', async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+
+    const r = await callWith(contextOver(directory), "add_monsters", {
+      groups: [{ monster: SHADOW, count: 2 }],
+    });
+
+    expect(r.isError).toBeUndefined();
+    const encounters = directory.listEncounters();
+    expect(encounters.map((e) => e.name)).toEqual(["Encounter 1"]);
+    expect(directory.getCurrentEncounter()).toEqual(encounters[0]);
+    expect(
+      directory
+        .repositoryFor(encounters[0]!.id)
+        .listInstances()
+        .map((i) => i.displayName),
+    ).toEqual(["Shadow 1", "Shadow 2"]);
+  });
+
+  it("a tool that reads no encounter creates none", async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const context = contextOver(directory);
+
+    const search = await callWith(context, "search_monsters", {
+      query: "shadow",
+    });
+    const statblock = await callWith(context, "get_statblock", {
+      key: SHADOW,
+    });
+
+    expect(search.isError).toBeUndefined();
+    expect(statblock.isError).toBeUndefined();
+    expect(directory.listEncounters()).toEqual([]);
+    expect(directory.getCurrentEncounter()).toBeUndefined();
+  });
+
+  it("a tool call keeps acting on the encounter it resolved when another encounter becomes current during the call", async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const a = directory.createEncounter("Encounter A");
+    const b = directory.createEncounter("Encounter B");
+    directory.setCurrentEncounter(a.id);
+    const [shadow] = directory
+      .repositoryFor(a.id)
+      .addInstances(() => [item("Shadow 1", 5, 10)], origin);
+    directory
+      .repositoryFor(b.id)
+      .addInstances(() => [item("Shadow 1", 5, 10)], origin);
+
+    // The first repository call of the tool makes B current, as another
+    // process could between two statements of the call.
+    const requested: string[] = [];
+    let switched = false;
+    const switching: EncounterDirectory = {
+      listEncounters: () => directory.listEncounters(),
+      createEncounter: (name) => directory.createEncounter(name),
+      getCurrentEncounter: () => directory.getCurrentEncounter(),
+      setCurrentEncounter: (id) => directory.setCurrentEncounter(id),
+      findEncounterOfInstance: (id) => directory.findEncounterOfInstance(id),
+      transaction: (fn) => directory.transaction(fn),
+      repositoryFor(encounterId) {
+        requested.push(encounterId);
+        const inner = directory.repositoryFor(encounterId);
+        return new Proxy(inner, {
+          get(target, prop, receiver) {
+            const value: unknown = Reflect.get(target, prop, receiver);
+            if (typeof value !== "function") return value;
+            return (...args: unknown[]) => {
+              if (!switched) {
+                switched = true;
+                directory.setCurrentEncounter(b.id);
+              }
+              return (value as (...a: unknown[]) => unknown).apply(
+                target,
+                args,
+              );
+            };
+          },
+        });
+      },
+    };
+
+    const r = await callWith(contextOver(switching), "apply_damage", {
+      target: "Shadow 1",
+      amount: 4,
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(switched).toBe(true);
+    expect(directory.getCurrentEncounter()).toEqual(b);
+    expect(requested).toEqual([a.id]);
+    expect(
+      directory
+        .repositoryFor(a.id)
+        .listInstances()
+        .map((i) => [i.id, i.currentHp]),
+    ).toEqual([[shadow!.id, 6]]);
+    expect(
+      directory
+        .repositoryFor(b.id)
+        .listInstances()
+        .map((i) => i.currentHp),
+    ).toEqual([10]);
+    expect(directory.listEncounters()).toEqual([a, b]);
   });
 });

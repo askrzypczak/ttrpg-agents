@@ -10,6 +10,7 @@ import {
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { openDatabase } from "./db.js";
 import { migrate, migrations } from "./migrations.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
@@ -267,6 +268,73 @@ describe("listRestoreSeqs", () => {
 
     expect(secondRestore).toBeGreaterThan(firstRestore);
     expect(repo.listRestoreSeqs()).toEqual({ [b!.id]: secondRestore });
+  });
+});
+
+describe("encounter scoping", () => {
+  it("listRemovedInstances, restoreInstances and listRestoreSeqs of a scoped repository see only that encounter's removed and restored instances", () => {
+    const store = openDatabase(":memory:");
+    let n = 0;
+    let t = 1000;
+    const options = { newId: () => `sc-${String(++n)}`, now: () => ++t };
+    const directory = new SqliteEncounterDirectory(store, options);
+    const a = directory.createEncounter("Encounter A");
+    const b = directory.createEncounter("Encounter B");
+    directory.setCurrentEncounter(b.id);
+    const repoA = new SqliteEncounterRepository(store, a.id, options);
+    const repoB = new SqliteEncounterRepository(store, b.id, options);
+    const storeLog = new SqliteEncounterLog(store);
+
+    const [, removedA] = repoA.addInstances(
+      () => [shadow("Shadow 1"), shadow("Shadow 2")],
+      seedOrigin,
+    );
+    const [, removedB] = repoB.addInstances(
+      () => [shadow("Ghoul 1"), shadow("Ghoul 2")],
+      seedOrigin,
+    );
+    repoA.removeInstances([removedA!.id], removeOrigin);
+    repoB.removeInstances([removedB!.id], removeOrigin);
+
+    expect(repoA.listRemovedInstances().map((r) => r.instance.id)).toEqual([
+      removedA!.id,
+    ]);
+    expect(repoB.listRemovedInstances().map((r) => r.instance.id)).toEqual([
+      removedB!.id,
+    ]);
+
+    const seqBefore = storeLog.latestSeq();
+    expect(() =>
+      repoA.restoreInstances([removedB!.id], keepName, restoreOrigin),
+    ).toThrow(UnknownInstanceError);
+    expect(storeLog.latestSeq()).toBe(seqBefore);
+    expect(repoB.listRemovedInstances().map((r) => r.instance.id)).toEqual([
+      removedB!.id,
+    ]);
+
+    let namesSeen: readonly string[] | undefined;
+    const [restored] = repoA.restoreInstances(
+      [removedA!.id],
+      (instance, namesInUse) => {
+        namesSeen = [...namesInUse];
+        return instance.displayName;
+      },
+      restoreOrigin,
+    );
+    const restoreSeq = storeLog.latestSeq();
+
+    expect(namesSeen).toEqual(["Shadow 1"]);
+    expect(restored!.encounterId).toBe(a.id);
+    expect(repoA.listRestoreSeqs()).toEqual({ [removedA!.id]: restoreSeq });
+    expect(repoB.listRestoreSeqs()).toEqual({});
+    expect(repoA.listRemovedInstances()).toEqual([]);
+    expect(repoB.listRemovedInstances().map((r) => r.instance.id)).toEqual([
+      removedB!.id,
+    ]);
+    expect(repoB.listInstances().map((i) => i.displayName)).toEqual([
+      "Ghoul 1",
+    ]);
+    store.close();
   });
 });
 
