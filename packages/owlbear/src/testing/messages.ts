@@ -16,7 +16,8 @@ export type TestEvent = EncounterEvent extends infer T
 /**
  * Builds `encounter-snapshot` and `encounter-event` messages with the `seq`
  * filled in, so tests do not number the change log by hand. A snapshot's
- * `art` and `restoreSeqs` are put in its payload only when given.
+ * `art` and `restoreSeqs` are put in its payload only when given. Every payload
+ * names the encounter `e1`, the id `makeTestInstance` uses.
  */
 export interface MessageFeed {
   snapshot(
@@ -34,6 +35,7 @@ export interface MessageFeed {
 }
 
 const DEFAULT_ORIGIN: ChangeOrigin = { source: "mcp", commandId: "test" };
+const ENCOUNTER_ID = "e1";
 
 export function createMessageFeed(): MessageFeed {
   let position = 0;
@@ -49,6 +51,7 @@ export function createMessageFeed(): MessageFeed {
           ...(art === undefined ? {} : { art }),
           ...(restoreSeqs === undefined ? {} : { restoreSeqs }),
           seq,
+          encounterId: ENCOUNTER_ID,
         },
       };
     },
@@ -59,6 +62,7 @@ export function createMessageFeed(): MessageFeed {
         ...event,
         origin: event.origin ?? DEFAULT_ORIGIN,
         seq,
+        encounterId: ENCOUNTER_ID,
       } as Extract<BridgeMessage, { type: "encounter-event" }>["payload"];
       return { v: PROTOCOL_VERSION, type: "encounter-event", payload };
     },

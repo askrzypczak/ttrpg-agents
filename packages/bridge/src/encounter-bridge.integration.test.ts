@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type ActiveEncounterReader,
   type ChangeOrigin,
   type EncounterLog,
   type EncounterRepository,
@@ -57,31 +58,41 @@ describe("snapshotMessage", () => {
       () => [{ monsterKey: "shadow", displayName: "Shadow 1", maxHp: 16 }],
       origin,
     );
+    const encounterId = repo.getOrCreateActiveEncounter().id;
     const { log } = stubLog([
-      { seq: 1, event: { type: "added", instances: created, origin } },
-      { seq: 2, event: { type: "cleared", origin } },
+      {
+        seq: 1,
+        encounterId,
+        event: { type: "added", instances: created, origin },
+      },
+      { seq: 2, encounterId, event: { type: "cleared", origin } },
     ]);
     expect(snapshotMessage(repo, noArt, log)).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: created, seq: 2 },
+      payload: { instances: created, seq: 2, encounterId },
     });
   });
 
   it("snapshotMessage carries the log's latest seq, read before the instances, and reads the restore seqs after them", () => {
     const { log, calls } = stubLog([
-      { seq: 4, event: { type: "cleared", origin } },
+      { seq: 4, encounterId: "e1", event: { type: "cleared", origin } },
     ]);
     const repoStub: Pick<
       EncounterRepository,
       "listInstances" | "listRestoreSeqs"
-    > = {
+    > &
+      ActiveEncounterReader = {
       listInstances: () => (calls.push("listInstances"), []),
+      getActiveEncounter: () => (
+        calls.push("getActiveEncounter"),
+        { id: "e1", createdAt: 0 }
+      ),
       listRestoreSeqs: () => (calls.push("listRestoreSeqs"), {}),
     };
 
     const message = snapshotMessage(
-      repoStub as EncounterRepository,
+      repoStub as EncounterRepository & ActiveEncounterReader,
       noArt,
       log,
     );
@@ -89,9 +100,14 @@ describe("snapshotMessage", () => {
     expect(message).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [], seq: 4 },
+      payload: { instances: [], seq: 4, encounterId: "e1" },
     });
-    expect(calls).toEqual(["latestSeq", "listInstances", "listRestoreSeqs"]);
+    expect(calls).toEqual([
+      "latestSeq",
+      "listInstances",
+      "getActiveEncounter",
+      "listRestoreSeqs",
+    ]);
   });
 
   it("snapshotMessage carries the restore seq of each restored instance and leaves the field out when none was restored", () => {
@@ -107,10 +123,16 @@ describe("snapshotMessage", () => {
       origin,
     );
 
+    const encounterId = repo.getOrCreateActiveEncounter().id;
+
     expect(snapshotMessage(repo, noArt, log)).toStrictEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: repo.listInstances(), seq: log.latestSeq() },
+      payload: {
+        instances: repo.listInstances(),
+        seq: log.latestSeq(),
+        encounterId,
+      },
     });
 
     repo.removeInstances([second!.id, third!.id], origin);
@@ -129,6 +151,7 @@ describe("snapshotMessage", () => {
           [third!.id]: thirdRestore,
         },
         seq: thirdRestore,
+        encounterId,
       },
     });
   });
@@ -216,16 +239,22 @@ describe("broadcastLogEvents", () => {
   const POLL_MS = 250;
   const cleared = (seq: number): LoggedEvent => ({
     seq,
+    encounterId: "e1",
     event: { type: "cleared", origin },
   });
   const removedEvent = (seq: number, id: string): LoggedEvent => ({
     seq,
+    encounterId: "e1",
     event: { type: "removed", id, origin },
   });
-  const message = ({ seq, event }: LoggedEvent): BridgeMessage => ({
+  const message = ({
+    seq,
+    encounterId,
+    event,
+  }: LoggedEvent): BridgeMessage => ({
     v: PROTOCOL_VERSION,
     type: "encounter-event",
-    payload: { ...event, seq },
+    payload: { ...event, seq, encounterId },
   });
 
   const unreadable = (seq: number): UnreadableLogEntry => ({
@@ -345,7 +374,7 @@ describe("broadcastLogEvents", () => {
     const snapshotMsg: BridgeMessage = {
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [], seq: 2 },
+      payload: { instances: [], seq: 2, encounterId: "e1" },
     };
     const { log } = stubLog();
     const stop = broadcastLogEvents(log, target, {

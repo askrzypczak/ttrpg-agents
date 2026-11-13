@@ -14,7 +14,7 @@ describe("createMessageFeed", () => {
     expect(snapshot).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances, seq: 0 },
+      payload: { instances, seq: 0, encounterId: "e1" },
     });
     expect("art" in snapshot.payload).toBe(false);
     expect(event).toEqual({
@@ -25,6 +25,7 @@ describe("createMessageFeed", () => {
         id: "i1",
         origin: { source: "mcp", commandId: "test" },
         seq: 1,
+        encounterId: "e1",
       },
     });
     expect(bridgeMessageSchema.parse(snapshot)).toEqual(snapshot);

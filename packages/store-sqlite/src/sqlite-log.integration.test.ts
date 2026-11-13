@@ -375,12 +375,14 @@ describe("SqliteEncounterLog", () => {
         raw,
       );
       const o = origin("after-bad-row");
+      const encounterId = repo.getOrCreateActiveEncounter().id;
       repo.setHp(first.id, 1, o);
 
       expect(log.eventsSince(before)).toEqual([
         { seq: before + 1, error: expect.stringMatching(/./) },
         {
           seq: before + 2,
+          encounterId,
           event: expect.objectContaining({ type: "hp-changed", origin: o }),
         },
       ]);

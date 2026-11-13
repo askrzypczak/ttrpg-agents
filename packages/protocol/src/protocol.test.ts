@@ -53,17 +53,23 @@ const samples: BridgeMessage[] = [
   {
     v: PROTOCOL_VERSION,
     type: "encounter-event",
-    payload: { type: "added", instances: [instance], origin, seq: 1 },
+    payload: {
+      type: "added",
+      instances: [instance],
+      origin,
+      seq: 1,
+      encounterId: "e1",
+    },
   },
   {
     v: PROTOCOL_VERSION,
     type: "encounter-event",
-    payload: { type: "removed", id: "i1", origin, seq: 2 },
+    payload: { type: "removed", id: "i1", origin, seq: 2, encounterId: "e1" },
   },
   {
     v: PROTOCOL_VERSION,
     type: "encounter-event",
-    payload: { type: "cleared", origin, seq: 3 },
+    payload: { type: "cleared", origin, seq: 3, encounterId: "e1" },
   },
   {
     v: PROTOCOL_VERSION,
@@ -75,12 +81,13 @@ const samples: BridgeMessage[] = [
       maxHp: 16,
       origin,
       seq: 4,
+      encounterId: "e1",
     },
   },
   {
     v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
-    payload: { instances: [instance], seq: 7 },
+    payload: { instances: [instance], seq: 7, encounterId: "e1" },
   },
 ];
 
@@ -116,7 +123,7 @@ describe("protocol", () => {
       encodeMessage({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [sample], seq: 0 },
+        payload: { instances: [sample], seq: 0, encounterId: "e1" },
       }),
     );
     expect(decoded.ok).toBe(true);
@@ -137,7 +144,7 @@ describe("protocol", () => {
       encodeMessage({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [revealed, hidden], seq: 0 },
+        payload: { instances: [revealed, hidden], seq: 0, encounterId: "e1" },
       }),
     );
     expect(decoded).toEqual({
@@ -145,7 +152,7 @@ describe("protocol", () => {
       message: {
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [revealed, hidden], seq: 0 },
+        payload: { instances: [revealed, hidden], seq: 0, encounterId: "e1" },
       },
     });
 
@@ -155,7 +162,7 @@ describe("protocol", () => {
       JSON.stringify({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [withoutFlag], seq: 0 },
+        payload: { instances: [withoutFlag], seq: 0, encounterId: "e1" },
       }),
     );
     expect(missing.ok).toBe(false);
@@ -173,6 +180,7 @@ describe("protocol", () => {
         maxHp: 16,
         origin: { source: "table", commandId: "instance-edit:i1" },
         seq: 7,
+        encounterId: "e1",
       },
     };
 
@@ -373,6 +381,7 @@ describe("protocol", () => {
           instances: [withoutFootprint],
           origin: { source: "mcp", commandId: "c1" },
           seq: 1,
+          encounterId: "e1",
         },
       }),
     );
@@ -386,6 +395,7 @@ describe("protocol", () => {
           instances: [withFootprint],
           origin: { source: "mcp", commandId: "c1" },
           seq: 1,
+          encounterId: "e1",
         },
       },
     });
@@ -394,7 +404,7 @@ describe("protocol", () => {
       JSON.stringify({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [withoutFootprint], seq: 0 },
+        payload: { instances: [withoutFootprint], seq: 0, encounterId: "e1" },
       }),
     );
     expect(snapshot).toEqual({
@@ -402,7 +412,7 @@ describe("protocol", () => {
       message: {
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [withFootprint], seq: 0 },
+        payload: { instances: [withFootprint], seq: 0, encounterId: "e1" },
       },
     });
   });
@@ -411,7 +421,12 @@ describe("protocol", () => {
     const withSeqs = {
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [instance], restoreSeqs: { i1: 5 }, seq: 7 },
+      payload: {
+        instances: [instance],
+        restoreSeqs: { i1: 5 },
+        seq: 7,
+        encounterId: "e1",
+      },
     };
     expect(decodeMessage(JSON.stringify(withSeqs))).toEqual({
       ok: true,
@@ -421,7 +436,7 @@ describe("protocol", () => {
     const withoutSeqs = {
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [instance], seq: 7 },
+      payload: { instances: [instance], seq: 7, encounterId: "e1" },
     };
     expect(decodeMessage(JSON.stringify(withoutSeqs))).toStrictEqual({
       ok: true,
@@ -436,7 +451,7 @@ describe("protocol", () => {
       JSON.stringify({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [withoutSpawn], seq: 0 },
+        payload: { instances: [withoutSpawn], seq: 0, encounterId: "e1" },
       }),
     );
     if (!decoded.ok || decoded.message.type !== "encounter-snapshot") {
