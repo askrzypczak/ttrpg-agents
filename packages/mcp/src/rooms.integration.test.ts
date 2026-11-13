@@ -5,6 +5,7 @@ import {
   parseCellLabel,
   type MapPlacement,
   type MapRegistration,
+  type SavedRoom,
   type TableMapItem,
   type TablePort,
   type TableSceneMap,
@@ -461,5 +462,130 @@ describe("map-moved flag", () => {
     const used = await call(ctx, "use_map");
     expect(used.isError).toBeFalsy();
     expect(used.structuredContent).not.toHaveProperty("moved");
+  });
+});
+
+describe("room tools per encounter", () => {
+  const GOBLIN = "srd-2024_goblin-warrior";
+  const sewers: TableMapItem = { ...trollskull, id: "map-2", name: "Sewers" };
+  const sewersRegistered: MapRegistration = {
+    ...registered,
+    itemId: "map-2",
+    name: "Sewers",
+  };
+  const room = (name: string): SavedRoom => ({
+    name,
+    status: "confirmed",
+    polygons: [
+      [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 300, y: 300 },
+        { x: 0, y: 300 },
+      ],
+    ],
+  });
+
+  /** A table showing both maps, with the tavern encounter on Trollskull and the sewer fight on the Sewers. */
+  function twoEncounters(sceneTokens?: TablePort["sceneTokens"]) {
+    const ctx = contextWith(
+      () => Promise.resolve(scene(trollskull, sewers)),
+      undefined,
+      sceneTokens,
+    );
+    const { encounters } = ctx;
+    const tavern = encounters.createEncounter("Tavern");
+    const sewerFight = encounters.createEncounter("Sewer fight");
+    encounters.mapRepositoryFor(tavern.id).registerMap(registered);
+    encounters.mapRepositoryFor(sewerFight.id).registerMap(sewersRegistered);
+    return { ctx, encounters, tavern, sewerFight };
+  }
+
+  it("`list_rooms` lists the rooms of the map of the encounter it acts on, not another encounter's", async () => {
+    const { ctx, encounters, tavern, sewerFight } = twoEncounters();
+    encounters
+      .mapRepositoryFor(tavern.id)
+      .replaceRooms("map-1", [room("Kitchen")]);
+    encounters
+      .mapRepositoryFor(sewerFight.id)
+      .replaceRooms("map-2", [room("Tunnel")]);
+    encounters.setCurrentEncounter(tavern.id);
+
+    const r = await call(ctx, "list_rooms");
+
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toContain("Rooms on Trollskull Manor:");
+    expect(text(r)).toContain("| Kitchen | confirmed |");
+    expect(text(r)).not.toContain("Tunnel");
+    expect(
+      (r.structuredContent?.["rooms"] as { name: string }[]).map((x) => x.name),
+    ).toEqual(["Kitchen"]);
+  });
+
+  it("`set_rooms` saves rooms on the map of the encounter it acts on", async () => {
+    const { ctx, encounters, tavern, sewerFight } = twoEncounters();
+    encounters.setCurrentEncounter(sewerFight.id);
+
+    const r = await call(ctx, "set_rooms", {
+      rooms: [{ name: "Tunnel", ranges: ["A1:C3"] }],
+    });
+
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toContain("on Sewers");
+    expect(
+      encounters
+        .mapRepositoryFor(sewerFight.id)
+        .getRooms("map-2")
+        .map((x) => x.name),
+    ).toEqual(["Tunnel"]);
+    expect(encounters.mapRepositoryFor(tavern.id).getRooms("map-1")).toEqual(
+      [],
+    );
+  });
+
+  it("`add_monsters` with a room places monsters in that room of the map of the encounter it acts on", async () => {
+    const { ctx, encounters, tavern, sewerFight } = twoEncounters(() =>
+      Promise.resolve({ tokens: [] }),
+    );
+    encounters.setCurrentEncounter(tavern.id);
+    await call(ctx, "set_rooms", {
+      rooms: [{ name: "Kitchen", ranges: ["A1:C1"] }],
+    });
+    encounters.setCurrentEncounter(sewerFight.id);
+    await call(ctx, "set_rooms", {
+      rooms: [{ name: "Kitchen", ranges: ["A20:C20"] }],
+    });
+
+    const r = await call(ctx, "add_monsters", {
+      groups: [{ monster: GOBLIN, count: 2, room: "kitchen" }],
+    });
+
+    expect(r.isError).toBeFalsy();
+    const placements = r.structuredContent?.["placements"] as {
+      name: string;
+      room: string;
+      cell: string | null;
+    }[];
+    expect(placements).toHaveLength(2);
+    for (const placement of placements)
+      expect(placement.cell).toMatch(/^[A-C]20$/);
+    expect(
+      encounters.repositoryFor(sewerFight.id).listInstances(),
+    ).toHaveLength(2);
+    expect(encounters.repositoryFor(tavern.id).listInstances()).toEqual([]);
+  });
+
+  it('`list_rooms` in an encounter that never used a map answers "No map is in use: use the map first." while another encounter has a map', async () => {
+    const { ctx, encounters, tavern } = twoEncounters();
+    encounters
+      .mapRepositoryFor(tavern.id)
+      .replaceRooms("map-1", [room("Kitchen")]);
+    const crypt = encounters.createEncounter("Crypt");
+    encounters.setCurrentEncounter(crypt.id);
+
+    const r = await call(ctx, "list_rooms");
+
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("No map is in use: use the map first.");
   });
 });

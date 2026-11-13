@@ -4,6 +4,7 @@ import type {
   Encounter,
   EncounterDirectory,
   EncounterRepository,
+  MapRepository,
 } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
@@ -92,6 +93,11 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
 
   repositoryFor(encounterId: string): EncounterRepository {
     return new SqliteEncounterRepository(this.db, encounterId, this.options);
+  }
+
+  mapRepositoryFor(encounterId: string): MapRepository {
+    void encounterId;
+    throw new Error("not implemented");
   }
 
   /** Runs fn in a transaction; nests by joining an already-open one. */

@@ -1,23 +1,22 @@
-import type { MapRepository } from "@ttrpg-agents/engine";
+import type { EncounterDirectory } from "@ttrpg-agents/engine";
 import { PROTOCOL_VERSION, type BridgeMessage } from "@ttrpg-agents/protocol";
 
 const MAP_ROOMS_POLL_INTERVAL_MS = 250;
 
 /**
- * The `map-rooms` message for the active map: its item id and saved rooms, or
- * a null item id and no rooms when no map is in use.
+ * The `map-rooms` message for the current encounter's map: its item id and
+ * saved rooms, or a null item id and no rooms when there is no current
+ * encounter or it uses no map.
  */
 export function mapRoomsMessage(
-  maps: Pick<MapRepository, "getActiveMap" | "getRooms">,
+  encounters: Pick<
+    EncounterDirectory,
+    "getCurrentEncounter" | "mapRepositoryFor"
+  >,
 ): BridgeMessage {
-  const active = maps.getActiveMap();
-  return {
-    v: PROTOCOL_VERSION,
-    type: "map-rooms",
-    payload: active
-      ? { itemId: active.itemId, rooms: maps.getRooms(active.itemId) }
-      : { itemId: null, rooms: [] },
-  };
+  void encounters;
+  void PROTOCOL_VERSION;
+  throw new Error("not implemented");
 }
 
 /**
@@ -26,11 +25,14 @@ export function mapRoomsMessage(
  * starts). A failed read is retried on the next tick. Returns a stop function.
  */
 export function broadcastMapRooms(
-  maps: Pick<MapRepository, "getActiveMap" | "getRooms">,
+  encounters: Pick<
+    EncounterDirectory,
+    "getCurrentEncounter" | "mapRepositoryFor"
+  >,
   target: { broadcast(message: BridgeMessage): void },
 ): () => void {
   const read = (): { message: BridgeMessage; key: string } => {
-    const message = mapRoomsMessage(maps);
+    const message = mapRoomsMessage(encounters);
     return { message, key: JSON.stringify(message.payload) };
   };
   // Undefined when the first read failed: the next successful read is sent.

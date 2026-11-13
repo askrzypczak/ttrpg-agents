@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  Encounter,
+  EncounterDirectory,
   MapPlacement,
   MapRegistration,
   MapRepository,
@@ -51,12 +53,16 @@ const room = (
 /** In-memory map store; `failReads` makes that many next reads throw; `reads` counts reads. */
 class MemoryMaps implements MapRepository {
   active: MapRegistration | undefined;
-  readonly rooms = new Map<string, SavedRoom[]>();
+  readonly rooms: Map<string, SavedRoom[]>;
   failReads = 0;
   reads = 0;
 
-  constructor(active?: MapRegistration) {
+  constructor(
+    active?: MapRegistration,
+    rooms: Map<string, SavedRoom[]> = new Map(),
+  ) {
     this.active = active;
+    this.rooms = rooms;
   }
 
   registerMap(registration: MapRegistration): void {
@@ -82,6 +88,33 @@ class MemoryMaps implements MapRepository {
   }
 }
 
+/** In-memory encounters, each with its own map; rooms are kept per map item and shared by every encounter. */
+class MemoryEncounters implements Pick<
+  EncounterDirectory,
+  "getCurrentEncounter" | "mapRepositoryFor"
+> {
+  current: string | undefined;
+  readonly rooms = new Map<string, SavedRoom[]>();
+  private readonly maps = new Map<string, MemoryMaps>();
+
+  /** Gives the encounter this map (none when undefined). */
+  use(encounterId: string, map?: MapRegistration): MemoryMaps {
+    const maps = new MemoryMaps(map, this.rooms);
+    this.maps.set(encounterId, maps);
+    return maps;
+  }
+
+  getCurrentEncounter(): Encounter | undefined {
+    return this.current === undefined
+      ? undefined
+      : { id: this.current, name: this.current, createdAt: 0 };
+  }
+
+  mapRepositoryFor(encounterId: string): MapRepository {
+    return this.maps.get(encounterId) ?? this.use(encounterId);
+  }
+}
+
 const mapRooms = (
   itemId: string | null,
   rooms: SavedRoom[],
@@ -92,24 +125,40 @@ const mapRooms = (
 });
 
 describe("mapRoomsMessage", () => {
-  it("mapRoomsMessage carries the active map's item id and its rooms in saved order", () => {
-    const maps = new MemoryMaps(trollskull);
+  it("mapRoomsMessage carries the current encounter's map item id and its rooms in saved order, not another encounter's", () => {
+    const encounters = new MemoryEncounters();
+    const tavern = encounters.use("tavern", trollskull);
+    encounters.use("cellar-fight", cellarMap);
     const rooms = [
       room("Taproom"),
       room("Kitchen", "proposed"),
       room("Cellar"),
     ];
-    maps.replaceRooms("trollskull", rooms);
-    maps.replaceRooms("cellar-map", [room("Vault")]);
+    tavern.replaceRooms("trollskull", rooms);
+    tavern.replaceRooms("cellar-map", [room("Vault")]);
+    encounters.current = "tavern";
 
-    expect(mapRoomsMessage(maps)).toEqual(mapRooms("trollskull", rooms));
+    expect(mapRoomsMessage(encounters)).toEqual(mapRooms("trollskull", rooms));
   });
 
-  it("mapRoomsMessage with no active map carries a null item id and no rooms", () => {
-    const maps = new MemoryMaps();
-    maps.replaceRooms("trollskull", [room("Taproom")]);
+  it("mapRoomsMessage with no current encounter carries a null item id and no rooms", () => {
+    const encounters = new MemoryEncounters();
+    encounters
+      .use("tavern", trollskull)
+      .replaceRooms("trollskull", [room("Taproom")]);
 
-    expect(mapRoomsMessage(maps)).toEqual(mapRooms(null, []));
+    expect(mapRoomsMessage(encounters)).toEqual(mapRooms(null, []));
+  });
+
+  it("mapRoomsMessage for a current encounter with no map carries a null item id and no rooms while another encounter has a map", () => {
+    const encounters = new MemoryEncounters();
+    encounters
+      .use("tavern", trollskull)
+      .replaceRooms("trollskull", [room("Taproom")]);
+    encounters.use("crypt");
+    encounters.current = "crypt";
+
+    expect(mapRoomsMessage(encounters)).toEqual(mapRooms(null, []));
   });
 });
 
@@ -155,6 +204,33 @@ describe("broadcastMapRooms", () => {
     vi.advanceTimersByTime(POLL_MS);
 
     expect(sent).toEqual([mapRooms("cellar-map", [room("Vault")])]);
+  });
+
+  it("broadcastMapRooms broadcasts the new current encounter's map and rooms within one poll when the current encounter changes", () => {
+    const encounters = new MemoryEncounters();
+    encounters
+      .use("tavern", trollskull)
+      .replaceRooms("trollskull", [room("Taproom")]);
+    encounters
+      .use("cellar-fight", cellarMap)
+      .replaceRooms("cellar-map", [room("Vault")]);
+    encounters.use("crypt");
+    encounters.current = "tavern";
+    stop = broadcastMapRooms(encounters, target);
+
+    vi.advanceTimersByTime(POLL_MS * 4);
+    expect(sent).toEqual([]);
+
+    encounters.current = "cellar-fight";
+    vi.advanceTimersByTime(POLL_MS);
+    expect(sent).toEqual([mapRooms("cellar-map", [room("Vault")])]);
+
+    encounters.current = "crypt";
+    vi.advanceTimersByTime(POLL_MS);
+    expect(sent).toEqual([
+      mapRooms("cellar-map", [room("Vault")]),
+      mapRooms(null, []),
+    ]);
   });
 
   it("broadcastMapRooms retries a failing read on the next tick", () => {

@@ -15,7 +15,13 @@ import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 import { SqliteTokenArtRepository } from "./token-art-repository.js";
-import { resolveEncounter, type ChangeOrigin } from "@ttrpg-agents/engine";
+import {
+  listRooms,
+  resolveEncounter,
+  useMap,
+  type ChangeOrigin,
+  type TablePort,
+} from "@ttrpg-agents/engine";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -25,14 +31,16 @@ afterEach(() => {
 });
 
 /**
- * Applies the migrations after the database's version up to version 16, the
- * last one that keeps existing encounters.
+ * Applies the migrations after the database's version up to `version` (16 is
+ * the last one that keeps existing encounters).
  */
-function migrateToVersion16(db: DatabaseSync): void {
+function migrateToVersion(db: DatabaseSync, version: number): void {
   const from = getUserVersion(db);
-  for (const m of migrations.filter((m) => m.version > from && m.version <= 16))
+  for (const m of migrations.filter(
+    (m) => m.version > from && m.version <= version,
+  ))
     db.exec(m.sql);
-  db.exec("PRAGMA user_version = 16");
+  db.exec(`PRAGMA user_version = ${String(version)}`);
 }
 
 describe("migrations", () => {
@@ -109,7 +117,7 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 'g1', 200)`,
     );
 
-    migrateToVersion16(db);
+    migrateToVersion(db, 16);
 
     expect(LATEST_VERSION).toBeGreaterThan(1);
     expect(getUserVersion(db)).toBe(16);
@@ -145,7 +153,7 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 16, NULL, 13, NULL, 200)`,
     );
 
-    migrateToVersion16(db);
+    migrateToVersion(db, 16);
 
     expect(getUserVersion(db)).toBe(16);
     const column = (
@@ -217,7 +225,7 @@ describe("migrations", () => {
     old.close();
 
     const db = new DatabaseSync(path);
-    migrateToVersion16(db);
+    migrateToVersion(db, 16);
     expect(getUserVersion(db)).toBe(16);
     expect(tables(db)).toContain("token_art");
     expect(
@@ -403,7 +411,7 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200)`,
     );
 
-    migrateToVersion16(db);
+    migrateToVersion(db, 16);
 
     expect(getUserVersion(db)).toBe(16);
     expect(new SqliteEncounterRepository(db, "e1").listInstances()).toEqual([
@@ -464,7 +472,7 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200, 1, 0)`,
     );
 
-    migrateToVersion16(db);
+    migrateToVersion(db, 16);
 
     const instances = new SqliteEncounterRepository(db, "e1").listInstances();
     expect(instances[0]?.spawnPosition).toBeNull();
@@ -691,6 +699,96 @@ describe("migration to scene-bound encounters", () => {
       event: { type: "added", instances: [added] },
     });
     expect(events[0]!.seq).toBeGreaterThan(9);
+    db.close();
+  });
+});
+
+describe("migration to per-encounter maps", () => {
+  /** A database at version 17 with one current encounter and a map registration, still flagged active, with a room. */
+  function version17Database(): DatabaseSync {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    migrateToVersion(db, 17);
+    db.exec(
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e1', 'Tavern', 1, 100)",
+    );
+    db.exec(
+      `INSERT INTO map_registrations
+        (item_id, name, position_x, position_y, rotation, scale_x, scale_y,
+         image_offset_x, image_offset_y, image_width, image_height, image_dpi, scene_dpi, active)
+       VALUES ('map-1', 'Cave', 0, 0, 0, 1, 1, 0, 0, 1500, 1200, 150, 150, 1)`,
+    );
+    db.exec(
+      `INSERT INTO map_rooms (map_item_id, name, status, polygons, position)
+       VALUES ('map-1', 'Hall', 'confirmed',
+               '[[{"x":0,"y":0},{"x":300,"y":0},{"x":300,"y":150},{"x":0,"y":150}]]', 0)`,
+    );
+    return db;
+  }
+
+  const rows = (db: DatabaseSync, sql: string) => db.prepare(sql).all();
+  const columns = (db: DatabaseSync, table: string): unknown[] =>
+    rows(db, `PRAGMA table_info(${table})`).map((c) => c["name"]);
+
+  it("a version 17 database migrates keeping its map registrations and their rooms without the active flag, and its encounter has no map", () => {
+    const db = version17Database();
+    const maps = rows(db, "SELECT * FROM map_registrations").map((row) => {
+      const kept = { ...row };
+      delete kept["active"];
+      return kept;
+    });
+    const rooms = rows(db, "SELECT * FROM map_rooms");
+
+    migrate(db);
+
+    expect(getUserVersion(db)).toBe(18);
+    expect(rows(db, "SELECT * FROM map_registrations")).toEqual(maps);
+    expect(rows(db, "SELECT * FROM map_rooms")).toEqual(rooms);
+    expect(columns(db, "map_registrations")).not.toContain("active");
+    expect(columns(db, "encounters")).toContain("map_item_id");
+    expect(rows(db, "SELECT id, map_item_id FROM encounters")).toEqual([
+      { id: "e1", map_item_id: null },
+    ]);
+    expect(
+      new SqliteEncounterDirectory(db).mapRepositoryFor("e1").getActiveMap(),
+    ).toBeUndefined();
+    expect(rows(db, "PRAGMA foreign_key_check")).toEqual([]);
+    db.close();
+  });
+
+  it("after migration 18, use_map in a new encounter on a registered map item lists that item's saved rooms", async () => {
+    const db = version17Database();
+    migrate(db);
+    const directory = new SqliteEncounterDirectory(db);
+    const table: Pick<TablePort, "sceneMap"> = {
+      sceneMap: () =>
+        Promise.resolve({
+          grid: { dpi: 150, type: "SQUARE" },
+          maps: [
+            {
+              id: "map-1",
+              name: "Cave",
+              imageWidth: 1500,
+              imageHeight: 1200,
+              imageDpi: 150,
+              imageOffset: { x: 0, y: 0 },
+              position: { x: 0, y: 0 },
+              rotation: 0,
+              scale: { x: 1, y: 1 },
+            },
+          ],
+        }),
+    };
+    const encounter = directory.createEncounter("Cave fight");
+    const maps = directory.mapRepositoryFor(encounter.id);
+
+    await useMap(table, maps);
+    const listed = await listRooms(table, maps);
+
+    expect(listed.map.itemId).toBe("map-1");
+    expect(listed.rooms.map((room) => [room.name, room.status])).toEqual([
+      ["Hall", "confirmed"],
+    ]);
     db.close();
   });
 });

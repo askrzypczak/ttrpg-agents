@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { MapRegistration, SavedRoom } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
 import { SqliteMapRepository } from "./map-repository.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -187,5 +188,37 @@ describe("SqliteMapRepository", () => {
     after.registerMap(trollskullRealigned);
     expect(after.getRooms("map-1")).toEqual([taproom, kitchen]);
     second.close();
+  });
+});
+
+describe("SqliteMapRepository per encounter", () => {
+  it("registerMap makes the registration its own encounter's map and leaves another encounter's map unchanged", () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const tavern = directory.createEncounter("Tavern");
+    const sewerFight = directory.createEncounter("Sewer fight");
+    directory.mapRepositoryFor(tavern.id).registerMap(trollskull);
+
+    directory.mapRepositoryFor(sewerFight.id).registerMap(sewers);
+
+    expect(directory.mapRepositoryFor(sewerFight.id).getActiveMap()).toEqual(
+      sewers,
+    );
+    expect(directory.mapRepositoryFor(tavern.id).getActiveMap()).toEqual(
+      trollskull,
+    );
+  });
+
+  it("an encounter that never registered a map has none while another encounter has one", () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const tavern = directory.createEncounter("Tavern");
+    const sewerFight = directory.createEncounter("Sewer fight");
+    directory.mapRepositoryFor(tavern.id).registerMap(trollskull);
+
+    expect(directory.mapRepositoryFor(tavern.id).getActiveMap()).toEqual(
+      trollskull,
+    );
+    expect(
+      directory.mapRepositoryFor(sewerFight.id).getActiveMap(),
+    ).toBeUndefined();
   });
 });

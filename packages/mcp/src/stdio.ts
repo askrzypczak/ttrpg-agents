@@ -15,7 +15,6 @@ import type { Rng } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   createDatabaseProbe,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -45,7 +44,6 @@ async function main(): Promise<void> {
     table: createBridgeTable(client),
     browser: createSystemBrowser(),
     encounters: new SqliteEncounterDirectory(db),
-    maps: new SqliteMapRepository(db),
     monsters: loadSrdMonsters(),
     rng,
     now: () => new Date(),

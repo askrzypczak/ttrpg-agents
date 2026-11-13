@@ -129,4 +129,22 @@ describe("get_map_image", () => {
     ]);
     expect(r.structuredContent).toBeUndefined();
   });
+
+  it("`get_map_image` asks the table for the image of the map of the encounter it acts on", async () => {
+    const sewers: TableMapItem = { ...trollskull, id: "map-2", name: "Sewers" };
+    const { ctx, imageCalls } = contextWith(scene(trollskull, sewers));
+    const tavern = ctx.encounters.createEncounter("Tavern");
+    const sewerFight = ctx.encounters.createEncounter("Sewer fight");
+    ctx.encounters.mapRepositoryFor(tavern.id).registerMap(registered);
+    ctx.encounters
+      .mapRepositoryFor(sewerFight.id)
+      .registerMap({ ...registered, itemId: "map-2", name: "Sewers" });
+    ctx.encounters.setCurrentEncounter(sewerFight.id);
+
+    const r = await getMapImage(ctx);
+
+    expect(r.isError).toBeFalsy();
+    expect(imageCalls).toEqual(["map-2"]);
+    expect(textBlocks(r).join("\n")).toMatch(/^Sewers: /);
+  });
 });

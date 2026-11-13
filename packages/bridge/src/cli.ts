@@ -6,7 +6,6 @@ import { storeTokenImage } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterLog,
   SqliteEncounterDirectory,
-  SqliteMapRepository,
   SqliteTokenArtRepository,
   SqliteTokenImageRepository,
   openDatabase,
@@ -48,13 +47,12 @@ const encounters = new SqliteEncounterDirectory(db);
 const artRepo = new SqliteTokenArtRepository(db);
 const imageRepo = new SqliteTokenImageRepository(db);
 const log = new SqliteEncounterLog(db);
-const maps = new SqliteMapRepository(db);
 const server = await startBridgeServer({
   port,
   staticDir,
   agentToken,
   snapshot: () => snapshotMessage(encounters, artRepo, log),
-  mapRooms: () => mapRoomsMessage(maps),
+  mapRooms: () => mapRoomsMessage(encounters),
   removeInstance: (id, commandId) => removeInstance(encounters, id, commandId),
   editInstance: (edit, commandId) => editInstance(encounters, edit, commandId),
   setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
@@ -76,7 +74,7 @@ const stopPolling = broadcastLogEvents(log, server, {
     ),
   snapshot: () => snapshotMessage(encounters, artRepo, log),
 });
-const stopMapRooms = broadcastMapRooms(maps, server);
+const stopMapRooms = broadcastMapRooms(encounters, server);
 // Registered before the state file can exist: a signal right after it appears
 // still closes the server and removes it, and one during the write waits for
 // it to land (or fail). The handler runs on a later turn, after `stateWritten`

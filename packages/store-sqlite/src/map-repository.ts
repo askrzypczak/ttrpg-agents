@@ -33,9 +33,11 @@ interface MapRow {
 /** Registered maps and the active one, in the `map_registrations` table of the shared database. */
 export class SqliteMapRepository implements MapRepository {
   private readonly db: DatabaseSync;
+  private readonly encounterId: string;
 
-  constructor(db: DatabaseSync) {
+  constructor(db: DatabaseSync, encounterId: string) {
     this.db = db;
+    this.encounterId = encounterId;
   }
 
   registerMap(registration: MapRegistration): void {

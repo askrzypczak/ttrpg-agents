@@ -30,6 +30,7 @@ import {
   useMap,
   type ChangeOrigin,
   type EncounterRepository,
+  type MapRepository,
   type MonsterInstance,
   type PreviewInstance,
   type PreviewPlacement,
@@ -141,6 +142,9 @@ function defineTool<S extends z.ZodRawShape>(def: {
             resolveEncounter(ctx.encounters).id,
           );
           return repo;
+        },
+        get maps(): MapRepository {
+          throw new Error("not implemented");
         },
       };
       try {

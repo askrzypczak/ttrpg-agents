@@ -1,4 +1,5 @@
 import { UnknownInstanceError } from "./errors.js";
+import type { MapRepository } from "../map/repository.js";
 import type { EncounterRepository } from "./repository.js";
 import type { Encounter } from "./types.js";
 
@@ -16,6 +17,8 @@ export interface EncounterDirectory {
   findEncounterOfInstance(instanceId: string): Encounter | undefined;
   /** A repository whose every method reads and changes that encounter only. */
   repositoryFor(encounterId: string): EncounterRepository;
+  /** A map repository whose map is that encounter's; rooms are keyed by map item and shared by every encounter on it. */
+  mapRepositoryFor(encounterId: string): MapRepository;
   /** Runs fn in one write transaction; directory and repository calls inside join it; a throw rolls them back and is rethrown. */
   transaction<T>(fn: () => T): T;
 }
