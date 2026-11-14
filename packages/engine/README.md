@@ -40,7 +40,9 @@ Each instance carries `spawnPosition`: where a new token for it is created, in s
 
 ## Table
 
-`src/table/`: `TablePort` (driven port: `sceneStatus()` asks the table, the VTT, about its scene; `sceneMap()` asks for the scene grid and the map images with their transforms; `sceneTokens()` asks for the position of each item on the table's character and mount layers, which the room placement for `add_monsters` (#50) reads to skip occupied cells; `mapImage(itemId)` asks for the gridded image of a map item, drawn as the DM sees it with the display grid's labels; all fail with `TableUnavailableError`) and `getTableStatus(repo, table)`, which adds the encounter count and the verdict: `inSync` = scene ready and token, applied and encounter counts all equal. The bridge client implements the port; `mcp` only formats the result.
+`src/table/`: `TablePort` (driven port: `sceneStatus()` asks the table, the VTT, about its scene; `sceneMap()` asks for the scene grid and the map images with their transforms; `sceneTokens()` asks for the position of each item on the table's character and mount layers, which the room placement for `add_monsters` (#50) reads to skip occupied cells; `mapImage(itemId)` asks for the gridded image of a map item, drawn as the DM sees it with the display grid's labels; all fail with `TableUnavailableError`). The bridge client implements the port.
+
+`getTableStatus(directory, table)` asks the table, then compares its answer with the open scene's bound encounter read from the store (it creates and resolves none): `inSync` = scene ready, the tab holds that encounter for that scene, and token, applied and encounter counts all equal, with no art picker open or still to open. Our tokens of another encounter or none are counted apart (`unmanagedTokenCount`) and do not affect sync. With no scene open there is nothing to compare: the tab cannot hold it and the encounter count is 0. An older tab, whose answer has no scene id or held encounter, keeps the count checks alone (`holdsOpenScene` undefined). `mcp` only formats the result.
 
 ## Browser
 
