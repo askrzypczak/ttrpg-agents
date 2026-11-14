@@ -98,6 +98,10 @@ describe("checkMonster entry report", () => {
       damage: [{ average: 7, dice: "2d4 + 2", type: "Piercing" }],
     });
     expect(e.attack?.reach).toBeUndefined();
+    const short = onlyEntry(
+      "Ranged Attack Roll: +4, range 30 ft. 5 (1d6 + 2) Piercing damage.",
+    );
+    expect(short.attack?.range).toStrictEqual({ normal: 30 });
   });
 
   it("reads a melee or ranged attack's reach and range", () => {
@@ -337,6 +341,9 @@ describe("checkMonster entry report", () => {
       { dice: "2d6" },
       { dice: "1d4" },
     ]);
+    expect(
+      onlyEntry("It takes 1d6 + 2 damage and sleeps for 1d4 + 1 days.").dice,
+    ).toEqual([{ dice: "1d6 + 2" }, { dice: "1d4 + 1" }]);
   });
 
   it("leaves out a dice expression the dice parser rejects and does not throw", () => {
