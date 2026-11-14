@@ -1283,4 +1283,78 @@ describe("createEncounterSync and the open scene", () => {
       encounterName: null,
     });
   });
+
+  it.each<
+    [
+      string,
+      EncounterInstance[],
+      string,
+      EncounterInstance[],
+      "addItems" | "setItemMetadata",
+    ]
+  >([
+    [
+      "a token added, so the placed record changes",
+      [inst(1)],
+      "i1",
+      [inst(1), inst(2)],
+      "addItems",
+    ],
+    [
+      "a token's metadata written, with the placed record unchanged",
+      [inst(1), inst(2)],
+      "i2",
+      [{ ...inst(1), currentHp: 3 }, inst(2)],
+      "setItemMetadata",
+    ],
+  ])(
+    "a scene switch while the last token write is in flight writes no placed record into the next scene and reports no deletion (%s)",
+    async (_case, preparedWith, deletedId, wanted, lastWrite) => {
+      // The GM deleted one placed token: the reconcile plans its deletion.
+      const prepared = await preparedScene(TEST_SCENE_ID, "e1", preparedWith);
+      const scene = new SceneModel();
+      scene.switchScene({
+        items: prepared.items.filter(
+          (item) =>
+            (linkOf(item) as { instanceId: string }).instanceId !== deletedId,
+        ),
+        metadata: prepared.metadata,
+      });
+      const fake = createFakeObr(scene);
+      const next = {
+        items: [],
+        metadata: { [SCENE_ID_METADATA_KEY]: SCENE_B },
+      };
+      let armed = true;
+      // The GM switches scenes as the write lands.
+      const thenSwitch = async (write: Promise<void>): Promise<void> => {
+        await write;
+        if (!armed) return;
+        armed = false;
+        scene.switchScene(next);
+      };
+      const obr: ObrAdapter = {
+        ...fake.obr,
+        addItems: (items) =>
+          lastWrite === "addItems"
+            ? thenSwitch(fake.obr.addItems(items))
+            : fake.obr.addItems(items),
+        setItemMetadata: (updates) =>
+          lastWrite === "setItemMetadata"
+            ? thenSwitch(fake.obr.setItemMetadata(updates))
+            : fake.obr.setItemMetadata(updates),
+      };
+      const sent: BridgeMessage[] = [];
+      const sync = createEncounterSync(obr, undefined, undefined, {
+        send: (message) => (sent.push(message), true),
+      });
+
+      await sync.handleMessage(createMessageFeed().snapshot(wanted));
+      await settle();
+
+      expect(scene.getItems()).toEqual([]);
+      expect(scene.getMetadata()).toEqual(next.metadata);
+      expect(sent.filter((m) => m.type === "token-deleted")).toEqual([]);
+    },
+  );
 });
