@@ -27,7 +27,7 @@ export class UnknownMonsterError extends DomainError {
   }
 }
 
-/** A display name that is empty or already used by another instance. */
+/** A display name or an encounter name that is empty or already taken. */
 export class InvalidNameError extends DomainError {
   constructor(message: string) {
     super("invalid_name", message);
@@ -64,6 +64,14 @@ export class NoSceneEncounterError extends DomainError {
   constructor(message: string) {
     super("no_scene_encounter", message);
     this.name = "NoSceneEncounterError";
+  }
+}
+
+/** A binding use_encounter refuses: no scene is open, the open scene has an encounter, or the encounter belongs to another scene. */
+export class SceneBindingError extends DomainError {
+  constructor(message: string) {
+    super("scene_binding", message);
+    this.name = "SceneBindingError";
   }
 }
 

@@ -127,6 +127,10 @@ function handingOut(
     getOpenScene: () => inner.getOpenScene(),
     setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
     bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
+    setEncounterName: (encounterId, name) =>
+      inner.setEncounterName(encounterId, name),
+    findSceneOfEncounter: (encounterId) =>
+      inner.findSceneOfEncounter(encounterId),
     transaction: (fn) => inner.transaction(fn),
   };
 }

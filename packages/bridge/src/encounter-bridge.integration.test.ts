@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   openScene,
+  renameEncounter,
   resolveEncounter,
   type ChangeOrigin,
   type EncounterDirectory,
@@ -744,10 +745,8 @@ describe("snapshots of the open scene", () => {
         ({ directory }) => {
           directory.setOpenScene("s1");
         },
-        ({ store, a }) => {
-          store
-            .prepare("UPDATE encounters SET name = ? WHERE id = ?")
-            .run("Crypt", a.id);
+        ({ directory, a }) => {
+          renameEncounter(directory, { name: "Crypt" });
           return { sceneId: "s1", encounterId: a.id, encounterName: "Crypt" };
         },
       ],

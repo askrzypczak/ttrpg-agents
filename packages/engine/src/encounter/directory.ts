@@ -35,6 +35,10 @@ export interface EncounterDirectory {
   setOpenScene(sceneId: string | null): void;
   /** Binds the scene to the encounter. Throws when the scene or the encounter is already bound, or the encounter is unknown; nothing changes then. */
   bindScene(sceneId: string, encounterId: string): void;
+  /** Renames the encounter; the store's unique index refuses a name another encounter has ignoring ASCII case. */
+  setEncounterName(encounterId: string, name: string): void;
+  /** The id of the scene bound to that encounter, or undefined when none is. */
+  findSceneOfEncounter(encounterId: string): string | undefined;
   /** Runs fn in one write transaction; directory and repository calls inside join it; a throw rolls them back and is rethrown. */
   transaction<T>(fn: () => T): T;
 }
@@ -59,6 +63,8 @@ export interface EncounterRequest {
 export interface ResolvedEncounter {
   encounter: Encounter;
   created: boolean;
+  /** Whether a reply's text names the encounter: no scene is open, the request named an encounter other than the open scene's, or this call created it. */
+  mention: boolean;
 }
 
 /**
@@ -72,18 +78,15 @@ export function resolveEncounter(
   request: EncounterRequest,
 ): ResolvedEncounter {
   if (request.name !== undefined)
-    return {
-      encounter: namedEncounter(directory, request.name),
-      created: false,
-    };
+    return withMention(namedEncounter(directory, request.name), false);
   const open = directory.getOpenScene();
-  if (open?.encounter) return { encounter: open.encounter, created: false };
+  if (open?.encounter) return withMention(open.encounter, false);
   if (open) {
     if (!request.writes)
       throw new NoSceneEncounterError("This scene has no encounter yet.");
   } else {
     const current = directory.getCurrentEncounter();
-    if (current) return { encounter: current, created: false };
+    if (current) return withMention(current, false);
   }
   return directory.transaction(() =>
     createUnderLock(directory, request.writes),
@@ -136,10 +139,10 @@ function createUnderLock(
   writes: boolean,
 ): ResolvedEncounter {
   const open = directory.getOpenScene();
-  if (open?.encounter) return { encounter: open.encounter, created: false };
+  if (open?.encounter) return withMention(open.encounter, false);
   if (!open) {
     const current = directory.getCurrentEncounter();
-    if (current) return { encounter: current, created: false };
+    if (current) return withMention(current, false);
   }
   if (open && !writes)
     throw new NoSceneEncounterError("This scene has no encounter yet.");
@@ -147,7 +150,19 @@ function createUnderLock(
   const created = directory.createEncounter(nextEncounterName(names));
   if (open) directory.bindScene(open.sceneId, created.id);
   directory.setCurrentEncounter(created.id);
-  return { encounter: created, created: true };
+  return withMention(created, true);
+}
+
+/** The resolved encounter with whether a reply names it. */
+function withMention(
+  encounter: Encounter,
+  created: boolean,
+): ResolvedEncounter {
+  return { encounter, created, mention: mentions() };
+}
+
+function mentions(): boolean {
+  throw new Error("not implemented");
 }
 
 /** Records the scene open at the table (or none) and, when it is bound, makes its encounter current, in one transaction. */
@@ -172,4 +187,65 @@ export function repositoryForInstance(
   if (!holder)
     throw new UnknownInstanceError(`Unknown monster instance: ${instanceId}`);
   return directory.repositoryFor(holder.id);
+}
+
+/** One encounter as list_encounters shows it. */
+export interface EncounterSummary {
+  encounter: Encounter;
+  /** Its live monsters; removed ones are not counted. */
+  monsterCount: number;
+  /** Bound to a scene, open or not. */
+  bound: boolean;
+  /** Bound to the open scene. */
+  openScene: boolean;
+  current: boolean;
+}
+
+export interface EncounterListing {
+  /** Oldest first. */
+  encounters: EncounterSummary[];
+  sceneOpen: boolean;
+}
+
+/** Every encounter with its monster count and scene state; reads only, creates nothing. */
+export function listEncounterSummaries(
+  directory: EncounterDirectory,
+): EncounterListing {
+  void directory;
+  throw new Error("not implemented");
+}
+
+export interface RenameEncounterRequest {
+  /** The new name; trimmed. */
+  name: string;
+  /** The encounter to rename, by name ignoring case; default: the read form of the resolution rule. */
+  encounter?: string;
+}
+
+export interface RenamedEncounter {
+  /** The encounter under its new name. */
+  encounter: Encounter;
+  renamedFrom: string;
+  /** Whether resolving it created it. */
+  created: boolean;
+}
+
+/** Renames the encounter the request resolves. InvalidNameError for an empty name (before resolving) or one another encounter has ignoring case; nothing changes then. */
+export function renameEncounter(
+  directory: EncounterDirectory,
+  request: RenameEncounterRequest,
+): RenamedEncounter {
+  void directory;
+  void request;
+  throw new Error("not implemented");
+}
+
+/** Binds the named encounter to the open scene and makes it current, in one transaction; SceneBindingError or UnknownEncounterError otherwise, changing nothing. */
+export function useEncounter(
+  directory: EncounterDirectory,
+  name: string,
+): Encounter {
+  void directory;
+  void name;
+  throw new Error("not implemented");
 }

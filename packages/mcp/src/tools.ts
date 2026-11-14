@@ -98,6 +98,11 @@ function defineTool<S extends z.ZodRawShape>(def: {
    */
   startsEncounter?: boolean;
   /**
+   * The tool reads or changes an encounter: its input takes an optional
+   * `encounter` name, and its reply names the encounter it acted on.
+   */
+  takesEncounter?: boolean;
+  /**
    * `origin()` is the origin of every write in one call: source `mcp`, one
    * command id minted on first use, and the tool's name as its command.
    */
@@ -1241,6 +1246,48 @@ const getMapImageTool = defineTool({
         { type: "text", text },
       ],
     };
+  },
+});
+
+/** The optional `encounter` argument: an encounter's name, any case. */
+const encounterArgument = z
+  .string()
+  .min(1)
+  .optional()
+  .describe(
+    "The encounter to act on, by name (any case). Default: the open scene's encounter, or with no scene open the current one. With no scene open, naming one makes it current.",
+  );
+
+const listEncountersTool = defineTool({
+  name: "list_encounters",
+  annotations: { readOnlyHint: true },
+  description:
+    "List every encounter: its name, live monster count, whether its scene is the open one, another or none, and which is current. Creates none.",
+  inputSchema: {},
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
+const renameEncounterTool = defineTool({
+  name: "rename_encounter",
+  annotations: { destructiveHint: true },
+  description:
+    "Rename the open scene's encounter (with no scene open, the current one), or the one named in encounter. The name must not be empty or taken by another encounter, ignoring case.",
+  inputSchema: { name: z.string(), encounter: encounterArgument },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
+const useEncounterTool = defineTool({
+  name: "use_encounter",
+  annotations: { destructiveHint: false },
+  description:
+    "Make the named encounter the open scene's encounter. The scene must have no encounter and the encounter no scene; it also becomes current. Needs a scene open in Owlbear.",
+  inputSchema: { encounter: z.string().min(1) },
+  run() {
+    throw new Error("not implemented");
   },
 });
 

@@ -156,6 +156,17 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
     });
   }
 
+  setEncounterName(encounterId: string, name: string): void {
+    void encounterId;
+    void name;
+    throw new Error("not implemented");
+  }
+
+  findSceneOfEncounter(encounterId: string): string | undefined {
+    void encounterId;
+    throw new Error("not implemented");
+  }
+
   /** Runs fn in a transaction; nests by joining an already-open one. */
   transaction<T>(fn: () => T): T {
     if (this.db.isTransaction) return fn();

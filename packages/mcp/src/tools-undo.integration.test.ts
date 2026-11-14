@@ -114,6 +114,10 @@ function recordingDirectory(
     getOpenScene: () => inner.getOpenScene(),
     setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
     bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
+    setEncounterName: (encounterId, name) =>
+      inner.setEncounterName(encounterId, name),
+    findSceneOfEncounter: (encounterId) =>
+      inner.findSceneOfEncounter(encounterId),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -576,6 +580,66 @@ describe("undo", () => {
       expect(text(reversed), tool).toContain("Undid apply_damage:");
       expect(byName("Wolf 1").currentHp, tool).toBe(11);
     }
+  });
+
+  describe("undo right after rename_encounter or use_encounter says the last change is not covered and changes nothing", () => {
+    it.each([
+      {
+        tool: "rename_encounter",
+        // An encounter bound to an open scene of its own, with a wolf.
+        before: () => {
+          const crypt = ctx.encounters.createEncounter("Crypt");
+          ctx.encounters.bindScene("scene-undo", crypt.id);
+          ctx.encounters.setOpenScene("scene-undo");
+          return crypt;
+        },
+        args: { name: "Goblin Ambush" },
+        after: { name: "Goblin Ambush" },
+      },
+      {
+        tool: "use_encounter",
+        // An unbound encounter with a wolf, and an open scene with none.
+        before: () => {
+          const crypt = ctx.encounters.createEncounter("Crypt");
+          ctx.encounters.setOpenScene("scene-undo");
+          return crypt;
+        },
+        args: { encounter: "Crypt" },
+        after: { name: "Crypt" },
+      },
+    ])("$tool", async ({ tool, before, args, after }) => {
+      const crypt = before();
+      ctx.encounters
+        .repositoryFor(crypt.id)
+        .addInstances(() => [wolf("Wolf 1")], table);
+      await ok("apply_damage", {
+        target: "Wolf 1",
+        amount: 4,
+        encounter: "Crypt",
+      });
+      await ok(tool, args);
+
+      const r = await ok("undo");
+
+      expect(text(r)).toBe(
+        [
+          NOT_COVERED(tool),
+          "Next undo would reverse apply_damage: Wolf 1.",
+        ].join("\n"),
+      );
+      const wolf1 = ctx.encounters
+        .repositoryFor(crypt.id)
+        .listInstances()
+        .find((i) => i.displayName === "Wolf 1");
+      expect(wolf1?.currentHp).toBe(7);
+      expect(
+        ctx.encounters.listEncounters().find((e) => e.id === crypt.id)?.name,
+      ).toBe(after.name);
+      expect(ctx.encounters.getOpenScene()).toEqual({
+        sceneId: "scene-undo",
+        encounter: { ...crypt, name: after.name },
+      });
+    });
   });
 
   it("undo right after a clear names restore_encounter in its reply text", async () => {

@@ -150,4 +150,21 @@ describe("get_map_image", () => {
     expect(imageCalls).toEqual(["map-2"]);
     expect(textBlocks(r).join("\n")).toMatch(/^Sewers: /);
   });
+
+  it("get_map_image with no scene open names the encounter in its text line and adds no structured content", async () => {
+    const { ctx } = contextWith(scene(trollskull));
+    ctx.encounters.setOpenScene(null);
+
+    const r = await getMapImage(ctx);
+
+    expect(r.isError).toBeFalsy();
+    expect(r.content).toEqual([
+      { type: "image", data: image.data, mimeType: "image/jpeg" },
+      {
+        type: "text",
+        text: "Encounter: Encounter 1\n\nTrollskull Manor: 32 x 24 cells, columns A-AF left to right, rows 1-24 top to bottom, labelled on the image's edges.",
+      },
+    ]);
+    expect(r.structuredContent).toBeUndefined();
+  });
 });
