@@ -129,7 +129,7 @@ export function mapOpen5eCreature(c: Open5eCreature): Monster {
   return {
     key: c.key,
     name: c.name,
-    source: "srd-5.2",
+    source: { book: "srd-5.2" },
     size: c.size.key,
     type: c.type.key,
     alignment: c.alignment,

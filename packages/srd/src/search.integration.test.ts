@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { getMonsterByKey, searchMonsters } from "@ttrpg-agents/engine";
+import {
+  getMonsterByKey,
+  searchMonsters,
+  staticMonsterIndex,
+} from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "./loader.js";
 
-const index = loadSrdMonsters();
+const index = staticMonsterIndex(loadSrdMonsters());
 const names = (q: string) =>
   searchMonsters(index, q).map((r) => r.monster.name);
 
