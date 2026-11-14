@@ -1,5 +1,6 @@
 import type {
   BrowserPort,
+  EncounterDirectory,
   EncounterRepository,
   MapRepository,
   MonsterIndex,
@@ -14,9 +15,8 @@ export interface ToolContext {
   table: TablePort;
   /** Shows a page to the DM (in production the system browser). */
   browser: BrowserPort;
-  repo: EncounterRepository;
-  /** Registered maps and the active one. */
-  maps: MapRepository;
+  /** Every encounter, the current one, and repositories scoped to one. */
+  encounters: EncounterDirectory;
   monsters: MonsterIndex;
   rng: Rng;
   now: () => Date;
@@ -25,4 +25,16 @@ export interface ToolContext {
   newCommandId: () => string;
   /** Settings facts and the database and bridge probes, for the setup report. */
   setup: SetupPorts;
+}
+
+/** What a tool's run receives: the context plus the encounter of this call. */
+export interface ToolCallContext extends ToolContext {
+  /**
+   * The encounter this call acts on, from the engine's resolution rule (the
+   * write form for tools that start an encounter, the read form otherwise),
+   * resolved on first use and kept for the call.
+   */
+  readonly repo: EncounterRepository;
+  /** The map repository of this call's encounter, resolved by the same rule with `repo` and kept for the call. */
+  readonly maps: MapRepository;
 }

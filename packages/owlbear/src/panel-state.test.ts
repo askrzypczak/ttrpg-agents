@@ -3,6 +3,7 @@ import {
   STALLED_HINT,
   describeError,
   panelView,
+  sceneEncounter,
   type PanelInput,
 } from "./panel-state.js";
 
@@ -424,5 +425,48 @@ describe("panelView token art", () => {
       { monsterKey: "wolf", label: "Wolf: has token art", canPick: false },
     ]);
     expect(view.typeArt?.[1]).not.toHaveProperty("hint");
+  });
+});
+
+describe("the open scene's encounter", () => {
+  it("sceneEncounter gives the held encounter's name, or null for none, only when the held snapshot is for the open scene", () => {
+    const held = {
+      sceneId: "s1",
+      encounterId: "e1",
+      encounterName: "Crypt",
+    };
+    const none = { sceneId: "s1", encounterId: null, encounterName: null };
+
+    expect(sceneEncounter("s1", held)).toBe("Crypt");
+    expect(sceneEncounter("s1", none)).toBeNull();
+    // A snapshot for another scene, or none yet, or no scene ready.
+    expect(sceneEncounter("s2", held)).toBeUndefined();
+    expect(sceneEncounter("s1", undefined)).toBeUndefined();
+    expect(sceneEncounter(null, held)).toBeUndefined();
+    expect(sceneEncounter(undefined, held)).toBeUndefined();
+    expect(sceneEncounter(null, { ...none, sceneId: null })).toBeUndefined();
+  });
+
+  it('panelView shows "Encounter: <name>", "No encounter in this scene yet", or no encounter line while it is not known', () => {
+    const cases: [string | null | undefined, string | undefined][] = [
+      ["Crypt", "Encounter: Crypt"],
+      [null, "No encounter in this scene yet"],
+      [undefined, undefined],
+    ];
+    for (const [sceneEncounterName, line] of cases) {
+      const view = panelView({
+        role: "gm",
+        socketState: "open",
+        disconnectedMs: 0,
+        ...(sceneEncounterName === undefined
+          ? {}
+          : { sceneEncounter: sceneEncounterName }),
+      });
+
+      if (line === undefined) expect(view).not.toHaveProperty("encounter");
+      else expect(view.encounter).toBe(line);
+      // Only the encounter line changes.
+      expect(view.kind).toBe("connected");
+    }
   });
 });

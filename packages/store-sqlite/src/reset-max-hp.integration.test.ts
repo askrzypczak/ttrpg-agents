@@ -10,10 +10,12 @@ import {
   type Rng,
   type ResetMaxHpDeps,
   type UnreadableLogEntry,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const seedOrigin: ChangeOrigin = { source: "table", commandId: "seed" };
@@ -71,10 +73,17 @@ beforeEach(() => {
   db = openDatabase(":memory:");
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(db, {
+  const options = {
     newId: () => `id-${++n}`,
     now: () => ++t,
-  });
+  };
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(new SqliteEncounterDirectory(db, options), {
+      writes: true,
+    }).encounter.id,
+    options,
+  );
   repo.addInstances(
     () => [
       // Full HP, max below the Wolf's average.

@@ -102,6 +102,51 @@ describe("createBridgeTable", () => {
     });
   });
 
+  it("sceneStatus passes the scene id, the held encounter id (null included) and the unmanaged token count through", async () => {
+    const answer = (extra: object) =>
+      clientAnswering({
+        ok: true,
+        result: {
+          name: "scene-status",
+          result: {
+            sceneReady: true,
+            tokenCount: 1,
+            appliedInstanceCount: 1,
+            artWaits: [],
+            roomId: "room-abc",
+            ...extra,
+          },
+        },
+      }).client;
+    const base = {
+      sceneReady: true,
+      tokenCount: 1,
+      appliedInstanceCount: 1,
+      artWaits: [],
+      roomId: "room-abc",
+    };
+
+    const held = {
+      sceneId: "scene-1",
+      heldEncounterId: "enc-1",
+      unmanagedTokenCount: 2,
+    };
+    expect(await createBridgeTable(answer(held)).sceneStatus()).toEqual({
+      ...base,
+      ...held,
+    });
+
+    const none = {
+      sceneId: null,
+      heldEncounterId: null,
+      unmanagedTokenCount: 0,
+    };
+    expect(await createBridgeTable(answer(none)).sceneStatus()).toEqual({
+      ...base,
+      ...none,
+    });
+  });
+
   it("throws `TableUnavailableError` carrying the bridge's message for any `{ ok: false }` response, each error code", async () => {
     for (const code of agentErrorCodeSchema.options) {
       const message = `bridge says ${code}`;

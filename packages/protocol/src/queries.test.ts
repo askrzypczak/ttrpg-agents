@@ -130,6 +130,57 @@ describe("query schemas", () => {
     expect(parsed.data?.result).not.toHaveProperty("roomId");
   });
 
+  it("a scene-status result carries the open scene id, the held encounter id and the unmanaged token count; the ids may be null, and a negative or fractional count or an empty scene id is rejected", () => {
+    const full = {
+      ...status,
+      artWaits: [],
+      sceneId: "scene-1",
+      heldEncounterId: "enc-1",
+      unmanagedTokenCount: 2,
+    };
+    const parsed = queryResultSchema.safeParse({
+      name: "scene-status",
+      result: full,
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({ name: "scene-status", result: full });
+
+    const nulls = {
+      ...status,
+      artWaits: [],
+      sceneId: null,
+      heldEncounterId: null,
+      unmanagedTokenCount: 0,
+    };
+    expect(sceneStatusSchema.safeParse(nulls).data).toEqual(nulls);
+
+    for (const bad of [
+      { ...full, unmanagedTokenCount: -1 },
+      { ...full, unmanagedTokenCount: 1.5 },
+      { ...full, sceneId: "" },
+    ]) {
+      expect(
+        sceneStatusSchema.safeParse(bad).success,
+        JSON.stringify(bad),
+      ).toBe(false);
+    }
+  });
+
+  it("a scene-status result without the scene id, held encounter id and unmanaged token count still decodes, with none", () => {
+    const parsed = queryResultSchema.safeParse({
+      name: "scene-status",
+      result: { ...status, artWaits: [], roomId: "room-abc" },
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({
+      name: "scene-status",
+      result: { ...status, artWaits: [], roomId: "room-abc" },
+    });
+    expect(parsed.data?.result).not.toHaveProperty("sceneId");
+    expect(parsed.data?.result).not.toHaveProperty("heldEncounterId");
+    expect(parsed.data?.result).not.toHaveProperty("unmanagedTokenCount");
+  });
+
   it("an art wait with an unknown step is rejected", () => {
     for (const step of ["upload", "confirm", "", "PICK"]) {
       expect(

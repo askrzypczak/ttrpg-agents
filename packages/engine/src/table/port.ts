@@ -23,6 +23,21 @@ export interface TableSceneStatus {
    * older than this field.
    */
   roomId?: string;
+  /**
+   * The id of the scene the GM tab has open: null when no scene is ready or it
+   * has no usable id; absent from an older open tab.
+   */
+  sceneId?: string | null;
+  /**
+   * The encounter the tab holds for that scene, null when it holds none;
+   * absent from an older open tab.
+   */
+  heldEncounterId?: string | null;
+  /**
+   * Our tokens on the scene whose link records another encounter than the
+   * held one, or none; absent from an older open tab.
+   */
+  unmanagedTokenCount?: number;
 }
 
 /** One map image on the table, with its image grid and transform. */

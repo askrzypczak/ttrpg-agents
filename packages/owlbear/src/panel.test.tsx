@@ -142,4 +142,21 @@ describe("Panel", () => {
     expect(actions.uploadArtFile).toHaveBeenCalledTimes(1);
     expect(actions.uploadArtFile).toHaveBeenCalledWith("owlbear", file);
   });
+
+  it("the panel shows the view's encounter line", () => {
+    const actions = makeActions();
+    render({ ...makeView(), encounter: "Encounter: Crypt" }, actions);
+
+    const line = container.querySelector("#encounter");
+    expect(line?.textContent).toBe("Encounter: Crypt");
+    // Above the scene line.
+    const scene = container.querySelector("#scene");
+    expect(scene).not.toBeNull();
+    expect(
+      line!.compareDocumentPosition(scene!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    render(makeView(), actions);
+    expect(container.querySelector("#encounter")?.textContent ?? "").toBe("");
+  });
 });

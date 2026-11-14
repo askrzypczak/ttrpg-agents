@@ -8,6 +8,7 @@ import {
 } from "@ttrpg-agents/store-sqlite";
 import { afterEach, expect, it } from "vitest";
 import {
+  E2E_ENCOUNTER_ID,
   SHADOW_IDS,
   e2eDbPath,
   listE2eInstanceIds,
@@ -31,7 +32,7 @@ function withRepo<T>(
 ): T {
   const db = openDatabase(e2eDbPath(dir));
   try {
-    return use(new SqliteEncounterRepository(db));
+    return use(new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID));
   } finally {
     db.close();
   }

@@ -3,7 +3,7 @@ import "./globals.d.ts";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withCoverage } from "./coverage.js";
-import { restoreE2eSeed } from "./db.js";
+import { E2E_SCENE_ID, restoreE2eSeed } from "./db.js";
 import { e2eDir, harnessOrigin } from "./env.js";
 import { startWorkerBridge, type WorkerBridge } from "./worker-bridge.js";
 
@@ -42,10 +42,15 @@ export async function openHarness(
     failItems?: string;
     /** The asset picker's answer (SDK `ImageDownload`s). Default: a cancel. */
     pickedImages?: unknown[];
+    /** The scene's id in its metadata. Default: E2E_SCENE_ID; null: none. */
+    sceneId?: string | null;
   } = {},
 ): Promise<void> {
   const url = new URL(HARNESS);
   url.searchParams.set("target", options.target ?? EXTENSION());
+  const sceneId =
+    options.sceneId === undefined ? E2E_SCENE_ID : options.sceneId;
+  if (sceneId !== null) url.searchParams.set("sceneId", sceneId);
   if (options.obrOrigin) url.searchParams.set("obrOrigin", options.obrOrigin);
   if (options.failItems) url.searchParams.set("failItems", options.failItems);
   if (options.pickedImages)

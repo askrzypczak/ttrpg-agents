@@ -1,5 +1,6 @@
 import type {
   ArtStep,
+  HeldScene,
   Reupload,
   TypeArt,
   TypeArtState,
@@ -39,6 +40,8 @@ export interface PanelInput {
   overrides?: readonly string[];
   /** Why the bridge rejected us, when socketState is "rejected". */
   rejection?: RejectionCode;
+  /** The open scene's encounter name, null when it has none; absent while not known (see sceneEncounter). */
+  sceneEncounter?: string | null;
 }
 
 export interface PanelView {
@@ -51,6 +54,8 @@ export interface PanelView {
     | "rejected-version"
     | "superseded";
   message: string;
+  /** The open scene's encounter line; absent while it is not known. */
+  encounter?: string;
   /** A user action the panel offers, e.g. reclaiming the bridge from another tab. */
   action?: "use-this-tab";
   /** Extra explanation when the connection seems stuck. */
@@ -107,6 +112,27 @@ export const STALLED_HINT =
   "allow it in the address bar or site settings for owlbear.rodeo, and make sure " +
   "the bridge is running (npm run bridge).";
 
+/**
+ * The held snapshot's encounter name when the snapshot is for the open scene
+ * (null when that scene has no encounter); undefined while no scene is ready
+ * or no snapshot for it has arrived.
+ */
+export function sceneEncounter(
+  openSceneId: string | null | undefined,
+  held: HeldScene | undefined,
+): string | null | undefined {
+  if (openSceneId === null || openSceneId === undefined) return undefined;
+  if (held === undefined || held.sceneId !== openSceneId) return undefined;
+  return held.encounterId === null ? null : held.encounterName;
+}
+
+/** The panel's line for the open scene's encounter (see sceneEncounter). */
+function encounterLine(name: string | null): string {
+  return name === null
+    ? "No encounter in this scene yet"
+    : `Encounter: ${name}`;
+}
+
 export function panelView(input: PanelInput): PanelView {
   const view = connectionView(input);
   if (view.kind === "gm-only") return view;
@@ -125,6 +151,9 @@ export function panelView(input: PanelInput): PanelView {
   ].filter((n): n is string => !!n);
   return {
     ...view,
+    ...(input.sceneEncounter === undefined
+      ? {}
+      : { encounter: encounterLine(input.sceneEncounter) }),
     ...(errors.length > 0 ? { error: errors.join(" ") } : {}),
     ...(notes.length > 0 ? { note: notes.join(" ") } : {}),
     ...(input.overrides && input.overrides.length > 0

@@ -9,7 +9,6 @@ function recordingRepository(received: unknown[]): EncounterRepository {
     return undefined as never;
   };
   return {
-    getOrCreateActiveEncounter: () => undefined as never,
     listInstances: () => [],
     addInstances: (_build, origin) => record(origin),
     applyDamage: (_id, _amount, origin) => record(origin),

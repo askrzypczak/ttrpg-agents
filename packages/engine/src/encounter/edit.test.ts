@@ -26,7 +26,6 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
     throw new Error("unexpected call");
   };
   return {
-    getOrCreateActiveEncounter: unexpected,
     addInstances: unexpected,
     applyDamage: unexpected,
     applyHealing: unexpected,

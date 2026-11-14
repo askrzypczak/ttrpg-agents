@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
+import type { BridgeMessage } from "@ttrpg-agents/protocol";
 import { createEncounterSync } from "./encounter-sync.js";
-import { createFakeObr } from "./fake-adapter.js";
+import { createFakeObr, type FakePick } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
+import { SCENE_ID_METADATA_KEY } from "./open-scene.js";
 import type { Timers } from "./reconnecting-socket.js";
+import { SceneModel, type SceneItem } from "./scene-model.js";
 import { createMessageFeed, type MessageFeed } from "./testing/messages.js";
-import { PLACED_METADATA_KEY, type EncounterInstance } from "./sync-plan.js";
+import {
+  INSTANCE_METADATA_KEY,
+  PLACED_METADATA_KEY,
+  instanceIdOf,
+  type EncounterInstance,
+} from "./sync-plan.js";
 
 const inst = (n: number): EncounterInstance =>
   makeTestInstance({ id: `i${n}`, displayName: `Shadow ${n}`, createdAt: n });
@@ -164,5 +172,93 @@ describe("createEncounterSync guards", () => {
     expect(cleared).toEqual(["handle"]);
     await sync.handleMessage(snapshot(feed, 1));
     expect(cleared).toEqual(["handle"]);
+  });
+});
+
+describe("createEncounterSync and what it does not manage", () => {
+  /** A sync over `scene` that records the commands it sends. */
+  function withCommands(scene: SceneModel, pickImage?: FakePick) {
+    const fake = createFakeObr(scene, undefined, { pickImage });
+    const sent: BridgeMessage[] = [];
+    const sync = createEncounterSync(fake.obr, undefined, undefined, {
+      send: (message) => (sent.push(message), true),
+    });
+    return {
+      sync,
+      deletions: () => sent.filter((m) => m.type === "token-deleted"),
+    };
+  }
+
+  /** The instance ids the scene's items link to, sorted. */
+  const linkedIds = (scene: SceneModel): string[] =>
+    scene
+      .getItems()
+      .flatMap((item) => instanceIdOf(item) ?? [])
+      .sort();
+
+  it("leaves a token whose link records no encounter alone and does not report its placed instance deleted", async () => {
+    const feed = createMessageFeed();
+    const scene = new SceneModel();
+    // A token of i1 made before tokens recorded their encounter.
+    const old: SceneItem = {
+      id: "old-1",
+      type: "SHAPE",
+      name: "Old shadow",
+      visible: true,
+      position: { x: 5, y: 5 },
+      metadata: { [INSTANCE_METADATA_KEY]: { instanceId: "i1" } },
+    };
+    scene.addItems([old]);
+    scene.setMetadata({ [PLACED_METADATA_KEY]: ["i1"] });
+    const { sync, deletions } = withCommands(scene);
+
+    await sync.handleMessage(snapshot(feed, 1, 2));
+    await settle();
+
+    expect(scene.getItems().find((item) => item.id === old.id)).toEqual(old);
+    expect(deletions()).toEqual([]);
+    expect(linkedIds(scene)).toEqual(["i1", "i2"]);
+  });
+
+  it("creates no token for an instance of the snapshot that belongs to another encounter", async () => {
+    const feed = createMessageFeed();
+    const scene = new SceneModel();
+    const { sync, deletions } = withCommands(scene);
+    const stray = makeTestInstance({
+      id: "x1",
+      encounterId: "e9",
+      displayName: "Stray",
+      createdAt: 9,
+    });
+
+    await sync.handleMessage(feed.snapshot([inst(1), stray]));
+    await settle();
+    await sync.handleMessage(feed.snapshot([inst(1), stray]));
+    await settle();
+
+    expect(linkedIds(scene)).toEqual(["i1"]);
+    expect(deletions()).toEqual([]);
+  });
+
+  it("a scene switch while a picker is open makes no write to the next scene", async () => {
+    const feed = createMessageFeed();
+    const scene = new SceneModel();
+    const next = { items: [], metadata: { [SCENE_ID_METADATA_KEY]: "s2" } };
+    const { sync, deletions } = withCommands(scene, () => {
+      scene.switchScene(next);
+      return {
+        url: "https://example.com/shadow.png",
+        mime: "image/png",
+        width: 64,
+        height: 64,
+      };
+    });
+
+    await sync.handleMessage(snapshot(feed, 1));
+    await settle();
+
+    expect(scene.getItems()).toEqual([]);
+    expect(scene.getMetadata()).toEqual(next.metadata);
+    expect(deletions()).toEqual([]);
   });
 });

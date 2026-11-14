@@ -254,7 +254,7 @@ export interface MoveIntoRoomResult {
 }
 
 /**
- * Moves existing instances of the active encounter into a saved room of the
+ * Moves existing instances of the repository's encounter into a saved room of the
  * map in use, with the same placement as `addMonstersInRooms` (free blocks of
  * each footprint, cells under the table's tokens occupied, largest footprint
  * first, ties in input order). Checks every id (UnknownInstanceError), then

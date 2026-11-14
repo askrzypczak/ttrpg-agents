@@ -88,12 +88,16 @@ missing, and `createBridgeTable` turns any `{ ok: false }` into the engine's
 The queries:
 
 - `scene-status` (`{"name":"scene-status"}`): whether the scene is ready, how
-  many of our tokens are on it, how many instances the extension has applied,
-  `roomId`, the id of the Owlbear room the tab is in (absent from an older
-  tab), and `artWaits`, the monster types whose token art waits on the GM
-  (monster key, name and step: `pick` while a fresh image picker is open or
-  still to open, `reupload` while its stored art is listed for re-upload in
-  the panel); an answer without it reads as none.
+  many tokens of the held encounter are on it (`tokenCount`), how many
+  instances the extension has applied, and:
+  - `roomId`, the id of the Owlbear room the tab is in; `sceneId`, the open
+    scene's id (null when none is ready); `heldEncounterId`, the encounter the
+    tab holds for that scene (null when none); `unmanagedTokenCount`, our
+    tokens of another encounter or none. Each is absent from an older tab.
+  - `artWaits`, the monster types whose token art waits on the GM (monster
+    key, name and step: `pick` while a fresh image picker is open or still to
+    open, `reupload` while its stored art is listed for re-upload in the
+    panel); an answer without it reads as none.
 - `scene-map`: the scene grid (dpi and type) and, for each image on the map
   layer, its id, name, image size, image grid (dpi and offset) and transform
   (position, rotation, scale). On a scene that is not ready the extension's
@@ -119,26 +123,50 @@ MCP server's `stdio.ts` wires in; `createBridgeTable` implements the engine's
 The bridge polls the change log every 250 ms (`broadcastLogEvents`) and
 broadcasts each event committed since it started as an `encounter-event`
 carrying its `seq`, oldest first, so tokens appear without reloading the panel.
-The poll sees the bridge's own commits too. A client that connects gets an
-`encounter-snapshot` carrying the `seq` it is current as of, read before the
-instances; events at or before that `seq` may still arrive and the client
-ignores them. Its `restoreSeqs` gives, for each instance a restore put back, the
-`seq` of its last restore; it is read after the instances, so it lists every
-restore they reflect, and is left out when empty. A failed read is retried on
-the next tick. A row the bridge cannot parse (for example one written by a newer
+The poll sees the bridge's own commits too. A failed read is retried on the
+next tick. A row the bridge cannot parse (for example one written by a newer
 MCP server) is skipped: `cli.ts` reports it once on stderr with its `seq`, and
 every client gets a fresh snapshot in its place.
 
-The bridge also polls the active map and its rooms every 250 ms and sends
-`map-rooms` (the active map's item id and its rooms) to every client on change
-and after each `hello-ack`, after the snapshot; no active map sends an empty
-list. A failed rooms read for the push after `hello-ack` is logged, and
-nothing is sent.
+A client that connects gets an `encounter-snapshot` carrying the `seq` it is
+current as of, read before the instances; events at or before that `seq` may
+still arrive and the client ignores them. Its `restoreSeqs` gives, for each
+instance a restore put back, the `seq` of its last restore; it is read after
+the instances, so it lists every restore they reflect, and is left out when
+empty. The snapshot shows the open scene (`sceneId`, null when none is open)
+and its bound encounter's id, name and instances (both null and no instances
+while it has none); with no scene open, the current encounter. Every snapshot
+comes from one source (`createSnapshotSource`), which remembers the scope of
+the last one built: at the end of each tick the poll sends a fresh snapshot
+when the open scene, its encounter or that encounter's name changed since
+(`scopeChanged`), as when another process binds a new encounter to the open
+scene or renames it.
+
+An authenticated client sends `scene-open` (`{ sceneId }`, null when no scene
+is open) when the GM opens or leaves a scene and after each `hello-ack`. The
+server's optional `openScene` option records it (`cli.ts` wires the engine's
+`openScene`, which makes the scene's bound encounter current), then the client
+gets the snapshot for that scene. A failed write is a non-fatal
+`scene-open-failed` `error` that echoes the request id, and no snapshot is
+sent. The active client's disconnect, and closing the server with one
+connected, record no open scene; a displaced client's does not. `cli.ts` also
+records none at start, once it listens (a bridge that cannot take its port
+leaves the running one's scene alone). Without the option the type is
+`unexpected-type`.
+
+The bridge also polls the current encounter's map and its rooms every 250 ms
+and sends `map-rooms` (that map's item id and its rooms) to every client on
+change and after each `hello-ack`, after the snapshot. With no current
+encounter, or one with no map, it sends a null item id and an empty list. A
+failed rooms read for the push after `hello-ack` is logged, and nothing is
+sent.
 
 An authenticated client can send `token-deleted` (`{ instanceId }`, sent by the
 extension when the GM deletes one of our tokens). The server's optional
 `removeInstance` option performs the removal (`cli.ts` wires
-`removeInstance(repo, id)` from `encounter-bridge.ts`). An accepted request gets
+`removeInstance(encounters, id)` from `encounter-bridge.ts`). The removal, like
+an `instance-edit`, acts on the encounter that holds the instance, current or
+not; an id no encounter holds is refused. An accepted request gets
 no reply of its own: the poll's `table` event for the removal carries the
 request id as its command id, and the extension takes it as the
 acknowledgement. An accepted `instance-edit` is answered the same way, by its

@@ -7,7 +7,9 @@ import type {
   MonsterInstance,
   UnreadableLogEntry,
 } from "@ttrpg-agents/engine";
+import { resolveEncounter } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
@@ -18,6 +20,7 @@ const origin = (commandId: string): ChangeOrigin => ({
 
 let db: DatabaseSync;
 let repo: SqliteEncounterRepository;
+let encounterId: string;
 let log: SqliteEncounterLog;
 let first: MonsterInstance;
 let second: MonsterInstance;
@@ -26,10 +29,14 @@ beforeEach(() => {
   db = openDatabase(":memory:");
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(db, {
+  const options = {
     newId: () => `id-${++n}`,
     now: () => ++t,
-  });
+  };
+  encounterId = resolveEncounter(new SqliteEncounterDirectory(db, options), {
+    writes: true,
+  }).encounter.id;
+  repo = new SqliteEncounterRepository(db, encounterId, options);
   log = new SqliteEncounterLog(db);
   [first, second] = repo.addInstances(
     () => [
@@ -205,6 +212,55 @@ const mutations: MutationCase[] = [
     },
   },
   {
+    name: "setSpawnPositions",
+    run: (o) => {
+      repo.setSpawnPositions(
+        [{ id: first.id, spawnPosition: { x: 3, y: 4 } }],
+        o,
+      );
+      return [
+        {
+          type: "position-changed",
+          id: first.id,
+          spawnPosition: { x: 3, y: 4 },
+          origin: o,
+        },
+      ];
+    },
+  },
+  {
+    name: "changeMonsters",
+    run: (o) => {
+      const change = {
+        id: first.id,
+        monsterKey: "orc",
+        displayName: "Orc 1",
+        maxHp: 15,
+        currentHp: 15,
+        armorClass: 13,
+        initiative: 9,
+        footprint: 1,
+      };
+      repo.changeMonsters([change], o);
+      return [{ type: "monster-changed", ...change, origin: o }];
+    },
+  },
+  {
+    name: "restoreInstances",
+    run: (o) => {
+      repo.removeInstances([second.id], o);
+      const instances = repo.restoreInstances(
+        [second.id],
+        (instance) => instance.displayName,
+        o,
+      );
+      return [
+        { type: "removed", id: second.id, origin: o },
+        { type: "added", instances, origin: o },
+      ];
+    },
+  },
+  {
     name: "clearEncounter",
     run: (o) => {
       repo.clearEncounter(o);
@@ -220,6 +276,42 @@ describe("SqliteEncounterLog", () => {
       const expected = run({ source: "table", commandId: `cmd-${name}` });
       expect(eventsAfter(before)).toEqual(expected);
     });
+  });
+
+  describe("each mutation logs its event with the id of the encounter it changed", () => {
+    it.each(mutations)("$name", ({ name, run }) => {
+      const before = log.latestSeq();
+      const expected = run(origin(`cmd-${name}`));
+      expect(log.eventsSince(before)).toEqual(
+        expected.map((event) => ({
+          seq: expect.any(Number),
+          encounterId,
+          event,
+        })),
+      );
+    });
+  });
+
+  it("a clear of an encounter with no instances logs its event with that encounter's id", () => {
+    const store = openDatabase(":memory:");
+    const directory = new SqliteEncounterDirectory(store);
+    const empty = directory.createEncounter("Encounter 1");
+    const other = directory.createEncounter("Encounter 2");
+    directory.setCurrentEncounter(other.id);
+    const storeLog = new SqliteEncounterLog(store);
+    const o = origin("clear-empty");
+
+    new SqliteEncounterRepository(store, empty.id).clearEncounter(o);
+
+    expect(storeLog.eventsSince(0)).toEqual([
+      {
+        seq: expect.any(Number),
+        encounterId: empty.id,
+        event: { type: "cleared", origin: o },
+      },
+    ]);
+    expect(directory.listEncounters()).toEqual([empty, other]);
+    store.close();
   });
 
   it("removing several instances records one removed event per id, in the order given", () => {
@@ -298,6 +390,7 @@ describe("SqliteEncounterLog", () => {
         { seq: before + 1, error: expect.stringMatching(/./) },
         {
           seq: before + 2,
+          encounterId,
           event: expect.objectContaining({ type: "hp-changed", origin: o }),
         },
       ]);

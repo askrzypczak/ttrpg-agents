@@ -34,6 +34,7 @@ const plan = (
   planSync(desired, observed, defaultSyncConfig, {
     viewportCenter: { x: 0, y: 0 },
     placed: new Set(placed),
+    encounterId: "e1",
     art: {},
     ...(fields ? { fields: new Map([["i1", fields]]) } : {}),
   });
@@ -75,7 +76,10 @@ describe("planSync with the stat bubbles projector", () => {
     const { add } = plan([inst()], []);
     expect(add).toHaveLength(1);
     const metadata = add[0]!.metadata;
-    expect(metadata[INSTANCE_METADATA_KEY]).toEqual({ instanceId: "i1" });
+    expect(metadata[INSTANCE_METADATA_KEY]).toEqual({
+      instanceId: "i1",
+      encounterId: "e1",
+    });
     expect(metadata[INITIATIVE_METADATA_KEY]).toEqual({
       count: "14",
       active: false,
@@ -110,7 +114,7 @@ describe("planSync with the stat bubbles projector", () => {
       position: { x: 0, y: 0 },
       shape: { shapeType: "CIRCLE", width: 150, height: 150 },
       metadata: {
-        [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+        [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
         [INITIATIVE_METADATA_KEY]: initiative,
         [FOREIGN_KEY]: { text: "keep me" },
         [STAT_BUBBLES_METADATA_KEY]: {
@@ -118,7 +122,7 @@ describe("planSync with the stat bubbles projector", () => {
           "temporary health": 4,
         },
         [SYNCED_METADATA_KEY]: {
-          [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+          [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
           [INITIATIVE_METADATA_KEY]: initiative,
           [STAT_BUBBLES_METADATA_KEY]: baselineBubbles,
           [NAME_BASELINE_KEY]: "Shadow 1",
@@ -139,7 +143,10 @@ describe("planSync with the stat bubbles projector", () => {
       hide: true,
       "temporary health": 4,
     });
-    expect(metadata[INSTANCE_METADATA_KEY]).toEqual({ instanceId: "i1" });
+    expect(metadata[INSTANCE_METADATA_KEY]).toEqual({
+      instanceId: "i1",
+      encounterId: "e1",
+    });
     expect(metadata[INITIATIVE_METADATA_KEY]).toEqual(initiative);
     expect(metadata[FOREIGN_KEY]).toEqual({ text: "keep me" });
   });
@@ -192,11 +199,11 @@ describe("planSync with the stat bubbles projector", () => {
       position: { x: 0, y: 0 },
       shape: { shapeType: "CIRCLE", width: 150, height: 150 },
       metadata: {
-        [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+        [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
         [INITIATIVE_METADATA_KEY]: { count: "14", active: false },
         [STAT_BUBBLES_METADATA_KEY]: { ...shown, hide },
         [SYNCED_METADATA_KEY]: {
-          [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+          [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
           [INITIATIVE_METADATA_KEY]: { count: "14", active: false },
           [STAT_BUBBLES_METADATA_KEY]: { ...shown, hide: baselineHide },
           [NAME_BASELINE_KEY]: "Shadow 1",

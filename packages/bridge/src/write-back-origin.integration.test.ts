@@ -4,8 +4,14 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import type { ChangeOrigin, EncounterRepository } from "@ttrpg-agents/engine";
 import {
+  resolveEncounter,
+  type ChangeOrigin,
+  type EncounterDirectory,
+  type EncounterRepository,
+} from "@ttrpg-agents/engine";
+import {
+  SqliteEncounterDirectory,
   SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
@@ -26,6 +32,7 @@ import { startBridgeServer, type BridgeServer } from "./server.js";
 
 let dir: string;
 let db: DatabaseSync;
+let encounters: SqliteEncounterDirectory;
 let repo: SqliteEncounterRepository;
 let instanceId: string;
 let origins: ChangeOrigin[];
@@ -38,7 +45,6 @@ let stopPolling: (() => void) | undefined;
 /** Delegates to `inner` and records the origin of every mutation. */
 function recordingRepo(inner: SqliteEncounterRepository): EncounterRepository {
   return {
-    getOrCreateActiveEncounter: () => inner.getOrCreateActiveEncounter(),
     listInstances: () => inner.listInstances(),
     addInstances: (build, origin) => inner.addInstances(build, origin),
     applyDamage: (id, amount, origin) => inner.applyDamage(id, amount, origin),
@@ -77,6 +83,30 @@ function recordingRepo(inner: SqliteEncounterRepository): EncounterRepository {
   };
 }
 
+/** Delegates to `inner` but hands out `recording` as every encounter's repository. */
+function recordingDirectory(
+  inner: SqliteEncounterDirectory,
+  recording: EncounterRepository,
+): EncounterDirectory {
+  return {
+    listEncounters: () => inner.listEncounters(),
+    createEncounter: (name) => inner.createEncounter(name),
+    getCurrentEncounter: () => inner.getCurrentEncounter(),
+    setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
+    findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    repositoryFor: () => recording,
+    mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
+    getOpenScene: () => inner.getOpenScene(),
+    setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
+    bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
+    setEncounterName: (encounterId, name) =>
+      inner.setEncounterName(encounterId, name),
+    findSceneOfEncounter: (encounterId) =>
+      inner.findSceneOfEncounter(encounterId),
+    transaction: (fn) => inner.transaction(fn),
+  };
+}
+
 async function waitFor(
   predicate: () => boolean,
   timeoutMs = 2000,
@@ -91,7 +121,11 @@ async function waitFor(
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "write-back-origin-"));
   db = openDatabase(join(dir, "test.db"));
-  repo = new SqliteEncounterRepository(db);
+  encounters = new SqliteEncounterDirectory(db);
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(encounters, { writes: true }).encounter.id,
+  );
   origins = [];
   const [shadow] = repo.addInstances(
     () => [
@@ -105,13 +139,13 @@ beforeEach(async () => {
     { source: "table", commandId: "seed" },
   );
   instanceId = shadow!.id;
-  const recording = recordingRepo(repo);
+  const recording = recordingDirectory(encounters, recordingRepo(repo));
   log = new SqliteEncounterLog(db);
   server = await startBridgeServer({
     port: 0,
     staticDir: dir,
     snapshot: () =>
-      snapshotMessage(repo, new SqliteTokenArtRepository(db), log),
+      snapshotMessage(encounters, new SqliteTokenArtRepository(db), log),
     editInstance: (edit, commandId) => editInstance(recording, edit, commandId),
     removeInstance: (id, commandId) => removeInstance(recording, id, commandId),
   });

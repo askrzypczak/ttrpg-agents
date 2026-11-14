@@ -10,13 +10,16 @@ import {
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * The largest bridge WebSocket message, in bytes: the bridge's `maxPayload`,
  * and the budget a `map-image` reply is encoded to fit.
  */
 export const MAX_MESSAGE_BYTES = 1024 * 1024;
+
+/** An Owlbear scene's id, as the GM tab mints it into the scene's metadata. */
+export const sceneIdSchema = z.string().min(1).max(200);
 
 // `role` is self-reported by the client and must never be used for
 // authorization; it only drives UI. The bridge admits a client by the Host and
@@ -68,11 +71,26 @@ const encounterSnapshotPayload = z.object({
   restoreSeqs: z.record(z.string(), z.number().int().min(1)).optional(),
   /** The change-log position this snapshot is current as of (0 for an empty log). */
   seq: z.number().int().min(0),
+  /**
+   * The snapshot's encounter: the open scene's bound one, or with no scene
+   * open the current one; null when there is none.
+   */
+  encounterId: z.string().nullable(),
+  /** The open scene this snapshot is for; null when no scene is open. */
+  sceneId: sceneIdSchema.nullable(),
+  /** The snapshot encounter's name; null exactly when `encounterId` is. */
+  encounterName: z.string().min(1).nullable(),
 });
-// An engine event plus its position in the change log: the extension applies
-// events in `seq` order and ignores one it already has.
+// Extension -> bridge: the scene the GM tab has open, null when none is.
+const sceneOpenPayload = z.object({ sceneId: sceneIdSchema.nullable() });
+// An engine event plus its position in the change log and the id of the
+// encounter it changed: the extension applies events in `seq` order and ignores
+// one it already has. The id is null when the event belongs to no encounter.
 const encounterEventPayload = encounterEventSchema.and(
-  z.object({ seq: z.number().int().min(1) }),
+  z.object({
+    seq: z.number().int().min(1),
+    encounterId: z.string().nullable(),
+  }),
 );
 // Extension -> bridge: the GM picked this art for a monster type.
 const tokenArtSetPayload = z.object({
@@ -80,8 +98,8 @@ const tokenArtSetPayload = z.object({
   art: publishedTokenArtSchema,
 });
 
-// Bridge -> extension: the active map's item and its saved rooms, for the
-// overlay; a null item id when no map is in use.
+// Bridge -> extension: the current encounter's map item and its saved rooms,
+// for the overlay; a null item id when no map is in use.
 const mapRoomsPayload = z.object({
   itemId: z.string().min(1).nullable(),
   rooms: z.array(savedRoomSchema),
@@ -120,6 +138,12 @@ export const sceneStatusSchema = z.object({
   artWaits: z.array(artWaitSchema).default([]),
   /** The Owlbear room the GM tab is in; absent from an older open tab. */
   roomId: z.string().optional(),
+  /** The scene the GM tab has open, null when none; absent from an older open tab. */
+  sceneId: sceneIdSchema.nullable().optional(),
+  /** The encounter the tab holds for that scene, null when none; absent from an older open tab. */
+  heldEncounterId: z.string().nullable().optional(),
+  /** Our tokens of another encounter or none; absent from an older open tab. */
+  unmanagedTokenCount: z.number().int().min(0).optional(),
 });
 
 const vec2 = z.object({ x: z.number(), y: z.number() });
@@ -270,6 +294,7 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("token-art-set", tokenArtSetPayload),
   envelope("instance-edit", instanceEditPayload),
   envelope("map-rooms", mapRoomsPayload),
+  envelope("scene-open", sceneOpenPayload),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;

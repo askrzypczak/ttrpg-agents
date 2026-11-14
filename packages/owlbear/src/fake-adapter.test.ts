@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createFakeObr } from "./fake-adapter.js";
+import { SCENE_ID_METADATA_KEY } from "./open-scene.js";
 import { SceneModel } from "./scene-model.js";
+import { TEST_SCENE_ID } from "./testing/messages.js";
 
 describe("createFakeObr", () => {
   it("rejects item calls with MissingDataError while the scene is not ready", async () => {
@@ -127,7 +129,10 @@ describe("createFakeObr", () => {
     await obr.updateItems(["a"], { name: "B" });
     expect((await obr.getItems())[0]?.name).toBe("B");
     await obr.setSceneMetadata({ k: 1 });
-    expect(scene.getMetadata()).toEqual({ k: 1 });
+    expect(scene.getMetadata()).toEqual({
+      [SCENE_ID_METADATA_KEY]: TEST_SCENE_ID,
+      k: 1,
+    });
     await obr.deleteItems(["a"]);
     expect(scene.getItems()).toEqual([]);
   });

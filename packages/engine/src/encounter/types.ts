@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export interface Encounter {
   id: string;
+  /** The DM-facing name, unique among encounters ignoring case. */
+  name: string;
   createdAt: number;
 }
 

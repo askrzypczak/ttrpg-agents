@@ -55,9 +55,9 @@ const circleToken = (n: number, monsterKey = "shadow"): SceneItem => ({
   layer: "CHARACTER",
   shape: { shapeType: "CIRCLE", width: 150, height: 150 },
   metadata: {
-    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
     [SYNCED_METADATA_KEY]: {
-      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
       [NAME_BASELINE_KEY]: `${monsterKey} ${n}`,
     },
   },

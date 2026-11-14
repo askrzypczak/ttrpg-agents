@@ -7,8 +7,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import type { ChangeOrigin, MonsterInstance } from "@ttrpg-agents/engine";
 import {
+  resolveEncounter,
+  type ChangeOrigin,
+  type MonsterInstance,
+} from "@ttrpg-agents/engine";
+import {
+  SqliteEncounterDirectory,
   SqliteEncounterLog,
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
@@ -80,13 +85,13 @@ beforeEach(async () => {
   db = openDatabase(dbPath);
   extraDbs = [];
   connections = [];
-  const repo = new SqliteEncounterRepository(db);
+  const encounters = new SqliteEncounterDirectory(db);
   const artRepo = new SqliteTokenArtRepository(db);
   log = new SqliteEncounterLog(db);
   server = await startBridgeServer({
     port: 0,
     staticDir: dir,
-    snapshot: () => snapshotMessage(repo, artRepo, log),
+    snapshot: () => snapshotMessage(encounters, artRepo, log),
   });
   stop = broadcastLogEvents(log, server);
 
@@ -117,11 +122,18 @@ const snapshotsOf = (c: Connection): Snapshot[] =>
 const eventsOf = (c: Connection): EncounterEvent[] =>
   c.received.filter((m): m is EncounterEvent => m.type === "encounter-event");
 
-/** A second connection to the same database, as another process would hold. */
+/**
+ * A second connection to the same database, as another process would hold,
+ * scoped to the current encounter (created when there is none).
+ */
 function otherRepository(): SqliteEncounterRepository {
   const other = openDatabase(dbPath);
   extraDbs.push(other);
-  return new SqliteEncounterRepository(other);
+  return new SqliteEncounterRepository(
+    other,
+    resolveEncounter(new SqliteEncounterDirectory(other), { writes: true })
+      .encounter.id,
+  );
 }
 
 async function waitFor(

@@ -9,9 +9,11 @@ import {
   type MonsterChange,
   type MonsterInstance,
   type UnreadableLogEntry,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "change-1" };
@@ -28,10 +30,17 @@ beforeEach(() => {
   db = openDatabase(":memory:");
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(db, {
+  const options = {
     newId: () => `id-${++n}`,
     now: () => ++t,
-  });
+  };
+  repo = new SqliteEncounterRepository(
+    db,
+    resolveEncounter(new SqliteEncounterDirectory(db, options), {
+      writes: true,
+    }).encounter.id,
+    options,
+  );
   log = new SqliteEncounterLog(db);
   [first, second, third] = repo.addInstances(
     () => [

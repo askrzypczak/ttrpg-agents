@@ -1,5 +1,6 @@
 import type { PublishedTokenArt } from "@ttrpg-agents/engine";
 import type { ImageUpload, ObrAdapter } from "./obr-adapter.js";
+import { SCENE_ID_METADATA_KEY } from "./open-scene.js";
 import {
   MissingSceneError,
   SceneModel,
@@ -7,6 +8,9 @@ import {
   type SceneGrid,
   type Vec2,
 } from "./scene-model.js";
+
+/** The fake scene's default id: `TEST_SCENE_ID`, the scene the test feed's snapshots are for. */
+const TEST_SCENE_ID = "s1";
 
 /**
  * What the fake's image picker answers: art, a cancel (`undefined`), or a
@@ -44,6 +48,11 @@ export function createFakeObr(
     local?: SceneModel;
     /** The bounds `getItemBounds` answers, per item id; an id without bounds rejects. */
     itemBounds?: Record<string, ItemBounds>;
+    /**
+     * The scene id written into the scene's metadata when it has none.
+     * Default: `TEST_SCENE_ID`; null writes none.
+     */
+    sceneId?: string | null;
   } = {},
 ): {
   obr: ObrAdapter;
@@ -57,6 +66,13 @@ export function createFakeObr(
 } {
   let picks = 0;
   const uploaded: ImageUpload[] = [];
+  const sceneId =
+    options.sceneId === undefined ? TEST_SCENE_ID : options.sceneId;
+  if (
+    sceneId !== null &&
+    scene.getMetadata()[SCENE_ID_METADATA_KEY] === undefined
+  )
+    scene.setMetadata({ [SCENE_ID_METADATA_KEY]: sceneId });
   // Like the real SDK, item calls reject while no scene is loaded.
   const whenReady = <T>(call: () => T): Promise<T> =>
     scene.isReady()

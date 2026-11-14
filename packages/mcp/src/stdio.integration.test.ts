@@ -11,10 +11,11 @@ import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { DatabaseSync } from "node:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -56,6 +57,9 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   remove_rooms: { destructiveHint: true },
   get_map_image: { readOnlyHint: true },
   propose_rooms: { readOnlyHint: true },
+  list_encounters: { readOnlyHint: true },
+  rename_encounter: { destructiveHint: true },
+  use_encounter: { destructiveHint: false },
 };
 
 let cleanup: (() => Promise<void>)[] = [];
@@ -97,7 +101,7 @@ async function connect(): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all thirty-three tools and serves a call", async () => {
+  it("lists all thirty-six tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
@@ -110,6 +114,7 @@ describe("stdio server", () => {
       "get_statblock",
       "heal",
       "list_encounter",
+      "list_encounters",
       "list_rooms",
       "merge_initiative",
       "move_monsters",
@@ -118,6 +123,7 @@ describe("stdio server", () => {
       "propose_rooms",
       "remove_monsters",
       "remove_rooms",
+      "rename_encounter",
       "rename_monster",
       "reset_max_hp",
       "restore_encounter",
@@ -134,6 +140,7 @@ describe("stdio server", () => {
       "split_initiative",
       "table_status",
       "undo",
+      "use_encounter",
       "use_map",
     ]);
 
@@ -146,11 +153,11 @@ describe("stdio server", () => {
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
   }, 30_000);
 
-  it("stdio server (spawned via `bin/stdio.mjs`) lists thirty-three tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
+  it("stdio server (spawned via `bin/stdio.mjs`) lists thirty-six tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(33);
+    expect(tools).toHaveLength(36);
     expect(tools.map((t) => t.name)).toContain("setup_status");
     const tableStatus = tools.find((t) => t.name === "table_status");
     expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });
@@ -284,9 +291,7 @@ describe("stdio server settings", () => {
     expect(existsSync(configured), "the configured database exists").toBe(true);
     const db = openDatabase(configured);
     try {
-      const names = new SqliteEncounterRepository(db)
-        .listInstances()
-        .map((i) => i.displayName);
+      const names = currentNames(db);
       expect(names).toHaveLength(1);
       expect(names[0]).toMatch(/^Shadow/);
     } finally {
@@ -335,13 +340,22 @@ async function addShadowWith(env: Record<string, string>): Promise<void> {
   await client.close();
 }
 
-/** Display names of the encounter in the database at `path`. */
+/** Display names of the current encounter in `db`; none when no encounter is current. */
+function currentNames(db: DatabaseSync): string[] {
+  const encounters = new SqliteEncounterDirectory(db);
+  const current = encounters.getCurrentEncounter();
+  if (!current) return [];
+  return encounters
+    .repositoryFor(current.id)
+    .listInstances()
+    .map((i) => i.displayName);
+}
+
+/** Display names of the current encounter in the database at `path`. */
 function namesIn(path: string): string[] {
   const db = openDatabase(path);
   try {
-    return new SqliteEncounterRepository(db)
-      .listInstances()
-      .map((i) => i.displayName);
+    return currentNames(db);
   } finally {
     db.close();
   }

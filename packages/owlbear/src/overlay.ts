@@ -9,7 +9,7 @@ import type { SceneItem } from "./scene-model.js";
 
 /** The map overlay of this tab: grid labels and room outlines as local items. */
 export interface MapOverlay {
-  /** The active map's rooms, from the bridge's `map-rooms`. */
+  /** The current encounter's map and its rooms, from the bridge's `map-rooms`. */
   setRooms(rooms: MapRooms): Promise<void>;
   /** Shows (true) or removes (false) the overlay. */
   setEnabled(enabled: boolean): Promise<void>;

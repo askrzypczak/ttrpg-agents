@@ -14,6 +14,7 @@ const instance = makeTestInstance({
 const ctx = {
   viewportCenter: { x: 0, y: 0 },
   placed: new Set<string>(),
+  encounterId: "e1",
   art: {},
 };
 

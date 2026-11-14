@@ -60,7 +60,7 @@ const config: SyncConfig = {
     {
       key: INSTANCE_METADATA_KEY,
       mode: "owned",
-      project: (i) => ({ instanceId: i.id }),
+      project: (i) => ({ instanceId: i.id, encounterId: i.encounterId }),
     },
     { key: HP_KEY, mode: "owned", project: (i) => i.currentHp },
   ],
@@ -92,7 +92,7 @@ const wolfRecord = (
   image: string | null,
   over: Record<string, unknown> = {},
 ): Record<string, unknown> => ({
-  [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+  [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
   [HP_KEY]: 16,
   [NAME_BASELINE_KEY]: `Dire Wolf ${n}`,
   [LOOK_BASELINE_KEY]: { monsterKey: "wolf", image },
@@ -115,7 +115,7 @@ const circleToken = (
     shape: { shapeType: "CIRCLE", width: 150, height: 150 },
     scale: { x: 1, y: 1 },
     metadata: {
-      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
       [HP_KEY]: 16,
       [SYNCED_METADATA_KEY]: record ?? wolfRecord(n, null),
     },
@@ -135,7 +135,7 @@ const imageToken = (n: number, over: Partial<SceneItem> = {}): SceneItem => ({
   grid: wolfGrid,
   scale: { x: 1, y: 1 },
   metadata: {
-    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
     [HP_KEY]: 16,
     [SYNCED_METADATA_KEY]: wolfRecord(n, wolfArt.url),
   },
@@ -164,6 +164,7 @@ const ctx = (
 ) => ({
   viewportCenter: { x: 1000, y: 500 },
   placed: new Set(over.placed ?? ["i1", "i2"]),
+  encounterId: "e1",
   art: over.art ?? { wolf: wolfArt, "dire-wolf": direWolfArt },
   ...(over.restyles === undefined ? {} : { restyles: new Set(over.restyles) }),
   ...(over.moves === undefined ? {} : { moves: new Set(over.moves) }),
@@ -220,7 +221,10 @@ describe("planSync token replacement", () => {
     });
     expect(item?.shape).toBeUndefined();
     expect(item?.scale ?? { x: 1, y: 1 }).toEqual({ x: 1, y: 1 });
-    expect(item?.metadata[INSTANCE_METADATA_KEY]).toEqual({ instanceId: "i1" });
+    expect(item?.metadata[INSTANCE_METADATA_KEY]).toEqual({
+      instanceId: "i1",
+      encounterId: "e1",
+    });
     expect(item?.metadata[HP_KEY]).toBe(16);
     expect(item?.metadata[OTHER_KEY]).toEqual({ keep: [1, 2] });
     expect(plan.restyle).toEqual([]);
@@ -311,7 +315,7 @@ describe("planSync token replacement", () => {
     });
     const synced = recordOf(replacement?.item);
     expect(synced).toMatchObject({
-      [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+      [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
       [HP_KEY]: 16,
       [NAME_BASELINE_KEY]: "Dire Wolf 1",
       [LOOK_BASELINE_KEY]: { monsterKey: "dire-wolf", image: direWolfArt.url },
@@ -378,7 +382,7 @@ describe("planSync token replacement", () => {
       image: direWolfImage,
       grid: direWolfGrid,
       metadata: {
-        [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+        [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
         [HP_KEY]: 16,
         [SYNCED_METADATA_KEY]: wolfRecord(1, null, {
           [POSITION_BASELINE_KEY]: { ...position },
@@ -435,7 +439,7 @@ describe("planSync token replacement", () => {
       image: direWolfImage,
       grid: direWolfGrid,
       metadata: {
-        [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+        [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
         [HP_KEY]: 16,
         [SYNCED_METADATA_KEY]: wolfRecord(1, direWolfArt.url, {
           [LOOK_BASELINE_KEY]: {
@@ -525,7 +529,7 @@ describe("planSync token replacement", () => {
           image: direWolfImage,
           grid: direWolfGrid,
           metadata: {
-            [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+            [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
             [HP_KEY]: 16,
             [SYNCED_METADATA_KEY]: wolfRecord(1, null, {
               [LOOK_BASELINE_KEY]: {

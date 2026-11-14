@@ -43,7 +43,7 @@ Issue: [#184](https://github.com/askrzypczak/ttrpg-agents/issues/184).
   - The placement as one JSON column: fewer columns, but no CHECKs, and a read needs parsing and validation.
   - A separate one-row table for the active map: a second table for what one flag does.
 - Where: migration 9 (`packages/store-sqlite/src/migrations.ts`), `SqliteMapRepository.registerMap` (`packages/store-sqlite/src/map-repository.ts`).
-- Status: active
+- Status: superseded by 362.2
 
 ## 184.5 The grid type is checked before the map is chosen
 

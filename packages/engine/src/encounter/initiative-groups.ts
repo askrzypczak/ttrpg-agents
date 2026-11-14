@@ -45,7 +45,7 @@ export interface MergeInitiativeResult {
 
 /**
  * The stored instances named by `instanceIds`, in the order given. Throws
- * UnknownInstanceError for an id not in the active encounter.
+ * UnknownInstanceError for an id not in the repository's encounter.
  */
 function namedInstances(
   repo: EncounterRepository,
@@ -62,7 +62,7 @@ function namedInstances(
 }
 
 /**
- * Gives each named instance of the active encounter a new initiative group of
+ * Gives each named instance of the repository's encounter a new initiative group of
  * its own, so it acts on its own. An unnamed member of the old group keeps that
  * group and still shares it with the other unnamed members.
  *
@@ -107,7 +107,7 @@ export function splitInitiative(
 }
 
 /**
- * Puts the named instances of the active encounter into one new initiative
+ * Puts the named instances of the repository's encounter into one new initiative
  * group, so they act together. The shared initiative is the one of the first
  * named instance that has one, or null when none has; nothing is rolled (a
  * fresh shared roll is `rollInitiative` after the merge).

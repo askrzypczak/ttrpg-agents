@@ -32,7 +32,7 @@ const NOTE_KEY = "test.ext/note";
 const link: Projector = {
   key: INSTANCE_METADATA_KEY,
   mode: "owned",
-  project: (i) => ({ instanceId: i.id }),
+  project: (i) => ({ instanceId: i.id, encounterId: i.encounterId }),
 };
 const hp: Projector = {
   key: HP_KEY,
@@ -59,6 +59,7 @@ const center = { x: 1000, y: 500 };
 const ctx = (placed: string[] = []) => ({
   viewportCenter: center,
   placed: new Set(placed),
+  encounterId: "e1",
   art: {},
 });
 
@@ -73,14 +74,17 @@ const token = (
   name: `Shadow ${n}`,
   visible: false,
   position: { x: 0, y: 0 },
-  metadata: { [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` }, ...metadata },
+  metadata: {
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
+    ...metadata,
+  },
   shape: { shapeType: "CIRCLE", width: 150, height: 150 },
   ...over,
 });
 
 /** The link and name baseline a token of ours has once we wrote it. */
 const linkBaseline = (n: number) => ({
-  [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+  [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
   [NAME_BASELINE_KEY]: `Shadow ${n}`,
 });
 
@@ -181,9 +185,9 @@ describe("planSync", () => {
       "Shadow 3",
     ]);
     expect(plan.add.map((i) => i.metadata[INSTANCE_METADATA_KEY])).toEqual([
-      { instanceId: "i1" },
-      { instanceId: "i2" },
-      { instanceId: "i3" },
+      { instanceId: "i1", encounterId: "e1" },
+      { instanceId: "i2", encounterId: "e1" },
+      { instanceId: "i3", encounterId: "e1" },
     ]);
     expect(plan.add.every((i) => i.visible === false)).toBe(true);
     expect(plan.add.every((i) => i.type === "SHAPE")).toBe(true);
@@ -214,7 +218,7 @@ describe("planSync", () => {
     expect(plan.update.filter((u) => u.id === foreign.id)).toEqual([]);
     // The foreign item's look-alike metadata does not count as a token of i1.
     expect(plan.add.map((i) => i.metadata[INSTANCE_METADATA_KEY])).toEqual([
-      { instanceId: "i1" },
+      { instanceId: "i1", encounterId: "e1" },
     ]);
   });
 
@@ -430,11 +434,14 @@ describe("planSync", () => {
     );
     expect(plan.add).toHaveLength(1);
     const metadata = plan.add[0]!.metadata;
-    expect(metadata[INSTANCE_METADATA_KEY]).toEqual({ instanceId: "i1" });
+    expect(metadata[INSTANCE_METADATA_KEY]).toEqual({
+      instanceId: "i1",
+      encounterId: "e1",
+    });
     expect(metadata[HP_KEY]).toBe(12);
     expect(metadata[NOTE_KEY]).toBe("Shadow 1");
     expect(metadata[SYNCED_METADATA_KEY]).toMatchObject({
-      [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+      [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
       [HP_KEY]: 12,
     });
   });
@@ -462,7 +469,7 @@ describe("planSync deleted", () => {
     );
     expect(plan.deleted).toEqual(["i1"]);
     expect(plan.add.map((i) => i.metadata[INSTANCE_METADATA_KEY])).toEqual([
-      { instanceId: "i2" },
+      { instanceId: "i2", encounterId: "e1" },
     ]);
   });
 
@@ -555,7 +562,7 @@ describe("planSync token name", () => {
         1,
         {
           [SYNCED_METADATA_KEY]: {
-            [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+            [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
             [STAT_BUBBLES_METADATA_KEY]: bubbles,
           },
         },
@@ -816,4 +823,75 @@ describe("planSync spawn position", () => {
     expect(positionOf(plan, 1)).toBeUndefined();
     expect(positionOf(plan, 2)).toEqual(spawn);
   });
+});
+
+describe("planSync and the encounter a token records", () => {
+  it("planSync creates each new token with an instance link that records the instance's encounter", () => {
+    const plan = planSync(
+      [inst(1, { encounterId: "e7" }), inst(2, { encounterId: "e7" })],
+      [],
+      defaultSyncConfig,
+      { ...ctx(), encounterId: "e7" },
+    );
+
+    expect(plan.add.map((i) => i.metadata[INSTANCE_METADATA_KEY])).toEqual([
+      { instanceId: "i1", encounterId: "e7" },
+      { instanceId: "i2", encounterId: "e7" },
+    ]);
+  });
+
+  it.each([
+    ["another encounter", { instanceId: "i1", encounterId: "e2" }],
+    ["no encounter", { instanceId: "i1" }],
+  ])(
+    "planSync never deletes, moves, renames, redraws or writes a token of ours that records another encounter or none (%s)",
+    (_case, link) => {
+      const strayLink = { ...link, instanceId: "i9" };
+      const tokens = [
+        defaultToken(
+          1,
+          {
+            [INSTANCE_METADATA_KEY]: link,
+            [SYNCED_METADATA_KEY]: {
+              ...defaultBaseline(1),
+              [INSTANCE_METADATA_KEY]: link,
+            },
+          },
+          { name: "Shadow 1", position: { x: 7, y: 9 } },
+        ),
+        token(9, { [INSTANCE_METADATA_KEY]: strayLink }),
+      ];
+      // The instance differs from the token in every way the planner writes.
+      const changed = inst(1, {
+        displayName: "Wight 1",
+        monsterKey: "wight",
+        currentHp: 3,
+        spawnPosition: { x: 400, y: 400 },
+      });
+
+      const plan = planSync([changed], tokens, defaultSyncConfig, {
+        ...ctx(),
+        encounterId: "e1",
+        moves: new Set(["i1"]),
+        restyles: new Set(["i1"]),
+        reskins: new Set(["i1"]),
+      });
+
+      expect(plan.delete).toEqual([]);
+      expect(plan.update).toEqual([]);
+      expect(plan.rename).toEqual([]);
+      expect(plan.move).toEqual([]);
+      expect(plan.restyle).toEqual([]);
+      expect(plan.replace).toEqual([]);
+      expect(plan.deleted).toEqual([]);
+      expect(plan.edits).toEqual([]);
+      // Neither token is the instance's token: it gets a new one.
+      expect(plan.add).toHaveLength(1);
+      expect(plan.add[0]!.metadata[INSTANCE_METADATA_KEY]).toEqual({
+        instanceId: "i1",
+        encounterId: "e1",
+      });
+      expect(["token-1", "token-9"]).not.toContain(plan.add[0]!.id);
+    },
+  );
 });

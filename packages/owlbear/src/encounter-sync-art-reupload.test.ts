@@ -821,6 +821,7 @@ describe("createEncounterSync re-upload list", () => {
     const earlier = planSync([inst(1)], [], defaultSyncConfig, {
       viewportCenter: { x: 0, y: 0 },
       placed: new Set(),
+      encounterId: "e1",
       art: { shadow: storedArt },
     });
     scene.addItems(earlier.add);

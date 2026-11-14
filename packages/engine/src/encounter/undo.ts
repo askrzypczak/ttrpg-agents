@@ -368,7 +368,7 @@ function nextUndo(repo: EncounterRepository): UndoNext | null {
 }
 
 /**
- * Reverses the active encounter's newest undo record in one repository
+ * Reverses the newest undo record of the repository's encounter in one repository
  * transaction, writing under `origin`, then forgets the undone command and the
  * undo's own command.
  *

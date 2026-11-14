@@ -136,7 +136,12 @@ export const defaultSyncConfig: SyncConfig = {
     {
       key: INSTANCE_METADATA_KEY,
       mode: "owned",
-      project: (instance) => ({ instanceId: instance.id }),
+      // The token records its encounter: only that encounter's reconcile
+      // manages it.
+      project: (instance) => ({
+        instanceId: instance.id,
+        encounterId: instance.encounterId,
+      }),
     },
     initiativeProjector,
     statBubblesProjector,
@@ -251,6 +256,14 @@ export function instanceIdOf(item: SceneItem): string | undefined {
   const value = item.metadata[INSTANCE_METADATA_KEY];
   if (typeof value !== "object" || value === null) return undefined;
   const id = (value as { instanceId?: unknown }).instanceId;
+  return typeof id === "string" ? id : undefined;
+}
+
+/** The encounter id a token's instance link records, if it records one. */
+export function linkedEncounterOf(item: SceneItem): string | undefined {
+  const value = item.metadata[INSTANCE_METADATA_KEY];
+  if (typeof value !== "object" || value === null) return undefined;
+  const id = (value as { encounterId?: unknown }).encounterId;
   return typeof id === "string" ? id : undefined;
 }
 
@@ -571,7 +584,13 @@ function movesEditField(
 
 /**
  * Pure diff of the desired instances against the scene's items; only items
- * carrying our instance link are ever touched.
+ * whose instance link records `context.encounterId` are ever touched. Every
+ * other item, a token of ours that records another encounter or none (one
+ * made before tokens recorded their encounter) included, is never deleted,
+ * moved, renamed, redrawn, replaced or written and is never an instance's
+ * token; an instance placed on the scene whose only linked items are such
+ * tokens is not reported in `deleted`. All items' ids count as taken for
+ * replacement ids.
  *
  * Table-wins rule, per `owned` key of an existing token. The projector sees the
  * token's current value, so table-owned fields inside an owned value (the
@@ -689,6 +708,8 @@ export function planSync(
   context: {
     viewportCenter: Vec2;
     placed: ReadonlySet<string>;
+    /** The encounter whose tokens the plan manages: only items whose link records it. */
+    encounterId: string;
     /** Monster key -> the art its new tokens are created with. */
     art: Readonly<Record<string, PublishedTokenArt>>;
     /** True when the reconcile follows a snapshot (connect, reconnect or gap). */
@@ -719,9 +740,15 @@ export function planSync(
   };
   const wanted = new Map(desired.map((i) => [i.id, i]));
   const linked = new Map<string, SceneItem[]>();
+  // Instance ids linked only by tokens of another encounter or none.
+  const unmanaged = new Set<string>();
   for (const item of observed) {
     const id = instanceIdOf(item);
     if (id === undefined) continue;
+    if (linkedEncounterOf(item) !== context.encounterId) {
+      unmanaged.add(id);
+      continue;
+    }
     if (!wanted.has(id)) plan.delete.push(item.id);
     else linked.set(id, [...(linked.get(id) ?? []), item]);
   }
@@ -771,8 +798,14 @@ export function planSync(
   // Ids a replacement may not take: those on the scene and those planned.
   const takenIds = new Set(observed.map((item) => item.id));
 
+  // A token of ours the plan does not manage still stands for its instance:
+  // never report that instance's token deleted.
   for (const instance of desired)
-    if (!tokens.has(instance.id) && context.placed.has(instance.id))
+    if (
+      !tokens.has(instance.id) &&
+      context.placed.has(instance.id) &&
+      !unmanaged.has(instance.id)
+    )
       plan.deleted.push(instance.id);
 
   const missing = desired.filter(

@@ -22,8 +22,9 @@ import {
   encodeMessage,
   type BridgeMessage,
 } from "@ttrpg-agents/protocol";
+import { resolveEncounter } from "@ttrpg-agents/engine";
 import {
-  SqliteEncounterRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 
@@ -334,6 +335,56 @@ describe("bridge CLI", () => {
     },
     TIMEOUT,
   );
+
+  it(
+    "the bridge records no open scene when it starts",
+    async () => {
+      // An earlier run left a scene open.
+      const before = openDatabase(String(env.TTRPG_AGENTS_DB));
+      new SqliteEncounterDirectory(before).setOpenScene("s1");
+      before.close();
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      await recordOf(bridge);
+
+      const db = openDatabase(String(env.TTRPG_AGENTS_DB));
+      try {
+        expect(new SqliteEncounterDirectory(db).getOpenScene()).toBeUndefined();
+      } finally {
+        db.close();
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a bridge that cannot take its port leaves the open scene recorded",
+    async () => {
+      // The running bridge's GM tab has a scene open.
+      const before = openDatabase(String(env.TTRPG_AGENTS_DB));
+      new SqliteEncounterDirectory(before).setOpenScene("s1");
+      before.close();
+      const holder = createServer();
+      servers.push(holder);
+      await new Promise<void>((done) =>
+        holder.listen(0, "127.0.0.1", () => done()),
+      );
+      env.BRIDGE_PORT = String((holder.address() as AddressInfo).port);
+
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      expect(await exited(bridge.child)).not.toBe(0);
+
+      const db = openDatabase(String(env.TTRPG_AGENTS_DB));
+      try {
+        expect(new SqliteEncounterDirectory(db).getOpenScene()?.sceneId).toBe(
+          "s1",
+        );
+      } finally {
+        db.close();
+      }
+    },
+    TIMEOUT,
+  );
 });
 
 const PROJECT_VARIABLES = new Set([
@@ -464,16 +515,21 @@ describe("bridge CLI settings", () => {
       const database = join(dir, "configured", "encounters.db");
       const db = openDatabase(database);
       try {
-        new SqliteEncounterRepository(db).addInstances(
-          () => [
-            {
-              monsterKey: "srd-2024_shadow",
-              displayName: "Configured Shadow",
-              maxHp: 16,
-            },
-          ],
-          { source: "mcp", commandId: "seed" },
-        );
+        const encounters = new SqliteEncounterDirectory(db);
+        encounters
+          .repositoryFor(
+            resolveEncounter(encounters, { writes: true }).encounter.id,
+          )
+          .addInstances(
+            () => [
+              {
+                monsterKey: "srd-2024_shadow",
+                displayName: "Configured Shadow",
+                maxHp: 16,
+              },
+            ],
+            { source: "mcp", commandId: "seed" },
+          );
       } finally {
         db.close();
       }

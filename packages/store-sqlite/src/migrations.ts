@@ -194,6 +194,59 @@ export const migrations: Migration[] = [
     version: 15,
     sql: "ALTER TABLE monster_instances ADD COLUMN restored_seq INTEGER;",
   },
+  {
+    // The id of the encounter a change-log event changed. NULL: the row was
+    // written before this migration, so it has no recorded encounter.
+    version: 16,
+    sql: "ALTER TABLE encounter_events ADD COLUMN encounter_id TEXT;",
+  },
+  {
+    // Encounters become named and are bound to scenes. Existing encounters are
+    // discarded with their instances and undo records (children first); the
+    // change-log rows stay, with their seqs and no encounter, so seq never goes
+    // backwards. Maps, rooms and token art are kept. SQLite cannot add a NOT
+    // NULL column without a default, so a CHECK rejects NULL and the empty
+    // name. Names are unique ignoring (ASCII) case.
+    version: 17,
+    sql: `
+      DELETE FROM undo_instances;
+      DELETE FROM undo_commands;
+      DELETE FROM monster_instances;
+      DELETE FROM encounters;
+      UPDATE encounter_events SET encounter_id = NULL;
+      ALTER TABLE encounters ADD COLUMN name TEXT CHECK (name IS NOT NULL AND length(name) > 0);
+      CREATE UNIQUE INDEX encounters_name ON encounters (name COLLATE NOCASE);
+    `,
+  },
+  {
+    // Each encounter records the map it uses; deleting the registration sets
+    // it to NULL. Nothing is copied: every encounter starts with no map. The
+    // registrations' global active flag and its unique index are dropped, as
+    // nothing reads them; registrations and their rooms are kept.
+    version: 18,
+    sql: `
+      ALTER TABLE encounters ADD COLUMN map_item_id TEXT REFERENCES map_registrations (item_id) ON DELETE SET NULL;
+      DROP INDEX map_registrations_one_active;
+      ALTER TABLE map_registrations DROP COLUMN active;
+    `,
+  },
+  {
+    // Each encounter records the scene bound to it; the unique index lets a
+    // scene bind at most one encounter (SQLite NULLs are distinct, so any
+    // number stay unbound; SQLite cannot ADD COLUMN with UNIQUE). The open
+    // scene is one row or none; its scene id may be bound to no encounter.
+    // Nothing is copied: no encounter is bound and no scene is open. No room
+    // id is stored.
+    version: 19,
+    sql: `
+      ALTER TABLE encounters ADD COLUMN scene_id TEXT;
+      CREATE UNIQUE INDEX encounters_scene ON encounters (scene_id);
+      CREATE TABLE open_scene (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        scene_id TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

@@ -8,6 +8,7 @@ import type {
 
 interface EventRow {
   seq: number;
+  encounter_id: string | null;
   event: string;
 }
 
@@ -29,13 +30,14 @@ export class SqliteEncounterLog implements EncounterLog {
   eventsSince(seq: number): (LoggedEvent | UnreadableLogEntry)[] {
     const rows = this.db
       .prepare(
-        "SELECT seq, event FROM encounter_events WHERE seq > ? ORDER BY seq",
+        "SELECT seq, encounter_id, event FROM encounter_events WHERE seq > ? ORDER BY seq",
       )
       .all(seq) as unknown as EventRow[];
     return rows.map((row): LoggedEvent | UnreadableLogEntry => {
       try {
         return {
           seq: row.seq,
+          encounterId: row.encounter_id,
           event: encounterEventSchema.parse(JSON.parse(row.event)),
         };
       } catch (e) {

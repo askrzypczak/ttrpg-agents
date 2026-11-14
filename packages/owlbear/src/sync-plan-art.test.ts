@@ -54,6 +54,7 @@ const ctx = (
 ) => ({
   viewportCenter: center,
   placed: new Set(placed),
+  encounterId: "e1",
   art,
 });
 
@@ -67,10 +68,10 @@ const circleToken = (n: number): SceneItem => ({
   layer: "CHARACTER",
   shape: { shapeType: "CIRCLE", width: 150, height: 150 },
   metadata: {
-    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
     [STAT_BUBBLES_METADATA_KEY]: { health: 16, "max health": 16, hide: true },
     [SYNCED_METADATA_KEY]: {
-      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
       [STAT_BUBBLES_METADATA_KEY]: {
         health: 16,
         "max health": 16,

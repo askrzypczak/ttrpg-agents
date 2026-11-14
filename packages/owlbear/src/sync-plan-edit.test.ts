@@ -31,6 +31,7 @@ const plan = (
   planSync(desired, observed, defaultSyncConfig, {
     viewportCenter: { x: 0, y: 0 },
     placed: new Set(["i1"]),
+    encounterId: "e1",
     art: {},
     ...(snapshot ? { snapshot } : {}),
     ...(fields ? { fields: new Map([["i1", fields]]) } : {}),
@@ -56,6 +57,7 @@ function editedToken(
   const [created] = planSync([instance], [], defaultSyncConfig, {
     viewportCenter: { x: 0, y: 0 },
     placed: new Set(),
+    encounterId: "e1",
     art: {},
   }).add;
   const token = structuredClone(created!);
