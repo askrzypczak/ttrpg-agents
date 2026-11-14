@@ -77,7 +77,8 @@ export function createBridgeClient(options: {
 
 /**
  * Driven adapter for the engine's `TablePort`, over `client`. `sceneStatus` sends `scene-status` and returns the
- * scene counts and the room id (when the tab reports one); `sceneMap` sends
+ * scene counts and the room id, scene id, held encounter and unmanaged token
+ * count (each when the tab reports it); `sceneMap` sends
  * `scene-map` and returns the scene grid and map items; `sceneTokens` sends
  * `scene-tokens` and returns each token's bounds; `mapImage` sends `map-image`
  * with the item id and returns the gridded map image. For any of them, a
@@ -93,14 +94,25 @@ export function createBridgeTable(client: BridgeClient): TablePort {
         throw new TableUnavailableError(
           `the table answered "${res.result.name}" to a "scene-status" query`,
         );
-      const { sceneReady, tokenCount, appliedInstanceCount, artWaits, roomId } =
-        res.result.result;
+      const {
+        sceneReady,
+        tokenCount,
+        appliedInstanceCount,
+        artWaits,
+        roomId,
+        sceneId,
+        heldEncounterId,
+        unmanagedTokenCount,
+      } = res.result.result;
       return {
         sceneReady,
         tokenCount,
         appliedInstanceCount,
         artWaits,
         ...(roomId !== undefined ? { roomId } : {}),
+        ...(sceneId !== undefined ? { sceneId } : {}),
+        ...(heldEncounterId !== undefined ? { heldEncounterId } : {}),
+        ...(unmanagedTokenCount !== undefined ? { unmanagedTokenCount } : {}),
       };
     },
     async sceneMap() {

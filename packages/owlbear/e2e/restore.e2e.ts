@@ -6,7 +6,12 @@ import {
 } from "@ttrpg-agents/store-sqlite";
 import { dirname } from "node:path";
 import type { SceneItem } from "../src/scene-model.js";
-import { E2E_ENCOUNTER_ID, SHADOW_IDS, seedE2eTokenArt } from "./db.js";
+import {
+  E2E_ENCOUNTER_ID,
+  E2E_SCENE_ID,
+  SHADOW_IDS,
+  seedE2eTokenArt,
+} from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems } from "./helpers.js";
 
@@ -252,6 +257,9 @@ test.describe("restoring a cleared encounter", () => {
             { monsterKey: "shadow", monsterName: "Shadow", step: "reupload" },
           ],
           roomId: "e2e-room",
+          sceneId: E2E_SCENE_ID,
+          heldEncounterId: E2E_ENCOUNTER_ID,
+          unmanagedTokenCount: 0,
         },
       },
     });

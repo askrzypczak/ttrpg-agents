@@ -1,5 +1,6 @@
 import { test, expect, openHarness } from "./fixtures.js";
 import { readItems } from "./helpers.js";
+import { E2E_ENCOUNTER_ID, E2E_SCENE_ID } from "./db.js";
 
 test.describe("agent query -> bridge -> extension", () => {
   test("POST `scene-status` to the worker bridge with the agent token returns the real extension's counts and room id", async ({
@@ -41,6 +42,9 @@ test.describe("agent query -> bridge -> extension", () => {
             appliedInstanceCount: 5,
             artWaits: [],
             roomId: "e2e-room",
+            sceneId: E2E_SCENE_ID,
+            heldEncounterId: E2E_ENCOUNTER_ID,
+            unmanagedTokenCount: 0,
           },
         },
       },
