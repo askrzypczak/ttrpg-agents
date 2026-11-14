@@ -61,6 +61,9 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
+  // A scene bound to the encounter is open, so replies name no encounter.
+  ctx.encounters.setOpenScene("scene-1");
+  resolveEncounter(ctx.encounters, { writes: true });
 });
 
 async function call(name: string, args: unknown): Promise<ToolResult> {
@@ -146,6 +149,7 @@ describe("split_initiative", () => {
         .map((i) => i.initiative),
     ).toEqual([14, null, 14]);
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: text(r),
       instances: [
         { ...view(after1), before: 14 },
@@ -223,6 +227,7 @@ describe("merge_initiative", () => {
       ["Wolf 3", 14, "pack"],
     ]);
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: text(r),
       instances: [
         { ...view(find("Goblin Warrior 1")), before: 12 },

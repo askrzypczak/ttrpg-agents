@@ -57,6 +57,9 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   remove_rooms: { destructiveHint: true },
   get_map_image: { readOnlyHint: true },
   propose_rooms: { readOnlyHint: true },
+  list_encounters: { readOnlyHint: true },
+  rename_encounter: { destructiveHint: true },
+  use_encounter: { destructiveHint: false },
 };
 
 let cleanup: (() => Promise<void>)[] = [];

@@ -133,6 +133,8 @@ beforeEach(() => {
   const directory = new SqliteEncounterDirectory(openDatabase(":memory:"), {
     now: () => tick++,
   });
+  // A scene bound to the encounter is open, so replies name no encounter.
+  directory.setOpenScene("scene-1");
   directory
     .mapRepositoryFor(
       resolveEncounter(directory, { writes: true }).encounter.id,
@@ -654,6 +656,7 @@ describe("undo", () => {
       "Nothing to undo. The last clear_encounter can be brought back with restore_encounter.",
     );
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       undone: null,
       notCovered: null,
       changes: [],

@@ -46,6 +46,9 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
+  // A scene bound to the encounter is open, so replies name no encounter.
+  ctx.encounters.setOpenScene("scene-1");
+  resolveEncounter(ctx.encounters, { writes: true });
 });
 
 async function call(name: string, args: unknown = {}): Promise<ToolResult> {
@@ -148,6 +151,7 @@ describe("clear_encounter", () => {
       "The encounter is already empty; nothing was cleared.",
     );
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: "The encounter is already empty; nothing was cleared.",
       removed: 0,
       cleared: [],

@@ -73,6 +73,7 @@ describe("use_map", () => {
     expect(text(r)).toContain("A-AF");
     expect(text(r)).toContain("1-24");
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: text(r),
       itemId: "map-1",
       name: "Trollskull Manor",

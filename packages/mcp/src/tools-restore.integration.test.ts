@@ -46,6 +46,9 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
+  // A scene bound to the encounter is open, so replies name no encounter.
+  ctx.encounters.setOpenScene("scene-1");
+  resolveEncounter(ctx.encounters, { writes: true });
 });
 
 async function call(name: string, args: unknown = {}): Promise<ToolResult> {
@@ -113,6 +116,7 @@ describe("restore_monsters", () => {
       "Restored 2: Wolf 2 (5/11 HP), Goblin Warrior 4 (7/7 HP, was Goblin Warrior 1)",
     );
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: text(r),
       restored: [
         {

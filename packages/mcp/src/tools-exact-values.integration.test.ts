@@ -39,6 +39,9 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
+  // A scene bound to the encounter is open, so replies name no encounter.
+  ctx.encounters.setOpenScene("scene-1");
+  resolveEncounter(ctx.encounters, { writes: true });
 });
 
 async function call(name: string, args: unknown): Promise<ToolResult> {
@@ -153,6 +156,7 @@ describe("set_hp", () => {
     expect(text(r)).toBe("Shadow 1: HP 9 -> 4/9");
     expect(repoOf(ctx).listInstances()[0]?.currentHp).toBe(4);
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: "Shadow 1: HP 9 -> 4/9",
       instance: { ...view(shadow), hp: 4 },
       before: view(shadow),
@@ -198,6 +202,7 @@ describe("set_hp", () => {
       "Shadow 1: HP 6 -> 10/10 (asked 25, lowered to max HP 10)",
     );
     expect(lowered.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: "Shadow 1: HP 6 -> 10/10 (asked 25, lowered to max HP 10)",
       instance: { ...view(shadow), hp: 10 },
       before: { ...view(shadow), hp: 6 },
@@ -226,6 +231,7 @@ describe("set_max_hp", () => {
     expect(text(r)).toBe("Wolf 1: max HP 20 -> 12, HP 20 -> 12/12");
     expect(stored()).toEqual([["Wolf 1", 12, 12, null]]);
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: "Wolf 1: max HP 20 -> 12, HP 20 -> 12/12",
       instance: { ...view(wolf), hp: 12, maxHp: 12 },
       before: view(wolf),
@@ -336,6 +342,7 @@ describe("reset_max_hp", () => {
     });
 
     expect(average.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: text(average),
       instances: [
         { ...view(full), hp: 27, maxHp: 27 },
@@ -373,6 +380,7 @@ describe("set_armor_class", () => {
     expect(text(r)).toBe("Shadow 1: AC 12 -> 15");
     expect(repoOf(ctx).listInstances()[0]?.armorClass).toBe(15);
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: "Shadow 1: AC 12 -> 15",
       instance: { ...view(shadow), armorClass: 15 },
       armorClass: 15,

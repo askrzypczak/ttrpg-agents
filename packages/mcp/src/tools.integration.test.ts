@@ -66,6 +66,9 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
+  // A scene bound to the encounter is open, so replies name no encounter.
+  ctx.encounters.setOpenScene("scene-1");
+  resolveEncounter(ctx.encounters, { writes: true });
 });
 
 async function call(name: string, args: unknown = {}): Promise<ToolResult> {
