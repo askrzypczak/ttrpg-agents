@@ -11,6 +11,7 @@ import {
   type ResetMaxHpDeps,
   type UnreadableLogEntry,
   resolveEncounter,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
@@ -23,9 +24,9 @@ const origin: ChangeOrigin = { source: "mcp", commandId: "reset" };
 
 const WOLF = "srd-2024_wolf";
 const GOBLIN = "srd-2024_goblin-warrior";
-const monsters = loadSrdMonsters();
-const wolf = monsters.byKey.get(WOLF);
-const goblin = monsters.byKey.get(GOBLIN);
+const monsters = staticMonsterIndex(loadSrdMonsters());
+const wolf = monsters.get(WOLF);
+const goblin = monsters.get(GOBLIN);
 if (!wolf || !goblin) throw new Error("SRD fixtures missing");
 
 const NOW = "2026-01-01T00:00:00.000Z";

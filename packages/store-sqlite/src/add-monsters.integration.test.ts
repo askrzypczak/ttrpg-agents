@@ -16,7 +16,9 @@ import {
   type Rng,
   type ChangeOrigin,
   resolveEncounter,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
+import { makeTestMonsterIndex } from "@ttrpg-agents/engine/testing";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
 import { SqliteEncounterDirectory } from "./sqlite-directory.js";
@@ -27,10 +29,10 @@ const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 const SHADOW = "srd-2024_shadow";
 const GOBLIN = "srd-2024_goblin-warrior";
 const OGRE = "srd-2024_ogre";
-const monsters = loadSrdMonsters();
-const shadow = monsters.byKey.get(SHADOW);
-const goblin = monsters.byKey.get(GOBLIN);
-const ogre = monsters.byKey.get(OGRE);
+const monsters = staticMonsterIndex(loadSrdMonsters());
+const shadow = monsters.get(SHADOW);
+const goblin = monsters.get(GOBLIN);
+const ogre = monsters.get(OGRE);
 if (!shadow || !goblin || !ogre) throw new Error("SRD fixtures missing");
 const zeroRng: Rng = { nextInt: () => 0 };
 
@@ -321,12 +323,7 @@ describe("addMonsters", () => {
       name: "Weakling",
       hp: { ...shadow.hp, dice: "1d4-5", average: 1 },
     };
-    const index = {
-      monsters: [weak],
-      byKey: new Map([[weak.key, weak]]),
-      aliases: new Map(),
-      dndBeyondPages: new Map(),
-    };
+    const index = makeTestMonsterIndex([weak]);
     const rng: Rng = { nextInt: () => 0 }; // every die shows its minimum (1)
     const { instances, rolls } = addMonsters(
       deps({ monsters: index, rng }),

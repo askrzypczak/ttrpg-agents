@@ -15,7 +15,7 @@ export function getMonsterByKey(
   index: MonsterIndex,
   key: string,
 ): Monster | undefined {
-  return index.byKey.get(key);
+  return index.get(key);
 }
 
 /** The query plus singular forms of its last word (ghouls, harpies, ogres). */
@@ -84,13 +84,13 @@ export function searchMonsters(
   if (q === "") return [];
   const variants = queryVariants(q);
   const aliasesByKey = new Map<string, string[]>();
-  for (const [alias, key] of index.aliases) {
+  for (const [alias, key] of index.aliases()) {
     const list = aliasesByKey.get(key) ?? [];
     list.push(alias);
     aliasesByKey.set(key, list);
   }
   const scored: { match: MonsterMatch; rank: number; viaAlias: boolean }[] = [];
-  for (const monster of index.monsters) {
+  for (const monster of index.list()) {
     const nameRank = bestScore(monster.name.toLowerCase(), variants);
     let bestAlias: { alias: string; rank: number } | undefined;
     for (const alias of aliasesByKey.get(monster.key) ?? []) {

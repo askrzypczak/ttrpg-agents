@@ -194,7 +194,7 @@ async function pickRoomBlocks(
   const dpi = live.placement.sceneDpi;
   const occupied = tokens.tokens.flatMap((t) => cellsUnderBounds(t, dpi));
   const footprints = groups.map((g) => {
-    const monster = deps.monsters.byKey.get(g.monster);
+    const monster = deps.monsters.get(g.monster);
     return monster === undefined ? 1 : footprintForSize(monster.size);
   });
   const order = groups

@@ -15,7 +15,7 @@ describe("mapOpen5eCreature", () => {
     expect(m).toMatchObject({
       key: "srd-2024_shadow",
       name: "Shadow",
-      source: "srd-5.2",
+      source: { book: "srd-5.2" },
       size: "medium",
       type: "undead",
       alignment: "chaotic evil",

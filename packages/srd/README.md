@@ -1,11 +1,11 @@
 # @ttrpg-agents/srd
 
-SRD 5.2 monster data adapter: the committed snapshot, its loader and the import script. Implements the `MonsterIndex` port from `@ttrpg-agents/engine`.
+SRD 5.2 monster data adapter: the committed snapshot, its loader and the import script. It loads the built-in `MonsterSet`, which the engine's `staticMonsterIndex` serves through the `MonsterIndex` port.
 
 ## Monsters
 
 - `src/map-open5e.ts`: pure mapper from an Open5e v2 creature to `Monster`.
-- `src/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadAliases(file, index)` adds the alias file's entries (see Aliases). `loadDndBeyondPages(file, index)` adds the D&D Beyond page file's entries (see D&D Beyond pages). `loadSrdMonsters()` loads the committed snapshot with its aliases and pages. A private source can be added later by passing another `{ path }`.
+- `src/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadAliases(file, set)` adds the alias file's entries (see Aliases). `loadDndBeyondPages(file, set)` adds the D&D Beyond page file's entries (see D&D Beyond pages). `loadSrdMonsters()` loads the committed snapshot with its aliases and pages. The loaders return a `MonsterSet`.
 
 ## SRD 5.2 data
 

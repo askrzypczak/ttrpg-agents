@@ -4,9 +4,10 @@ The domain engine: dice, monster schema and search, encounter events, map geomet
 
 ## Monsters
 
-- `src/monsters/schema.ts`: zod schema and the `Monster` type.
+- `src/monsters/types.ts`: the `MonsterIndex` read port (`get`, `list`, `aliases`, `dndBeyondPage`), the built-in `MonsterSet`, and `staticMonsterIndex(set)`, which serves a set through the port.
+- `src/monsters/schema.ts`: zod schema and the `Monster` type, whose `source` is `{ book, page? }` (a lower-case book tag, such as the SRD's `srd-5.2`).
 - `src/monsters/search.ts`: `searchMonsters(index, query)` (case-insensitive, plural-tolerant, ranked; also matches aliases, marked as alias hits) and `getMonsterByKey`.
-- `src/monsters/dndbeyond.ts`: `dndBeyondUrl(index, monster)`, the monster's D&D Beyond 2024 page URL from `MonsterIndex.dndBeyondPages`, or undefined when it has none.
+- `src/monsters/dndbeyond.ts`: `dndBeyondUrl(index, monster)`, the monster's D&D Beyond 2024 page URL from `MonsterIndex.dndBeyondPage(key)`, or undefined when it has none.
 - `src/monsters/footprint.ts`: `footprintForSize(size)`, the grid cells per side a token of a size category spans (small and medium 1, large 2, huge 3, gargantuan 4, anything else 1). `addMonsters` stores it on each new instance as `footprint`.
 - `src/monsters/check.ts`: `checkMonster(monster)` reads a statblock's entries and checks its numbers. It returns a report per entry (the attack, the saving throws, the spell save DC and spell attack bonus, every dice expression, and whether the entry rolls; Multiattack never does) and findings, which are warnings that carry the printed value and every value the engine accepts: `damage_average`, `attack_bonus`, `save_dc`, `spell_save_dc`, `spell_attack_bonus`, `save_modifier` and `initiative`. It reads the 2024 wording; other wording stays text, so only its dice are listed and only its printed dice averages are checked. The proficiency bonus comes from the challenge rating (`proficiency.ts`). It is pure and never throws on entry text.
 
@@ -24,7 +25,7 @@ Each instance carries `spawnPosition`: where a new token for it is created, in s
 
 ## Test data
 
-`@ttrpg-agents/engine/testing` (`src/testing/index.ts`) exports `makeTestInstance`, a full `MonsterInstance` for tests. It is test data only; production code must not import it (lint-enforced).
+`@ttrpg-agents/engine/testing` (`src/testing/index.ts`) exports `makeTestInstance`, a full `MonsterInstance` for tests, and `makeTestMonsterIndex`, a `MonsterIndex` over given monsters, aliases and D&D Beyond pages. It is test data only; production code must not import it (lint-enforced).
 
 ## Map
 

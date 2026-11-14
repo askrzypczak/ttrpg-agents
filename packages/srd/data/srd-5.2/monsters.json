@@ -2,7 +2,9 @@
   {
     "key": "srd-2024_aboleth",
     "name": "Aboleth",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "aberration",
     "alignment": "lawful evil",
@@ -111,7 +113,9 @@
   {
     "key": "srd-2024_adult-black-dragon",
     "name": "Adult Black Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -217,7 +221,9 @@
   {
     "key": "srd-2024_adult-blue-dragon",
     "name": "Adult Blue Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "lawful evil",
@@ -319,7 +325,9 @@
   {
     "key": "srd-2024_adult-brass-dragon",
     "name": "Adult Brass Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "chaotic good",
@@ -427,7 +435,9 @@
   {
     "key": "srd-2024_adult-bronze-dragon",
     "name": "Adult Bronze Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "lawful good",
@@ -538,7 +548,9 @@
   {
     "key": "srd-2024_adult-copper-dragon",
     "name": "Adult Copper Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "chaotic good",
@@ -645,7 +657,9 @@
   {
     "key": "srd-2024_adult-gold-dragon",
     "name": "Adult Gold Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "lawful good",
@@ -757,7 +771,9 @@
   {
     "key": "srd-2024_adult-green-dragon",
     "name": "Adult Green Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "lawful evil",
@@ -867,7 +883,9 @@
   {
     "key": "srd-2024_adult-red-dragon",
     "name": "Adult Red Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -969,7 +987,9 @@
   {
     "key": "srd-2024_adult-silver-dragon",
     "name": "Adult Silver Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "lawful good",
@@ -1075,7 +1095,9 @@
   {
     "key": "srd-2024_adult-white-dragon",
     "name": "Adult White Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -1178,7 +1200,9 @@
   {
     "key": "srd-2024_air-elemental",
     "name": "Air Elemental",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "elemental",
     "alignment": "neutral",
@@ -1268,7 +1292,9 @@
   {
     "key": "srd-2024_allosaurus",
     "name": "Allosaurus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -1330,7 +1356,9 @@
   {
     "key": "srd-2024_ancient-black-dragon",
     "name": "Ancient Black Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -1436,7 +1464,9 @@
   {
     "key": "srd-2024_ancient-blue-dragon",
     "name": "Ancient Blue Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "lawful evil",
@@ -1538,7 +1568,9 @@
   {
     "key": "srd-2024_ancient-brass-dragon",
     "name": "Ancient Brass Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "chaotic good",
@@ -1646,7 +1678,9 @@
   {
     "key": "srd-2024_ancient-bronze-dragon",
     "name": "Ancient Bronze Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "lawful good",
@@ -1757,7 +1791,9 @@
   {
     "key": "srd-2024_ancient-copper-dragon",
     "name": "Ancient Copper Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "chaotic good",
@@ -1864,7 +1900,9 @@
   {
     "key": "srd-2024_ancient-gold-dragon",
     "name": "Ancient Gold Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "lawful good",
@@ -1976,7 +2014,9 @@
   {
     "key": "srd-2024_ancient-green-dragon",
     "name": "Ancient Green Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "lawful evil",
@@ -2086,7 +2126,9 @@
   {
     "key": "srd-2024_ancient-red-dragon",
     "name": "Ancient Red Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -2188,7 +2230,9 @@
   {
     "key": "srd-2024_ancient-silver-dragon",
     "name": "Ancient Silver Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "lawful good",
@@ -2294,7 +2338,9 @@
   {
     "key": "srd-2024_ancient-white-dragon",
     "name": "Ancient White Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -2397,7 +2443,9 @@
   {
     "key": "srd-2024_animated-armor",
     "name": "Animated Armor",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "construct",
     "alignment": "unaligned",
@@ -2469,7 +2517,9 @@
   {
     "key": "srd-2024_animated-flying-sword",
     "name": "Animated Flying Sword",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "construct",
     "alignment": "unaligned",
@@ -2539,7 +2589,9 @@
   {
     "key": "srd-2024_animated-rug-of-smothering",
     "name": "Animated Rug of Smothering",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "construct",
     "alignment": "unaligned",
@@ -2607,7 +2659,9 @@
   {
     "key": "srd-2024_ankheg",
     "name": "Ankheg",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -2679,7 +2733,9 @@
   {
     "key": "srd-2024_ankylosaurus",
     "name": "Ankylosaurus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -2739,7 +2795,9 @@
   {
     "key": "srd-2024_ape",
     "name": "Ape",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -2811,7 +2869,9 @@
   {
     "key": "srd-2024_archelon",
     "name": "Archelon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -2879,7 +2939,9 @@
   {
     "key": "srd-2024_archmage",
     "name": "Archmage",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -2974,7 +3036,9 @@
   {
     "key": "srd-2024_assassin",
     "name": "Assassin",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -3054,7 +3118,9 @@
   {
     "key": "srd-2024_awakened-shrub",
     "name": "Awakened Shrub",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "plant",
     "alignment": "neutral",
@@ -3110,7 +3176,9 @@
   {
     "key": "srd-2024_awakened-tree",
     "name": "Awakened Tree",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "plant",
     "alignment": "neutral",
@@ -3166,7 +3234,9 @@
   {
     "key": "srd-2024_axe-beak",
     "name": "Axe Beak",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -3222,7 +3292,9 @@
   {
     "key": "srd-2024_azer-sentinel",
     "name": "Azer Sentinel",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "elemental",
     "alignment": "lawful neutral",
@@ -3292,7 +3364,9 @@
   {
     "key": "srd-2024_baboon",
     "name": "Baboon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -3354,7 +3428,9 @@
   {
     "key": "srd-2024_badger",
     "name": "Badger",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -3416,7 +3492,9 @@
   {
     "key": "srd-2024_balor",
     "name": "Balor",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -3516,7 +3594,9 @@
   {
     "key": "srd-2024_bandit",
     "name": "Bandit",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -3576,7 +3656,9 @@
   {
     "key": "srd-2024_bandit-captain",
     "name": "Bandit Captain",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -3648,7 +3730,9 @@
   {
     "key": "srd-2024_barbed-devil",
     "name": "Barbed Devil",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -3742,7 +3826,9 @@
   {
     "key": "srd-2024_basilisk",
     "name": "Basilisk",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -3808,7 +3894,9 @@
   {
     "key": "srd-2024_bat",
     "name": "Bat",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -3866,7 +3954,9 @@
   {
     "key": "srd-2024_bearded-devil",
     "name": "Bearded Devil",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -3944,7 +4034,9 @@
   {
     "key": "srd-2024_behir",
     "name": "Behir",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "monstrosity",
     "alignment": "neutral evil",
@@ -4028,7 +4120,9 @@
   {
     "key": "srd-2024_berserker",
     "name": "Berserker",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -4089,7 +4183,9 @@
   {
     "key": "srd-2024_black-bear",
     "name": "Black Bear",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -4154,7 +4250,9 @@
   {
     "key": "srd-2024_black-dragon-wyrmling",
     "name": "Black Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -4236,7 +4334,9 @@
   {
     "key": "srd-2024_black-pudding",
     "name": "Black Pudding",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "ooze",
     "alignment": "unaligned",
@@ -4324,7 +4424,9 @@
   {
     "key": "srd-2024_blink-dog",
     "name": "Blink Dog",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "lawful good",
@@ -4393,7 +4495,9 @@
   {
     "key": "srd-2024_blood-hawk",
     "name": "Blood Hawk",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -4457,7 +4561,9 @@
   {
     "key": "srd-2024_blue-dragon-wyrmling",
     "name": "Blue Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "lawful evil",
@@ -4534,7 +4640,9 @@
   {
     "key": "srd-2024_boar",
     "name": "Boar",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -4595,7 +4703,9 @@
   {
     "key": "srd-2024_bone-devil",
     "name": "Bone Devil",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -4680,7 +4790,9 @@
   {
     "key": "srd-2024_brass-dragon-wyrmling",
     "name": "Brass Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "chaotic good",
@@ -4757,7 +4869,9 @@
   {
     "key": "srd-2024_bronze-dragon-wyrmling",
     "name": "Bronze Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "lawful good",
@@ -4843,7 +4957,9 @@
   {
     "key": "srd-2024_brown-bear",
     "name": "Brown Bear",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -4911,7 +5027,9 @@
   {
     "key": "srd-2024_bugbear-stalker",
     "name": "Bugbear Stalker",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "chaotic evil",
@@ -4989,7 +5107,9 @@
   {
     "key": "srd-2024_bugbear-warrior",
     "name": "Bugbear Warrior",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "chaotic evil",
@@ -5058,7 +5178,9 @@
   {
     "key": "srd-2024_bulette",
     "name": "Bulette",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -5132,7 +5254,9 @@
   {
     "key": "srd-2024_camel",
     "name": "Camel",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -5189,7 +5313,9 @@
   {
     "key": "srd-2024_cat",
     "name": "Cat",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -5255,7 +5381,9 @@
   {
     "key": "srd-2024_centaur-trooper",
     "name": "Centaur Trooper",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fey",
     "alignment": "neutral good",
@@ -5331,7 +5459,9 @@
   {
     "key": "srd-2024_chain-devil",
     "name": "Chain Devil",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -5417,7 +5547,9 @@
   {
     "key": "srd-2024_chimera",
     "name": "Chimera",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "chaotic evil",
@@ -5497,7 +5629,9 @@
   {
     "key": "srd-2024_chuul",
     "name": "Chuul",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "aberration",
     "alignment": "chaotic evil",
@@ -5578,7 +5712,9 @@
   {
     "key": "srd-2024_clay-golem",
     "name": "Clay Golem",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "construct",
     "alignment": "unaligned",
@@ -5676,7 +5812,9 @@
   {
     "key": "srd-2024_cloaker",
     "name": "Cloaker",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "aberration",
     "alignment": "chaotic neutral",
@@ -5758,7 +5896,9 @@
   {
     "key": "srd-2024_cloud-giant",
     "name": "Cloud Giant",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "giant",
     "alignment": "neutral",
@@ -5836,7 +5976,9 @@
   {
     "key": "srd-2024_cockatrice",
     "name": "Cockatrice",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -5894,7 +6036,9 @@
   {
     "key": "srd-2024_commoner",
     "name": "Commoner",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -5955,7 +6099,9 @@
   {
     "key": "srd-2024_constrictor-snake",
     "name": "Constrictor Snake",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -6020,7 +6166,9 @@
   {
     "key": "srd-2024_copper-dragon-wyrmling",
     "name": "Copper Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "chaotic good",
@@ -6097,7 +6245,9 @@
   {
     "key": "srd-2024_couatl",
     "name": "Couatl",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "celestial",
     "alignment": "lawful good",
@@ -6180,7 +6330,9 @@
   {
     "key": "srd-2024_crab",
     "name": "Crab",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -6245,7 +6397,9 @@
   {
     "key": "srd-2024_crocodile",
     "name": "Crocodile",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -6309,7 +6463,9 @@
   {
     "key": "srd-2024_cultist",
     "name": "Cultist",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -6368,7 +6524,9 @@
   {
     "key": "srd-2024_cultist-fanatic",
     "name": "Cultist Fanatic",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -6441,7 +6599,9 @@
   {
     "key": "srd-2024_darkmantle",
     "name": "Darkmantle",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "aberration",
     "alignment": "unaligned",
@@ -6509,7 +6669,9 @@
   {
     "key": "srd-2024_death-dog",
     "name": "Death Dog",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "neutral evil",
@@ -6573,7 +6735,9 @@
   {
     "key": "srd-2024_deer",
     "name": "Deer",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -6637,7 +6801,9 @@
   {
     "key": "srd-2024_deva",
     "name": "Deva",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "celestial",
     "alignment": "lawful good",
@@ -6727,7 +6893,9 @@
   {
     "key": "srd-2024_dire-wolf",
     "name": "Dire Wolf",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -6792,7 +6960,9 @@
   {
     "key": "srd-2024_djinni",
     "name": "Djinni",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "elemental",
     "alignment": "chaotic good",
@@ -6883,7 +7053,9 @@
   {
     "key": "srd-2024_doppelganger",
     "name": "Doppelganger",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "neutral",
@@ -6964,7 +7136,9 @@
   {
     "key": "srd-2024_draft-horse",
     "name": "Draft Horse",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -7020,7 +7194,9 @@
   {
     "key": "srd-2024_dragon-turtle",
     "name": "Dragon Turtle",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "dragon",
     "alignment": "neutral",
@@ -7101,7 +7277,9 @@
   {
     "key": "srd-2024_dretch",
     "name": "Dretch",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -7174,7 +7352,9 @@
   {
     "key": "srd-2024_drider",
     "name": "Drider",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "chaotic evil",
@@ -7265,7 +7445,9 @@
   {
     "key": "srd-2024_druid",
     "name": "Druid",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -7337,7 +7519,9 @@
   {
     "key": "srd-2024_dryad",
     "name": "Dryad",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "neutral",
@@ -7423,7 +7607,9 @@
   {
     "key": "srd-2024_dust-mephit",
     "name": "Dust Mephit",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "elemental",
     "alignment": "neutral evil",
@@ -7510,7 +7696,9 @@
   {
     "key": "srd-2024_eagle",
     "name": "Eagle",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -7569,7 +7757,9 @@
   {
     "key": "srd-2024_earth-elemental",
     "name": "Earth Elemental",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "elemental",
     "alignment": "neutral",
@@ -7653,7 +7843,9 @@
   {
     "key": "srd-2024_efreeti",
     "name": "Efreeti",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "elemental",
     "alignment": "neutral",
@@ -7739,7 +7931,9 @@
   {
     "key": "srd-2024_elephant",
     "name": "Elephant",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -7804,7 +7998,9 @@
   {
     "key": "srd-2024_elk",
     "name": "Elk",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -7863,7 +8059,9 @@
   {
     "key": "srd-2024_erinyes",
     "name": "Erinyes",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -7958,7 +8156,9 @@
   {
     "key": "srd-2024_ettercap",
     "name": "Ettercap",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "neutral evil",
@@ -8050,7 +8250,9 @@
   {
     "key": "srd-2024_ettin",
     "name": "Ettin",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "giant",
     "alignment": "chaotic evil",
@@ -8117,7 +8319,9 @@
   {
     "key": "srd-2024_fire-elemental",
     "name": "Fire Elemental",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "elemental",
     "alignment": "neutral",
@@ -8207,7 +8411,9 @@
   {
     "key": "srd-2024_fire-giant",
     "name": "Fire Giant",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "giant",
     "alignment": "lawful evil",
@@ -8276,7 +8482,9 @@
   {
     "key": "srd-2024_flesh-golem",
     "name": "Flesh Golem",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "construct",
     "alignment": "neutral",
@@ -8368,7 +8576,9 @@
   {
     "key": "srd-2024_flying-snake",
     "name": "Flying Snake",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -8432,7 +8642,9 @@
   {
     "key": "srd-2024_frog",
     "name": "Frog",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -8502,7 +8714,9 @@
   {
     "key": "srd-2024_frost-giant",
     "name": "Frost Giant",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "giant",
     "alignment": "neutral evil",
@@ -8580,7 +8794,9 @@
   {
     "key": "srd-2024_gargoyle",
     "name": "Gargoyle",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "elemental",
     "alignment": "chaotic evil",
@@ -8655,7 +8871,9 @@
   {
     "key": "srd-2024_gelatinous-cube",
     "name": "Gelatinous Cube",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "ooze",
     "alignment": "unaligned",
@@ -8734,7 +8952,9 @@
   {
     "key": "srd-2024_ghast",
     "name": "Ghast",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "chaotic evil",
@@ -8808,7 +9028,9 @@
   {
     "key": "srd-2024_ghost",
     "name": "Ghost",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "neutral",
@@ -8915,7 +9137,9 @@
   {
     "key": "srd-2024_ghoul",
     "name": "Ghoul",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "chaotic evil",
@@ -8986,7 +9210,9 @@
   {
     "key": "srd-2024_giant-ape",
     "name": "Giant Ape",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -9064,7 +9290,9 @@
   {
     "key": "srd-2024_giant-badger",
     "name": "Giant Badger",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -9126,7 +9354,9 @@
   {
     "key": "srd-2024_giant-bat",
     "name": "Giant Bat",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -9184,7 +9414,9 @@
   {
     "key": "srd-2024_giant-boar",
     "name": "Giant Boar",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -9245,7 +9477,9 @@
   {
     "key": "srd-2024_giant-centipede",
     "name": "Giant Centipede",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -9303,7 +9537,9 @@
   {
     "key": "srd-2024_giant-constrictor-snake",
     "name": "Giant Constrictor Snake",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -9371,7 +9607,9 @@
   {
     "key": "srd-2024_giant-crab",
     "name": "Giant Crab",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -9436,7 +9674,9 @@
   {
     "key": "srd-2024_giant-crocodile",
     "name": "Giant Crocodile",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -9508,7 +9748,9 @@
   {
     "key": "srd-2024_giant-eagle",
     "name": "Giant Eagle",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "neutral good",
@@ -9574,7 +9816,9 @@
   {
     "key": "srd-2024_giant-elk",
     "name": "Giant Elk",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "celestial",
     "alignment": "neutral good",
@@ -9636,7 +9880,9 @@
   {
     "key": "srd-2024_giant-fire-beetle",
     "name": "Giant Fire Beetle",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -9701,7 +9947,9 @@
   {
     "key": "srd-2024_giant-fly",
     "name": "Giant Fly",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -9754,7 +10002,9 @@
   {
     "key": "srd-2024_giant-frog",
     "name": "Giant Frog",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -9828,7 +10078,9 @@
   {
     "key": "srd-2024_giant-goat",
     "name": "Giant Goat",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -9888,7 +10140,9 @@
   {
     "key": "srd-2024_giant-hyena",
     "name": "Giant Hyena",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -9956,7 +10210,9 @@
   {
     "key": "srd-2024_giant-lizard",
     "name": "Giant Lizard",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -10019,7 +10275,9 @@
   {
     "key": "srd-2024_giant-octopus",
     "name": "Giant Octopus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -10094,7 +10352,9 @@
   {
     "key": "srd-2024_giant-owl",
     "name": "Giant Owl",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "neutral",
@@ -10167,7 +10427,9 @@
   {
     "key": "srd-2024_giant-rat",
     "name": "Giant Rat",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -10232,7 +10494,9 @@
   {
     "key": "srd-2024_giant-scorpion",
     "name": "Giant Scorpion",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -10297,7 +10561,9 @@
   {
     "key": "srd-2024_giant-seahorse",
     "name": "Giant Seahorse",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -10364,7 +10630,9 @@
   {
     "key": "srd-2024_giant-shark",
     "name": "Giant Shark",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -10433,7 +10701,9 @@
   {
     "key": "srd-2024_giant-spider",
     "name": "Giant Spider",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -10511,7 +10781,9 @@
   {
     "key": "srd-2024_giant-toad",
     "name": "Giant Toad",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -10582,7 +10854,9 @@
   {
     "key": "srd-2024_giant-venomous-snake",
     "name": "Giant Venomous Snake",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -10642,7 +10916,9 @@
   {
     "key": "srd-2024_giant-vulture",
     "name": "Giant Vulture",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "neutral evil",
@@ -10709,7 +10985,9 @@
   {
     "key": "srd-2024_giant-wasp",
     "name": "Giant Wasp",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -10771,7 +11049,9 @@
   {
     "key": "srd-2024_giant-weasel",
     "name": "Giant Weasel",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -10833,7 +11113,9 @@
   {
     "key": "srd-2024_giant-wolf-spider",
     "name": "Giant Wolf Spider",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -10900,7 +11182,9 @@
   {
     "key": "srd-2024_gibbering-mouther",
     "name": "Gibbering Mouther",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "aberration",
     "alignment": "chaotic neutral",
@@ -10975,7 +11259,9 @@
   {
     "key": "srd-2024_glabrezu",
     "name": "Glabrezu",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -11064,7 +11350,9 @@
   {
     "key": "srd-2024_gladiator",
     "name": "Gladiator",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -11136,7 +11424,9 @@
   {
     "key": "srd-2024_gnoll-warrior",
     "name": "Gnoll Warrior",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -11206,7 +11496,9 @@
   {
     "key": "srd-2024_goat",
     "name": "Goat",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -11266,7 +11558,9 @@
   {
     "key": "srd-2024_goblin-boss",
     "name": "Goblin Boss",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "fey",
     "alignment": "chaotic neutral",
@@ -11343,7 +11637,9 @@
   {
     "key": "srd-2024_goblin-minion",
     "name": "Goblin Minion",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "fey",
     "alignment": "chaotic neutral",
@@ -11407,7 +11703,9 @@
   {
     "key": "srd-2024_goblin-warrior",
     "name": "Goblin Warrior",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "fey",
     "alignment": "chaotic neutral",
@@ -11475,7 +11773,9 @@
   {
     "key": "srd-2024_gold-dragon-wyrmling",
     "name": "Gold Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "lawful good",
@@ -11561,7 +11861,9 @@
   {
     "key": "srd-2024_gorgon",
     "name": "Gorgon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "construct",
     "alignment": "unaligned",
@@ -11633,7 +11935,9 @@
   {
     "key": "srd-2024_gray-ooze",
     "name": "Gray Ooze",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "ooze",
     "alignment": "unaligned",
@@ -11706,7 +12010,9 @@
   {
     "key": "srd-2024_green-dragon-wyrmling",
     "name": "Green Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "lawful evil",
@@ -11790,7 +12096,9 @@
   {
     "key": "srd-2024_green-hag",
     "name": "Green Hag",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "neutral evil",
@@ -11870,7 +12178,9 @@
   {
     "key": "srd-2024_grick",
     "name": "Grick",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "aberration",
     "alignment": "unaligned",
@@ -11938,7 +12248,9 @@
   {
     "key": "srd-2024_griffon",
     "name": "Griffon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -12002,7 +12314,9 @@
   {
     "key": "srd-2024_grimlock",
     "name": "Grimlock",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "aberration",
     "alignment": "neutral evil",
@@ -12064,7 +12378,9 @@
   {
     "key": "srd-2024_guard",
     "name": "Guard",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -12122,7 +12438,9 @@
   {
     "key": "srd-2024_guard-captain",
     "name": "Guard Captain",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -12189,7 +12507,9 @@
   {
     "key": "srd-2024_guardian-naga",
     "name": "Guardian Naga",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "lawful good",
@@ -12276,7 +12596,9 @@
   {
     "key": "srd-2024_half-dragon",
     "name": "Half-Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "neutral",
@@ -12360,7 +12682,9 @@
   {
     "key": "srd-2024_harpy",
     "name": "Harpy",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "chaotic evil",
@@ -12421,7 +12745,9 @@
   {
     "key": "srd-2024_hawk",
     "name": "Hawk",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -12480,7 +12806,9 @@
   {
     "key": "srd-2024_hell-hound",
     "name": "Hell Hound",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -12558,7 +12886,9 @@
   {
     "key": "srd-2024_hezrou",
     "name": "Hezrou",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -12645,7 +12975,9 @@
   {
     "key": "srd-2024_hill-giant",
     "name": "Hill Giant",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "giant",
     "alignment": "chaotic evil",
@@ -12711,7 +13043,9 @@
   {
     "key": "srd-2024_hippogriff",
     "name": "Hippogriff",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -12779,7 +13113,9 @@
   {
     "key": "srd-2024_hippopotamus",
     "name": "Hippopotamus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -12847,7 +13183,9 @@
   {
     "key": "srd-2024_hobgoblin-captain",
     "name": "Hobgoblin Captain",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "lawful evil",
@@ -12917,7 +13255,9 @@
   {
     "key": "srd-2024_hobgoblin-warrior",
     "name": "Hobgoblin Warrior",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "lawful evil",
@@ -12983,7 +13323,9 @@
   {
     "key": "srd-2024_homunculus",
     "name": "Homunculus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "construct",
     "alignment": "neutral",
@@ -13051,7 +13393,9 @@
   {
     "key": "srd-2024_horned-devil",
     "name": "Horned Devil",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -13135,7 +13479,9 @@
   {
     "key": "srd-2024_hunter-shark",
     "name": "Hunter Shark",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -13200,7 +13546,9 @@
   {
     "key": "srd-2024_hydra",
     "name": "Hydra",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -13277,7 +13625,9 @@
   {
     "key": "srd-2024_hyena",
     "name": "Hyena",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -13341,7 +13691,9 @@
   {
     "key": "srd-2024_ice-devil",
     "name": "Ice Devil",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -13433,7 +13785,9 @@
   {
     "key": "srd-2024_ice-mephit",
     "name": "Ice Mephit",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "elemental",
     "alignment": "neutral evil",
@@ -13521,7 +13875,9 @@
   {
     "key": "srd-2024_imp",
     "name": "Imp",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -13603,7 +13959,9 @@
   {
     "key": "srd-2024_incubus",
     "name": "Incubus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "neutral evil",
@@ -13694,7 +14052,9 @@
   {
     "key": "srd-2024_invisible-stalker",
     "name": "Invisible Stalker",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "elemental",
     "alignment": "neutral",
@@ -13784,7 +14144,9 @@
   {
     "key": "srd-2024_iron-golem",
     "name": "Iron Golem",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "construct",
     "alignment": "unaligned",
@@ -13881,7 +14243,9 @@
   {
     "key": "srd-2024_jackal",
     "name": "Jackal",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -13941,7 +14305,9 @@
   {
     "key": "srd-2024_killer-whale",
     "name": "Killer Whale",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -14007,7 +14373,9 @@
   {
     "key": "srd-2024_knight",
     "name": "Knight",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -14076,7 +14444,9 @@
   {
     "key": "srd-2024_kobold-warrior",
     "name": "Kobold Warrior",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "dragon",
     "alignment": "neutral",
@@ -14142,7 +14512,9 @@
   {
     "key": "srd-2024_kraken",
     "name": "Kraken",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "monstrosity",
     "alignment": "chaotic evil",
@@ -14251,7 +14623,9 @@
   {
     "key": "srd-2024_lamia",
     "name": "Lamia",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -14329,7 +14703,9 @@
   {
     "key": "srd-2024_lemure",
     "name": "Lemure",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -14400,7 +14776,9 @@
   {
     "key": "srd-2024_lich",
     "name": "Lich",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "neutral evil",
@@ -14516,7 +14894,9 @@
   {
     "key": "srd-2024_lion",
     "name": "Lion",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -14593,7 +14973,9 @@
   {
     "key": "srd-2024_lizard",
     "name": "Lizard",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -14656,7 +15038,9 @@
   {
     "key": "srd-2024_mage",
     "name": "Mage",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -14742,7 +15126,9 @@
   {
     "key": "srd-2024_magma-mephit",
     "name": "Magma Mephit",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "elemental",
     "alignment": "neutral evil",
@@ -14821,7 +15207,9 @@
   {
     "key": "srd-2024_magmin",
     "name": "Magmin",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "elemental",
     "alignment": "chaotic neutral",
@@ -14890,7 +15278,9 @@
   {
     "key": "srd-2024_mammoth",
     "name": "Mammoth",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -14955,7 +15345,9 @@
   {
     "key": "srd-2024_manticore",
     "name": "Manticore",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "lawful evil",
@@ -15021,7 +15413,9 @@
   {
     "key": "srd-2024_marilith",
     "name": "Marilith",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -15124,7 +15518,9 @@
   {
     "key": "srd-2024_mastiff",
     "name": "Mastiff",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -15183,7 +15579,9 @@
   {
     "key": "srd-2024_medusa",
     "name": "Medusa",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "lawful evil",
@@ -15265,7 +15663,9 @@
   {
     "key": "srd-2024_merfolk-skirmisher",
     "name": "Merfolk Skirmisher",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "elemental",
     "alignment": "neutral",
@@ -15327,7 +15727,9 @@
   {
     "key": "srd-2024_merrow",
     "name": "Merrow",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "chaotic evil",
@@ -15402,7 +15804,9 @@
   {
     "key": "srd-2024_mimic",
     "name": "Mimic",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "neutral",
@@ -15479,7 +15883,9 @@
   {
     "key": "srd-2024_minotaur-of-baphomet",
     "name": "Minotaur of Baphomet",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "chaotic evil",
@@ -15547,7 +15953,9 @@
   {
     "key": "srd-2024_minotaur-skeleton",
     "name": "Minotaur Skeleton",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "undead",
     "alignment": "lawful evil",
@@ -15613,7 +16021,9 @@
   {
     "key": "srd-2024_mule",
     "name": "Mule",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -15674,7 +16084,9 @@
   {
     "key": "srd-2024_mummy",
     "name": "Mummy",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "undead",
     "alignment": "lawful evil",
@@ -15748,7 +16160,9 @@
   {
     "key": "srd-2024_mummy-lord",
     "name": "Mummy Lord",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "undead",
     "alignment": "lawful evil",
@@ -15868,7 +16282,9 @@
   {
     "key": "srd-2024_nalfeshnee",
     "name": "Nalfeshnee",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -15966,7 +16382,9 @@
   {
     "key": "srd-2024_night-hag",
     "name": "Night Hag",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "neutral evil",
@@ -16062,7 +16480,9 @@
   {
     "key": "srd-2024_nightmare",
     "name": "Nightmare",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "neutral evil",
@@ -16135,7 +16555,9 @@
   {
     "key": "srd-2024_noble",
     "name": "Noble",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -16200,7 +16622,9 @@
   {
     "key": "srd-2024_ochre-jelly",
     "name": "Ochre Jelly",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "ooze",
     "alignment": "unaligned",
@@ -16284,7 +16708,9 @@
   {
     "key": "srd-2024_octopus",
     "name": "Octopus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -16363,7 +16789,9 @@
   {
     "key": "srd-2024_ogre",
     "name": "Ogre",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "giant",
     "alignment": "chaotic evil",
@@ -16424,7 +16852,9 @@
   {
     "key": "srd-2024_ogre-zombie",
     "name": "Ogre Zombie",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "undead",
     "alignment": "neutral evil",
@@ -16491,7 +16921,9 @@
   {
     "key": "srd-2024_oni",
     "name": "Oni",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -16582,7 +17014,9 @@
   {
     "key": "srd-2024_otyugh",
     "name": "Otyugh",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "aberration",
     "alignment": "neutral",
@@ -16651,7 +17085,9 @@
   {
     "key": "srd-2024_owl",
     "name": "Owl",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -16717,7 +17153,9 @@
   {
     "key": "srd-2024_owlbear",
     "name": "Owlbear",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -16781,7 +17219,9 @@
   {
     "key": "srd-2024_panther",
     "name": "Panther",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -16847,7 +17287,9 @@
   {
     "key": "srd-2024_pegasus",
     "name": "Pegasus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "chaotic good",
@@ -16906,7 +17348,9 @@
   {
     "key": "srd-2024_phase-spider",
     "name": "Phase Spider",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -16988,7 +17432,9 @@
   {
     "key": "srd-2024_piranha",
     "name": "Piranha",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -17051,7 +17497,9 @@
   {
     "key": "srd-2024_pirate",
     "name": "Pirate",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -17115,7 +17563,9 @@
   {
     "key": "srd-2024_pirate-captain",
     "name": "Pirate Captain",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -17192,7 +17642,9 @@
   {
     "key": "srd-2024_pit-fiend",
     "name": "Pit Fiend",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -17297,7 +17749,9 @@
   {
     "key": "srd-2024_planetar",
     "name": "Planetar",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "lawful good",
@@ -17394,7 +17848,9 @@
   {
     "key": "srd-2024_plesiosaurus",
     "name": "Plesiosaurus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -17459,7 +17915,9 @@
   {
     "key": "srd-2024_polar-bear",
     "name": "Polar Bear",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -17526,7 +17984,9 @@
   {
     "key": "srd-2024_pony",
     "name": "Pony",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -17582,7 +18042,9 @@
   {
     "key": "srd-2024_priest",
     "name": "Priest",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -17663,7 +18125,9 @@
   {
     "key": "srd-2024_priest-acolyte",
     "name": "Priest Acolyte",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -17739,7 +18203,9 @@
   {
     "key": "srd-2024_pseudodragon",
     "name": "Pseudodragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "dragon",
     "alignment": "neutral good",
@@ -17814,7 +18280,9 @@
   {
     "key": "srd-2024_pteranodon",
     "name": "Pteranodon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -17878,7 +18346,9 @@
   {
     "key": "srd-2024_purple-worm",
     "name": "Purple Worm",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -17955,7 +18425,9 @@
   {
     "key": "srd-2024_quasit",
     "name": "Quasit",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -18043,7 +18515,9 @@
   {
     "key": "srd-2024_rakshasa",
     "name": "Rakshasa",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -18129,7 +18603,9 @@
   {
     "key": "srd-2024_rat",
     "name": "Rat",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -18194,7 +18670,9 @@
   {
     "key": "srd-2024_raven",
     "name": "Raven",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -18258,7 +18736,9 @@
   {
     "key": "srd-2024_red-dragon-wyrmling",
     "name": "Red Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -18335,7 +18815,9 @@
   {
     "key": "srd-2024_reef-shark",
     "name": "Reef Shark",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -18404,7 +18886,9 @@
   {
     "key": "srd-2024_remorhaz",
     "name": "Remorhaz",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -18476,7 +18960,9 @@
   {
     "key": "srd-2024_rhinoceros",
     "name": "Rhinoceros",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -18532,7 +19018,9 @@
   {
     "key": "srd-2024_riding-horse",
     "name": "Riding Horse",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -18588,7 +19076,9 @@
   {
     "key": "srd-2024_roc",
     "name": "Roc",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -18664,7 +19154,9 @@
   {
     "key": "srd-2024_roper",
     "name": "Roper",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "aberration",
     "alignment": "neutral evil",
@@ -18742,7 +19234,9 @@
   {
     "key": "srd-2024_rust-monster",
     "name": "Rust Monster",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -18821,7 +19315,9 @@
   {
     "key": "srd-2024_saber-toothed-tiger",
     "name": "Saber-Toothed Tiger",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -18895,7 +19391,9 @@
   {
     "key": "srd-2024_sahuagin-warrior",
     "name": "Sahuagin Warrior",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "lawful evil",
@@ -18980,7 +19478,9 @@
   {
     "key": "srd-2024_salamander",
     "name": "Salamander",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "elemental",
     "alignment": "neutral evil",
@@ -19053,7 +19553,9 @@
   {
     "key": "srd-2024_satyr",
     "name": "Satyr",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "chaotic neutral",
@@ -19122,7 +19624,9 @@
   {
     "key": "srd-2024_scorpion",
     "name": "Scorpion",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -19179,7 +19683,9 @@
   {
     "key": "srd-2024_scout",
     "name": "Scout",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -19248,7 +19754,9 @@
   {
     "key": "srd-2024_sea-hag",
     "name": "Sea Hag",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fey",
     "alignment": "chaotic evil",
@@ -19327,7 +19835,9 @@
   {
     "key": "srd-2024_seahorse",
     "name": "Seahorse",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -19392,7 +19902,9 @@
   {
     "key": "srd-2024_shadow",
     "name": "Shadow",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "chaotic evil",
@@ -19484,7 +19996,9 @@
   {
     "key": "srd-2024_shambling-mound",
     "name": "Shambling Mound",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "plant",
     "alignment": "unaligned",
@@ -19565,7 +20079,9 @@
   {
     "key": "srd-2024_shield-guardian",
     "name": "Shield Guardian",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "construct",
     "alignment": "unaligned",
@@ -19654,7 +20170,9 @@
   {
     "key": "srd-2024_shrieker-fungus",
     "name": "Shrieker Fungus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "plant",
     "alignment": "unaligned",
@@ -19711,7 +20229,9 @@
   {
     "key": "srd-2024_silver-dragon-wyrmling",
     "name": "Silver Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "lawful good",
@@ -19791,7 +20311,9 @@
   {
     "key": "srd-2024_skeleton",
     "name": "Skeleton",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "lawful evil",
@@ -19857,7 +20379,9 @@
   {
     "key": "srd-2024_solar",
     "name": "Solar",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "lawful good",
@@ -19975,7 +20499,9 @@
   {
     "key": "srd-2024_specter",
     "name": "Specter",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "chaotic evil",
@@ -20062,7 +20588,9 @@
   {
     "key": "srd-2024_sphinx-of-lore",
     "name": "Sphinx of Lore",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "lawful neutral",
@@ -20169,7 +20697,9 @@
   {
     "key": "srd-2024_sphinx-of-valor",
     "name": "Sphinx of Valor",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "lawful neutral",
@@ -20275,7 +20805,9 @@
   {
     "key": "srd-2024_sphinx-of-wonder",
     "name": "Sphinx of Wonder",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "celestial",
     "alignment": "lawful good",
@@ -20355,7 +20887,9 @@
   {
     "key": "srd-2024_spider",
     "name": "Spider",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -20424,7 +20958,9 @@
   {
     "key": "srd-2024_spirit-naga",
     "name": "Spirit Naga",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -20503,7 +21039,9 @@
   {
     "key": "srd-2024_sprite",
     "name": "Sprite",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "fey",
     "alignment": "neutral good",
@@ -20575,7 +21113,9 @@
   {
     "key": "srd-2024_spy",
     "name": "Spy",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -20648,7 +21188,9 @@
   {
     "key": "srd-2024_steam-mephit",
     "name": "Steam Mephit",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "elemental",
     "alignment": "neutral evil",
@@ -20731,7 +21273,9 @@
   {
     "key": "srd-2024_stirge",
     "name": "Stirge",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -20789,7 +21333,9 @@
   {
     "key": "srd-2024_stone-giant",
     "name": "Stone Giant",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "giant",
     "alignment": "neutral",
@@ -20867,7 +21413,9 @@
   {
     "key": "srd-2024_stone-golem",
     "name": "Stone Golem",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "construct",
     "alignment": "unaligned",
@@ -20960,7 +21508,9 @@
   {
     "key": "srd-2024_storm-giant",
     "name": "Storm Giant",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "giant",
     "alignment": "chaotic good",
@@ -21056,7 +21606,9 @@
   {
     "key": "srd-2024_succubus",
     "name": "Succubus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "fiend",
     "alignment": "neutral evil",
@@ -21147,7 +21699,9 @@
   {
     "key": "srd-2024_swarm-of-bats",
     "name": "Swarm of Bats",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -21210,7 +21764,9 @@
   {
     "key": "srd-2024_swarm-of-crawling-claws",
     "name": "Swarm of Crawling Claws",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "neutral evil",
@@ -21288,7 +21844,9 @@
   {
     "key": "srd-2024_swarm-of-insects",
     "name": "Swarm of Insects",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -21355,7 +21913,9 @@
   {
     "key": "srd-2024_swarm-of-piranhas",
     "name": "Swarm of Piranhas",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -21422,7 +21982,9 @@
   {
     "key": "srd-2024_swarm-of-rats",
     "name": "Swarm of Rats",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -21485,7 +22047,9 @@
   {
     "key": "srd-2024_swarm-of-ravens",
     "name": "Swarm of Ravens",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -21557,7 +22121,9 @@
   {
     "key": "srd-2024_swarm-of-venomous-snakes",
     "name": "Swarm of Venomous Snakes",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -21620,7 +22186,9 @@
   {
     "key": "srd-2024_tarrasque",
     "name": "Tarrasque",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "gargantuan",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -21743,7 +22311,9 @@
   {
     "key": "srd-2024_tiger",
     "name": "Tiger",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -21808,7 +22378,9 @@
   {
     "key": "srd-2024_tough",
     "name": "Tough",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -21873,7 +22445,9 @@
   {
     "key": "srd-2024_tough-boss",
     "name": "Tough Boss",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -21942,7 +22516,9 @@
   {
     "key": "srd-2024_treant",
     "name": "Treant",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "plant",
     "alignment": "chaotic good",
@@ -22019,7 +22595,9 @@
   {
     "key": "srd-2024_triceratops",
     "name": "Triceratops",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -22079,7 +22657,9 @@
   {
     "key": "srd-2024_troll",
     "name": "Troll",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "giant",
     "alignment": "chaotic evil",
@@ -22156,7 +22736,9 @@
   {
     "key": "srd-2024_troll-limb",
     "name": "Troll Limb",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "giant",
     "alignment": "chaotic evil",
@@ -22222,7 +22804,9 @@
   {
     "key": "srd-2024_tyrannosaurus-rex",
     "name": "Tyrannosaurus Rex",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "huge",
     "type": "beast",
     "alignment": "unaligned",
@@ -22288,7 +22872,9 @@
   {
     "key": "srd-2024_unicorn",
     "name": "Unicorn",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "celestial",
     "alignment": "lawful good",
@@ -22392,7 +22978,9 @@
   {
     "key": "srd-2024_vampire",
     "name": "Vampire",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "undead",
     "alignment": "lawful evil",
@@ -22507,7 +23095,9 @@
   {
     "key": "srd-2024_vampire-familiar",
     "name": "Vampire Familiar",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral evil",
@@ -22585,7 +23175,9 @@
   {
     "key": "srd-2024_vampire-spawn",
     "name": "Vampire Spawn",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "undead",
     "alignment": "neutral evil",
@@ -22669,7 +23261,9 @@
   {
     "key": "srd-2024_venomous-snake",
     "name": "Venomous Snake",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -22727,7 +23321,9 @@
   {
     "key": "srd-2024_violet-fungus",
     "name": "Violet Fungus",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "plant",
     "alignment": "unaligned",
@@ -22788,7 +23384,9 @@
   {
     "key": "srd-2024_vrock",
     "name": "Vrock",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fiend",
     "alignment": "chaotic evil",
@@ -22883,7 +23481,9 @@
   {
     "key": "srd-2024_vulture",
     "name": "Vulture",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -22947,7 +23547,9 @@
   {
     "key": "srd-2024_warhorse",
     "name": "Warhorse",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "beast",
     "alignment": "unaligned",
@@ -23003,7 +23605,9 @@
   {
     "key": "srd-2024_warhorse-skeleton",
     "name": "Warhorse Skeleton",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "undead",
     "alignment": "lawful evil",
@@ -23065,7 +23669,9 @@
   {
     "key": "srd-2024_warrior-infantry",
     "name": "Warrior Infantry",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -23126,7 +23732,9 @@
   {
     "key": "srd-2024_warrior-veteran",
     "name": "Warrior Veteran",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "humanoid",
     "alignment": "neutral",
@@ -23198,7 +23806,9 @@
   {
     "key": "srd-2024_water-elemental",
     "name": "Water Elemental",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "elemental",
     "alignment": "neutral",
@@ -23291,7 +23901,9 @@
   {
     "key": "srd-2024_weasel",
     "name": "Weasel",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "beast",
     "alignment": "unaligned",
@@ -23353,7 +23965,9 @@
   {
     "key": "srd-2024_werebear",
     "name": "Werebear",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "monstrosity",
     "alignment": "neutral good",
@@ -23433,7 +24047,9 @@
   {
     "key": "srd-2024_wereboar",
     "name": "Wereboar",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "monstrosity",
     "alignment": "neutral evil",
@@ -23511,7 +24127,9 @@
   {
     "key": "srd-2024_wererat",
     "name": "Wererat",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "monstrosity",
     "alignment": "lawful evil",
@@ -23591,7 +24209,9 @@
   {
     "key": "srd-2024_weretiger",
     "name": "Weretiger",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "monstrosity",
     "alignment": "neutral",
@@ -23674,7 +24294,9 @@
   {
     "key": "srd-2024_werewolf",
     "name": "Werewolf",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "monstrosity",
     "alignment": "chaotic evil",
@@ -23758,7 +24380,9 @@
   {
     "key": "srd-2024_white-dragon-wyrmling",
     "name": "White Dragon Wyrmling",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -23841,7 +24465,9 @@
   {
     "key": "srd-2024_wight",
     "name": "Wight",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "neutral evil",
@@ -23925,7 +24551,9 @@
   {
     "key": "srd-2024_will-o-wisp",
     "name": "Will-o'-Wisp",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "undead",
     "alignment": "chaotic evil",
@@ -24023,7 +24651,9 @@
   {
     "key": "srd-2024_winter-wolf",
     "name": "Winter Wolf",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "monstrosity",
     "alignment": "neutral evil",
@@ -24097,7 +24727,9 @@
   {
     "key": "srd-2024_wolf",
     "name": "Wolf",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "beast",
     "alignment": "unaligned",
@@ -24162,7 +24794,9 @@
   {
     "key": "srd-2024_worg",
     "name": "Worg",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "fey",
     "alignment": "neutral evil",
@@ -24221,7 +24855,9 @@
   {
     "key": "srd-2024_wraith",
     "name": "Wraith",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "small",
     "type": "undead",
     "alignment": "neutral evil",
@@ -24310,7 +24946,9 @@
   {
     "key": "srd-2024_wyvern",
     "name": "Wyvern",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "unaligned",
@@ -24378,7 +25016,9 @@
   {
     "key": "srd-2024_xorn",
     "name": "Xorn",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "elemental",
     "alignment": "neutral",
@@ -24468,7 +25108,9 @@
   {
     "key": "srd-2024_young-black-dragon",
     "name": "Young Black Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -24550,7 +25192,9 @@
   {
     "key": "srd-2024_young-blue-dragon",
     "name": "Young Blue Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "lawful evil",
@@ -24627,7 +25271,9 @@
   {
     "key": "srd-2024_young-brass-dragon",
     "name": "Young Brass Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "chaotic good",
@@ -24709,7 +25355,9 @@
   {
     "key": "srd-2024_young-bronze-dragon",
     "name": "Young Bronze Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "lawful good",
@@ -24796,7 +25444,9 @@
   {
     "key": "srd-2024_young-copper-dragon",
     "name": "Young Copper Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "chaotic good",
@@ -24878,7 +25528,9 @@
   {
     "key": "srd-2024_young-gold-dragon",
     "name": "Young Gold Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "lawful good",
@@ -24966,7 +25618,9 @@
   {
     "key": "srd-2024_young-green-dragon",
     "name": "Young Green Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "lawful evil",
@@ -25051,7 +25705,9 @@
   {
     "key": "srd-2024_young-red-dragon",
     "name": "Young Red Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -25128,7 +25784,9 @@
   {
     "key": "srd-2024_young-silver-dragon",
     "name": "Young Silver Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "lawful good",
@@ -25209,7 +25867,9 @@
   {
     "key": "srd-2024_young-white-dragon",
     "name": "Young White Dragon",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "large",
     "type": "dragon",
     "alignment": "chaotic evil",
@@ -25292,7 +25952,9 @@
   {
     "key": "srd-2024_zombie",
     "name": "Zombie",
-    "source": "srd-5.2",
+    "source": {
+      "book": "srd-5.2"
+    },
     "size": "medium",
     "type": "undead",
     "alignment": "neutral evil",

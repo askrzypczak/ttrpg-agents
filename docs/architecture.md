@@ -27,7 +27,7 @@ flowchart LR
   bsrv -->|"reads EncounterDirectory, EncounterRepository and MapRepository, reads and writes TokenArtRepository and TokenImageRepository"| ports
   uc --> ports
   ports -.implemented by.-> store
-  ports -.implemented by.-> srd
+  srd -.->|"loads the built-in MonsterSet, served as MonsterIndex by the engine's staticMonsterIndex"| ports
   ports -.implemented by.-> bclient
   ports -.implemented by.-> sysbrowser
   store --> db[("SQLite")]

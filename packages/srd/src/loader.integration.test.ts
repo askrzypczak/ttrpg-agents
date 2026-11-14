@@ -2,7 +2,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { dndBeyondUrl, type Monster } from "@ttrpg-agents/engine";
+import {
+  dndBeyondUrl,
+  staticMonsterIndex,
+  type Monster,
+} from "@ttrpg-agents/engine";
 import {
   MonsterLoadError,
   loadAliases,
@@ -15,7 +19,7 @@ function monster(key: string, name = key): Monster {
   return {
     key,
     name,
-    source: "private",
+    source: { book: "homebrew" },
     size: "medium",
     type: "beast",
     alignment: "unaligned",
@@ -133,7 +137,14 @@ describe("SRD snapshot", () => {
     expect(new Set(index.monsters.map((m) => m.key)).size).toBe(
       index.monsters.length,
     );
-    expect(index.monsters.every((m) => m.source === "srd-5.2")).toBe(true);
+  });
+
+  it('every SRD snapshot record\'s source is exactly { book: "srd-5.2" }', () => {
+    const monsters = srd().monsters;
+    expect(monsters.length).toBeGreaterThan(0);
+    for (const m of monsters) {
+      expect(m.source, m.key).toStrictEqual({ book: "srd-5.2" });
+    }
   });
 
   it("contains the shadow with known stats", () => {
@@ -169,7 +180,7 @@ describe("SRD snapshot", () => {
     const url = (key: string) => {
       const m = index.byKey.get(key);
       expect(m, key).toBeDefined();
-      return dndBeyondUrl(index, m as Monster);
+      return dndBeyondUrl(staticMonsterIndex(index), m as Monster);
     };
     expect({
       aboleth: url("srd-2024_aboleth"),
@@ -192,7 +203,7 @@ describe("SRD snapshot", () => {
   it("every SRD monster has a D&D Beyond URL except Giant Fly, which has no 2024 page", () => {
     const index = srd();
     const without = index.monsters
-      .filter((m) => dndBeyondUrl(index, m) === undefined)
+      .filter((m) => dndBeyondUrl(staticMonsterIndex(index), m) === undefined)
       .map((m) => m.key);
     expect(without).toEqual(["srd-2024_giant-fly"]);
   });

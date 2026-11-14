@@ -2,7 +2,7 @@
   {
     "key": "test-book_mirewick-lurker",
     "name": "Mirewick Lurker",
-    "source": "private",
+    "source": { "book": "test-book", "page": 12 },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -72,7 +72,7 @@
   {
     "key": "test-book_cinderling-sentry",
     "name": "Cinderling Sentry",
-    "source": "private",
+    "source": { "book": "test-book", "page": 27 },
     "size": "small",
     "type": "elemental",
     "alignment": "neutral",
@@ -142,7 +142,7 @@
   {
     "key": "test-book_ashfeather-harrier",
     "name": "Ashfeather Harrier",
-    "source": "private",
+    "source": { "book": "test-book", "page": 41 },
     "size": "medium",
     "type": "monstrosity",
     "alignment": "unaligned",
@@ -214,7 +214,7 @@
   {
     "key": "test-book_gloomcap-shambler",
     "name": "Gloomcap Shambler",
-    "source": "private",
+    "source": { "book": "test-book", "page": 58 },
     "size": "medium",
     "type": "plant",
     "alignment": "unaligned",

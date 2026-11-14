@@ -285,14 +285,14 @@ const searchMonstersTool = defineTool({
     const renames = matches.flatMap((m) =>
       m.alias === undefined
         ? []
-        : [`${m.alias} is now ${m.monster.name} (${m.monster.source}).`],
+        : [`${m.alias} is now ${m.monster.name} (${m.monster.source.book}).`],
     );
     return ok(
       [
         ...renames,
         table(
           ["key", "name", "CR", "source"],
-          matches.map(({ monster: m }) => [m.key, m.name, m.cr, m.source]),
+          matches.map(({ monster: m }) => [m.key, m.name, m.cr, m.source.book]),
         ),
       ].join("\n"),
       {

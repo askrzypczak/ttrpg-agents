@@ -8,6 +8,7 @@ import {
   type Rng,
   type RollInitiativeDeps,
   resolveEncounter,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
@@ -20,10 +21,10 @@ const origin: ChangeOrigin = { source: "mcp", commandId: "roll" };
 const SHADOW = "srd-2024_shadow";
 const GOBLIN = "srd-2024_goblin-warrior";
 const OGRE = "srd-2024_ogre";
-const monsters = loadSrdMonsters();
-const shadow = monsters.byKey.get(SHADOW);
-const goblin = monsters.byKey.get(GOBLIN);
-const ogre = monsters.byKey.get(OGRE);
+const monsters = staticMonsterIndex(loadSrdMonsters());
+const shadow = monsters.get(SHADOW);
+const goblin = monsters.get(GOBLIN);
+const ogre = monsters.get(OGRE);
 if (!shadow || !goblin || !ogre) throw new Error("SRD fixtures missing");
 
 const NOW = "2026-01-01T00:00:00.000Z";
