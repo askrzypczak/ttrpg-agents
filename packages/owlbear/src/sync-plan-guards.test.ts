@@ -18,13 +18,14 @@ const KEY = "test.ext/value";
 const context = {
   viewportCenter: { x: 0, y: 0 },
   placed: new Set<string>(),
+  encounterId: "e1",
   art: {},
 };
-const linkValue = { instanceId: "i1" };
+const linkValue = { instanceId: "i1", encounterId: "e1" };
 const link: Projector = {
   key: INSTANCE_METADATA_KEY,
   mode: "owned",
-  project: (i) => ({ instanceId: i.id }),
+  project: (i) => ({ instanceId: i.id, encounterId: i.encounterId }),
 };
 const configFor = (project: () => unknown): SyncConfig => ({
   projectors: [link, { key: KEY, mode: "owned", project }],

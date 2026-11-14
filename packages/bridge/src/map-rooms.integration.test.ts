@@ -16,7 +16,13 @@ const MANIFEST = { name: "t", action: { popover: "/index.html" } };
 const snapshot: BridgeMessage = {
   v: PROTOCOL_VERSION,
   type: "encounter-snapshot",
-  payload: { instances: [], seq: 0, encounterId: "e1" },
+  payload: {
+    instances: [],
+    seq: 0,
+    encounterId: "e1",
+    sceneId: null,
+    encounterName: "Encounter 1",
+  },
 };
 
 const rooms: BridgeMessage = {

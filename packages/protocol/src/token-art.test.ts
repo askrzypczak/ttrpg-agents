@@ -34,6 +34,8 @@ describe("token art on the wire", () => {
         art: { shadow: art },
         seq: 0,
         encounterId: "e1",
+        sceneId: null,
+        encounterName: "Encounter 1",
       },
     };
     const decoded = decodeMessage(JSON.stringify(raw));
@@ -49,7 +51,13 @@ describe("token art on the wire", () => {
     const raw = {
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [instance], seq: 0, encounterId: "e1" },
+      payload: {
+        instances: [instance],
+        seq: 0,
+        encounterId: "e1",
+        sceneId: null,
+        encounterName: "Encounter 1",
+      },
     };
     expect(decodeMessage(JSON.stringify(raw))).toEqual({
       ok: true,
@@ -96,6 +104,8 @@ describe("token art on the wire", () => {
         art: { shadow: { sha256 }, ghoul: { ...art, sha256: "cd".repeat(32) } },
         seq: 0,
         encounterId: "e1",
+        sceneId: null,
+        encounterName: "Encounter 1",
       },
     };
     const decoded = decodeMessage(JSON.stringify(raw));

@@ -3,9 +3,11 @@ import type { MapPlacement, SavedRoom } from "@ttrpg-agents/engine";
 import type { MapRooms } from "@ttrpg-agents/protocol";
 import { createFakeObr } from "./fake-adapter.js";
 import type { ObrAdapter } from "./obr-adapter.js";
+import { SCENE_ID_METADATA_KEY } from "./open-scene.js";
 import { createMapOverlay } from "./overlay.js";
 import { OVERLAY_METADATA_KEY, planOverlay } from "./overlay-plan.js";
 import { SceneModel, type SceneGrid, type SceneItem } from "./scene-model.js";
+import { TEST_SCENE_ID } from "./testing/messages.js";
 
 /** Trollskull Manor: 3000x4000 px at 125 dpi on a 150-unit grid, rotated 270. */
 const TROLLSKULL: MapPlacement = {
@@ -274,7 +276,9 @@ describe("createMapOverlay", () => {
     expect(scene.getItems().sort(byId)).toEqual(
       [{ ...mapItem, position: { x: 300, y: 150 } }, token].sort(byId),
     );
-    expect(scene.getMetadata()).toEqual({});
+    expect(scene.getMetadata()).toEqual({
+      [SCENE_ID_METADATA_KEY]: TEST_SCENE_ID,
+    });
   });
 
   it("overlay items left by an earlier load are removed before the first draw", async () => {

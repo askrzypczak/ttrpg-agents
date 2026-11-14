@@ -1,3 +1,4 @@
+import { E2E_SCENE_ID } from "./db.js";
 import { test, expect, openDriver } from "./fixtures.js";
 
 test.describe("scene writes through the real adapter", () => {
@@ -38,6 +39,7 @@ test.describe("scene writes through the real adapter", () => {
     expect(metadata).toEqual({
       "other.ext/metadata": { keep: 1 },
       "com.ttrpg-agents/placed": ["x"],
+      "com.ttrpg-agents/scene-id": E2E_SCENE_ID,
     });
   });
 

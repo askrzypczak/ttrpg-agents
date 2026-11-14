@@ -3,6 +3,7 @@ import {
   UnknownInstanceError,
   applyInstanceEdit,
   repositoryForInstance,
+  type Encounter,
   type EncounterDirectory,
   type EncounterLog,
   type InstanceEdit,
@@ -61,29 +62,44 @@ export function editInstance(
   }
 }
 
+/** What a snapshot is for: the open scene and the encounter it shows. */
+interface SnapshotScope {
+  sceneId: string | null;
+  encounter: Encounter | undefined;
+}
+
 /**
- * The current encounter's instance list and id, and the token art, for a
- * client that just connected, plus the log position it is current as of. The position is read before the
- * instances, so a commit in between makes the snapshot newer than its `seq`
- * and the client sees that event again as a duplicate or a harmless re-fold,
- * never misses it. Each instance a restore put back is listed in `restoreSeqs`
- * with the seq of its last restore, read after the instances so every restore
- * they reflect is listed; like an empty art map, an empty list is left out.
- * With no current encounter the snapshot has no instances and a null id; it
- * creates none.
+ * The scope of a snapshot read now: with a scene open, that scene and its
+ * bound encounter (none while it is unbound, even when another encounter is
+ * current); with none open, no scene and the current encounter. Never writes.
  */
-export function snapshotMessage(
+function snapshotScope(encounters: EncounterDirectory): SnapshotScope {
+  const open = encounters.getOpenScene();
+  if (open) return { sceneId: open.sceneId, encounter: open.encounter };
+  return { sceneId: null, encounter: encounters.getCurrentEncounter() };
+}
+
+function sameScope(a: SnapshotScope, b: SnapshotScope): boolean {
+  return (
+    a.sceneId === b.sceneId &&
+    a.encounter?.id === b.encounter?.id &&
+    a.encounter?.name === b.encounter?.name
+  );
+}
+
+function buildSnapshot(
   encounters: EncounterDirectory,
   artRepo: TokenArtRepository,
   log: EncounterLog,
-): BridgeMessage {
+): { message: BridgeMessage; scope: SnapshotScope } {
   const seq = log.latestSeq();
   const art = artRepo.listTokenArt();
-  const current = encounters.getCurrentEncounter();
-  const repo = current ? encounters.repositoryFor(current.id) : undefined;
+  const scope = snapshotScope(encounters);
+  const { encounter } = scope;
+  const repo = encounter ? encounters.repositoryFor(encounter.id) : undefined;
   const instances = repo?.listInstances() ?? [];
   const restoreSeqs = repo?.listRestoreSeqs() ?? {};
-  return {
+  const message: BridgeMessage = {
     v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
     // An empty map is left out, so a store with no art sends what it always did.
@@ -92,7 +108,60 @@ export function snapshotMessage(
       ...(Object.keys(art).length > 0 ? { art } : {}),
       ...(Object.keys(restoreSeqs).length > 0 ? { restoreSeqs } : {}),
       seq,
-      encounterId: current?.id ?? null,
+      encounterId: encounter?.id ?? null,
+      sceneId: scope.sceneId,
+      encounterName: encounter?.name ?? null,
+    },
+  };
+  return { message, scope };
+}
+
+/**
+ * The snapshot a client converges on: the open scene, the instance list, id
+ * and name of the encounter it shows (the open scene's bound one, or with no
+ * scene open the current one), and the token art, plus the log position it is
+ * current as of. The position is read before the instances, so a commit in
+ * between makes the snapshot newer than its `seq` and the client sees that
+ * event again as a duplicate or a harmless re-fold, never misses it. Each
+ * instance a restore put back is listed in `restoreSeqs` with the seq of its
+ * last restore, read after the instances so every restore they reflect is
+ * listed; like an empty art map, an empty list is left out. With no such
+ * encounter (an open scene with none bound, or no current encounter) the
+ * snapshot has no instances and a null id and name; it creates and binds none.
+ */
+export function snapshotMessage(
+  encounters: EncounterDirectory,
+  artRepo: TokenArtRepository,
+  log: EncounterLog,
+): BridgeMessage {
+  return buildSnapshot(encounters, artRepo, log).message;
+}
+
+/**
+ * Builds every snapshot the bridge sends and remembers the scope of the last
+ * one built (the open scene, its encounter's id and name).
+ */
+export interface SnapshotSource {
+  /** A snapshot as `snapshotMessage` builds it; its scope is remembered. */
+  snapshot(): BridgeMessage;
+  /** Whether the scope now differs from the last snapshot built (true before the first). */
+  changed(): boolean;
+}
+
+export function createSnapshotSource(
+  encounters: EncounterDirectory,
+  artRepo: TokenArtRepository,
+  log: EncounterLog,
+): SnapshotSource {
+  let last: SnapshotScope | undefined;
+  return {
+    snapshot() {
+      const { message, scope } = buildSnapshot(encounters, artRepo, log);
+      last = scope;
+      return message;
+    },
+    changed() {
+      return last === undefined || !sameScope(last, snapshotScope(encounters));
     },
   };
 }
@@ -110,9 +179,12 @@ const LOG_POLL_INTERVAL_MS = 250;
  * snapshot to every client (the tick's batch ends there and the next tick
  * resumes after the row). Without `snapshot`, the next event's `seq` shows the
  * gap and the extension reconnects for a snapshot. The poll also sees this
- * process's own commits, such as an applied write-back. A failed read or
- * broadcast is retried on the next tick from the last event sent. Returns a
- * stop function.
+ * process's own commits, such as an applied write-back. At the end of each
+ * tick, after its events, a snapshot is broadcast when `scopeChanged` says the
+ * open scene, its encounter or that encounter's name changed since the last
+ * snapshot built (a binding, a rename or a scene opened by another process
+ * writes no event). A failed read or broadcast is retried on the next tick
+ * from the last event sent. Returns a stop function.
  */
 export function broadcastLogEvents(
   log: EncounterLog,
@@ -120,6 +192,7 @@ export function broadcastLogEvents(
   options: {
     onUnreadable?: (entry: UnreadableLogEntry) => void;
     snapshot?: () => BridgeMessage;
+    scopeChanged?: () => boolean;
   } = {},
 ): () => void {
   let lastSent = log.latestSeq();
@@ -141,6 +214,8 @@ export function broadcastLogEvents(
         });
         lastSent = seq;
       }
+      if (options.snapshot && options.scopeChanged?.() === true)
+        target.broadcast(options.snapshot());
     } catch {
       // Keep `lastSent` so the next tick retries.
     }

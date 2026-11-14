@@ -349,7 +349,13 @@ describe("bridge server broadcast and snapshot", () => {
   const snapshot: BridgeMessage = {
     v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
-    payload: { instances: [], seq: 0, encounterId: "e1" },
+    payload: {
+      instances: [],
+      seq: 0,
+      encounterId: "e1",
+      sceneId: null,
+      encounterName: "Encounter 1",
+    },
   };
   const cleared: BridgeMessage = {
     v: PROTOCOL_VERSION,
@@ -519,8 +525,8 @@ describe("bridge server broadcast and snapshot", () => {
       for (const raw of [
         "{nope",
         "[]",
-        '{"v":2,"type":"launch","payload":{}}',
-        '{"v":2,"type":"hello","payload":{}}',
+        '{"v":3,"type":"launch","payload":{}}',
+        '{"v":3,"type":"hello","payload":{}}',
         encodeMessage(cleared),
       ]) {
         ws.send(raw);
@@ -652,5 +658,161 @@ describe("bridge server broadcast and snapshot", () => {
     await settle();
     expect(msgs).toEqual([cleared]);
     ws.close();
+  });
+});
+
+describe("bridge server open scene", () => {
+  const snapshot: BridgeMessage = {
+    v: PROTOCOL_VERSION,
+    type: "encounter-snapshot",
+    payload: {
+      instances: [],
+      seq: 0,
+      encounterId: "e1",
+      sceneId: "s1",
+      encounterName: "Encounter 1",
+    },
+  };
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  function record(ws: WebSocket): BridgeMessage[] {
+    const received: BridgeMessage[] = [];
+    ws.on("message", (data) => {
+      const r = decodeMessage(data.toString());
+      if (r.ok) received.push(r.message);
+    });
+    return received;
+  }
+
+  function connectTo(s: BridgeServer): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`, {
+        origin: `http://localhost:${s.port}`,
+      });
+      ws.once("open", () => resolve(ws));
+      ws.once("error", reject);
+    });
+  }
+
+  async function authedTo(
+    s: BridgeServer,
+  ): Promise<{ ws: WebSocket; msgs: BridgeMessage[] }> {
+    const ws = await connectTo(s);
+    const msgs = record(ws);
+    ws.send(hello());
+    await settle();
+    return { ws, msgs };
+  }
+
+  // Raw JSON: a scene-open is sent as the extension would send it.
+  function sceneOpen(sceneId: string | null, id = "so1"): string {
+    return JSON.stringify({
+      v: PROTOCOL_VERSION,
+      type: "scene-open",
+      id,
+      payload: { sceneId },
+    });
+  }
+
+  it("scene-open calls openScene with its scene id and then sends the snapshot; a throwing openScene is a non-fatal scene-open-failed error with the request id and no snapshot", async () => {
+    const order: string[] = [];
+    let fail = false;
+    const s = await startBridgeServer({
+      port: 0,
+      staticDir: dir,
+      snapshot: () => {
+        order.push("snapshot");
+        return snapshot;
+      },
+      openScene: (sceneId) => {
+        order.push(`open:${String(sceneId)}`);
+        if (fail) throw new Error("db locked");
+      },
+    });
+    try {
+      const { ws, msgs } = await authedTo(s);
+      order.length = 0;
+      msgs.length = 0;
+
+      ws.send(sceneOpen("s1"));
+      await settle();
+
+      expect(order).toEqual(["open:s1", "snapshot"]);
+      expect(msgs).toEqual([snapshot]);
+
+      fail = true;
+      order.length = 0;
+      msgs.length = 0;
+      ws.send(sceneOpen(null, "so2"));
+      await settle();
+
+      expect(order).toEqual(["open:null"]);
+      expect(msgs).toHaveLength(1);
+      const err = msgs[0];
+      expect(err?.type).toBe("error");
+      expect(err?.id).toBe("so2");
+      if (err?.type === "error") {
+        expect(err.payload.code).toBe("scene-open-failed");
+        expect(err.payload.fatal).toBe(false);
+      }
+
+      msgs.length = 0;
+      ws.send(ping);
+      await settle();
+      expect(msgs.map((m) => m.type)).toEqual(["pong"]);
+      ws.close();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("the active client's disconnect calls openScene with null, and a displaced client's does not", async () => {
+    const calls: (string | null)[] = [];
+    const s = await startBridgeServer({
+      port: 0,
+      staticDir: dir,
+      snapshot: () => snapshot,
+      openScene: (sceneId) => {
+        calls.push(sceneId);
+      },
+    });
+    try {
+      const first = await authedTo(s);
+      first.ws.send(sceneOpen("s1"));
+      await settle();
+      expect(calls).toEqual(["s1"]);
+      calls.length = 0;
+
+      const second = await authedTo(s);
+      await settle();
+      // The displaced socket has closed by now.
+      expect(first.ws.readyState).toBe(WebSocket.CLOSED);
+      expect(calls).toEqual([]);
+
+      second.ws.close();
+      await settle();
+      expect(calls).toEqual([null]);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("closing the server with an active client calls openScene with null", async () => {
+    const calls: (string | null)[] = [];
+    const s = await startBridgeServer({
+      port: 0,
+      staticDir: dir,
+      snapshot: () => snapshot,
+      openScene: (sceneId) => {
+        calls.push(sceneId);
+      },
+    });
+    await authedTo(s);
+    expect(calls).toEqual([]);
+
+    await s.close();
+
+    expect(calls).toEqual([null]);
   });
 });

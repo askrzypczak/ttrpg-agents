@@ -33,6 +33,7 @@ const plan = (
   planSync(desired, observed, config, {
     viewportCenter: { x: 0, y: 0 },
     placed: new Set(["i1"]),
+    encounterId: "e1",
     art: {},
     ...(fields ? { fields: new Map([["i1", fields]]) } : {}),
   });
@@ -45,6 +46,7 @@ function tokenWith(
   const [created] = planSync([inst()], [], defaultSyncConfig, {
     viewportCenter: { x: 0, y: 0 },
     placed: new Set(),
+    encounterId: "e1",
     art: {},
   }).add;
   const token = structuredClone(created!);
