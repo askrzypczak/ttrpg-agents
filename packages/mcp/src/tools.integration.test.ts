@@ -1,6 +1,7 @@
 import {
   TableUnavailableError,
   applyInstanceEdit,
+  staticMonsterIndex,
   getSetupStatus,
   type EncounterDirectory,
   type EncounterRepository,
@@ -26,7 +27,7 @@ import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
-const monsters = loadSrdMonsters();
+const monsters = staticMonsterIndex(loadSrdMonsters());
 const SHADOW = "srd-2024_shadow";
 
 /** Test-only Rng: yields the given values in order, cycling, each reduced mod max. */
@@ -286,7 +287,7 @@ describe("search_monsters", () => {
 describe("get_statblock", () => {
   it("formats a known monster", async () => {
     const r = await call("get_statblock", { key: SHADOW });
-    const monster = monsters.byKey.get(SHADOW);
+    const monster = monsters.get(SHADOW);
     expect(r.isError).toBeUndefined();
     expect(text(r)).toContain("## Shadow");
     expect(text(r)).toContain(`**AC** ${String(monster?.ac)}`);

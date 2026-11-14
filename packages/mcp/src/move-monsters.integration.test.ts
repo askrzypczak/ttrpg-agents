@@ -11,6 +11,7 @@ import {
   type TableToken,
   resolveEncounter,
   type EncounterRepository,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -72,7 +73,7 @@ function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     encounters,
-    monsters: loadSrdMonsters(),
+    monsters: staticMonsterIndex(loadSrdMonsters()),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group",

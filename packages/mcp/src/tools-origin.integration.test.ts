@@ -5,6 +5,7 @@ import {
   type NewMonsterInstance,
   type Rng,
   resolveEncounter,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -148,7 +149,7 @@ beforeEach(() => {
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     encounters: recordingDirectory(inner, writes),
-    monsters: loadSrdMonsters(),
+    monsters: staticMonsterIndex(loadSrdMonsters()),
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group-1",
