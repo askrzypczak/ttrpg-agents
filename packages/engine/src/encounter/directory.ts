@@ -1,5 +1,7 @@
 import {
+  InvalidNameError,
   NoSceneEncounterError,
+  SceneBindingError,
   UnknownEncounterError,
   UnknownInstanceError,
 } from "./errors.js";
@@ -78,19 +80,31 @@ export function resolveEncounter(
   request: EncounterRequest,
 ): ResolvedEncounter {
   if (request.name !== undefined)
-    return withMention(namedEncounter(directory, request.name), false);
+    return namedEncounter(directory, request.name);
   const open = directory.getOpenScene();
-  if (open?.encounter) return withMention(open.encounter, false);
+  if (open?.encounter) return resolved(open.encounter, false, open);
   if (open) {
     if (!request.writes)
       throw new NoSceneEncounterError("This scene has no encounter yet.");
   } else {
     const current = directory.getCurrentEncounter();
-    if (current) return withMention(current, false);
+    if (current) return resolved(current, false, open);
   }
   return directory.transaction(() =>
     createUnderLock(directory, request.writes),
   );
+}
+
+/** The encounter with that name ignoring case; UnknownEncounterError listing the names otherwise. */
+function findByName(encounters: readonly Encounter[], name: string): Encounter {
+  const wanted = name.toLowerCase();
+  const found = encounters.find((e) => e.name.toLowerCase() === wanted);
+  if (found) return found;
+  const known =
+    encounters.length === 0
+      ? "there are no encounters"
+      : `known encounters: ${encounters.map((e) => e.name).join(", ")}`;
+  throw new UnknownEncounterError(`Unknown encounter "${name}"; ${known}.`);
 }
 
 /**
@@ -100,21 +114,10 @@ export function resolveEncounter(
 function namedEncounter(
   directory: EncounterDirectory,
   name: string,
-): Encounter {
-  const encounters = directory.listEncounters();
-  const wanted = name.toLowerCase();
-  const found = encounters.find((e) => e.name.toLowerCase() === wanted);
-  if (!found) {
-    const known =
-      encounters.length === 0
-        ? "there are no encounters"
-        : `known encounters: ${encounters.map((e) => e.name).join(", ")}`;
-    throw new UnknownEncounterError(`Unknown encounter "${name}"; ${known}.`);
-  }
-  if (
-    directory.getOpenScene() === undefined &&
-    directory.getCurrentEncounter()?.id !== found.id
-  ) {
+): ResolvedEncounter {
+  const found = findByName(directory.listEncounters(), name);
+  const open = directory.getOpenScene();
+  if (open === undefined && directory.getCurrentEncounter()?.id !== found.id) {
     directory.transaction(() => {
       // Another process shares the database: read again under the write lock,
       // as it may have opened a scene or made this encounter current since.
@@ -123,7 +126,7 @@ function namedEncounter(
       directory.setCurrentEncounter(found.id);
     });
   }
-  return found;
+  return resolved(found, false, open);
 }
 
 /**
@@ -139,10 +142,10 @@ function createUnderLock(
   writes: boolean,
 ): ResolvedEncounter {
   const open = directory.getOpenScene();
-  if (open?.encounter) return withMention(open.encounter, false);
+  if (open?.encounter) return resolved(open.encounter, false, open);
   if (!open) {
     const current = directory.getCurrentEncounter();
-    if (current) return withMention(current, false);
+    if (current) return resolved(current, false, open);
   }
   if (open && !writes)
     throw new NoSceneEncounterError("This scene has no encounter yet.");
@@ -150,19 +153,22 @@ function createUnderLock(
   const created = directory.createEncounter(nextEncounterName(names));
   if (open) directory.bindScene(open.sceneId, created.id);
   directory.setCurrentEncounter(created.id);
-  return withMention(created, true);
+  return resolved(created, true, open);
 }
 
-/** The resolved encounter with whether a reply names it. */
-function withMention(
+/**
+ * The resolved encounter with whether a reply names it: this call created
+ * it, no scene is open (as read by the caller), or it is not the open
+ * scene's encounter.
+ */
+function resolved(
   encounter: Encounter,
   created: boolean,
+  open: OpenScene | undefined,
 ): ResolvedEncounter {
-  return { encounter, created, mention: mentions() };
-}
-
-function mentions(): boolean {
-  throw new Error("not implemented");
+  const mention =
+    created || open === undefined || open.encounter?.id !== encounter.id;
+  return { encounter, created, mention };
 }
 
 /** Records the scene open at the table (or none) and, when it is bound, makes its encounter current, in one transaction. */
@@ -211,8 +217,16 @@ export interface EncounterListing {
 export function listEncounterSummaries(
   directory: EncounterDirectory,
 ): EncounterListing {
-  void directory;
-  throw new Error("not implemented");
+  const open = directory.getOpenScene();
+  const currentId = directory.getCurrentEncounter()?.id;
+  const encounters = directory.listEncounters().map((encounter) => ({
+    encounter,
+    monsterCount: directory.repositoryFor(encounter.id).listInstances().length,
+    bound: directory.findSceneOfEncounter(encounter.id) !== undefined,
+    openScene: open?.encounter?.id === encounter.id,
+    current: currentId === encounter.id,
+  }));
+  return { encounters, sceneOpen: open !== undefined };
 }
 
 export interface RenameEncounterRequest {
@@ -235,9 +249,30 @@ export function renameEncounter(
   directory: EncounterDirectory,
   request: RenameEncounterRequest,
 ): RenamedEncounter {
-  void directory;
-  void request;
-  throw new Error("not implemented");
+  const name = request.name.trim();
+  if (name === "")
+    throw new InvalidNameError("An encounter name must not be empty.");
+  const { encounter, created } = resolveEncounter(directory, {
+    ...(request.encounter !== undefined && { name: request.encounter }),
+    writes: false,
+  });
+  return directory.transaction(() => {
+    // Another process shares the database: check the names under the write lock.
+    const wanted = name.toLowerCase();
+    const clash = directory
+      .listEncounters()
+      .find((e) => e.id !== encounter.id && e.name.toLowerCase() === wanted);
+    if (clash)
+      throw new InvalidNameError(
+        `Another encounter is already named "${clash.name}".`,
+      );
+    directory.setEncounterName(encounter.id, name);
+    return {
+      encounter: { ...encounter, name },
+      renamedFrom: encounter.name,
+      created,
+    };
+  });
 }
 
 /** Binds the named encounter to the open scene and makes it current, in one transaction; SceneBindingError or UnknownEncounterError otherwise, changing nothing. */
@@ -245,7 +280,24 @@ export function useEncounter(
   directory: EncounterDirectory,
   name: string,
 ): Encounter {
-  void directory;
-  void name;
-  throw new Error("not implemented");
+  return directory.transaction(() => {
+    const open = directory.getOpenScene();
+    if (!open)
+      throw new SceneBindingError(
+        "No scene is open: open the scene in Owlbear first.",
+      );
+    const found = findByName(directory.listEncounters(), name);
+    if (open.encounter)
+      throw new SceneBindingError(
+        `This scene already has an encounter: ${open.encounter.name}.`,
+      );
+    if (directory.findSceneOfEncounter(found.id) !== undefined)
+      throw new SceneBindingError(
+        `${found.name} already belongs to another scene.`,
+      );
+    directory.bindScene(open.sceneId, found.id);
+    // It stays the last current encounter when the scene closes.
+    directory.setCurrentEncounter(found.id);
+    return found;
+  });
 }
