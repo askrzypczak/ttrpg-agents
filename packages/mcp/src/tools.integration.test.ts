@@ -1,6 +1,7 @@
 import {
   TableUnavailableError,
   applyInstanceEdit,
+  staticMonsterIndex,
   getSetupStatus,
   type EncounterDirectory,
   type EncounterRepository,
@@ -26,7 +27,7 @@ import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
-const monsters = loadSrdMonsters();
+const monsters = staticMonsterIndex(loadSrdMonsters());
 const SHADOW = "srd-2024_shadow";
 
 /** Test-only Rng: yields the given values in order, cycling, each reduced mod max. */
@@ -258,11 +259,17 @@ describe("search_monsters", () => {
       expect(results[0]).toMatchObject({
         key: "srd-2024_tough",
         name: "Tough",
-        source: "srd-5.2",
+        source: { book: "srd-5.2" },
         alias: "Thug",
       });
       const lines = text(r).split("\n");
       expect(lines[0]).toBe("Thug is now Tough (srd-5.2).");
+      const row = lines.find((l) => l.startsWith("| srd-2024_tough |"));
+      const cells = row
+        ?.split("|")
+        .slice(1, -1)
+        .map((c) => c.trim());
+      expect(cells?.[3]).toBe("srd-5.2");
       expect(text(r)).toContain("srd-2024_tough");
       expect(r.structuredContent?.["summary"]).toBe(text(r));
     }
@@ -280,7 +287,7 @@ describe("search_monsters", () => {
 describe("get_statblock", () => {
   it("formats a known monster", async () => {
     const r = await call("get_statblock", { key: SHADOW });
-    const monster = monsters.byKey.get(SHADOW);
+    const monster = monsters.get(SHADOW);
     expect(r.isError).toBeUndefined();
     expect(text(r)).toContain("## Shadow");
     expect(text(r)).toContain(`**AC** ${String(monster?.ac)}`);

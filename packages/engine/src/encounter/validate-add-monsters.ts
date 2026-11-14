@@ -43,7 +43,7 @@ export function validateAddMonsters(
   }
   groups.forEach((group, i) => {
     const where = `Group ${i + 1} (${group.monster})`;
-    if (!monsters.byKey.has(group.monster)) {
+    if (monsters.get(group.monster) === undefined) {
       throw new AddMonstersError(
         "unknown_monster",
         `${where}: unknown monster "${group.monster}"`,

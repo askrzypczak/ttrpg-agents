@@ -8,6 +8,7 @@ import {
   type NewMonsterInstance,
   type RestoreMonstersDeps,
   resolveEncounter,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
@@ -20,7 +21,7 @@ const clearOrigin: ChangeOrigin = { source: "mcp", commandId: "clear" };
 const origin: ChangeOrigin = { source: "mcp", commandId: "restore" };
 
 const SHADOW = "srd-2024_shadow";
-const monsters = loadSrdMonsters();
+const monsters = staticMonsterIndex(loadSrdMonsters());
 
 let repo: SqliteEncounterRepository;
 

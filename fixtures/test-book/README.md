@@ -17,4 +17,4 @@ The Ashfeather Harrier's Talons print `9 (2d6 + 3)`, whose average is 10. The er
 
 ## creatures.json
 
-`creatures.json` holds the four statblocks as printed, the deliberate error included, in the shape of `monsterSchema` (`packages/engine/src/monsters/schema.ts`). Its `source` follows that schema: `"private"` today, and `{ book, page }` once the schema changes.
+`creatures.json` holds the four statblocks as printed, the deliberate error included, in the shape of `monsterSchema` (`packages/engine/src/monsters/schema.ts`). Its `source` is `{ "book": "test-book", "page": N }`, N the page of the creature's statblock.

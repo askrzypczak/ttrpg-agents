@@ -1,4 +1,10 @@
 import type { MonsterInstance } from "../encounter/types.js";
+import type { Monster } from "../monsters/schema.js";
+import {
+  staticMonsterIndex,
+  type MonsterIndex,
+  type MonsterSet,
+} from "../monsters/types.js";
 import type {
   BackupFacts,
   BridgeFacts,
@@ -91,4 +97,21 @@ export function makeTestSetupPorts(
     bridge: { check: () => Promise.resolve(bridge) },
     now: () => new Date(now.getTime()),
   };
+}
+
+/** A MonsterIndex over `monsters` (in order) with the given aliases (old name -> key) and D&D Beyond pages (key -> segment). */
+export function makeTestMonsterIndex(
+  monsters: readonly Monster[],
+  extras?: {
+    aliases?: Record<string, string>;
+    dndBeyondPages?: Record<string, string>;
+  },
+): MonsterIndex {
+  const set: MonsterSet = {
+    monsters: [...monsters],
+    byKey: new Map(monsters.map((m) => [m.key, m])),
+    aliases: new Map(Object.entries(extras?.aliases ?? {})),
+    dndBeyondPages: new Map(Object.entries(extras?.dndBeyondPages ?? {})),
+  };
+  return staticMonsterIndex(set);
 }

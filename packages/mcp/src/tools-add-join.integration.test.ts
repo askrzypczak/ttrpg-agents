@@ -2,6 +2,7 @@ import {
   type Rng,
   resolveEncounter,
   type EncounterRepository,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -14,7 +15,7 @@ import { tools, type ToolResult } from "./tools.js";
 import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
 
 const SHADOW = "srd-2024_shadow";
-const monsters = loadSrdMonsters();
+const monsters = staticMonsterIndex(loadSrdMonsters());
 
 /** Test-only Rng: yields the given values in order, cycling, each reduced mod max. */
 function cycleRng(...values: number[]): Rng {
