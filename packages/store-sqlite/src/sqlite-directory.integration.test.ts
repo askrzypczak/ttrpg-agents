@@ -224,3 +224,35 @@ describe("SqliteEncounterDirectory inside an outer transaction", () => {
     expect(directory.getCurrentEncounter()).toEqual(a);
   });
 });
+
+describe("SqliteEncounterDirectory names and bindings", () => {
+  it("setEncounterName renames the encounter and keeps its id, its scene and whether it is current", () => {
+    const bound = directory.createEncounter("Encounter 1");
+    const other = directory.createEncounter("Encounter 2");
+    directory.bindScene("scene-1", bound.id);
+    directory.setCurrentEncounter(bound.id);
+    directory.setOpenScene("scene-1");
+
+    directory.setEncounterName(bound.id, "Goblin Ambush");
+
+    const renamed = { ...bound, name: "Goblin Ambush" };
+    expect(directory.listEncounters()).toEqual([renamed, other]);
+    expect(directory.getCurrentEncounter()).toEqual(renamed);
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter: renamed,
+    });
+    expect(
+      db.prepare("SELECT scene_id FROM encounters WHERE id = ?").get(bound.id),
+    ).toEqual({ scene_id: "scene-1" });
+  });
+
+  it("findSceneOfEncounter returns the scene bound to the encounter, or undefined when none is", () => {
+    const bound = directory.createEncounter("Encounter 1");
+    const unbound = directory.createEncounter("Encounter 2");
+    directory.bindScene("scene-1", bound.id);
+
+    expect(directory.findSceneOfEncounter(bound.id)).toBe("scene-1");
+    expect(directory.findSceneOfEncounter(unbound.id)).toBeUndefined();
+  });
+});

@@ -74,6 +74,8 @@ let log: SqliteEncounterLog;
 beforeEach(() => {
   const db = openDatabase(":memory:");
   const encounters = new SqliteEncounterDirectory(db);
+  // A scene bound to the encounter is open, so replies name no encounter.
+  encounters.setOpenScene("scene-1");
   encounters
     .mapRepositoryFor(
       resolveEncounter(encounters, { writes: true }).encounter.id,

@@ -65,6 +65,8 @@ function contextWith(answer: TableSceneMap): {
 } {
   const imageCalls: string[] = [];
   const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  // A scene bound to the encounter is open, so replies name no encounter.
+  encounters.setOpenScene("scene-1");
   encounters
     .mapRepositoryFor(
       resolveEncounter(encounters, { writes: true }).encounter.id,
@@ -142,12 +144,32 @@ describe("get_map_image", () => {
     ctx.encounters
       .mapRepositoryFor(sewerFight.id)
       .registerMap({ ...registered, itemId: "map-2", name: "Sewers" });
+    ctx.encounters.setOpenScene(null);
     ctx.encounters.setCurrentEncounter(sewerFight.id);
 
     const r = await getMapImage(ctx);
 
     expect(r.isError).toBeFalsy();
     expect(imageCalls).toEqual(["map-2"]);
-    expect(textBlocks(r).join("\n")).toMatch(/^Sewers: /);
+    expect(textBlocks(r).join("\n")).toMatch(
+      /^Encounter: Sewer fight\n\nSewers: /,
+    );
+  });
+
+  it("get_map_image with no scene open names the encounter in its text line and adds no structured content", async () => {
+    const { ctx } = contextWith(scene(trollskull));
+    ctx.encounters.setOpenScene(null);
+
+    const r = await getMapImage(ctx);
+
+    expect(r.isError).toBeFalsy();
+    expect(r.content).toEqual([
+      { type: "image", data: image.data, mimeType: "image/jpeg" },
+      {
+        type: "text",
+        text: "Encounter: Encounter 1\n\nTrollskull Manor: 32 x 24 cells, columns A-AF left to right, rows 1-24 top to bottom, labelled on the image's edges.",
+      },
+    ]);
+    expect(r.structuredContent).toBeUndefined();
   });
 });

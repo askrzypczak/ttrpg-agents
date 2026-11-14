@@ -10,12 +10,14 @@ import {
   getMapImage,
   getSetupStatus,
   getTableStatus,
+  listEncounterSummaries,
   listRooms,
   moveMonstersIntoRoom,
   previewMonstersInRooms,
   proposeRooms,
   removeRooms,
   mergeInitiative,
+  renameEncounter,
   resetMaxHp,
   resolveEncounter,
   resolveTargets,
@@ -27,6 +29,7 @@ import {
   getMonsterByKey,
   searchMonsters,
   undoLastCommand,
+  useEncounter,
   useMap,
   type ChangeOrigin,
   type EncounterRepository,
@@ -34,6 +37,7 @@ import {
   type MonsterInstance,
   type PreviewInstance,
   type PreviewPlacement,
+  type ResolvedEncounter,
   type RestoredMonster,
   type RoomPlacement,
   type TableArtWait,
@@ -87,6 +91,56 @@ function fail(message: string): ToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
+/** The optional `encounter` argument: an encounter's name, any case. */
+const encounterArgument = z
+  .string()
+  .min(1)
+  .optional()
+  .describe(
+    "The encounter to act on, by name (any case). Default: the open scene's encounter, or with no scene open the current one. With no scene open, naming one makes it current.",
+  );
+
+/**
+ * The reply of a call that resolved its encounter: its first text block begins
+ * with `New encounter: <name>` when the call created it, else with
+ * `Encounter: <name>` when the engine says to mention it; structured content,
+ * where the reply has one, carries the name as `encounter` and the decorated
+ * text as `summary`.
+ */
+function withEncounter(
+  result: ToolResult,
+  resolved: ResolvedEncounter,
+): ToolResult {
+  const { name } = resolved.encounter;
+  const line = resolved.created
+    ? `New encounter: ${name}`
+    : resolved.mention
+      ? `Encounter: ${name}`
+      : undefined;
+  const first = result.content.findIndex((block) => block.type === "text");
+  const content =
+    line === undefined
+      ? result.content
+      : result.content.map((block, index) =>
+          index === first && block.type === "text"
+            ? { ...block, text: `${line}\n\n${block.text}` }
+            : block,
+        );
+  const decorated: ToolResult = { ...result, content };
+  if (result.structuredContent) {
+    const summary = result.structuredContent["summary"];
+    decorated.structuredContent = {
+      ...result.structuredContent,
+      encounter: name,
+      summary:
+        line !== undefined && typeof summary === "string"
+          ? `${line}\n\n${summary}`
+          : summary,
+    };
+  }
+  return decorated;
+}
+
 function defineTool<S extends z.ZodRawShape>(def: {
   name: string;
   description: string;
@@ -98,6 +152,11 @@ function defineTool<S extends z.ZodRawShape>(def: {
    */
   startsEncounter?: boolean;
   /**
+   * The tool reads or changes an encounter: its input takes an optional
+   * `encounter` name, and its reply names the encounter it acted on.
+   */
+  takesEncounter?: boolean;
+  /**
    * `origin()` is the origin of every write in one call: source `mcp`, one
    * command id minted on first use, and the tool's name as its command.
    */
@@ -107,11 +166,14 @@ function defineTool<S extends z.ZodRawShape>(def: {
     origin: () => ChangeOrigin,
   ): ToolResult | Promise<ToolResult>;
 }): ToolDefinition {
-  const schema = z.object(def.inputSchema);
+  const inputSchema: z.ZodRawShape = def.takesEncounter
+    ? { ...def.inputSchema, encounter: encounterArgument }
+    : def.inputSchema;
+  const schema = z.object(inputSchema);
   return {
     name: def.name,
     description: def.description,
-    inputSchema: def.inputSchema,
+    inputSchema,
     annotations: def.annotations,
     handler(ctx, args) {
       const parsed = schema.safeParse(args);
@@ -142,12 +204,24 @@ function defineTool<S extends z.ZodRawShape>(def: {
       // encounter mid-call moves neither repository. In an open scene with no
       // encounter only a tool that starts an encounter creates one (the write
       // form); every other tool fails there (the read form), as a domain
-      // error reply.
-      let encounterId: string | undefined;
+      // error reply. A tool that takes an encounter passes the one named in
+      // its `encounter` argument.
+      const data = parsed.data as z.infer<z.ZodObject<S>>;
+      const named = def.takesEncounter
+        ? (parsed.data as { encounter?: string }).encounter
+        : undefined;
+      let resolved: ResolvedEncounter | undefined;
       const callEncounterId = (): string =>
-        (encounterId ??= resolveEncounter(ctx.encounters, {
+        (resolved ??= resolveEncounter(ctx.encounters, {
+          ...(named !== undefined && { name: named }),
           writes: def.startsEncounter === true,
-        }).encounter.id);
+        })).encounter.id;
+      // A reply names the encounter the call resolved; a call whose
+      // resolution failed, or that never resolved one, is left as it is.
+      const decorate = (result: ToolResult): ToolResult =>
+        def.takesEncounter && resolved
+          ? withEncounter(result, resolved)
+          : result;
       let repo: EncounterRepository | undefined;
       let maps: MapRepository | undefined;
       const callCtx: ToolCallContext = {
@@ -162,12 +236,12 @@ function defineTool<S extends z.ZodRawShape>(def: {
         },
       };
       try {
-        const result = def.run(callCtx, parsed.data, origin);
+        const result = def.run(callCtx, data, origin);
         return result instanceof Promise
-          ? result.catch(domainErrorToResult)
-          : result;
+          ? result.catch(domainErrorToResult).then(decorate)
+          : decorate(result);
       } catch (e) {
-        return domainErrorToResult(e);
+        return decorate(domainErrorToResult(e));
       }
     },
   };
@@ -321,6 +395,7 @@ const addMonstersInput = {
 
 const addMonstersTool = defineTool({
   name: "add_monsters",
+  takesEncounter: true,
   annotations: { destructiveHint: false },
   startsEncounter: true,
   description:
@@ -379,6 +454,7 @@ const addMonstersTool = defineTool({
 
 const previewMonstersTool = defineTool({
   name: "preview_monsters",
+  takesEncounter: true,
   annotations: { readOnlyHint: true },
   description:
     "Preview an add_monsters call without adding anything: same groups and initiative, same checks. Returns each would-be monster's name, AC, average HP with its dice, initiative modifier (or, for a group with join, that monster's initiative) and footprint; with a room, the cells they would take or which would not fit (needs the bridge running). Nothing is stored or rolled.",
@@ -424,6 +500,7 @@ const previewMonstersTool = defineTool({
 
 const moveMonstersTool = defineTool({
   name: "move_monsters",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Move existing monsters, by instance id or exact name, into a saved room of the map in use: each gets a free cell there and its token moves on the table, keeping its id, HP, initiative and name. All targets must resolve, otherwise nothing is moved. Monsters left without a free cell stay where they are. Needs the bridge running.",
@@ -459,9 +536,10 @@ const moveMonstersTool = defineTool({
 
 const listEncounterTool = defineTool({
   name: "list_encounter",
+  takesEncounter: true,
   annotations: { readOnlyHint: true },
   description:
-    "List the encounter in initiative order (highest first), with each monster's AC, HP and initiative.",
+    "List an encounter's monsters in initiative order (highest first), with each monster's AC, HP and initiative.",
   inputSchema: {},
   run(ctx) {
     const instances = ctx.repo.listInstances().sort(compareByInitiative);
@@ -500,6 +578,7 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
   const damage = kind === "damage";
   return defineTool({
     name: damage ? "apply_damage" : "heal",
+    takesEncounter: true,
     description: damage
       ? "Apply damage to a monster (HP clamped at 0). Target is an instance id or exact name."
       : "Heal a monster (HP clamped at max). Target is an instance id or exact name.",
@@ -520,6 +599,7 @@ function hpTool(kind: "damage" | "heal"): ToolDefinition {
 
 const setHpTool = defineTool({
   name: "set_hp",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Set a monster's current HP to an exact value (clamped to 0..max HP). Target is an instance id or exact name.",
@@ -538,6 +618,7 @@ const setHpTool = defineTool({
 
 const setMaxHpTool = defineTool({
   name: "set_max_hp",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Set a monster's max HP to an exact value (at least 1); current HP is lowered if above the new max, never raised. Target is an instance id or exact name.",
@@ -556,6 +637,7 @@ const setMaxHpTool = defineTool({
 
 const resetMaxHpTool = defineTool({
   name: "reset_max_hp",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Set monsters' max HP to their statblock average (hp average) or a new roll of their HP dice (hp rolled). A monster at full HP stays at full HP; a damaged one keeps its current HP, lowered to the new max if above it. Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
@@ -601,6 +683,7 @@ const resetMaxHpTool = defineTool({
 
 const setArmorClassTool = defineTool({
   name: "set_armor_class",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Set a monster's armor class to an exact value (at least 0). Target is an instance id or exact name.",
@@ -624,6 +707,7 @@ const setArmorClassTool = defineTool({
 
 const removeMonstersTool = defineTool({
   name: "remove_monsters",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Remove monsters by instance id or exact name. All targets must resolve, otherwise nothing is removed.",
@@ -666,6 +750,7 @@ function restoredReply(restored: readonly RestoredMonster[]): ToolResult {
 
 const restoreMonstersTool = defineTool({
   name: "restore_monsters",
+  takesEncounter: true,
   annotations: { destructiveHint: false },
   description:
     "Bring back monsters removed from the encounter, by instance id or exact name, with the HP, initiative and group they had. All targets must resolve, otherwise nothing is restored. list_encounter names what can be restored; a name taken meanwhile gets a new number.",
@@ -690,6 +775,7 @@ const restoreMonstersTool = defineTool({
 
 const renameMonsterTool = defineTool({
   name: "rename_monster",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Rename a monster. Target is an instance id or exact name; the new name must be non-empty and not used by another monster.",
@@ -707,6 +793,7 @@ const renameMonsterTool = defineTool({
 
 const changeMonsterTypeTool = defineTool({
   name: "change_monster_type",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Change monsters to another monster type, keeping their tokens' places. Targets are instance ids or exact names; monster is a monster key. Each gets a new numbered name and the new monster's max HP (hp: rolled by default, or average), AC and size; damage taken, the initiative roll (with the new modifier), group and stats visibility are kept. All targets must resolve, otherwise nothing changes.",
@@ -767,6 +854,7 @@ const changeMonsterTypeTool = defineTool({
 
 const setInitiativeTool = defineTool({
   name: "set_initiative",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Set a monster's initiative to an exact value. Target is an instance id or exact name.",
@@ -786,6 +874,7 @@ const setInitiativeTool = defineTool({
 
 const rollInitiativeTool = defineTool({
   name: "roll_initiative",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Roll initiative (1d20 plus the monster's initiative modifier) for monsters already in the encounter, replacing any value they have. Targets are instance ids or exact names. mode group (default): named monsters of one group share one roll; each: one roll per monster. All targets must resolve, otherwise nothing changes.",
@@ -829,6 +918,7 @@ const rollInitiativeTool = defineTool({
 
 const splitInitiativeTool = defineTool({
   name: "split_initiative",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Give each named monster its own initiative group, so it acts on its own. Targets are instance ids or exact names. Each keeps its initiative unless roll is true, then each rolls its own. All targets must resolve, otherwise nothing changes.",
@@ -883,6 +973,7 @@ const splitInitiativeTool = defineTool({
 
 const mergeInitiativeTool = defineTool({
   name: "merge_initiative",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Put the named monsters into one initiative group, so they act together. Targets are instance ids or exact names; each takes the initiative of the first named monster that has one, without a roll. All targets must resolve, otherwise nothing changes.",
@@ -923,6 +1014,7 @@ const mergeInitiativeTool = defineTool({
 
 const setStatsVisibilityTool = defineTool({
   name: "set_stats_visibility",
+  takesEncounter: true,
   annotations: { destructiveHint: false },
   description:
     "Reveal monsters' stats to players (visible: true) or hide them again (visible: false). Targets are instance ids or exact names. All targets must resolve, otherwise nothing changes.",
@@ -950,6 +1042,7 @@ const setStatsVisibilityTool = defineTool({
 
 const clearEncounterTool = defineTool({
   name: "clear_encounter",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Remove every monster from the encounter. The cleared monsters can be brought back with restore_encounter.",
@@ -974,6 +1067,7 @@ const clearEncounterTool = defineTool({
 
 const restoreEncounterTool = defineTool({
   name: "restore_encounter",
+  takesEncounter: true,
   annotations: { destructiveHint: false },
   description:
     "Bring back every monster the last clear_encounter removed, with the HP, initiative, group and stats visibility they had; their tokens are created again. Monsters added since stay; a name taken meanwhile gets a new number. Fails when nothing cleared is left to restore.",
@@ -987,9 +1081,10 @@ const restoreEncounterTool = defineTool({
 
 const undoTool = defineTool({
   name: "undo",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
-    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
+    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms) and encounter renames and bindings (rename_encounter, use_encounter) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
   inputSchema: {},
   run(ctx, _args, origin) {
     const snapshot = ctx.repo.listInstances();
@@ -1159,10 +1254,11 @@ function artWaitLines(waits: readonly TableArtWait[]): string[] {
 
 const useMapTool = defineTool({
   name: "use_map",
+  takesEncounter: true,
   annotations: { destructiveHint: false },
   startsEncounter: true,
   description:
-    "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the current encounter's map. Needs the bridge running.",
+    "Use the map the GM aligned on the Owlbear scene: reads the scene's maps, picks one by name when there are several, records how it sits on the grid and makes it the map of the encounter the call acts on. Needs the bridge running.",
   inputSchema: { name: z.string().min(1).optional() },
   async run(ctx, { name }, origin) {
     const { map, cols, rows } = await useMap(ctx.table, ctx.maps, name);
@@ -1176,6 +1272,7 @@ const useMapTool = defineTool({
 
 const setRoomsTool = defineTool({
   name: "set_rooms",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Name rooms on the map in use by display-cell ranges such as T5:AB11; a room with several ranges (an L shape) lists each. A room named like a saved one (ignoring case) replaces it. Status is confirmed unless given as proposed. Reads where the map sits now; needs the bridge running.",
@@ -1207,6 +1304,7 @@ const setRoomsTool = defineTool({
 
 const listRoomsTool = defineTool({
   name: "list_rooms",
+  takesEncounter: true,
   annotations: { readOnlyHint: true },
   description:
     "List the rooms saved for the map in use, with their status and display-cell ranges where the map sits now. Needs the bridge running.",
@@ -1234,6 +1332,7 @@ const listRoomsTool = defineTool({
 
 const removeRoomsTool = defineTool({
   name: "remove_rooms",
+  takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
     "Remove saved rooms from the map in use by name, ignoring case. Every name must match a saved room, or nothing is removed.",
@@ -1250,6 +1349,7 @@ const removeRoomsTool = defineTool({
 
 const getMapImageTool = defineTool({
   name: "get_map_image",
+  takesEncounter: true,
   annotations: { readOnlyHint: true },
   description:
     "Get an image of the map in use as the DM sees it, with the column letters and row numbers of its display cells drawn on its edges, plus its grid size. Read room interiors from it to propose rooms. Needs the bridge running.",
@@ -1269,6 +1369,83 @@ const getMapImageTool = defineTool({
         { type: "text", text },
       ],
     };
+  },
+});
+
+const listEncountersTool = defineTool({
+  name: "list_encounters",
+  annotations: { readOnlyHint: true },
+  description:
+    "List every encounter: its name, live monster count, whether its scene is the open one, another or none, and which is current. Creates none.",
+  inputSchema: {},
+  run(ctx) {
+    const listing = listEncounterSummaries(ctx.encounters);
+    const structured = {
+      encounters: listing.encounters.map((summary) => ({
+        encounter: summary.encounter.name,
+        monsters: summary.monsterCount,
+        bound: summary.bound,
+        openScene: summary.openScene,
+        current: summary.current,
+      })),
+      sceneOpen: listing.sceneOpen,
+    };
+    if (listing.encounters.length === 0)
+      return ok("There are no encounters yet.", structured);
+    const rows = table(
+      ["encounter", "monsters", "scene", "current"],
+      listing.encounters.map((summary) => [
+        summary.encounter.name,
+        summary.monsterCount,
+        summary.openScene ? "open" : summary.bound ? "another" : null,
+        summary.current ? "yes" : null,
+      ]),
+    );
+    const sceneLine = !listing.sceneOpen
+      ? ["No scene is open."]
+      : listing.encounters.some((summary) => summary.openScene)
+        ? []
+        : ["The open scene has no encounter yet."];
+    return ok([rows, ...sceneLine].join("\n\n"), structured);
+  },
+});
+
+const renameEncounterTool = defineTool({
+  name: "rename_encounter",
+  annotations: { destructiveHint: true },
+  description:
+    "Rename the open scene's encounter (with no scene open, the current one), or the one named in encounter. The name must not be empty or taken by another encounter, ignoring case.",
+  inputSchema: { name: z.string(), encounter: encounterArgument },
+  run(ctx, { name, encounter }, origin) {
+    const renamed = renameEncounter(ctx.encounters, {
+      name,
+      ...(encounter !== undefined && { encounter }),
+    });
+    // Undo does not cover a rename: it leaves a barrier, as map changes do.
+    ctx.encounters.repositoryFor(renamed.encounter.id).noteCommand(origin());
+    const line = `Renamed ${renamed.renamedFrom} to ${renamed.encounter.name}.`;
+    return ok(
+      renamed.created
+        ? `New encounter: ${renamed.renamedFrom}\n\n${line}`
+        : line,
+      { encounter: renamed.encounter.name, renamedFrom: renamed.renamedFrom },
+    );
+  },
+});
+
+const useEncounterTool = defineTool({
+  name: "use_encounter",
+  annotations: { destructiveHint: false },
+  description:
+    "Make the named encounter the open scene's encounter. The scene must have no encounter and the encounter no scene; it also becomes current. Needs a scene open in Owlbear.",
+  inputSchema: { encounter: z.string().min(1) },
+  run(ctx, { encounter }, origin) {
+    const used = useEncounter(ctx.encounters, encounter);
+    // Undo does not cover a binding: it leaves a barrier, as map changes do.
+    ctx.encounters.repositoryFor(used.id).noteCommand(origin());
+    return ok(`${used.name} is now this scene's encounter.`, {
+      encounter: used.name,
+    });
   },
 });
 
@@ -1777,4 +1954,7 @@ export const tools: readonly ToolDefinition[] = [
   removeRoomsTool,
   getMapImageTool,
   proposeRoomsTool,
+  listEncountersTool,
+  renameEncounterTool,
+  useEncounterTool,
 ];

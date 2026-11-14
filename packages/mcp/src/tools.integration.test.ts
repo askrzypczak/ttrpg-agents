@@ -18,6 +18,7 @@ import {
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import type { ToolContext } from "./context.js";
 import { formatSetupStatus } from "./setup-status.js";
 import { tools, type ToolResult } from "./tools.js";
@@ -65,6 +66,9 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
+  // A scene bound to the encounter is open, so replies name no encounter.
+  ctx.encounters.setOpenScene("scene-1");
+  resolveEncounter(ctx.encounters, { writes: true });
 });
 
 async function call(name: string, args: unknown = {}): Promise<ToolResult> {
@@ -165,6 +169,10 @@ function handingOut(
     getOpenScene: () => inner.getOpenScene(),
     setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
     bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
+    setEncounterName: (encounterId, name) =>
+      inner.setEncounterName(encounterId, name),
+    findSceneOfEncounter: (encounterId) =>
+      inner.findSceneOfEncounter(encounterId),
     transaction: (fn) => inner.transaction(fn),
   };
 }
@@ -177,7 +185,7 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the thirty-three tools", () => {
+  it("exposes the thirty-six tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -187,6 +195,7 @@ describe("tool registry", () => {
       "get_statblock",
       "heal",
       "list_encounter",
+      "list_encounters",
       "list_rooms",
       "merge_initiative",
       "move_monsters",
@@ -195,6 +204,7 @@ describe("tool registry", () => {
       "propose_rooms",
       "remove_monsters",
       "remove_rooms",
+      "rename_encounter",
       "rename_monster",
       "reset_max_hp",
       "restore_encounter",
@@ -211,6 +221,7 @@ describe("tool registry", () => {
       "split_initiative",
       "table_status",
       "undo",
+      "use_encounter",
       "use_map",
     ]);
   });
@@ -1104,6 +1115,14 @@ describe("setup_status", () => {
 });
 
 describe("table_status", () => {
+  // These tests set the open scene and its binding themselves: start from an
+  // empty store with no scene open and no encounter.
+  beforeEach(() => {
+    ctx.encounters = new SqliteEncounterDirectory(openDatabase(":memory:"), {
+      now: () => tick++,
+    });
+  });
+
   /**
    * Opens "scene-1" in the store bound to the current encounter (the one
    * `seed` created), and returns what a tab holding it for that scene reports.
@@ -1721,6 +1740,10 @@ describe("the encounter a tool call acts on", () => {
       setOpenScene: (sceneId) => directory.setOpenScene(sceneId),
       bindScene: (sceneId, encounterId) =>
         directory.bindScene(sceneId, encounterId),
+      setEncounterName: (encounterId, name) =>
+        directory.setEncounterName(encounterId, name),
+      findSceneOfEncounter: (encounterId) =>
+        directory.findSceneOfEncounter(encounterId),
       repositoryFor(encounterId) {
         requested.push(encounterId);
         const inner = directory.repositoryFor(encounterId);
@@ -1765,5 +1788,416 @@ describe("the encounter a tool call acts on", () => {
         .map((i) => i.currentHp),
     ).toEqual([10]);
     expect(directory.listEncounters()).toEqual([a, b]);
+  });
+
+  it("with no scene open, apply_damage with encounter changes that encounter and makes it current, a following call without encounter acts on it, and both replies begin with its encounter line", async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const first = directory.createEncounter("Encounter 1");
+    const ambush = directory.createEncounter("Goblin Ambush");
+    directory.setCurrentEncounter(first.id);
+    directory.setOpenScene(null);
+    for (const encounter of [first, ambush])
+      directory
+        .repositoryFor(encounter.id)
+        .addInstances(() => [item("Shadow 1", 5, 10)], origin);
+    const context = contextOver(directory);
+
+    const named = await callWith(context, "apply_damage", {
+      target: "Shadow 1",
+      amount: 4,
+      encounter: "goblin ambush",
+    });
+
+    expect(named.isError).toBeUndefined();
+    expect(text(named)).toBe(
+      "Encounter: Goblin Ambush\n\nShadow 1: 10 -> 6/10 HP",
+    );
+    expect(named.structuredContent).toMatchObject({
+      encounter: "Goblin Ambush",
+      summary: "Encounter: Goblin Ambush\n\nShadow 1: 10 -> 6/10 HP",
+    });
+    expect(directory.getCurrentEncounter()).toEqual(ambush);
+
+    const unnamed = await callWith(context, "apply_damage", {
+      target: "Shadow 1",
+      amount: 1,
+    });
+
+    expect(text(unnamed)).toBe(
+      "Encounter: Goblin Ambush\n\nShadow 1: 6 -> 5/10 HP",
+    );
+    expect(unnamed.structuredContent).toMatchObject({
+      encounter: "Goblin Ambush",
+    });
+    expect(
+      directory.repositoryFor(first.id).listInstances()[0]?.currentHp,
+    ).toBe(10);
+    expect(
+      directory.repositoryFor(ambush.id).listInstances()[0]?.currentHp,
+    ).toBe(5);
+  });
+
+  it("with a scene open, apply_damage naming another encounter changes that one and leaves the current encounter as it was, its reply begins with the encounter line, and a call in the open scene's encounter has no line but carries the encounter's name in its structured content", async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const bound = directory.createEncounter("Encounter 1");
+    const ambush = directory.createEncounter("Goblin Ambush");
+    directory.bindScene("scene-1", bound.id);
+    directory.setOpenScene("scene-1");
+    directory.setCurrentEncounter(bound.id);
+    for (const encounter of [bound, ambush])
+      directory
+        .repositoryFor(encounter.id)
+        .addInstances(() => [item("Shadow 1", 5, 10)], origin);
+    const context = contextOver(directory);
+
+    const named = await callWith(context, "apply_damage", {
+      target: "Shadow 1",
+      amount: 4,
+      encounter: "Goblin Ambush",
+    });
+
+    expect(named.isError).toBeUndefined();
+    expect(text(named)).toBe(
+      "Encounter: Goblin Ambush\n\nShadow 1: 10 -> 6/10 HP",
+    );
+    expect(named.structuredContent).toMatchObject({
+      encounter: "Goblin Ambush",
+    });
+    expect(directory.getCurrentEncounter()).toEqual(bound);
+    expect(
+      directory.repositoryFor(ambush.id).listInstances()[0]?.currentHp,
+    ).toBe(6);
+
+    const own = await callWith(context, "apply_damage", {
+      target: "Shadow 1",
+      amount: 3,
+    });
+
+    expect(text(own)).toBe("Shadow 1: 10 -> 7/10 HP");
+    expect(own.structuredContent).toMatchObject({
+      encounter: "Encounter 1",
+      summary: "Shadow 1: 10 -> 7/10 HP",
+    });
+    expect(
+      directory.repositoryFor(bound.id).listInstances()[0]?.currentHp,
+    ).toBe(7);
+    expect(directory.getCurrentEncounter()).toEqual(bound);
+  });
+
+  it("a call naming an unknown encounter fails listing the encounters' names and changes nothing", async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const first = directory.createEncounter("Encounter 1");
+    directory.createEncounter("Goblin Ambush");
+    directory.setCurrentEncounter(first.id);
+    directory.setOpenScene(null);
+    directory
+      .repositoryFor(first.id)
+      .addInstances(() => [item("Shadow 1", 5, 10)], origin);
+    const before = directory.listEncounters();
+
+    const r = await callWith(contextOver(directory), "apply_damage", {
+      target: "Shadow 1",
+      amount: 4,
+      encounter: "Ogre Den",
+    });
+
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("Ogre Den");
+    expect(text(r)).toContain("Encounter 1");
+    expect(text(r)).toContain("Goblin Ambush");
+    expect(directory.listEncounters()).toEqual(before);
+    expect(directory.getCurrentEncounter()).toEqual(first);
+    expect(
+      directory.repositoryFor(first.id).listInstances()[0]?.currentHp,
+    ).toBe(10);
+  });
+
+  it('add_monsters that starts an encounter in an open scene begins its reply with "New encounter: Encounter 2"', async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const first = directory.createEncounter("Encounter 1");
+    directory.setCurrentEncounter(first.id);
+    directory.setOpenScene("scene-1");
+
+    const r = await callWith(contextOver(directory), "add_monsters", {
+      groups: [{ monster: SHADOW, count: 1 }],
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(text(r).startsWith("New encounter: Encounter 2\n\n")).toBe(true);
+    expect(r.structuredContent).toMatchObject({
+      encounter: "Encounter 2",
+      summary: text(r),
+    });
+  });
+
+  it("an error reply of a call with no scene open begins with the encounter line", async () => {
+    const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const first = directory.createEncounter("Encounter 1");
+    directory.setCurrentEncounter(first.id);
+    directory.setOpenScene(null);
+
+    const r = await callWith(contextOver(directory), "apply_damage", {
+      target: "Nobody",
+      amount: 1,
+    });
+
+    expect(r.isError).toBe(true);
+    expect(text(r).startsWith("Encounter: Encounter 1\n\n")).toBe(true);
+    expect(text(r)).toContain('Unknown target "Nobody"');
+    expect(r.structuredContent).toBeUndefined();
+  });
+
+  it("every tool that reads or changes an encounter takes an optional encounter argument, use_encounter requires one, and the other tools take none", () => {
+    const optional = [
+      "add_monsters",
+      "preview_monsters",
+      "move_monsters",
+      "list_encounter",
+      "apply_damage",
+      "heal",
+      "set_hp",
+      "set_max_hp",
+      "reset_max_hp",
+      "set_armor_class",
+      "remove_monsters",
+      "restore_monsters",
+      "rename_monster",
+      "change_monster_type",
+      "set_initiative",
+      "roll_initiative",
+      "split_initiative",
+      "merge_initiative",
+      "set_stats_visibility",
+      "clear_encounter",
+      "restore_encounter",
+      "undo",
+      "use_map",
+      "set_rooms",
+      "list_rooms",
+      "remove_rooms",
+      "get_map_image",
+      "rename_encounter",
+    ];
+    const required = ["use_encounter"];
+    const none = [
+      "search_monsters",
+      "get_statblock",
+      "open_statblock",
+      "setup_status",
+      "propose_rooms",
+      "table_status",
+      "list_encounters",
+    ];
+    expect(tools.map((t) => t.name).sort()).toEqual(
+      [...optional, ...required, ...none].sort(),
+    );
+
+    const encounterArgument = (name: string) => {
+      const schema = tools.find((t) => t.name === name)?.inputSchema[
+        "encounter"
+      ];
+      if (!schema) return "none";
+      const accepts = (args: Record<string, unknown>) =>
+        z.object({ encounter: schema }).safeParse(args).success;
+      if (!accepts({ encounter: "Goblin Ambush" })) return "not a name";
+      return accepts({}) ? "optional" : "required";
+    };
+    for (const name of optional)
+      expect(encounterArgument(name), name).toBe("optional");
+    for (const name of required)
+      expect(encounterArgument(name), name).toBe("required");
+    for (const name of none) expect(encounterArgument(name), name).toBe("none");
+  });
+
+  describe("list_encounters", () => {
+    it("list_encounters lists each encounter's name, monster count, scene and current flag in a table and its structured content", async () => {
+      const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+      const ambush = directory.createEncounter("Goblin Ambush");
+      const crypt = directory.createEncounter("Crypt");
+      directory.createEncounter("Encounter 3");
+      const ambushRepo = directory.repositoryFor(ambush.id);
+      const [, , removed] = ambushRepo.addInstances(
+        () => [item("Goblin 1", 5), item("Goblin 2", 5), item("Goblin 3", 5)],
+        origin,
+      );
+      ambushRepo.removeInstances([removed!.id], origin);
+      directory
+        .repositoryFor(crypt.id)
+        .addInstances(() => [item("Shadow 1", 5)], origin);
+      directory.bindScene("scene-1", ambush.id);
+      directory.bindScene("scene-2", crypt.id);
+      directory.setOpenScene("scene-1");
+      directory.setCurrentEncounter(crypt.id);
+      const context = contextOver(directory);
+
+      const r = await callWith(context, "list_encounters");
+
+      const expectedTable = [
+        "| encounter | monsters | scene | current |",
+        "| --- | --- | --- | --- |",
+        "| Goblin Ambush | 2 | open | - |",
+        "| Crypt | 1 | another | yes |",
+        "| Encounter 3 | 0 | - | - |",
+      ].join("\n");
+      expect(r.isError).toBeUndefined();
+      expect(text(r)).toBe(expectedTable);
+      expect(r.structuredContent).toEqual({
+        encounters: [
+          {
+            encounter: "Goblin Ambush",
+            monsters: 2,
+            bound: true,
+            openScene: true,
+            current: false,
+          },
+          {
+            encounter: "Crypt",
+            monsters: 1,
+            bound: true,
+            openScene: false,
+            current: true,
+          },
+          {
+            encounter: "Encounter 3",
+            monsters: 0,
+            bound: false,
+            openScene: false,
+            current: false,
+          },
+        ],
+        sceneOpen: true,
+        summary: expectedTable,
+      });
+
+      directory.setOpenScene(null);
+      const closed = await callWith(context, "list_encounters");
+
+      expect(
+        text(closed).startsWith(
+          expectedTable.replace("| open |", "| another |"),
+        ),
+      ).toBe(true);
+      expect(text(closed).endsWith("No scene is open.")).toBe(true);
+      expect(closed.structuredContent).toMatchObject({ sceneOpen: false });
+
+      directory.setOpenScene("scene-3");
+      const unbound = await callWith(context, "list_encounters");
+
+      expect(
+        text(unbound).endsWith("The open scene has no encounter yet."),
+      ).toBe(true);
+      expect(unbound.structuredContent).toMatchObject({ sceneOpen: true });
+      expect(directory.listEncounters()).toHaveLength(3);
+    });
+
+    it("list_encounters on an empty store says there are no encounters and creates none", async () => {
+      const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+      directory.setOpenScene(null);
+
+      const r = await callWith(contextOver(directory), "list_encounters");
+
+      expect(r.isError).toBeUndefined();
+      expect(text(r)).toBe("There are no encounters yet.");
+      expect(r.structuredContent).toMatchObject({
+        encounters: [],
+        sceneOpen: false,
+      });
+      expect(directory.listEncounters()).toEqual([]);
+      expect(directory.getCurrentEncounter()).toBeUndefined();
+    });
+  });
+
+  describe("rename_encounter", () => {
+    it("rename_encounter renames the open scene's encounter and replies with the old and new name", async () => {
+      const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+      const bound = directory.createEncounter("Encounter 1");
+      const current = directory.createEncounter("Encounter 2");
+      directory.bindScene("scene-1", bound.id);
+      directory.setOpenScene("scene-1");
+      directory.setCurrentEncounter(current.id);
+
+      const r = await callWith(contextOver(directory), "rename_encounter", {
+        name: "Goblin Ambush",
+      });
+
+      expect(r.isError).toBeUndefined();
+      expect(text(r)).toBe("Renamed Encounter 1 to Goblin Ambush.");
+      expect(r.structuredContent).toEqual({
+        encounter: "Goblin Ambush",
+        renamedFrom: "Encounter 1",
+        summary: "Renamed Encounter 1 to Goblin Ambush.",
+      });
+      expect(directory.listEncounters().map((e) => e.name)).toEqual([
+        "Goblin Ambush",
+        "Encounter 2",
+      ]);
+      expect(directory.getCurrentEncounter()).toEqual(current);
+    });
+
+    it("rename_encounter to a name another encounter has fails naming it and renames nothing", async () => {
+      const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+      const bound = directory.createEncounter("Encounter 1");
+      directory.createEncounter("Crypt");
+      directory.bindScene("scene-1", bound.id);
+      directory.setOpenScene("scene-1");
+      const before = directory.listEncounters();
+
+      const r = await callWith(contextOver(directory), "rename_encounter", {
+        name: "crypt",
+      });
+
+      expect(r.isError).toBe(true);
+      expect(text(r)).toContain("Crypt");
+      expect(directory.listEncounters()).toEqual(before);
+    });
+  });
+
+  describe("use_encounter", () => {
+    it("use_encounter binds the named encounter to the open scene, makes it current and replies so", async () => {
+      const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+      const crypt = directory.createEncounter("Crypt");
+      const ambush = directory.createEncounter("Goblin Ambush");
+      directory.bindScene("scene-1", crypt.id);
+      directory.setCurrentEncounter(crypt.id);
+      directory.setOpenScene("scene-2");
+
+      const r = await callWith(contextOver(directory), "use_encounter", {
+        encounter: "goblin ambush",
+      });
+
+      expect(r.isError).toBeUndefined();
+      expect(text(r)).toBe("Goblin Ambush is now this scene's encounter.");
+      expect(r.structuredContent).toEqual({
+        encounter: "Goblin Ambush",
+        summary: "Goblin Ambush is now this scene's encounter.",
+      });
+      expect(directory.getOpenScene()).toEqual({
+        sceneId: "scene-2",
+        encounter: ambush,
+      });
+      expect(directory.getCurrentEncounter()).toEqual(ambush);
+    });
+
+    it("use_encounter with no scene open fails with the reason and binds nothing", async () => {
+      const directory = new SqliteEncounterDirectory(openDatabase(":memory:"));
+      const crypt = directory.createEncounter("Crypt");
+      const ambush = directory.createEncounter("Goblin Ambush");
+      directory.setCurrentEncounter(crypt.id);
+      directory.setOpenScene(null);
+
+      const r = await callWith(contextOver(directory), "use_encounter", {
+        encounter: "Goblin Ambush",
+      });
+
+      expect(r.isError).toBe(true);
+      expect(text(r)).toContain("No scene is open");
+      expect(directory.getCurrentEncounter()).toEqual(crypt);
+      expect(directory.listEncounters()).toEqual([crypt, ambush]);
+      // Bound to no scene: a fresh scene can still take it.
+      directory.setOpenScene("scene-1");
+      expect(directory.getOpenScene()?.encounter).toBeUndefined();
+      directory.bindScene("scene-1", ambush.id);
+      expect(directory.getOpenScene()?.encounter).toEqual(ambush);
+    });
   });
 });

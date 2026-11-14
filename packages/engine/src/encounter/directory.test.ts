@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  listEncounterSummaries,
   nextEncounterName,
   openScene,
+  renameEncounter,
   repositoryForInstance,
   resolveEncounter,
+  useEncounter,
   type EncounterDirectory,
   type OpenScene,
 } from "./directory.js";
 import {
+  InvalidNameError,
   NoSceneEncounterError,
+  SceneBindingError,
   UnknownEncounterError,
   UnknownInstanceError,
 } from "./errors.js";
@@ -26,6 +31,8 @@ class FakeDirectory implements EncounterDirectory {
   readonly bindings = new Map<string, string>();
   /** Instance id -> id of the encounter holding it. */
   readonly holders = new Map<string, string>();
+  /** Encounter id -> ids of its live instances. */
+  readonly live = new Map<string, string[]>();
   readonly repositories = new Map<string, EncounterRepository>();
   /** Each mutating call, with whether it ran inside a transaction. */
   readonly writes: { call: string; inTransaction: boolean }[] = [];
@@ -44,6 +51,8 @@ class FakeDirectory implements EncounterDirectory {
     this.encounters.push(encounter);
     this.repositories.set(encounter.id, {
       tag: encounter.id,
+      listInstances: () =>
+        (this.live.get(encounter.id) ?? []).map((id) => ({ id })),
     } as unknown as EncounterRepository);
     return encounter;
   }
@@ -103,6 +112,23 @@ class FakeDirectory implements EncounterDirectory {
     this.bindings.set(sceneId, encounterId);
   }
 
+  setEncounterName(encounterId: string, name: string): void {
+    this.writes.push({
+      call: "setEncounterName",
+      inTransaction: this.depth > 0,
+    });
+    const index = this.encounters.findIndex((e) => e.id === encounterId);
+    const encounter = this.encounters[index];
+    if (!encounter) throw new Error(`unknown encounter: ${encounterId}`);
+    this.encounters[index] = { ...encounter, name };
+  }
+
+  findSceneOfEncounter(encounterId: string): string | undefined {
+    for (const [sceneId, boundId] of this.bindings)
+      if (boundId === encounterId) return sceneId;
+    return undefined;
+  }
+
   findEncounterOfInstance(instanceId: string): Encounter | undefined {
     const id = this.holders.get(instanceId);
     return this.encounters.find((e) => e.id === id);
@@ -157,7 +183,7 @@ describe("resolveEncounter", () => {
 
     expect(
       resolveEncounter(directory, { name: "bridge FIGHT", writes: true }),
-    ).toEqual({ encounter: named, created: false });
+    ).toEqual({ encounter: named, created: false, mention: true });
     expect(directory.listEncounters()).toHaveLength(2);
     expect(directory.writes).toEqual([]);
   });
@@ -173,7 +199,11 @@ describe("resolveEncounter", () => {
       writes: false,
     });
 
-    expect(resolved).toEqual({ encounter: named, created: false });
+    expect(resolved).toEqual({
+      encounter: named,
+      created: false,
+      mention: true,
+    });
     expect(directory.getCurrentEncounter()).toEqual(named);
     expect(directory.listEncounters()).toHaveLength(2);
     expect(directory.writes.map((w) => w.call)).toEqual([
@@ -195,7 +225,11 @@ describe("resolveEncounter", () => {
       writes: true,
     });
 
-    expect(resolved).toEqual({ encounter: named, created: false });
+    expect(resolved).toEqual({
+      encounter: named,
+      created: false,
+      mention: true,
+    });
     expect(directory.currentId).toBe(current.id);
     expect(directory.writes).toEqual([]);
   });
@@ -243,10 +277,12 @@ describe("resolveEncounter", () => {
     expect(resolveEncounter(directory, { writes: true })).toEqual({
       encounter: bound,
       created: false,
+      mention: false,
     });
     expect(resolveEncounter(directory, { writes: false })).toEqual({
       encounter: bound,
       created: false,
+      mention: false,
     });
     expect(directory.currentId).toBe(current.id);
     expect(directory.listEncounters()).toHaveLength(2);
@@ -263,6 +299,7 @@ describe("resolveEncounter", () => {
     const resolved = resolveEncounter(directory, { writes: true });
 
     expect(resolved.created).toBe(true);
+    expect(resolved.mention).toBe(true);
     expect(resolved.encounter.name).toBe("Encounter 2");
     expect(directory.listEncounters().map((e) => e.name)).toEqual([
       "Encounter 1",
@@ -288,7 +325,12 @@ describe("resolveEncounter", () => {
     const second = resolveEncounter(directory, { writes: true });
 
     expect(first.created).toBe(true);
-    expect(second).toEqual({ encounter: first.encounter, created: false });
+    expect(first.mention).toBe(true);
+    expect(second).toEqual({
+      encounter: first.encounter,
+      created: false,
+      mention: false,
+    });
     expect(directory.listEncounters()).toEqual([first.encounter]);
     expect(directory.bindings.get("scene-1")).toBe(first.encounter.id);
     expect(directory.writes.map((w) => w.call).sort()).toEqual([
@@ -313,7 +355,11 @@ describe("resolveEncounter", () => {
 
     const resolved = resolveEncounter(directory, { writes: true });
 
-    expect(resolved).toEqual({ encounter: other, created: false });
+    expect(resolved).toEqual({
+      encounter: other,
+      created: false,
+      mention: false,
+    });
     expect(directory.listEncounters()).toEqual([other]);
     expect(directory.writes).toEqual([]);
   });
@@ -343,10 +389,12 @@ describe("resolveEncounter", () => {
     expect(resolveEncounter(directory, { writes: true })).toEqual({
       encounter: current,
       created: false,
+      mention: true,
     });
     expect(resolveEncounter(directory, { writes: false })).toEqual({
       encounter: current,
       created: false,
+      mention: true,
     });
     expect(directory.listEncounters()).toHaveLength(2);
     expect(directory.writes).toEqual([]);
@@ -361,6 +409,7 @@ describe("resolveEncounter", () => {
     const resolved = resolveEncounter(directory, { writes: true });
 
     expect(resolved.created).toBe(true);
+    expect(resolved.mention).toBe(true);
     expect(resolved.encounter.name).toBe("Encounter 2");
     expect(directory.listEncounters().map((e) => e.name)).toEqual([
       "Encounter 1",
@@ -381,6 +430,7 @@ describe("resolveEncounter", () => {
     const resolved = resolveEncounter(directory, { writes: false });
 
     expect(resolved.created).toBe(true);
+    expect(resolved.mention).toBe(true);
     expect(resolved.encounter.name).toBe("Encounter 1");
     expect(directory.listEncounters()).toEqual([resolved.encounter]);
     expect(directory.getCurrentEncounter()).toEqual(resolved.encounter);
@@ -405,7 +455,11 @@ describe("resolveEncounter", () => {
 
     const resolved = resolveEncounter(directory, { writes: true });
 
-    expect(resolved).toEqual({ encounter: other, created: false });
+    expect(resolved).toEqual({
+      encounter: other,
+      created: false,
+      mention: true,
+    });
     expect(directory.listEncounters()).toEqual([other]);
     expect(directory.writes).toEqual([]);
   });
@@ -426,6 +480,25 @@ describe("resolveEncounter", () => {
     );
     expect(directory.listEncounters()).toEqual([]);
     expect(directory.bindings.size).toBe(0);
+    expect(directory.writes).toEqual([]);
+  });
+});
+
+describe("resolveEncounter mention", () => {
+  it("resolveEncounter with a name while a scene is open mentions the encounter only when it is not the open scene's", () => {
+    const directory = new FakeDirectory();
+    const bound = directory.add("Encounter 1");
+    const other = directory.add("Bridge fight");
+    directory.bindings.set("scene-1", bound.id);
+    directory.openSceneId = "scene-1";
+    directory.currentId = bound.id;
+
+    expect(
+      resolveEncounter(directory, { name: "encounter 1", writes: true }),
+    ).toEqual({ encounter: bound, created: false, mention: false });
+    expect(
+      resolveEncounter(directory, { name: "Bridge Fight", writes: false }),
+    ).toEqual({ encounter: other, created: false, mention: true });
     expect(directory.writes).toEqual([]);
   });
 });
@@ -513,5 +586,264 @@ describe("repositoryForInstance", () => {
     expect(() => repositoryForInstance(directory, "ghost")).toThrow(
       UnknownInstanceError,
     );
+  });
+});
+
+describe("renameEncounter", () => {
+  it("renameEncounter renames the encounter the request resolves (the named one ignoring case, else the open scene's) to the trimmed name inside a transaction and returns its old name", () => {
+    const directory = new FakeDirectory();
+    const bound = directory.add("Encounter 1");
+    const other = directory.add("Encounter 2");
+    directory.bindings.set("scene-1", bound.id);
+    directory.openSceneId = "scene-1";
+    directory.currentId = other.id;
+
+    const renamedBound = renameEncounter(directory, {
+      name: "  Goblin Ambush  ",
+    });
+
+    expect(renamedBound).toEqual({
+      encounter: { ...bound, name: "Goblin Ambush" },
+      renamedFrom: "Encounter 1",
+      created: false,
+    });
+    expect(directory.writes).toEqual([
+      { call: "setEncounterName", inTransaction: true },
+    ]);
+
+    const renamedOther = renameEncounter(directory, {
+      name: "Crypt",
+      encounter: "ENCOUNTER 2",
+    });
+
+    expect(renamedOther).toEqual({
+      encounter: { ...other, name: "Crypt" },
+      renamedFrom: "Encounter 2",
+      created: false,
+    });
+    expect(directory.listEncounters()).toEqual([
+      { ...bound, name: "Goblin Ambush" },
+      { ...other, name: "Crypt" },
+    ]);
+    expect(directory.currentId).toBe(other.id);
+    expect(directory.writes.every((w) => w.inTransaction)).toBe(true);
+  });
+
+  it("renameEncounter refuses an empty or whitespace-only name with InvalidNameError before resolving, and creates and changes nothing", () => {
+    for (const name of ["", "   "]) {
+      const directory = new FakeDirectory();
+
+      expect(() => renameEncounter(directory, { name })).toThrow(
+        InvalidNameError,
+      );
+      expect(directory.listEncounters()).toEqual([]);
+      expect(directory.currentId).toBeUndefined();
+      expect(directory.transactions).toBe(0);
+      expect(directory.writes).toEqual([]);
+    }
+  });
+
+  it("renameEncounter refuses a name another encounter has ignoring case, non-ASCII letters included, with InvalidNameError naming that encounter, and changes nothing", () => {
+    const directory = new FakeDirectory();
+    const current = directory.add("Encounter 1");
+    directory.add("Écran du Roi");
+    directory.add("Crypt");
+    directory.currentId = current.id;
+    const before = directory.listEncounters();
+
+    for (const [name, clash] of [
+      ["écran du roi", "Écran du Roi"],
+      ["CRYPT", "Crypt"],
+    ] as const) {
+      let thrown: unknown;
+      try {
+        renameEncounter(directory, { name });
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(InvalidNameError);
+      expect((thrown as Error).message).toContain(clash);
+    }
+    expect(directory.listEncounters()).toEqual(before);
+    expect(directory.writes.map((w) => w.call)).not.toContain(
+      "setEncounterName",
+    );
+  });
+
+  it("renameEncounter allows a change of case of the encounter's own name", () => {
+    const directory = new FakeDirectory();
+    const current = directory.add("goblin ambush");
+    directory.currentId = current.id;
+
+    const renamed = renameEncounter(directory, { name: "Goblin Ambush" });
+
+    expect(renamed).toEqual({
+      encounter: { ...current, name: "Goblin Ambush" },
+      renamedFrom: "goblin ambush",
+      created: false,
+    });
+    expect(directory.listEncounters()).toEqual([
+      { ...current, name: "Goblin Ambush" },
+    ]);
+  });
+});
+
+describe("useEncounter", () => {
+  it("useEncounter binds the named unbound encounter to the open unbound scene and makes it current in one transaction", () => {
+    const directory = new FakeDirectory();
+    const current = directory.add("Encounter 1");
+    const ambush = directory.add("Goblin Ambush");
+    directory.bindings.set("scene-1", current.id);
+    directory.openSceneId = "scene-2";
+    directory.currentId = current.id;
+
+    const used = useEncounter(directory, "goblin ambush");
+
+    expect(used).toEqual(ambush);
+    expect(directory.bindings.get("scene-2")).toBe(ambush.id);
+    expect(directory.bindings.get("scene-1")).toBe(current.id);
+    expect(directory.currentId).toBe(ambush.id);
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-2",
+      encounter: ambush,
+    });
+    expect(directory.transactions).toBe(1);
+    expect(directory.writes.map((w) => w.call).sort()).toEqual([
+      "bindScene",
+      "setCurrentEncounter",
+    ]);
+    expect(directory.writes.every((w) => w.inTransaction)).toBe(true);
+  });
+
+  describe("useEncounter refuses with the reason and changes nothing: no scene open, the open scene has an encounter (another one or this one), the encounter belongs to another scene, an unknown name", () => {
+    it.each([
+      {
+        reason: "no scene open",
+        setUp: () => undefined,
+        name: "Goblin Ambush",
+        error: SceneBindingError,
+      },
+      {
+        reason: "the open scene has another encounter",
+        setUp: (d: FakeDirectory) => {
+          const [crypt] = d.encounters.filter((e) => e.name === "Crypt");
+          d.bindings.set("scene-1", crypt!.id);
+          d.openSceneId = "scene-1";
+        },
+        name: "Goblin Ambush",
+        error: SceneBindingError,
+      },
+      {
+        reason: "the open scene has this encounter",
+        setUp: (d: FakeDirectory) => {
+          const [ambush] = d.encounters.filter(
+            (e) => e.name === "Goblin Ambush",
+          );
+          d.bindings.set("scene-1", ambush!.id);
+          d.openSceneId = "scene-1";
+        },
+        name: "Goblin Ambush",
+        error: SceneBindingError,
+      },
+      {
+        reason: "the encounter belongs to another scene",
+        setUp: (d: FakeDirectory) => {
+          const [ambush] = d.encounters.filter(
+            (e) => e.name === "Goblin Ambush",
+          );
+          d.bindings.set("scene-9", ambush!.id);
+          d.openSceneId = "scene-1";
+        },
+        name: "Goblin Ambush",
+        error: SceneBindingError,
+      },
+      {
+        reason: "an unknown name",
+        setUp: (d: FakeDirectory) => {
+          d.openSceneId = "scene-1";
+        },
+        name: "Ogre Den",
+        error: UnknownEncounterError,
+      },
+    ])("$reason", ({ setUp, name, error }) => {
+      const directory = new FakeDirectory();
+      const crypt = directory.add("Crypt");
+      directory.add("Goblin Ambush");
+      directory.currentId = crypt.id;
+      setUp(directory);
+      const bindingsBefore = [...directory.bindings];
+
+      expect(() => useEncounter(directory, name)).toThrow(error);
+      expect([...directory.bindings]).toEqual(bindingsBefore);
+      expect(directory.currentId).toBe(crypt.id);
+      expect(directory.listEncounters()).toHaveLength(2);
+      expect(directory.writes).toEqual([]);
+    });
+  });
+});
+
+describe("listEncounterSummaries", () => {
+  it("listEncounterSummaries lists every encounter oldest first with its live monster count, whether it is bound, whether it is the open scene's and whether it is current, and creates nothing", () => {
+    const directory = new FakeDirectory();
+    const ambush = directory.add("Goblin Ambush");
+    const crypt = directory.add("Crypt");
+    const spare = directory.add("Encounter 3");
+    directory.live.set(ambush.id, ["g1", "g2", "g3"]);
+    directory.live.set(crypt.id, ["s1"]);
+    directory.bindings.set("scene-1", ambush.id);
+    directory.bindings.set("scene-2", crypt.id);
+    directory.openSceneId = "scene-1";
+    directory.currentId = crypt.id;
+
+    expect(listEncounterSummaries(directory)).toEqual({
+      encounters: [
+        {
+          encounter: ambush,
+          monsterCount: 3,
+          bound: true,
+          openScene: true,
+          current: false,
+        },
+        {
+          encounter: crypt,
+          monsterCount: 1,
+          bound: true,
+          openScene: false,
+          current: true,
+        },
+        {
+          encounter: spare,
+          monsterCount: 0,
+          bound: false,
+          openScene: false,
+          current: false,
+        },
+      ],
+      sceneOpen: true,
+    });
+    expect(directory.listEncounters()).toHaveLength(3);
+    expect(directory.writes).toEqual([]);
+  });
+
+  it("listEncounterSummaries says whether a scene is open, also when the open scene has no encounter", () => {
+    const directory = new FakeDirectory();
+    const ambush = directory.add("Goblin Ambush");
+    directory.bindings.set("scene-1", ambush.id);
+
+    expect(listEncounterSummaries(directory).sceneOpen).toBe(false);
+
+    directory.openSceneId = "scene-2";
+    const listing = listEncounterSummaries(directory);
+
+    expect(listing.sceneOpen).toBe(true);
+    expect(listing.encounters.map((e) => e.openScene)).toEqual([false]);
+
+    const empty = new FakeDirectory();
+    expect(listEncounterSummaries(empty)).toEqual({
+      encounters: [],
+      sceneOpen: false,
+    });
+    expect(empty.listEncounters()).toEqual([]);
+    expect(empty.writes).toEqual([]);
   });
 });

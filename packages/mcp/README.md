@@ -48,7 +48,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                            |
 | `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                       |
 | `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number                  |
-| `undo`                 | Undo the agent's last encounter change, again the one before; table edits since stay; not clears, map or room changes; names the next undo        |
+| `undo`                 | Undo the agent's last change, again the one before; table edits stay; not clears, map/room changes, encounter renames/bindings; names next undo   |
 | `table_status`         | Owlbear room and scene status, in sync or not with the open scene's encounter (named); our tokens left alone; art for the GM to pick or re-upload |
 | `setup_status`         | Is this setup ready: profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; a fix under each problem       |
 | `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                                   |
@@ -57,6 +57,20 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `remove_rooms`         | Remove saved rooms by name, all-or-nothing                                                                                                        |
 | `get_map_image`        | Gridded image of the map in use as the DM sees it (an image block) and its grid size; needs the bridge                                            |
 | `propose_rooms`        | Room proposals from ranges read on the map image: each range shrunk by one cell where the room is at least three cells wide; saves nothing        |
+| `list_encounters`      | Every encounter: name, live monster count, whether its scene is the open one, another or none, which is current; creates none                     |
+| `rename_encounter`     | Rename the open scene's (else the current) encounter, or the one named in `encounter`; non-empty, unique ignoring case                            |
+| `use_encounter`        | Make a named encounter that has no scene the open scene's encounter (the scene must have none); refused with the reason otherwise                 |
+
+Every tool that reads or changes an encounter takes an optional `encounter`, an
+encounter's name in any case (`use_encounter` requires it); `list_encounters`,
+`table_status` and the tools that read no encounter take none. Without it a call
+acts on the open scene's encounter, or with no scene open on the current one;
+naming one with no scene open makes it current. In an open scene with no
+encounter only `add_monsters` and `use_map` start one; the other encounter tools
+reply "This scene has no encounter yet.". A reply begins with
+`New encounter: <name>` when the call created its encounter, or with
+`Encounter: <name>` when no scene is open or the call named an encounter other
+than the open scene's; its structured content carries the name as `encounter`.
 
 `table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`,
 `move_monsters`, and `add_monsters` or `preview_monsters` with a `room`, need the bridge running (`npm run bridge`) and a GM

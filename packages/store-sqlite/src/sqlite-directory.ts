@@ -156,6 +156,20 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
     });
   }
 
+  setEncounterName(encounterId: string, name: string): void {
+    // The unique index on name (NOCASE) throws for a name another encounter has.
+    this.db
+      .prepare("UPDATE encounters SET name = ? WHERE id = ?")
+      .run(name, encounterId);
+  }
+
+  findSceneOfEncounter(encounterId: string): string | undefined {
+    const row = this.db
+      .prepare("SELECT scene_id FROM encounters WHERE id = ?")
+      .get(encounterId) as { scene_id: string | null } | undefined;
+    return row?.scene_id ?? undefined;
+  }
+
   /** Runs fn in a transaction; nests by joining an already-open one. */
   transaction<T>(fn: () => T): T {
     if (this.db.isTransaction) return fn();

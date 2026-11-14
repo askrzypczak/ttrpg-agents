@@ -57,6 +57,9 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   remove_rooms: { destructiveHint: true },
   get_map_image: { readOnlyHint: true },
   propose_rooms: { readOnlyHint: true },
+  list_encounters: { readOnlyHint: true },
+  rename_encounter: { destructiveHint: true },
+  use_encounter: { destructiveHint: false },
 };
 
 let cleanup: (() => Promise<void>)[] = [];
@@ -98,7 +101,7 @@ async function connect(): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all thirty-three tools and serves a call", async () => {
+  it("lists all thirty-six tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
@@ -111,6 +114,7 @@ describe("stdio server", () => {
       "get_statblock",
       "heal",
       "list_encounter",
+      "list_encounters",
       "list_rooms",
       "merge_initiative",
       "move_monsters",
@@ -119,6 +123,7 @@ describe("stdio server", () => {
       "propose_rooms",
       "remove_monsters",
       "remove_rooms",
+      "rename_encounter",
       "rename_monster",
       "reset_max_hp",
       "restore_encounter",
@@ -135,6 +140,7 @@ describe("stdio server", () => {
       "split_initiative",
       "table_status",
       "undo",
+      "use_encounter",
       "use_map",
     ]);
 
@@ -147,11 +153,11 @@ describe("stdio server", () => {
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
   }, 30_000);
 
-  it("stdio server (spawned via `bin/stdio.mjs`) lists thirty-three tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
+  it("stdio server (spawned via `bin/stdio.mjs`) lists thirty-six tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(33);
+    expect(tools).toHaveLength(36);
     expect(tools.map((t) => t.name)).toContain("setup_status");
     const tableStatus = tools.find((t) => t.name === "table_status");
     expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });

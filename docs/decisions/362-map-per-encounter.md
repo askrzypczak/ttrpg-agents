@@ -66,4 +66,4 @@ Issue: [#362](https://github.com/askrzypczak/ttrpg-agents/issues/362). Part of E
   - Leave it for #365, which adds an `encounter` parameter: the agent would read a global map until then.
 - Where: `useMapTool` in `packages/mcp/src/tools.ts`.
 - Revisit if: #365 lets `use_map` name an encounter.
-- Status: active
+- Status: superseded by 365.8

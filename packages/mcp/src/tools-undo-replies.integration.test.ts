@@ -56,6 +56,8 @@ beforeEach(() => {
   const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"), {
     now: () => tick++,
   });
+  // A scene bound to the encounter is open, so replies name no encounter.
+  encounters.setOpenScene("scene-1");
   encounters
     .mapRepositoryFor(
       resolveEncounter(encounters, { writes: true }).encounter.id,
@@ -248,6 +250,7 @@ describe("undo structured content and next-undo line", () => {
     const first = await ok("undo");
 
     expect(first.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: replyText(first),
       undone: "apply_damage",
       notCovered: null,
@@ -259,6 +262,7 @@ describe("undo structured content and next-undo line", () => {
     const second = await ok("undo");
 
     expect(second.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: replyText(second),
       undone: "rename_monster",
       notCovered: null,
@@ -487,6 +491,7 @@ describe("undo structured content and next-undo line", () => {
     ].join("\n");
     expect(replyText(r)).toBe(reply);
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: reply,
       undone: null,
       notCovered: "set_rooms",
@@ -574,6 +579,7 @@ describe("undo structured content and next-undo line", () => {
     expect(roomChange.structuredContent?.["notCovered"]).toBe("set_rooms");
 
     expect((await ok("undo")).structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: "Nothing to undo.",
       undone: null,
       notCovered: null,
