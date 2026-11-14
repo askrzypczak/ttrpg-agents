@@ -22,10 +22,22 @@ function inst(i: number): MonsterInstance {
   });
 }
 
-/** Fake repo holding `count` instances. */
-function repoWith(count: number) {
+/** The store's open scene, bound to the encounter `boundSceneWith` fills. */
+const boundScene: OpenScene = {
+  sceneId: "scene-1",
+  encounter: { id: "enc", name: "Encounter 1", createdAt: 1 },
+};
+
+/** Fake directory whose open scene is bound to an encounter of `count` instances. */
+function boundSceneWith(count: number) {
   return {
-    listInstances: () => Array.from({ length: count }, (_, i) => inst(i)),
+    getOpenScene: () => boundScene,
+    repositoryFor: (encounterId: string) => ({
+      listInstances: () =>
+        encounterId === boundScene.encounter?.id
+          ? Array.from({ length: count }, (_, i) => inst(i))
+          : [],
+    }),
   };
 }
 
@@ -65,7 +77,7 @@ describe("getTableStatus art waits", () => {
 
   it("getTableStatus passes the table's art waits through", async () => {
     const status = await getTableStatus(
-      repoWith(3),
+      boundSceneWith(3),
       tableAnswering(scene(true, 1, 3, [ogrePick, wolfReupload])),
     );
     expect(status.artWaits).toEqual([ogrePick, wolfReupload]);
@@ -73,7 +85,7 @@ describe("getTableStatus art waits", () => {
 
   it("an open pick wait makes the table out of sync even when the counts match", async () => {
     const status = await getTableStatus(
-      repoWith(3),
+      boundSceneWith(3),
       tableAnswering(scene(true, 3, 3, [ogrePick])),
     );
     expect(status).toEqual({
@@ -82,13 +94,15 @@ describe("getTableStatus art waits", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: false,
+      openScene: boundScene,
+      holdsOpenScene: undefined,
       artWaits: [ogrePick],
     });
   });
 
   it("a re-upload wait alone leaves the table in sync when the counts match", async () => {
     const status = await getTableStatus(
-      repoWith(3),
+      boundSceneWith(3),
       tableAnswering(scene(true, 3, 3, [wolfReupload])),
     );
     expect(status).toEqual({
@@ -97,11 +111,13 @@ describe("getTableStatus art waits", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: true,
+      openScene: boundScene,
+      holdsOpenScene: undefined,
       artWaits: [wolfReupload],
     });
     // Control: the same wait with a pick beside it is out of sync.
     const withPick = await getTableStatus(
-      repoWith(3),
+      boundSceneWith(3),
       tableAnswering(scene(true, 3, 3, [wolfReupload, ogrePick])),
     );
     expect(withPick.inSync).toBe(false);
@@ -111,7 +127,7 @@ describe("getTableStatus art waits", () => {
 describe("getTableStatus", () => {
   it("reports in sync, with the full status (`sceneReady`, the three counts, `inSync`), when the scene is ready and token, applied and encounter counts match", async () => {
     const status = await getTableStatus(
-      repoWith(3),
+      boundSceneWith(3),
       tableAnswering(scene(true, 3, 3)),
     );
     expect(status).toEqual({
@@ -120,13 +136,15 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: true,
+      openScene: boundScene,
+      holdsOpenScene: undefined,
       artWaits: [],
     });
   });
 
   it("an empty scene and an empty encounter are in sync", async () => {
     const status = await getTableStatus(
-      repoWith(0),
+      boundSceneWith(0),
       tableAnswering(scene(true, 0, 0)),
     );
     expect(status).toEqual({
@@ -135,13 +153,15 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 0,
       encounterCount: 0,
       inSync: true,
+      openScene: boundScene,
+      holdsOpenScene: undefined,
       artWaits: [],
     });
   });
 
   it("reports out of sync when the scene is not ready, even if all counts match", async () => {
     const status = await getTableStatus(
-      repoWith(2),
+      boundSceneWith(2),
       tableAnswering(scene(false, 2, 2)),
     );
     expect(status).toEqual({
@@ -150,6 +170,8 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 2,
       encounterCount: 2,
       inSync: false,
+      openScene: boundScene,
+      holdsOpenScene: undefined,
       artWaits: [],
     });
   });
@@ -157,7 +179,7 @@ describe("getTableStatus", () => {
   it("reports out of sync when the token count differs from the applied count", async () => {
     // Token count differs from applied; applied equals the encounter count.
     const status = await getTableStatus(
-      repoWith(3),
+      boundSceneWith(3),
       tableAnswering(scene(true, 2, 3)),
     );
     expect(status).toEqual({
@@ -166,6 +188,8 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 3,
       encounterCount: 3,
       inSync: false,
+      openScene: boundScene,
+      holdsOpenScene: undefined,
       artWaits: [],
     });
   });
@@ -173,7 +197,7 @@ describe("getTableStatus", () => {
   it("reports out of sync when the applied count differs from the encounter count", async () => {
     // Token and applied counts agree; the encounter has one more.
     const status = await getTableStatus(
-      repoWith(4),
+      boundSceneWith(4),
       tableAnswering(scene(true, 3, 3)),
     );
     expect(status).toEqual({
@@ -182,6 +206,8 @@ describe("getTableStatus", () => {
       appliedInstanceCount: 3,
       encounterCount: 4,
       inSync: false,
+      openScene: boundScene,
+      holdsOpenScene: undefined,
       artWaits: [],
     });
   });
@@ -198,7 +224,7 @@ describe("getTableStatus", () => {
     };
     let caught: unknown;
     try {
-      await getTableStatus(repoWith(1), table);
+      await getTableStatus(boundSceneWith(1), table);
     } catch (e) {
       caught = e;
     }

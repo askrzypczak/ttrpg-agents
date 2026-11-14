@@ -1104,9 +1104,23 @@ describe("setup_status", () => {
 });
 
 describe("table_status", () => {
+  /**
+   * Opens "scene-1" in the store bound to the current encounter (the one
+   * `seed` created), and returns what a tab holding it for that scene reports.
+   */
+  function holdSeededScene(): { sceneId: string; heldEncounterId: string } {
+    const encounter = ctx.encounters.getCurrentEncounter();
+    if (!encounter) throw new Error("seed an encounter first");
+    ctx.encounters.setOpenScene("scene-1");
+    ctx.encounters.bindScene("scene-1", encounter.id);
+    return { sceneId: "scene-1", heldEncounterId: encounter.id };
+  }
+
   it("`table_status` formats text and `structuredContent` from the port and the repo when in sync", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
+    const held = holdSeededScene();
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1127,12 +1141,15 @@ describe("table_status", () => {
       encounterCount: 3,
       inSync: true,
       roomId: "room-abc",
+      encounter: "Encounter 1",
     });
   });
 
   it("table_status names the room in its summary line and structured result when in sync", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
+    const held = holdSeededScene();
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1152,7 +1169,9 @@ describe("table_status", () => {
 
   it("table_status names the room in its summary line when out of sync", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
+    const held = holdSeededScene();
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: false,
       tokenCount: 0,
       appliedInstanceCount: 0,
@@ -1172,7 +1191,9 @@ describe("table_status", () => {
 
   it("table_status without a room id says the room is unknown and to reload the Owlbear tab, and leaves `roomId` out of its structured result", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
+    const held = holdSeededScene();
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1190,7 +1211,9 @@ describe("table_status", () => {
   it("`table_status` reports out of sync with all three counts in the text", async () => {
     // Encounter count 3; tokens 7 and applied 8 are distinct from it.
     seed(item("A", 1), item("B", 2), item("C", 3));
+    const held = holdSeededScene();
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 7,
       appliedInstanceCount: 8,
@@ -1219,7 +1242,9 @@ describe("table_status", () => {
 
   it("table_status names the types whose art is being picked and says tokens wait on the GM, in its text and structured result", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
+    const held = holdSeededScene();
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1233,9 +1258,10 @@ describe("table_status", () => {
     const line =
       "Tokens are waiting on the GM: art for Ogre is being chosen in Owlbear's image picker; cancelling it gives circles.";
     const lines = text(r).split("\n");
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
     expect(lines[0]).toMatch(/^Owlbear is out of sync \(room room-abc\): /);
-    expect(lines[1]).toBe(line);
+    expect(lines[1]).toBe("Encounter: Encounter 1.");
+    expect(lines[2]).toBe(line);
     expect(r.structuredContent).toMatchObject({
       inSync: false,
       waitingOnGm: [line],
@@ -1244,6 +1270,7 @@ describe("table_status", () => {
 
   it("table_status names the types whose art needs re-uploading and what the GM presses, in its text and structured result", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
+    const held = holdSeededScene();
     const reupload = (monsterKey: string, monsterName: string) => ({
       monsterKey,
       monsterName,
@@ -1251,6 +1278,7 @@ describe("table_status", () => {
     });
 
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1265,16 +1293,18 @@ describe("table_status", () => {
     const twoLine =
       "Art for Wolf and Owlbear needs re-uploading: click Re-upload next to each in the extension panel, then Pick the uploaded image.";
     const twoLines = text(two).split("\n");
-    expect(twoLines).toHaveLength(2);
+    expect(twoLines).toHaveLength(3);
     // A re-upload alone leaves the verdict to the counts.
     expect(twoLines[0]).toMatch(/^Owlbear is in sync \(room room-abc\): /);
-    expect(twoLines[1]).toBe(twoLine);
+    expect(twoLines[1]).toBe("Encounter: Encounter 1.");
+    expect(twoLines[2]).toBe(twoLine);
     expect(two.structuredContent).toMatchObject({
       inSync: true,
       waitingOnGm: [twoLine],
     });
 
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1283,10 +1313,11 @@ describe("table_status", () => {
     const one = await call("table_status");
     const oneLine =
       "Art for Wolf needs re-uploading: click Re-upload next to it in the extension panel, then Pick the uploaded image.";
-    expect(text(one).split("\n")[1]).toBe(oneLine);
+    expect(text(one).split("\n")[2]).toBe(oneLine);
     expect(one.structuredContent).toMatchObject({ waitingOnGm: [oneLine] });
 
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1297,14 +1328,16 @@ describe("table_status", () => {
       ],
     });
     const three = await call("table_status");
-    expect(text(three).split("\n")[1]).toBe(
+    expect(text(three).split("\n")[2]).toBe(
       "Art for Wolf, Owlbear and Ogre needs re-uploading: click Re-upload next to each in the extension panel, then Pick the uploaded image.",
     );
   });
 
   it("table_status adds nothing when no art wait is open", async () => {
     seed(item("A", 1), item("B", 2), item("C", 3));
+    const held = holdSeededScene();
     ctx.table = tableAnswering({
+      ...held,
       sceneReady: true,
       tokenCount: 3,
       appliedInstanceCount: 3,
@@ -1314,7 +1347,7 @@ describe("table_status", () => {
     const r = await call("table_status");
     expect(r.isError).toBeFalsy();
     expect(text(r)).toBe(
-      "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+      "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.\nEncounter: Encounter 1.",
     );
     expect(r.structuredContent).toEqual({
       sceneReady: true,
@@ -1323,8 +1356,9 @@ describe("table_status", () => {
       encounterCount: 3,
       inSync: true,
       roomId: "room-abc",
+      encounter: "Encounter 1",
       summary:
-        "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+        "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.\nEncounter: Encounter 1.",
     });
   });
 

@@ -155,6 +155,9 @@ describe("handleQuery scene-status", () => {
         appliedInstanceCount: 0,
         artWaits: [],
         roomId: "fake-room",
+        sceneId: null,
+        heldEncounterId: null,
+        unmanagedTokenCount: 0,
       },
     });
   });
@@ -168,6 +171,7 @@ describe("handleQuery scene-status", () => {
     const sync = {
       appliedInstanceCount: () => 0,
       artWaits: () => artWaits.map((wait) => ({ ...wait })),
+      heldScene: () => undefined,
     };
 
     expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
@@ -178,6 +182,9 @@ describe("handleQuery scene-status", () => {
         appliedInstanceCount: 0,
         artWaits,
         roomId: "fake-room",
+        sceneId: TEST_SCENE_ID,
+        heldEncounterId: null,
+        unmanagedTokenCount: 0,
       },
     });
   });

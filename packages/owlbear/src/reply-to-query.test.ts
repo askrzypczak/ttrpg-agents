@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { replyToQuery } from "./queries.js";
 import { createEncounterSync } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
+import { TEST_SCENE_ID } from "./testing/messages.js";
 import type { ObrAdapter } from "./obr-adapter.js";
 import { PROTOCOL_VERSION } from "@ttrpg-agents/protocol";
 
@@ -23,6 +24,9 @@ describe("replyToQuery", () => {
           appliedInstanceCount: 0,
           artWaits: [],
           roomId: "fake-room",
+          sceneId: TEST_SCENE_ID,
+          heldEncounterId: null,
+          unmanagedTokenCount: 0,
         },
       },
     });
