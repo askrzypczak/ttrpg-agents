@@ -67,7 +67,7 @@ export function changeMonsterType(
   origin: ChangeOrigin,
 ): ChangeMonsterTypeResult {
   const { repo, monsters, rng, now } = deps;
-  const monster = monsters.byKey.get(monsterKey);
+  const monster = monsters.get(monsterKey);
   if (monster === undefined) {
     throw new UnknownMonsterError(`unknown monster "${monsterKey}"`);
   }
@@ -82,7 +82,7 @@ export function changeMonsterType(
   });
   const oldModifiers = targets.map((instance) => {
     if (instance.initiative === null) return 0;
-    const old = monsters.byKey.get(instance.monsterKey);
+    const old = monsters.get(instance.monsterKey);
     if (old === undefined) {
       throw new UnknownMonsterError(
         `${instance.displayName}: unknown monster "${instance.monsterKey}"`,

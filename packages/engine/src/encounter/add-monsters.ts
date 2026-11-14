@@ -315,7 +315,7 @@ function planAddMonsters(
 ): PlannedGroup[] {
   const planned: PlannedGroup[] = [];
   for (const [g, group] of groups.entries()) {
-    const monster = monsters.byKey.get(group.monster);
+    const monster = monsters.get(group.monster);
     /* v8 ignore next -- validated before planning */
     if (monster === undefined) continue;
     const join = joins[g];

@@ -19,7 +19,6 @@ import {
   type MapRegistration,
   type MapRepository,
   type Monster,
-  type MonsterIndex,
   type MonsterInstance,
   type RemovedInstance,
   type RoomGroup,
@@ -29,7 +28,7 @@ import {
   type TableSceneMap,
   type TableToken,
 } from "../index.js";
-import { makeTestInstance } from "../testing/index.js";
+import { makeTestInstance, makeTestMonsterIndex } from "../testing/index.js";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "c1" };
 
@@ -225,7 +224,7 @@ function monster(key: string, name: string, size = "medium"): Monster {
   return {
     key,
     name,
-    source: "private",
+    source: { book: "homebrew" },
     size,
     type: "humanoid",
     alignment: "neutral",
@@ -259,12 +258,7 @@ const bestiary = [
   monster("bandit", "Bandit"),
   monster("ogre", "Ogre", "large"),
 ];
-const monsters: MonsterIndex = {
-  monsters: bestiary,
-  byKey: new Map(bestiary.map((m) => [m.key, m] as const)),
-  aliases: new Map(),
-  dndBeyondPages: new Map(),
-};
+const monsters = makeTestMonsterIndex(bestiary);
 
 function setup(
   options: {
@@ -805,15 +799,7 @@ describe("previewMonsters", () => {
       hp: { average: 27, dice: "5d8 + 5" },
       initiativeModifier: 2,
     };
-    const index: MonsterIndex = {
-      monsters: [troll, shadow],
-      byKey: new Map([
-        [troll.key, troll],
-        [shadow.key, shadow],
-      ]),
-      aliases: new Map(),
-      dndBeyondPages: new Map(),
-    };
+    const index = makeTestMonsterIndex([troll, shadow]);
     const { repo } = setup();
     const preview = previewMonsters({ repo, monsters: index }, [
       { monster: "shadow", count: 2 },

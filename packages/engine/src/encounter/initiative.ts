@@ -59,7 +59,7 @@ export function rollInitiativeValues(
 ): InitiativeRollResult {
   const { monsters, rng, now } = deps;
   const resolved = instances.map((item) => {
-    const monster = monsters.byKey.get(item.monsterKey);
+    const monster = monsters.get(item.monsterKey);
     if (monster === undefined) {
       throw new UnknownMonsterError(
         `${item.displayName}: unknown monster "${item.monsterKey}"`,

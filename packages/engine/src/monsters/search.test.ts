@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Monster } from "./schema.js";
 import { getMonsterByKey, searchMonsters } from "./search.js";
-import type { MonsterIndex } from "./types.js";
+import { makeTestMonsterIndex } from "../testing/index.js";
 
 function stub(key: string, name: string): Monster {
   return {
     key,
     name,
-    source: "private",
+    source: { book: "homebrew" },
     size: "medium",
     type: "beast",
     alignment: "unaligned",
@@ -48,20 +48,17 @@ const monsters = [
   stub("warrior-veteran", "Warrior Veteran"),
   stub("venomous-snake", "Venomous Snake"),
 ];
-const index: MonsterIndex = {
-  monsters,
-  byKey: new Map(monsters.map((m) => [m.key, m] as const)),
-  aliases: new Map([
-    ["Thug", "tough"],
-    ["Veteran", "warrior-veteran"],
-    ["Poisonous Snake", "venomous-snake"],
-  ]),
-  dndBeyondPages: new Map(),
-};
+const index = makeTestMonsterIndex(monsters, {
+  aliases: {
+    Thug: "tough",
+    Veteran: "warrior-veteran",
+    "Poisonous Snake": "venomous-snake",
+  },
+});
 const names = (q: string) =>
   searchMonsters(index, q).map((r) => r.monster.name);
 const byKey = (key: string): Monster => {
-  const m = index.byKey.get(key);
+  const m = index.get(key);
   if (!m) throw new Error(`no stub monster ${key}`);
   return m;
 };

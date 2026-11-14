@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Rng } from "../dice/rng.js";
 import type { Monster } from "../monsters/schema.js";
-import type { MonsterIndex } from "../monsters/types.js";
-import { makeTestInstance } from "../testing/index.js";
+import { makeTestInstance, makeTestMonsterIndex } from "../testing/index.js";
 import type { HpMode } from "./add-monsters.js";
 import {
   changeMonsterType,
@@ -33,7 +32,7 @@ function monster(
   return {
     key,
     name,
-    source: "private",
+    source: { book: "homebrew" },
     size: stats.size,
     type: "beast",
     alignment: "unaligned",
@@ -88,12 +87,7 @@ const bestiary = [
     initiativeModifier: 1,
   }),
 ];
-const monsters: MonsterIndex = {
-  monsters: bestiary,
-  byKey: new Map(bestiary.map((m) => [m.key, m] as const)),
-  aliases: new Map(),
-  dndBeyondPages: new Map(),
-};
+const monsters = makeTestMonsterIndex(bestiary);
 
 /** Test-only Rng: yields the given values in order, cycling, each reduced mod max; counts calls. */
 function cycleRng(...values: number[]): Rng & { calls: number } {

@@ -4,9 +4,9 @@ import {
   rollInitiativeValues,
   type InitiativeRollDeps,
   type Monster,
-  type MonsterIndex,
   type Rng,
 } from "../index.js";
+import { makeTestMonsterIndex } from "../testing/index.js";
 
 function monster(
   key: string,
@@ -16,7 +16,7 @@ function monster(
   return {
     key,
     name,
-    source: "private",
+    source: { book: "homebrew" },
     size: "medium",
     type: "humanoid",
     alignment: "neutral",
@@ -46,12 +46,7 @@ function monster(
 }
 
 const bestiary = [monster("goblin", "Goblin", 2), monster("ogre", "Ogre", -1)];
-const monsters: MonsterIndex = {
-  monsters: bestiary,
-  byKey: new Map(bestiary.map((m) => [m.key, m] as const)),
-  aliases: new Map(),
-  dndBeyondPages: new Map(),
-};
+const monsters = makeTestMonsterIndex(bestiary);
 
 const NOW = "2026-01-01T00:00:00.000Z";
 

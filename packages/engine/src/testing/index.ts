@@ -1,6 +1,10 @@
 import type { MonsterInstance } from "../encounter/types.js";
 import type { Monster } from "../monsters/schema.js";
-import type { MonsterIndex } from "../monsters/types.js";
+import {
+  staticMonsterIndex,
+  type MonsterIndex,
+  type MonsterSet,
+} from "../monsters/types.js";
 import type {
   BackupFacts,
   BridgeFacts,
@@ -103,7 +107,11 @@ export function makeTestMonsterIndex(
     dndBeyondPages?: Record<string, string>;
   },
 ): MonsterIndex {
-  void monsters;
-  void extras;
-  throw new Error("not implemented");
+  const set: MonsterSet = {
+    monsters: [...monsters],
+    byKey: new Map(monsters.map((m) => [m.key, m])),
+    aliases: new Map(Object.entries(extras?.aliases ?? {})),
+    dndBeyondPages: new Map(Object.entries(extras?.dndBeyondPages ?? {})),
+  };
+  return staticMonsterIndex(set);
 }

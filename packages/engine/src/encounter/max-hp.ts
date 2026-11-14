@@ -79,7 +79,7 @@ export function resetMaxHp(
     if (instance === undefined) {
       throw new UnknownInstanceError(`no instance ${id}`);
     }
-    const monster = monsters.byKey.get(instance.monsterKey);
+    const monster = monsters.get(instance.monsterKey);
     if (monster === undefined) {
       throw new UnknownMonsterError(
         `${instance.displayName}: unknown monster "${instance.monsterKey}"`,
