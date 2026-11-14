@@ -49,7 +49,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                       |
 | `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number                  |
 | `undo`                 | Undo the agent's last change, again the one before; table edits stay; not clears, map/room changes, encounter renames/bindings; names next undo   |
-| `table_status`         | Owlbear room and scene status, in sync or not; any art the GM must pick (out of sync) or re-upload, as text lines and `waitingOnGm` (only if any) |
+| `table_status`         | Owlbear room and scene status, in sync or not with the open scene's encounter (named); our tokens left alone; art for the GM to pick or re-upload |
 | `setup_status`         | Is this setup ready: profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; a fix under each problem       |
 | `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                                   |
 | `set_rooms`            | Name rooms on the map in use by display-cell ranges (confirmed, or proposed); a room named like a saved one replaces it                           |

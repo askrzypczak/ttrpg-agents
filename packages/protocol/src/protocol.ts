@@ -138,6 +138,12 @@ export const sceneStatusSchema = z.object({
   artWaits: z.array(artWaitSchema).default([]),
   /** The Owlbear room the GM tab is in; absent from an older open tab. */
   roomId: z.string().optional(),
+  /** The scene the GM tab has open, null when none; absent from an older open tab. */
+  sceneId: sceneIdSchema.nullable().optional(),
+  /** The encounter the tab holds for that scene, null when none; absent from an older open tab. */
+  heldEncounterId: z.string().nullable().optional(),
+  /** Our tokens of another encounter or none; absent from an older open tab. */
+  unmanagedTokenCount: z.number().int().min(0).optional(),
 });
 
 const vec2 = z.object({ x: z.number(), y: z.number() });

@@ -260,7 +260,7 @@ export function instanceIdOf(item: SceneItem): string | undefined {
 }
 
 /** The encounter id a token's instance link records, if it records one. */
-function linkedEncounterOf(item: SceneItem): string | undefined {
+export function linkedEncounterOf(item: SceneItem): string | undefined {
   const value = item.metadata[INSTANCE_METADATA_KEY];
   if (typeof value !== "object" || value === null) return undefined;
   const id = (value as { encounterId?: unknown }).encounterId;

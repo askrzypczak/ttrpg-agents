@@ -75,6 +75,14 @@ The panel shows the open scene's encounter in `#encounter` ("Encounter:
 <name>", or "No encounter in this scene yet") once the held snapshot is for
 the open scene (`sceneEncounter` in `src/panel-state.ts`).
 
+The `scene-status` answer (`src/queries.ts`) carries the open scene's id from
+`com.ttrpg-agents/scene-id`, and the held encounter only when the held
+snapshot is for the open scene (else null). Our tokens are split by
+`linkedEncounterOf` into the held encounter's (`tokenCount`) and the rest
+(`unmanagedTokenCount`); the applied count is 0 while none is held. Known
+window: between a bound scene's snapshot and the end of its reconcile, the
+applied count is still the previous scene's, until the reconcile sets it.
+
 ### The planner
 
 `src/sync-plan.ts` holds the pure planner `planSync(desired, observed, config,

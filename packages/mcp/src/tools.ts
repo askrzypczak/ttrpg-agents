@@ -1149,7 +1149,7 @@ const tableStatusTool = defineTool({
   name: "table_status",
   annotations: { readOnlyHint: true },
   description:
-    "Ask the connected Owlbear GM tab for its scene status (scene ready, our token count, applied instance count, room id) and compare it with the encounter; also names the monster types whose token art waits on the GM, with what to click (waitingOnGm). Needs the bridge running.",
+    "Ask the connected Owlbear GM tab for its scene status (scene ready, the token count of the open scene's encounter, applied instance count, room id) and compare it with the open scene's encounter, which it names (or says the scene has none yet, or that no scene is open). Counts our tokens of another encounter or none, which do not affect sync. Also names the monster types whose token art waits on the GM, with what to click (waitingOnGm). Needs the bridge running.",
   inputSchema: {},
   async run(ctx) {
     const {
@@ -1160,7 +1160,10 @@ const tableStatusTool = defineTool({
       inSync,
       artWaits,
       roomId,
-    } = await getTableStatus(ctx.repo, ctx.table);
+      openScene,
+      holdsOpenScene,
+      unmanagedTokenCount = 0,
+    } = await getTableStatus(ctx.encounters, ctx.table);
     const counts = `${String(tokenCount)} tokens on the scene, ${String(appliedInstanceCount)} instances applied, ${String(encounterCount)} in the encounter`;
     const room =
       roomId === undefined
@@ -1169,16 +1172,41 @@ const tableStatusTool = defineTool({
     const status = inSync
       ? `Owlbear is in sync (${room}): scene ready, ${counts}.`
       : `Owlbear is out of sync (${room}): ${sceneReady ? "scene ready" : "scene not ready"}, ${counts}.`;
+    const held =
+      holdsOpenScene === undefined
+        ? " (the tab's encounter unknown: reload the Owlbear tab)"
+        : holdsOpenScene
+          ? ""
+          : "; the Owlbear tab has not caught up yet";
+    const encounterLine =
+      openScene === undefined
+        ? "No scene is open."
+        : openScene.encounter
+          ? `Encounter: ${openScene.encounter.name}${held}.`
+          : `This scene has no encounter yet${held}.`;
+    const unmanaged =
+      unmanagedTokenCount === 0
+        ? []
+        : [
+            unmanagedTokenCount === 1
+              ? "1 token of ours on the scene is left alone: it belongs to another encounter or to none, and does not count toward sync."
+              : `${String(unmanagedTokenCount)} tokens of ours on the scene are left alone: they belong to another encounter or to none, and do not count toward sync.`,
+          ];
     const waitingOnGm = artWaitLines(artWaits);
-    return ok([status, ...waitingOnGm].join("\n"), {
-      sceneReady,
-      tokenCount,
-      appliedInstanceCount,
-      encounterCount,
-      inSync,
-      ...(roomId !== undefined ? { roomId } : {}),
-      ...(waitingOnGm.length > 0 ? { waitingOnGm } : {}),
-    });
+    return ok(
+      [status, encounterLine, ...unmanaged, ...waitingOnGm].join("\n"),
+      {
+        sceneReady,
+        tokenCount,
+        appliedInstanceCount,
+        encounterCount,
+        inSync,
+        encounter: openScene?.encounter?.name ?? null,
+        ...(roomId !== undefined ? { roomId } : {}),
+        ...(unmanagedTokenCount > 0 ? { unmanagedTokenCount } : {}),
+        ...(waitingOnGm.length > 0 ? { waitingOnGm } : {}),
+      },
+    );
   },
 });
 
