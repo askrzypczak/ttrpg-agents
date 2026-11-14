@@ -46,15 +46,47 @@ retried with backoff, and a scene that vanishes mid-apply counts as deferral.
 Item metadata is written key by key (`setItemMetadata`; `undefined` clears),
 never as a whole object.
 
+### Scenes and encounters
+
+`src/open-scene.ts` (`createOpenSceneReporter(obr, send, options)`, GM tab
+only, created in `main.ts` after the socket) reports the open scene: on start
+when a scene is ready, on each ready change to true and after each
+`hello-ack` it reads the scene id from scene metadata
+`com.ttrpg-agents/scene-id` (`SCENE_ID_METADATA_KEY`; `sceneIdOf` accepts
+what the protocol's `sceneIdSchema` does) and sends `scene-open` with it; on a
+ready change to false, or a `hello-ack` with no scene ready, it sends null. A
+scene with no usable id gets one minted once (a UUID); an id is never
+replaced, so a duplicated scene keeps its original's id and shares its
+encounter. Reads and mints run one at a time, and a ready change discards
+those begun before it. A send that does not go out is dropped: the next
+`hello-ack` sends the latest. `current()` is the id last read.
+
+The sync holds the last snapshot's scene, encounter id and name
+(`heldScene()`). A reconcile goes on only while the held encounter is not null
+and the scene's id is the held scene's: it checks after its first scene read
+and after the read that follows an art step, and otherwise ends with no write,
+no `token-deleted`, no `onApplied`, no `onError` and no retry, keeping its
+facts for the next reconcile. A scene-ready change while a reconcile runs (the
+scene epoch) stops it the same way before its next write. Only the held
+encounter's instances get tokens. An event of another encounter advances
+`seq` and settles the command it answers; nothing else.
+
+The panel shows the open scene's encounter in `#encounter` ("Encounter:
+<name>", or "No encounter in this scene yet") once the held snapshot is for
+the open scene (`sceneEncounter` in `src/panel-state.ts`).
+
 ### The planner
 
 `src/sync-plan.ts` holds the pure planner `planSync(desired, observed, config,
-{ viewportCenter, placed, art, snapshot, fields, moves, restyles, reskins })`.
-`defaultSyncConfig` mirrors each instance as a hidden (`visible: false`) token
-on the CHARACTER layer, named after the instance: an IMAGE token from the
-type's stored art, else a circle SHAPE. Tokens are linked by metadata key
-`com.ttrpg-agents/instance` (`{ instanceId }`); only items carrying it are
-touched.
+{ viewportCenter, placed, encounterId, art, snapshot, fields, moves, restyles,
+reskins })`. `defaultSyncConfig` mirrors each instance as a hidden
+(`visible: false`) token on the CHARACTER layer, named after the instance: an
+IMAGE token from the type's stored art, else a circle SHAPE. Tokens are linked
+by metadata key `com.ttrpg-agents/instance` (`{ instanceId, encounterId }`);
+only items whose link records `encounterId` are touched. A token of ours that
+records another encounter or none (made before tokens recorded one) is never
+deleted, moved, renamed, redrawn, replaced or written, is never an instance's
+token, and keeps a placed instance from being reported deleted.
 
 Per-token metadata comes from projectors: `owned` keys follow the encounter,
 `create-only` keys are written at creation. Each owned key's baseline, the raw
@@ -139,10 +171,11 @@ A snapshot pushes the store's value over a kept clamp or refusal. Each such
 write is reported in `plan.overrides`; the sync calls `options.onOverride(text)`
 once per record after the write, and `main.ts` keeps them for `Panel` to list
 under `#overrides` until the DM presses `#dismiss-overrides` (in memory only; `onStoreChange`
-leaves the list alone). A snapshot on the same connection (sent in place of an
-unreadable change-log row) may cover the answers of edits already sent, so the
-sync forgets them; one the store has not applied yet is planned and sent
-again.
+leaves the list alone). A snapshot on the same connection (after a
+`scene-open`, for a change of the open scene's encounter or its name, or in
+place of an unreadable change-log row) may cover the answers of edits already
+sent, so the sync forgets them; one the store has not applied yet is planned
+and sent again.
 
 ### The outbox
 
@@ -403,6 +436,14 @@ the unit fake: pass it as the `local` option or read it from the result's
 
 Use `scene` for assertions and to drive changes (`scene.setReady(true)`). The e2e fake host reuses `SceneModel`.
 
+`SceneModel.switchScene(next)` switches scenes as Owlbear does (ready false,
+the items and scene metadata replaced, ready true) and returns the replaced
+scene. The unit fake writes the scene id `TEST_SCENE_ID` ("s1") into a scene
+that has none (option `sceneId`; null writes none). The test feed
+(`src/testing/messages.ts`) builds snapshots for that scene and the encounter
+`e1` named "Encounter 1", and events of `e1`; options name another scene,
+encounter or name, or null.
+
 Component tests live in `src/*.test.tsx` and run under jsdom: the file starts
 with `// @vitest-environment jsdom` and renders with `createRoot` from
 `react-dom/client` inside `act` from `react` (no Testing Library), then
@@ -432,7 +473,10 @@ Chromium. First time: `npx playwright install chromium`. Not part of `npm run ch
   while the scene is not ready), `OBR_ASSETS_UPLOAD_IMAGES` at once (recording
   each image in `window.__host.uploads`) and `OBR_ACTION_OPEN`.
   `openHarness(page, { failItems: "msg" })` makes every item call fail with
-  that message; those failures are not recorded in `host.errors`.
+  that message; those failures are not recorded in `host.errors`. The scene
+  opens with the scene id `E2E_SCENE_ID`, which the seeded encounter is bound
+  to; `openHarness(page, { sceneId })` names another, and null opens a scene
+  with none.
 - `e2e/helpers.ts` holds shared page actions: `readItems`, `whileExtensionAway`,
   and `controlBridgeSocket` (routes the extension's socket to the bridge through
   Playwright's `page.routeWebSocket`, so a test can drop it and let it back).

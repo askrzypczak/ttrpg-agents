@@ -119,15 +119,36 @@ MCP server's `stdio.ts` wires in; `createBridgeTable` implements the engine's
 The bridge polls the change log every 250 ms (`broadcastLogEvents`) and
 broadcasts each event committed since it started as an `encounter-event`
 carrying its `seq`, oldest first, so tokens appear without reloading the panel.
-The poll sees the bridge's own commits too. A client that connects gets an
-`encounter-snapshot` carrying the `seq` it is current as of, read before the
-instances; events at or before that `seq` may still arrive and the client
-ignores them. Its `restoreSeqs` gives, for each instance a restore put back, the
-`seq` of its last restore; it is read after the instances, so it lists every
-restore they reflect, and is left out when empty. A failed read is retried on
-the next tick. A row the bridge cannot parse (for example one written by a newer
+The poll sees the bridge's own commits too. A failed read is retried on the
+next tick. A row the bridge cannot parse (for example one written by a newer
 MCP server) is skipped: `cli.ts` reports it once on stderr with its `seq`, and
 every client gets a fresh snapshot in its place.
+
+A client that connects gets an `encounter-snapshot` carrying the `seq` it is
+current as of, read before the instances; events at or before that `seq` may
+still arrive and the client ignores them. Its `restoreSeqs` gives, for each
+instance a restore put back, the `seq` of its last restore; it is read after
+the instances, so it lists every restore they reflect, and is left out when
+empty. The snapshot shows the open scene (`sceneId`, null when none is open)
+and its bound encounter's id, name and instances (both null and no instances
+while it has none); with no scene open, the current encounter. Every snapshot
+comes from one source (`createSnapshotSource`), which remembers the scope of
+the last one built: at the end of each tick the poll sends a fresh snapshot
+when the open scene, its encounter or that encounter's name changed since
+(`scopeChanged`), as when another process binds a new encounter to the open
+scene or renames it.
+
+An authenticated client sends `scene-open` (`{ sceneId }`, null when no scene
+is open) when the GM opens or leaves a scene and after each `hello-ack`. The
+server's optional `openScene` option records it (`cli.ts` wires the engine's
+`openScene`, which makes the scene's bound encounter current), then the client
+gets the snapshot for that scene. A failed write is a non-fatal
+`scene-open-failed` `error` that echoes the request id, and no snapshot is
+sent. The active client's disconnect, and closing the server with one
+connected, record no open scene; a displaced client's does not. `cli.ts` also
+records none at start, once it listens (a bridge that cannot take its port
+leaves the running one's scene alone). Without the option the type is
+`unexpected-type`.
 
 The bridge also polls the current encounter's map and its rooms every 250 ms
 and sends `map-rooms` (that map's item id and its rooms) to every client on
