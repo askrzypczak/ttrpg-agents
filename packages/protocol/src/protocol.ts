@@ -10,7 +10,7 @@ import {
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * The largest bridge WebSocket message, in bytes: the bridge's `maxPayload`,
@@ -71,13 +71,18 @@ const encounterSnapshotPayload = z.object({
   restoreSeqs: z.record(z.string(), z.number().int().min(1)).optional(),
   /** The change-log position this snapshot is current as of (0 for an empty log). */
   seq: z.number().int().min(0),
-  /** The active encounter's id, null when the store has none. */
+  /**
+   * The snapshot's encounter: the open scene's bound one, or with no scene
+   * open the current one; null when there is none.
+   */
   encounterId: z.string().nullable(),
   /** The open scene this snapshot is for; null when no scene is open. */
-  sceneId: sceneIdSchema.nullable().optional(),
+  sceneId: sceneIdSchema.nullable(),
   /** The snapshot encounter's name; null exactly when `encounterId` is. */
-  encounterName: z.string().min(1).nullable().optional(),
+  encounterName: z.string().min(1).nullable(),
 });
+// Extension -> bridge: the scene the GM tab has open, null when none is.
+const sceneOpenPayload = z.object({ sceneId: sceneIdSchema.nullable() });
 // An engine event plus its position in the change log and the id of the
 // encounter it changed: the extension applies events in `seq` order and ignores
 // one it already has. The id is null when the event belongs to no encounter.
@@ -93,8 +98,8 @@ const tokenArtSetPayload = z.object({
   art: publishedTokenArtSchema,
 });
 
-// Bridge -> extension: the active map's item and its saved rooms, for the
-// overlay; a null item id when no map is in use.
+// Bridge -> extension: the current encounter's map item and its saved rooms,
+// for the overlay; a null item id when no map is in use.
 const mapRoomsPayload = z.object({
   itemId: z.string().min(1).nullable(),
   rooms: z.array(savedRoomSchema),
@@ -283,6 +288,7 @@ export const bridgeMessageSchema = z.discriminatedUnion("type", [
   envelope("token-art-set", tokenArtSetPayload),
   envelope("instance-edit", instanceEditPayload),
   envelope("map-rooms", mapRoomsPayload),
+  envelope("scene-open", sceneOpenPayload),
 ]);
 
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
