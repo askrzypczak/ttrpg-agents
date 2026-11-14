@@ -258,11 +258,17 @@ describe("search_monsters", () => {
       expect(results[0]).toMatchObject({
         key: "srd-2024_tough",
         name: "Tough",
-        source: "srd-5.2",
+        source: { book: "srd-5.2" },
         alias: "Thug",
       });
       const lines = text(r).split("\n");
       expect(lines[0]).toBe("Thug is now Tough (srd-5.2).");
+      const row = lines.find((l) => l.startsWith("| srd-2024_tough |"));
+      const cells = row
+        ?.split("|")
+        .slice(1, -1)
+        .map((c) => c.trim());
+      expect(cells?.[3]).toBe("srd-5.2");
       expect(text(r)).toContain("srd-2024_tough");
       expect(r.structuredContent?.["summary"]).toBe(text(r));
     }
