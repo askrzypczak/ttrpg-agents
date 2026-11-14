@@ -217,4 +217,19 @@ describe("open scene reporter", () => {
     expect(sceneOpens(sent).at(-1)).toBe("s2");
     expect(reporter.current()).toBe("s2");
   });
+
+  it("a hello-ack while no scene is ready sends scene-open with null and mints nothing", async () => {
+    const { reporter, sent, writes, mints } = setup({
+      scene: new SceneModel("gm", false),
+      sceneId: null,
+    });
+    await settle();
+
+    await reporter.helloAck();
+
+    expect(sceneOpens(sent)).toEqual([null]);
+    expect(reporter.current()).toBeNull();
+    expect(writes).toEqual([]);
+    expect(mints()).toBe(0);
+  });
 });

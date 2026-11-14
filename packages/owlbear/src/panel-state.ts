@@ -121,9 +121,16 @@ export function sceneEncounter(
   openSceneId: string | null | undefined,
   held: HeldScene | undefined,
 ): string | null | undefined {
-  void openSceneId;
-  void held;
-  throw new Error("not implemented");
+  if (openSceneId === null || openSceneId === undefined) return undefined;
+  if (held === undefined || held.sceneId !== openSceneId) return undefined;
+  return held.encounterId === null ? null : held.encounterName;
+}
+
+/** The panel's line for the open scene's encounter (see sceneEncounter). */
+function encounterLine(name: string | null): string {
+  return name === null
+    ? "No encounter in this scene yet"
+    : `Encounter: ${name}`;
 }
 
 export function panelView(input: PanelInput): PanelView {
@@ -144,6 +151,9 @@ export function panelView(input: PanelInput): PanelView {
   ].filter((n): n is string => !!n);
   return {
     ...view,
+    ...(input.sceneEncounter === undefined
+      ? {}
+      : { encounter: encounterLine(input.sceneEncounter) }),
     ...(errors.length > 0 ? { error: errors.join(" ") } : {}),
     ...(notes.length > 0 ? { note: notes.join(" ") } : {}),
     ...(input.overrides && input.overrides.length > 0

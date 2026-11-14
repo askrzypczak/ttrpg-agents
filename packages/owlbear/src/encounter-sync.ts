@@ -19,6 +19,7 @@ import {
 } from "./token-art.js";
 import { nextDelay, type BackoffOptions } from "./backoff.js";
 import type { ObrAdapter } from "./obr-adapter.js";
+import { sceneIdOf } from "./open-scene.js";
 import { createOutbox } from "./outbox.js";
 import { describeError } from "./panel-state.js";
 import type { Timers } from "./reconnecting-socket.js";
@@ -133,6 +134,12 @@ export type HeldScene = {
   encounterId: string | null;
   encounterName: string | null;
 };
+
+/**
+ * A reconcile stopped before its next write: the scene is not the held
+ * snapshot's, or it changed while the reconcile ran.
+ */
+class SceneNotHeld extends Error {}
 
 // Real timers are only used in the browser; tests inject Timers.
 const defaultTimers: Timers = {
@@ -322,6 +329,21 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * a duplicate and ignored; one that skips ahead is a gap: nothing is applied,
  * `onGap` is called once, and events are ignored until the next snapshot.
  *
+ * Only the encounter of the last snapshot (`heldScene()`) is reconciled, and
+ * only on the scene that snapshot is for. After every scene read of a
+ * reconcile (the first, before any picker opens, and the one after an art
+ * step) it goes on only when the snapshot has an encounter and the scene's id
+ * (`SCENE_ID_METADATA_KEY`) is the snapshot's scene; otherwise it ends with no
+ * write, no `token-deleted`, no `onApplied`, no `onError` and no retry, and
+ * its facts, moves, redraws and departures wait for the next reconcile. A
+ * scene-ready change while a reconcile runs stops it the same way before its
+ * next write; the ready flip reconciles again. Tokens are created for the
+ * held encounter's instances only, and only tokens whose link records the
+ * held encounter are touched (see planSync). An event of another encounter
+ * (one neither null nor the held one) advances `seq` and settles the command
+ * it answers, and nothing else; an event with a null encounter applies to the
+ * held one.
+ *
  * A planned table edit is held for `EDIT_SETTLE_MS` before it is sent: a
  * different planned value restarts the delay, the same value planned again
  * keeps it, and an edit the plan no longer contains is dropped. An unreadable
@@ -412,8 +434,9 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * edit is settled at its sent value, so it is not sent again. An `mcp` event
  * pushes the fields it changes, unless an edit of the field is in flight. A
  * snapshot with no `hello-ack` since the last one (sent on the same
- * connection, in place of an unreadable change-log row) forgets the sent
- * edits, whose answers its `seq` may cover.
+ * connection: after a `scene-open`, when the open scene's encounter, binding
+ * or name changed, or in place of an unreadable change-log row) forgets the
+ * sent edits, whose answers its `seq` may cover.
  *
  * An `mcp` `position-changed` event moves its instance's token to the new
  * spawn position in the next reconcile, once (a token not created yet is
@@ -513,6 +536,11 @@ export function createEncounterSync(
 ): EncounterSync {
   const timers = options.timers ?? defaultTimers;
   let desired: EncounterInstance[] | null = null;
+  // What the last snapshot was for; only that scene's encounter is reconciled.
+  let held: HeldScene | undefined;
+  // Bumped by every scene-ready change: a reconcile begun before it makes no
+  // further write.
+  let sceneEpoch = 0;
   // Log position of the last snapshot or applied event. Null before the first
   // snapshot and after a gap, when events are ignored until the next snapshot.
   let seq: number | null = null;
@@ -607,7 +635,9 @@ export function createEncounterSync(
   let left = new Set<string>();
   let afterSnapshot = false;
   // Whether a hello-ack came since the last snapshot. A snapshot without one
-  // came on the same connection (in place of an unreadable change-log row).
+  // came on the same connection (after a scene-open, for a change of the open
+  // scene's encounter or its name, or in place of an unreadable change-log
+  // row).
   let ackedSinceSnapshot = false;
 
   /**
@@ -1092,17 +1122,19 @@ export function createEncounterSync(
   }
 
   /**
-   * The scene's items, the ids in its placed record and the seq the record is
-   * current as of (undefined when missing or not a non-negative integer), read
-   * together.
+   * The scene's items, its id (undefined when it has no usable one), the ids
+   * in its placed record and the seq the record is current as of (undefined
+   * when missing or not a non-negative integer), read together.
    */
   async function readScene(): Promise<{
     items: SceneItem[];
+    sceneId: string | undefined;
     placed: Set<string>;
     placedSeq: number | undefined;
   }> {
     const items = await obr.getItems();
     const metadata = await obr.getSceneMetadata();
+    const sceneId = sceneIdOf(metadata);
     const stored = metadata[PLACED_METADATA_KEY];
     const placed = new Set(
       Array.isArray(stored)
@@ -1116,10 +1148,14 @@ export function createEncounterSync(
       storedSeq >= 0
         ? storedSeq
         : undefined;
-    return { items, placed, placedSeq };
+    return { items, sceneId, placed, placedSeq };
   }
 
   async function apply(
+    // The held snapshot this reconcile is for, with its encounter, and the
+    // scene epoch it began in.
+    scope: { sceneId: string; encounterId: string },
+    epoch: number,
     wanted: EncounterInstance[],
     taken: Facts,
     takenMoves: ReadonlySet<string>,
@@ -1134,6 +1170,22 @@ export function createEncounterSync(
     restores: ReadonlyMap<string, number>,
   ): Promise<SyncPlan> {
     artStepRan = false;
+    // Stops the reconcile once the scene changed since it began: the ready
+    // flip reconciles again.
+    const stillOnScene = (): void => {
+      if (epoch !== sceneEpoch) throw new SceneNotHeld();
+    };
+    // Stops it when the scene read is not the held snapshot's scene.
+    const onHeldScene = (sceneId: string | undefined): void => {
+      stillOnScene();
+      if (sceneId === undefined || sceneId !== scope.sceneId)
+        throw new SceneNotHeld();
+    };
+    // Every scene write of the reconcile, only while it is on its scene.
+    const writeToScene = (call: () => Promise<void>): Promise<void> => {
+      stillOnScene();
+      return write(call);
+    };
     // Whether an id of the record was left out for a restore newer than it,
     // including one that also left the encounter.
     let droppedForRestore = false;
@@ -1153,12 +1205,14 @@ export function createEncounterSync(
         }),
       );
     };
-    let { items, placed: stored, placedSeq } = await readScene();
+    const read = await readScene();
+    onHeldScene(read.sceneId);
+    let { items, placed: stored, placedSeq } = read;
     let placed = withoutLeft(stored, placedSeq);
     const context = {
       viewportCenter: await obr.getViewportCenter(),
       snapshot,
-      encounterId: "",
+      encounterId: scope.encounterId,
     };
     const first = planSync(wanted, items, defaultSyncConfig, {
       ...context,
@@ -1189,6 +1243,8 @@ export function createEncounterSync(
     picking = queue;
     try {
       for (const [i, { monsterKey, monsterName }] of queue.entries()) {
+        // No picker for a scene the GM has left.
+        stillOnScene();
         artStepRan = true;
         announceStep({ monsterName, index: i + 1, total: queue.length });
         const chosen = await pickArt();
@@ -1236,8 +1292,10 @@ export function createEncounterSync(
     }
     if (artStepRan) {
       // An art step waits on the GM or the network, so the table and the
-      // scene may have changed meanwhile: plan from what is there now.
+      // scene may have changed meanwhile: plan from what is there now, and
+      // only if it is still the held snapshot's scene.
       const fresh = await readScene();
+      onHeldScene(fresh.sceneId);
       items = fresh.items;
       stored = fresh.placed;
       placedSeq = fresh.placedSeq;
@@ -1272,26 +1330,28 @@ export function createEncounterSync(
         }
     };
     if (plan.delete.length > 0) {
-      await write(() => obr.deleteItems(plan.delete));
+      await writeToScene(() => obr.deleteItems(plan.delete));
       // The old token of a half-done replacement is among them.
       for (const id of plan.delete) reportWriteNotes(id, "replace");
     }
-    if (plan.add.length > 0) await write(() => obr.addItems(plan.add));
+    if (plan.add.length > 0) await writeToScene(() => obr.addItems(plan.add));
     // Before the metadata write, so a failed rename leaves the baseline
     // unwritten and the retry renames.
     for (const r of plan.rename)
-      await write(() => obr.updateItems([r.id], { name: r.name }));
+      await writeToScene(() => obr.updateItems([r.id], { name: r.name }));
     // Likewise, a failed move leaves the position baseline unwritten. A
     // move's override note is reported once its write succeeds: the retry of
     // a reconcile that fails later finds the token moved and plans no note.
     for (const m of plan.move) {
-      await write(() => obr.updateItems([m.id], { position: m.position }));
+      await writeToScene(() =>
+        obr.updateItems([m.id], { position: m.position }),
+      );
       reportWriteNotes(m.id, "move");
     }
     // Likewise for a redraw: a failed one leaves the look record unwritten,
     // and its note is reported once its write succeeds.
     for (const r of plan.restyle) {
-      await write(() => obr.updateItems([r.id], r.patch));
+      await writeToScene(() => obr.updateItems([r.id], r.patch));
       reportWriteNotes(r.id, "restyle");
     }
     // A token whose kind must change is replaced: its synced record is first
@@ -1300,7 +1360,7 @@ export function createEncounterSync(
     // reconcile that fails in between leaves the instance a linked token, and
     // the retry plans the replacement again or finishes it (see planSync).
     if (plan.replace.length > 0) {
-      await write(() =>
+      await writeToScene(() =>
         obr.setItemMetadata(
           plan.replace.map((r) => ({
             id: r.id,
@@ -1309,13 +1369,13 @@ export function createEncounterSync(
           })),
         ),
       );
-      await write(() => obr.addItems(plan.replace.map((r) => r.item)));
+      await writeToScene(() => obr.addItems(plan.replace.map((r) => r.item)));
       for (const r of plan.replace) reportWriteNotes(r.id, "move");
-      await write(() => obr.deleteItems(plan.replace.map((r) => r.id)));
+      await writeToScene(() => obr.deleteItems(plan.replace.map((r) => r.id)));
       for (const r of plan.replace) reportWriteNotes(r.id, "replace");
     }
     if (plan.update.length > 0)
-      await write(() => obr.setItemMetadata(plan.update));
+      await writeToScene(() => obr.setItemMetadata(plan.update));
 
     // Remember which instances now have a token, so a token the GM deletes
     // later stays deleted; forget instances that left the encounter.
@@ -1342,11 +1402,16 @@ export function createEncounterSync(
       [...next].some((id) => !stored.has(id)) ||
       (stored.size > 0 && placedSeq === undefined) ||
       droppedForRestore
-    )
+    ) {
+      stillOnScene();
       await obr.setSceneMetadata({
         [PLACED_METADATA_KEY]: [...next],
         [PLACED_SEQ_METADATA_KEY]: nextSeq,
       });
+    }
+    // The plan's deletions and notes are verdicts about the scene it read:
+    // none is reported once the scene changed.
+    stillOnScene();
     return plan;
   }
 
@@ -1355,8 +1420,17 @@ export function createEncounterSync(
       timers.clearTimeout(retry);
       retry = null;
     }
-    if (desired === null || !(await obr.isSceneReady())) return;
-    const applying = desired;
+    // Taken before any read: a ready change from here on stops the writes.
+    const epoch = sceneEpoch;
+    if (desired === null || held === undefined) return;
+    // A snapshot for no scene, or of no encounter, is never reconciled: the
+    // scene is left as it is and the pending facts wait for the next one.
+    const { sceneId, encounterId } = held;
+    if (sceneId === null || encounterId === null) return;
+    if (!(await obr.isSceneReady())) return;
+    // Only the held encounter's instances: a token is only ever created for
+    // the encounter its link records.
+    const applying = desired.filter((i) => i.encounterId === encounterId);
     // Facts that arrive while this reconcile applies are for the next one.
     const taken = facts;
     const takenMoves = moves;
@@ -1375,6 +1449,8 @@ export function createEncounterSync(
     let plan: SyncPlan;
     try {
       plan = await apply(
+        { sceneId, encounterId },
+        epoch,
         applying,
         taken,
         takenMoves,
@@ -1394,7 +1470,10 @@ export function createEncounterSync(
         takenLeft,
         snapshot,
       );
-      // The scene went away mid-apply: the ready flip reconciles again.
+      // The scene is not the held snapshot's (its own snapshot reconciles
+      // it), or it changed or went away mid-apply (the ready flip reconciles
+      // again): nothing more is written and nothing is reported or retried.
+      if (error instanceof SceneNotHeld || epoch !== sceneEpoch) return;
       if (!(await obr.isSceneReady())) return;
       try {
         onError(error);
@@ -1447,6 +1526,7 @@ export function createEncounterSync(
     queueQuiet();
   });
   obr.onSceneReadyChange((ready) => {
+    sceneEpoch++;
     if (ready) void enqueue(reconcile);
   });
 
@@ -1463,6 +1543,11 @@ export function createEncounterSync(
         ackedSinceSnapshot = false;
         outbox?.snapshot();
         desired = message.payload.instances;
+        held = {
+          sceneId: message.payload.sceneId,
+          encounterId: message.payload.encounterId,
+          encounterName: message.payload.encounterName,
+        };
         art = { ...art, ...message.payload.art };
         if (options.storeImage !== undefined)
           for (const [monsterKey, value] of Object.entries(
@@ -1519,6 +1604,17 @@ export function createEncounterSync(
         seq = eventSeq;
         desiredSeq = eventSeq;
         const event = message.payload;
+        if (
+          event.encounterId !== null &&
+          event.encounterId !== held?.encounterId
+        ) {
+          // Another encounter's change (one of another scene, or a command
+          // sent in the scene the GM left): it only settles the command it
+          // answers. Nothing is folded, recorded or reconciled.
+          if (event.origin.source === "table")
+            outbox?.settle(event.origin.commandId);
+          return Promise.resolve();
+        }
         if (event.type === "added")
           for (const i of event.instances) restoredAt.set(i.id, eventSeq);
         if (event.type === "removed") left.add(event.id);
@@ -1711,7 +1807,7 @@ export function createEncounterSync(
       await takePanelPick(monsterKey, picked);
     },
     heldScene() {
-      throw new Error("not implemented");
+      return held === undefined ? undefined : { ...held };
     },
   };
 }

@@ -173,6 +173,7 @@ export function Panel({
           onChange={onArtFileChange}
         />
       </div>
+      <p id="encounter">{view?.encounter}</p>
       <p id="scene">{scene}</p>
       <label id="overlay" hidden={!showOverlayToggle}>
         <input
