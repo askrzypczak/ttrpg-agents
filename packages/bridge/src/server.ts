@@ -442,6 +442,7 @@ export async function startBridgeServer(
     storeTokenImage,
     getTokenImage,
     openScene,
+    extensionName,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
@@ -584,10 +585,12 @@ export async function startBridgeServer(
       res.writeHead(405).end();
       return;
     }
-    void serveStatic(req.url ?? "/", root).then(({ status, body, type }) => {
-      res.writeHead(status, { "Content-Type": type });
-      res.end(req.method === "HEAD" ? undefined : body);
-    });
+    void serveStatic(req.url ?? "/", root, extensionName).then(
+      ({ status, body, type }) => {
+        res.writeHead(status, { "Content-Type": type });
+        res.end(req.method === "HEAD" ? undefined : body);
+      },
+    );
   });
 
   const wss = new WebSocketServer({
@@ -866,9 +869,32 @@ function handleTokenImageRead(
   res.end(image.bytes);
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The built manifest with `name` and `action.title` set to the extension's
+ * name; every other field keeps its value and position. Text that is not a
+ * JSON object is returned as built, byte for byte.
+ */
+function renameManifest(built: Buffer, name: string): Buffer | string {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(built.toString("utf8"));
+  } catch {
+    return built;
+  }
+  if (!isPlainObject(manifest)) return built;
+  manifest.name = name;
+  if (isPlainObject(manifest.action)) manifest.action.title = name;
+  return JSON.stringify(manifest, null, 2) + "\n";
+}
+
 async function serveStatic(
   url: string,
   root: string,
+  extensionName: string | undefined,
 ): Promise<{ status: number; body: string | Buffer; type: string }> {
   const text = "text/plain; charset=utf-8";
   let pathname: string;
@@ -883,7 +909,11 @@ async function serveStatic(
     return { status: 403, body: "forbidden", type: text };
   }
   try {
-    const body = await readFile(file);
+    const built = await readFile(file);
+    const body =
+      extensionName !== undefined && file === join(root, "manifest.json")
+        ? renameManifest(built, extensionName)
+        : built;
     return {
       status: 200,
       body,
