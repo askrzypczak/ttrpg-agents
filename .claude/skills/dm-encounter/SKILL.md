@@ -1,13 +1,24 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "that should have been a goblin boss", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "undo that", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", "open the aboleth's statblock", "show me the goblin's page", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "that should have been a goblin boss", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "undo that", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", "open the aboleth's statblock", "show me the goblin's page", "in the ambush, goblin 2 takes 5", "what encounters are there", "call this one the goblin ambush", "use the ambush here", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
 
-The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `open_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `table_status`, `setup_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
+The DM is mid-session and wants speed. Turn each sentence into the fewest correct calls to the `ttrpg-agents` MCP tools (`search_monsters`, `get_statblock`, `open_statblock`, `add_monsters`, `preview_monsters`, `move_monsters`, `list_encounter`, `apply_damage`, `heal`, `set_hp`, `set_max_hp`, `reset_max_hp`, `set_armor_class`, `remove_monsters`, `restore_monsters`, `change_monster_type`, `set_initiative`, `roll_initiative`, `split_initiative`, `merge_initiative`, `set_stats_visibility`, `clear_encounter`, `restore_encounter`, `undo`, `use_map`, `set_rooms`, `list_rooms`, `remove_rooms`, `get_map_image`, `propose_rooms`, `list_encounters`, `rename_encounter`, `use_encounter`, `table_status`, `setup_status`). Never use Bash, grep or file reads to find monsters or run the encounter; the tools are the only source of truth.
 
-Each tool's reply lines come back as the `summary` of its result (the same lines as its text); "relay the tool's line" below means a line of that summary, copied as it is. `get_map_image` is the exception: its result is an image block plus one text line, with no `summary`.
+Each tool's reply lines come back as the `summary` of its result (the same lines as its text); "relay the tool's line" below means a line of that summary, copied as it is. `get_map_image` is the exception: its result is an image block plus one text line, with no `summary`. A reply may begin with an encounter line, `Encounter: ...` or `New encounter: ...` (see Encounters).
+
+## Encounters
+
+Each Owlbear scene has its own encounter, and commands act on the open scene's encounter (with no scene open, on the current one).
+
+- When the DM names an encounter ("in the ambush, goblin warrior 2 takes 5"), pass `encounter` with its name as listed. Call `list_encounters` first when unsure of the name. On an unknown-encounter error, whose message lists the names, call again once with the listed name that matches the DM's words; if none matches, relay the list and ask.
+- When a reply's first line is `Encounter: ...` or `New encounter: ...`, relay it verbatim before the rest.
+- "What encounters are there?" is ONE `list_encounters` call; relay its table and its last line.
+- "Call this one the goblin ambush" is ONE `rename_encounter` call with `name` capitalised as a title ("Goblin Ambush"); pass `encounter` only when the DM names another encounter. Relay its line.
+- "Use the ambush here" is ONE `use_encounter` call with the encounter's name (resolve it as above). Relay its line, or its refusal, and do not retry.
+- On "This scene has no encounter yet.", tell the DM that the first monster added (or `use_map`) starts this scene's encounter, or that `use_encounter` brings a prepared one here; `preview_monsters` fails there too until then.
 
 ## Fewest calls
 
@@ -174,7 +185,7 @@ Removed monsters stay restorable until the next `clear_encounter` that clears mo
 
 - "Undo that", "take that back" or "undo the last change" is ONE `undo` call (no arguments). It reverses the agent's last encounter change; saying it again goes one change further back. Do not reverse the change yourself with `heal`, `set_hp` or another tool.
 - After a `clear_encounter`, use `restore_encounter` as above; `undo` does not reach past a clear.
-- After a map or room change (`use_map`, `set_rooms`, `remove_rooms`), `undo` says it does not cover it, changes nothing and names what the next undo would reach. Relay that, and call `undo` again only when the DM wants that change undone.
+- After a map or room change (`use_map`, `set_rooms`, `remove_rooms`) or an encounter rename or binding (`rename_encounter`, `use_encounter`), `undo` says it does not cover it, changes nothing and names what the next undo would reach. Relay that, and call `undo` again only when the DM wants that change undone.
 - Relay the tool's reply verbatim, including any value it left as set at the table and its last line, which says what the next undo would reverse (for example "Undid apply_damage: Goblin Warrior 2 HP 0 -> 7/7" then "Next undo would reverse add_monsters: Goblin Warrior 1, Goblin Warrior 2, Goblin Warrior 3.").
 
 ## Correcting a monster's type
