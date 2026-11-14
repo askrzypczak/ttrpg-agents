@@ -157,14 +157,17 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
   }
 
   setEncounterName(encounterId: string, name: string): void {
-    void encounterId;
-    void name;
-    throw new Error("not implemented");
+    // The unique index on name (NOCASE) throws for a name another encounter has.
+    this.db
+      .prepare("UPDATE encounters SET name = ? WHERE id = ?")
+      .run(name, encounterId);
   }
 
   findSceneOfEncounter(encounterId: string): string | undefined {
-    void encounterId;
-    throw new Error("not implemented");
+    const row = this.db
+      .prepare("SELECT scene_id FROM encounters WHERE id = ?")
+      .get(encounterId) as { scene_id: string | null } | undefined;
+    return row?.scene_id ?? undefined;
   }
 
   /** Runs fn in a transaction; nests by joining an already-open one. */
