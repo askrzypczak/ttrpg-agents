@@ -344,6 +344,9 @@ describe("checkMonster entry report", () => {
     expect(
       onlyEntry("It takes 1d6 + 2 damage and sleeps for 1d4 + 1 days.").dice,
     ).toEqual([{ dice: "1d6 + 2" }, { dice: "1d4 + 1" }]);
+    expect(onlyEntry("It rolls x7 (2d6) once.").dice).toEqual([
+      { dice: "2d6" },
+    ]);
   });
 
   it("leaves out a dice expression the dice parser rejects and does not throw", () => {

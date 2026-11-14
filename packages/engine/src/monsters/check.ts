@@ -200,7 +200,7 @@ const FAILURE = /Failure:\s*/;
 const SPELL_SAVE_DC = /spell save DC (\d+)/;
 const SPELL_ATTACK_BONUS = /([+-]\d+) to hit with spell attacks/;
 const DICE_MENTION = new RegExp(
-  String.raw`(?:(\d+)\s+\()?(?<![A-Za-z0-9])(${DICE})(?![A-Za-z0-9])(\))?`,
+  String.raw`(?:(?<![A-Za-z0-9])(\d+)\s+\()?(?<![A-Za-z0-9])(${DICE})(?![A-Za-z0-9])(\))?`,
   "g",
 );
 
@@ -363,7 +363,7 @@ function entryFindings(
       code: "attack_bonus",
       entry: entry(),
       found: attack.bonus,
-      expected: bonusValues,
+      expected: [...bonusValues],
       byAbility: bonuses,
     });
   }
