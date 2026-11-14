@@ -68,7 +68,10 @@ export interface BridgeServerOptions {
   /** Directory of the built extension (contains manifest.json). */
   staticDir: string;
   host?: string;
-  /** Message sent to a client right after each `hello-ack`, so it converges on current state. */
+  /**
+   * Message sent to a client right after each `hello-ack` and each accepted
+   * `scene-open`, so it converges on current state.
+   */
   snapshot?: () => BridgeMessage;
   /**
    * Message sent right after the snapshot that follows each `hello-ack`; a
@@ -169,6 +172,7 @@ interface Hooks {
   setTokenArt: ((monsterKey: string, art: TokenArt) => void) | undefined;
   editInstance:
     ((edit: InstanceEdit, commandId: string) => WriteBackResult) | undefined;
+  openScene: ((sceneId: string | null) => void) | undefined;
   onAuthenticated: () => void;
 }
 
@@ -188,7 +192,7 @@ function sendSnapshot(ws: WebSocket, hooks: Hooks): void {
   }
 }
 
-/** Sends the active map's rooms, if configured; a failing read is logged and nothing is sent. */
+/** Sends the current encounter's map and its rooms, if configured; a failing read is logged and nothing is sent. */
 function sendMapRooms(ws: WebSocket, hooks: Hooks): void {
   if (!hooks.mapRooms) return;
   let message: BridgeMessage;
@@ -341,6 +345,34 @@ function handleMessage(
       // next connect carries the stored art.
       break;
     }
+    case "scene-open": {
+      if (!hooks.openScene) {
+        send(
+          ws,
+          errorMessage(
+            "unexpected-type",
+            `server does not accept "${message.type}"`,
+          ),
+        );
+        break;
+      }
+      try {
+        hooks.openScene(message.payload.sceneId);
+      } catch (e) {
+        send(
+          ws,
+          errorMessage(
+            "scene-open-failed",
+            e instanceof Error ? e.message : String(e),
+            message.id,
+          ),
+        );
+        break;
+      }
+      // The snapshot for the scene now open: its encounter, or none.
+      sendSnapshot(ws, hooks);
+      break;
+    }
     case "query-result": {
       const waiting = hooks.pending.get(message.id ?? "");
       if (waiting === undefined) {
@@ -404,12 +436,23 @@ export async function startBridgeServer(
     editInstance,
     storeTokenImage,
     getTokenImage,
+    openScene,
   } = options;
   const root = resolvePath(staticDir);
   const clients = new Set<WebSocket>();
   // The newest authenticated client; a second one displaces it.
   let active: WebSocket | null = null;
   const pending = new Map<string, Pending>();
+
+  /** With no GM tab connected no scene is open; a failure is logged. */
+  const closeOpenScene = (): void => {
+    if (!openScene) return;
+    try {
+      openScene(null);
+    } catch (e) {
+      console.error("the open scene could not be cleared", e);
+    }
+  };
 
   /** Relays `query` to the active client and awaits its reply or the timeout. */
   const sendQuery = (query: Query): Promise<AgentQueryResponse> => {
@@ -562,7 +605,12 @@ export async function startBridgeServer(
       clients.add(ws);
       const forget = () => {
         clients.delete(ws);
-        if (active === ws) active = null;
+        // Only the active client's disconnect closes the scene: a displaced
+        // socket's tab no longer speaks for the table.
+        if (active === ws) {
+          active = null;
+          closeOpenScene();
+        }
       };
       const hooks: Hooks = {
         pending,
@@ -571,6 +619,7 @@ export async function startBridgeServer(
         removeInstance,
         setTokenArt,
         editInstance,
+        openScene,
         onAuthenticated: () => {
           if (active !== null) {
             rejectAndClose(active, "superseded", "another tab connected");
@@ -604,6 +653,9 @@ export async function startBridgeServer(
       }
     },
     close: async () => {
+      // Closing the bridge disconnects the active client; `active` is cleared
+      // below, before the sockets' close events could do it.
+      if (active !== null) closeOpenScene();
       for (const ws of clients) ws.terminate();
       clients.clear();
       active = null;
