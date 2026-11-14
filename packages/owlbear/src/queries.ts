@@ -13,7 +13,9 @@ import {
   planMapImage,
   type DrawMapImage,
 } from "./map-image.js";
+import { sceneIdOf } from "./open-scene.js";
 import { mapPlacementOf } from "./overlay-plan.js";
+import { linkedEncounterOf } from "./sync-plan.js";
 import { describeError } from "./panel-state.js";
 import type { ObrReader } from "./obr-adapter.js";
 import type { SceneItem } from "./scene-model.js";
@@ -45,7 +47,12 @@ function isTokenItem(item: SceneItem): boolean {
   return item.layer === "CHARACTER" || item.layer === "MOUNT";
 }
 
-/** Answers a bridge `query` from the scene and the encounter sync state. */
+/**
+ * Answers a bridge `query` from the scene and the encounter sync state. For
+ * `scene-status`, the held encounter counts only when the held snapshot is for
+ * the open scene; our tokens split into that encounter's (`tokenCount`) and
+ * the rest (`unmanagedTokenCount`), and nothing is applied while none is held.
+ */
 export async function handleQuery(
   obr: ObrReader,
   sync: Pick<EncounterSync, "appliedInstanceCount" | "artWaits" | "heldScene">,
@@ -55,15 +62,30 @@ export async function handleQuery(
   switch (query.name) {
     case "scene-status": {
       const sceneReady = await obr.isSceneReady();
-      const tokenCount = sceneReady ? (await obr.getItems(isOurs)).length : 0;
+      const sceneId = sceneReady
+        ? (sceneIdOf(await obr.getSceneMetadata()) ?? null)
+        : null;
+      const held = sync.heldScene();
+      const heldEncounterId =
+        sceneId !== null && held?.sceneId === sceneId ? held.encounterId : null;
+      const ours = sceneReady ? await obr.getItems(isOurs) : [];
+      const tokenCount =
+        heldEncounterId === null
+          ? 0
+          : ours.filter((item) => linkedEncounterOf(item) === heldEncounterId)
+              .length;
       return {
         name: "scene-status",
         result: {
           sceneReady,
           tokenCount,
-          appliedInstanceCount: sync.appliedInstanceCount(),
+          appliedInstanceCount:
+            heldEncounterId === null ? 0 : sync.appliedInstanceCount(),
           artWaits: sync.artWaits(),
           roomId: obr.getRoomId(),
+          sceneId,
+          heldEncounterId,
+          unmanagedTokenCount: ours.length - tokenCount,
         },
       };
     }
