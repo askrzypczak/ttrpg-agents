@@ -16,9 +16,10 @@ import {
 } from "./encounter-sync.js";
 import { createObrAdapter } from "./obr-adapter.js";
 import { instanceEditErrorText } from "./instance-edit.js";
+import { createOpenSceneReporter } from "./open-scene.js";
 import { createMapOverlay } from "./overlay.js";
 import { Panel, type PanelActions } from "./panel.js";
-import { describeError, panelView } from "./panel-state.js";
+import { describeError, panelView, sceneEncounter } from "./panel-state.js";
 import { tokenDeletedErrorText } from "./token-deleted.js";
 import { downloadTokenImage, uploadTokenImage } from "./token-art.js";
 
@@ -75,12 +76,17 @@ obr.onReady(async () => {
   let showOverlayToggle = false;
   let actions = noActions;
 
+  // The open scene's encounter name (see sceneEncounter); GM only.
+  let openSceneEncounter: () => string | null | undefined = () => undefined;
+
   let rejection: RejectionCode | undefined;
   const render = () => {
+    const encounter = openSceneEncounter();
     const view = panelView({
       role,
       socketState,
       ...(rejection ? { rejection } : {}),
+      ...(encounter !== undefined ? { sceneEncounter: encounter } : {}),
       syncError,
       ...(removeError !== undefined ? { removeError } : {}),
       ...(editError !== undefined ? { editError } : {}),
@@ -219,6 +225,8 @@ obr.onReady(async () => {
         render();
       }
       void sync.handleMessage(message);
+      // After the sync: queued commands go out before the scene-open.
+      if (message.type === "hello-ack") void reporter.helloAck();
     },
     onStateChange: (state) => {
       if (state === "open") streakStart = Date.now();
@@ -230,6 +238,13 @@ obr.onReady(async () => {
     },
   });
   sendToBridge = (message) => socket.send(message);
+  // Reports the open scene (minting its id once) so the bridge sends the
+  // snapshot of the encounter bound to it.
+  const reporter = createOpenSceneReporter(obr, sendToBridge, {
+    onChange: () => render(),
+  });
+  openSceneEncounter = () =>
+    sceneEncounter(reporter.current(), sync.heldScene());
   reconnect = () => {
     socket.close();
     socket.start();

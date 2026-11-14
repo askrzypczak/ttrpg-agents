@@ -13,9 +13,14 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ChangeOrigin, NewMonsterInstance } from "@ttrpg-agents/engine";
+import {
+  resolveEncounter,
+  type ChangeOrigin,
+  type NewMonsterInstance,
+} from "@ttrpg-agents/engine";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import {
+  SqliteEncounterDirectory,
   SqliteEncounterRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -121,7 +126,13 @@ describe("db:backup", () => {
       mkdirSync(dirname(database));
       const live = openDatabase(database);
       try {
-        const repo = new SqliteEncounterRepository(live);
+        const encounterId = resolveEncounter(
+          new SqliteEncounterDirectory(live),
+          {
+            writes: true,
+          },
+        ).encounter.id;
+        const repo = new SqliteEncounterRepository(live, encounterId);
         repo.addInstances(
           () => [newInstance("Shadow 1", 16), newInstance("Shadow 2", 18)],
           origin,
@@ -143,9 +154,9 @@ describe("db:backup", () => {
 
         const copy = openDatabase(backup);
         try {
-          expect(new SqliteEncounterRepository(copy).listInstances()).toEqual(
-            expected,
-          );
+          expect(
+            new SqliteEncounterRepository(copy, encounterId).listInstances(),
+          ).toEqual(expected);
         } finally {
           copy.close();
         }

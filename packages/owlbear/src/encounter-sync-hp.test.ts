@@ -46,6 +46,9 @@ describe("createEncounterSync stat bubbles", () => {
       health: 3,
       "max health": 20,
     });
-    expect(metadata[INSTANCE_METADATA_KEY]).toEqual({ instanceId: "i1" });
+    expect(metadata[INSTANCE_METADATA_KEY]).toEqual({
+      instanceId: "i1",
+      encounterId: "e1",
+    });
   });
 });

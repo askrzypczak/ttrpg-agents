@@ -84,7 +84,7 @@ export interface JoinTarget {
 
 /**
  * Per group, the member its `join` names (instance id first, else exact
- * display name) among the active encounter's instances, read only when some
+ * display name) among the instances of the repository's encounter, read only when some
  * group has `join`; undefined for a group without it. Throws AddMonstersError
  * `unknown_group` when a `join` matches no instance, several by name, or one
  * with no group.

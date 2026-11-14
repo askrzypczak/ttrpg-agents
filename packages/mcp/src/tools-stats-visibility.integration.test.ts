@@ -1,8 +1,12 @@
-import type { NewMonsterInstance, ChangeOrigin } from "@ttrpg-agents/engine";
+import {
+  type NewMonsterInstance,
+  type ChangeOrigin,
+  resolveEncounter,
+  type EncounterRepository,
+} from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
-  SqliteMapRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -24,8 +28,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
-    maps: new SqliteMapRepository(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -34,6 +37,9 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
+  // A scene bound to the encounter is open, so replies name no encounter.
+  ctx.encounters.setOpenScene("scene-1");
+  resolveEncounter(ctx.encounters, { writes: true });
 });
 
 async function setVisibility(
@@ -50,7 +56,7 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): void {
-  ctx.repo.addInstances(() => items, origin);
+  repoOf(ctx).addInstances(() => items, origin);
 }
 
 function item(displayName: string, initiative: number): NewMonsterInstance {
@@ -58,7 +64,16 @@ function item(displayName: string, initiative: number): NewMonsterInstance {
 }
 
 const flags = () =>
-  ctx.repo.listInstances().map((i) => [i.displayName, i.statsVisible]);
+  repoOf(ctx)
+    .listInstances()
+    .map((i) => [i.displayName, i.statsVisible]);
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
+  );
+}
 
 describe("set_stats_visibility failures", () => {
   it("an unknown target fails with the target error and says nothing was changed", async () => {
@@ -96,7 +111,7 @@ describe("set_stats_visibility result", () => {
         { ...item("B", 2), statsVisible: !visible },
         { ...item("C", 3), statsVisible: !visible },
       );
-      const [a, , c] = ctx.repo.listInstances();
+      const [a, , c] = repoOf(ctx).listInstances();
       const r = await setVisibility(["A", c?.id ?? ""], visible);
       expect(r.isError).toBeUndefined();
       expect(text(r)).toBe(

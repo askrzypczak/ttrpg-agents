@@ -123,7 +123,6 @@ function memoryRepo(instances: MonsterInstance[]): EncounterRepository & {
   };
   return {
     calls,
-    getOrCreateActiveEncounter: unexpected,
     addInstances: unexpected,
     applyDamage: unexpected,
     applyHealing: unexpected,

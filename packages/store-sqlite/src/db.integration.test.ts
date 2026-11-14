@@ -11,9 +11,17 @@ import {
   migrate,
   migrations,
 } from "./migrations.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
+import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 import { SqliteTokenArtRepository } from "./token-art-repository.js";
-import type { ChangeOrigin } from "@ttrpg-agents/engine";
+import {
+  listRooms,
+  resolveEncounter,
+  useMap,
+  type ChangeOrigin,
+  type TablePort,
+} from "@ttrpg-agents/engine";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -21,6 +29,19 @@ const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
+
+/**
+ * Applies the migrations after the database's version up to `version` (16 is
+ * the last one that keeps existing encounters).
+ */
+function migrateToVersion(db: DatabaseSync, version: number): void {
+  const from = getUserVersion(db);
+  for (const m of migrations.filter(
+    (m) => m.version > from && m.version <= version,
+  ))
+    db.exec(m.sql);
+  db.exec(`PRAGMA user_version = ${String(version)}`);
+}
 
 describe("migrations", () => {
   it("brings a fresh database to the latest version", () => {
@@ -80,7 +101,7 @@ describe("migrations", () => {
     b.close();
   });
 
-  it("a version 1 database migrates to the latest version keeping its instances with a null armorClass", () => {
+  it("a version 1 database migrates to version 16 keeping its instances with a null armorClass", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON");
     for (const m of migrations.filter((m) => m.version === 1)) {
@@ -96,17 +117,17 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 'g1', 200)`,
     );
 
-    migrate(db);
+    migrateToVersion(db, 16);
 
     expect(LATEST_VERSION).toBeGreaterThan(1);
-    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    expect(getUserVersion(db)).toBe(16);
     const columns = (
       db.prepare("PRAGMA table_info(monster_instances)").all() as {
         name: string;
       }[]
     ).map((c) => c.name);
     expect(columns).toContain("armor_class");
-    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+    expect(new SqliteEncounterRepository(db, "e1").listInstances()).toEqual([
       makeTestInstance({
         currentHp: 9,
         initiative: 12,
@@ -132,9 +153,9 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 16, NULL, 13, NULL, 200)`,
     );
 
-    migrate(db);
+    migrateToVersion(db, 16);
 
-    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    expect(getUserVersion(db)).toBe(16);
     const column = (
       db.prepare("PRAGMA table_info(monster_instances)").all() as {
         name: string;
@@ -146,7 +167,7 @@ describe("migrations", () => {
     expect(
       db.prepare("SELECT stats_visible FROM monster_instances").all(),
     ).toEqual([{ stats_visible: 0 }]);
-    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+    expect(new SqliteEncounterRepository(db, "e1").listInstances()).toEqual([
       makeTestInstance({ armorClass: 13, createdAt: 200, statsVisible: false }),
     ]);
     db.close();
@@ -157,13 +178,21 @@ describe("migrations", () => {
     dirs.push(dir);
     const path = join(dir, "nested", "enc.db");
     const db1 = openDatabase(path);
-    new SqliteEncounterRepository(db1).addInstances(
-      () => [{ monsterKey: "orc", displayName: "Orc", maxHp: 15 }],
-      origin,
-    );
+    const directory1 = new SqliteEncounterDirectory(db1);
+    directory1
+      .repositoryFor(
+        resolveEncounter(directory1, { writes: true }).encounter.id,
+      )
+      .addInstances(
+        () => [{ monsterKey: "orc", displayName: "Orc", maxHp: 15 }],
+        origin,
+      );
     db1.close();
     const db2 = openDatabase(path);
-    const list = new SqliteEncounterRepository(db2).listInstances();
+    const directory2 = new SqliteEncounterDirectory(db2);
+    const list = directory2
+      .repositoryFor(directory2.getCurrentEncounter()!.id)
+      .listInstances();
     expect(list.map((i) => i.displayName)).toEqual(["Orc"]);
     db2.close();
   });
@@ -197,11 +226,12 @@ describe("migrations", () => {
     );
     old.close();
 
-    const db = openDatabase(path);
-    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    const db = new DatabaseSync(path);
+    migrateToVersion(db, 16);
+    expect(getUserVersion(db)).toBe(16);
     expect(tables(db)).toContain("token_art");
     expect(
-      new SqliteEncounterRepository(db)
+      new SqliteEncounterRepository(db, "e1")
         .listInstances()
         .map((i) => i.displayName),
     ).toEqual(["Shadow 1"]);
@@ -383,10 +413,10 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200)`,
     );
 
-    migrate(db);
+    migrateToVersion(db, 16);
 
-    expect(getUserVersion(db)).toBe(LATEST_VERSION);
-    expect(new SqliteEncounterRepository(db).listInstances()).toEqual([
+    expect(getUserVersion(db)).toBe(16);
+    expect(new SqliteEncounterRepository(db, "e1").listInstances()).toEqual([
       makeTestInstance({
         currentHp: 9,
         initiative: 12,
@@ -402,7 +432,7 @@ describe("migrations", () => {
   it("the footprint column rejects a value below 1", () => {
     const db = openDatabase(":memory:");
     db.exec(
-      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e1', 'Encounter 1', 1, 100)",
     );
     const insert = (id: string, footprint: number) =>
       db
@@ -423,7 +453,7 @@ describe("migrations", () => {
     expect(error).toMatchObject({ errcode: 275 });
     insert("i2", 2);
     expect(
-      new SqliteEncounterRepository(db)
+      new SqliteEncounterRepository(db, "e1")
         .listInstances()
         .map((i) => [i.id, i.footprint]),
     ).toEqual([["i2", 2]]);
@@ -444,9 +474,9 @@ describe("migrations", () => {
        VALUES ('i1', 'e1', 'shadow', 'Shadow 1', 16, 9, 12, 13, 'g1', 200, 1, 0)`,
     );
 
-    migrate(db);
+    migrateToVersion(db, 16);
 
-    const instances = new SqliteEncounterRepository(db).listInstances();
+    const instances = new SqliteEncounterRepository(db, "e1").listInstances();
     expect(instances[0]?.spawnPosition).toBeNull();
     expect(instances).toEqual([
       makeTestInstance({
@@ -461,10 +491,32 @@ describe("migrations", () => {
     db.close();
   });
 
+  it("a version 15 database migrates keeping its change-log rows and their seqs, each with a null encounter id", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 15)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 15");
+    const cleared = { type: "cleared", origin };
+    const removed = { type: "removed", id: "i1", origin };
+    const insert = db.prepare(
+      "INSERT INTO encounter_events (seq, event) VALUES (?, ?)",
+    );
+    insert.run(4, JSON.stringify(removed));
+    insert.run(9, JSON.stringify(cleared));
+
+    migrate(db);
+
+    expect(new SqliteEncounterLog(db).eventsSince(0)).toEqual([
+      { seq: 4, encounterId: null, event: removed },
+      { seq: 9, encounterId: null, event: cleared },
+    ]);
+    db.close();
+  });
+
   it("the spawn columns refuse a row with only one of x and y", () => {
     const db = openDatabase(":memory:");
     db.exec(
-      "INSERT INTO encounters (id, active, created_at) VALUES ('e1', 1, 100)",
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e1', 'Encounter 1', 1, 100)",
     );
     const insert = (id: string, x: number | null, y: number | null) =>
       db
@@ -490,7 +542,7 @@ describe("migrations", () => {
     }
     insert("i3", 225, 375);
     expect(
-      new SqliteEncounterRepository(db)
+      new SqliteEncounterRepository(db, "e1")
         .listInstances()
         .map((i) => [i.id, i.spawnPosition]),
     ).toEqual([["i3", { x: 225, y: 375 }]]);
@@ -516,7 +568,7 @@ describe("openDatabase concurrency settings", () => {
     expect(pragma(db, "journal_mode")).toBe("memory");
   });
 
-  it("takes the write lock up front so a concurrent writer cannot race getOrCreateActiveEncounter", () => {
+  it("takes the write lock up front so a concurrent writer cannot race the creation of the current encounter", () => {
     const dir = mkdtempSync(join(tmpdir(), "ttrpg-db-"));
     dirs.push(dir);
     const path = join(dir, "enc.db");
@@ -524,15 +576,15 @@ describe("openDatabase concurrency settings", () => {
     const other = new DatabaseSync(path, { timeout: 0 });
     let otherError: unknown;
     let n = 0;
-    const repo = new SqliteEncounterRepository(a, {
-      // Called between the SELECT and the INSERT: simulates another process
-      // trying to create the active encounter at exactly that moment.
+    const directory = new SqliteEncounterDirectory(a, {
+      // Called between the read and the INSERT: simulates another process
+      // trying to create the current encounter at exactly that moment.
       newId: () => {
         if (++n === 1) {
           try {
             other
               .prepare(
-                "INSERT INTO encounters (id, active, created_at) VALUES ('other', 1, 0)",
+                "INSERT INTO encounters (id, name, active, created_at) VALUES ('other', 'Other', 1, 0)",
               )
               .run();
           } catch (err) {
@@ -542,7 +594,7 @@ describe("openDatabase concurrency settings", () => {
         return `id-${n}`;
       },
     });
-    const enc = repo.getOrCreateActiveEncounter();
+    const enc = resolveEncounter(directory, { writes: true }).encounter;
     expect(otherError).toBeDefined();
     expect(enc.id).toBe("id-1");
     expect(a.prepare("SELECT COUNT(*) AS c FROM encounters").get()).toEqual({
@@ -550,5 +602,229 @@ describe("openDatabase concurrency settings", () => {
     });
     other.close();
     a.close();
+  });
+});
+
+describe("migration to scene-bound encounters", () => {
+  /** A database at version 16 with one encounter, its instances, an undo record, log rows and a map with a room. */
+  function version16Database(): DatabaseSync {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const m of migrations.filter((m) => m.version <= 16)) db.exec(m.sql);
+    db.exec("PRAGMA user_version = 16");
+    db.exec(
+      "INSERT INTO encounters (id, active, created_at, cleared_seq) VALUES ('e1', 1, 100, 9)",
+    );
+    db.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at)
+       VALUES ('live', 'e1', 'ogre', 'Ogre 1', 59, 59, 200)`,
+    );
+    db.exec(
+      `INSERT INTO monster_instances
+        (id, encounter_id, monster_key, display_name, max_hp, current_hp, created_at,
+         removed_seq, removed_source, removed_command_id)
+       VALUES ('gone', 'e1', 'ogre', 'Ogre 2', 59, 59, 201, 9, 'mcp', 'c1')`,
+    );
+    db.exec(
+      "INSERT INTO undo_commands (command_id, encounter_id, command, base_seq) VALUES ('c1', 'e1', 'remove_monsters', 3)",
+    );
+    db.exec(
+      "INSERT INTO undo_instances (command_id, instance_id, before) VALUES ('c1', 'gone', NULL)",
+    );
+    const insertEvent = db.prepare(
+      "INSERT INTO encounter_events (seq, event, encounter_id) VALUES (?, ?, 'e1')",
+    );
+    insertEvent.run(4, JSON.stringify({ type: "removed", id: "gone", origin }));
+    insertEvent.run(9, JSON.stringify({ type: "cleared", origin }));
+    db.exec(
+      `INSERT INTO map_registrations
+        (item_id, name, position_x, position_y, rotation, scale_x, scale_y,
+         image_offset_x, image_offset_y, image_width, image_height, image_dpi, scene_dpi, active)
+       VALUES ('map-1', 'Cave', 0, 0, 0, 1, 1, 0, 0, 1000, 800, 150, 150, 1)`,
+    );
+    db.exec(
+      `INSERT INTO map_rooms (map_item_id, name, status, polygons, position)
+       VALUES ('map-1', 'Hall', 'confirmed', '[]', 0)`,
+    );
+    return db;
+  }
+
+  const rows = (db: DatabaseSync, sql: string) => db.prepare(sql).all();
+
+  it("a version 16 database migrates deleting every encounter, instance and undo record, keeping the change-log rows with their seqs and a null encounter id and the map registrations with their rooms", () => {
+    const db = version16Database();
+    const maps = rows(db, "SELECT * FROM map_registrations");
+    const rooms = rows(db, "SELECT * FROM map_rooms");
+
+    migrateToVersion(db, 17);
+
+    expect(getUserVersion(db)).toBe(17);
+    expect(new SqliteEncounterDirectory(db).listEncounters()).toEqual([]);
+    expect(rows(db, "SELECT id FROM encounters")).toEqual([]);
+    expect(rows(db, "SELECT id FROM monster_instances")).toEqual([]);
+    expect(rows(db, "SELECT command_id FROM undo_commands")).toEqual([]);
+    expect(rows(db, "SELECT command_id FROM undo_instances")).toEqual([]);
+    expect(new SqliteEncounterLog(db).eventsSince(0)).toEqual([
+      {
+        seq: 4,
+        encounterId: null,
+        event: { type: "removed", id: "gone", origin },
+      },
+      { seq: 9, encounterId: null, event: { type: "cleared", origin } },
+    ]);
+    expect(rows(db, "SELECT * FROM map_registrations")).toEqual(maps);
+    expect(rows(db, "SELECT * FROM map_rooms")).toEqual(rooms);
+    db.close();
+  });
+
+  it('after the migration the next encounter write creates "Encounter 1" and logs its event above the old seqs', () => {
+    const db = version16Database();
+    migrate(db);
+    const directory = new SqliteEncounterDirectory(db);
+
+    const encounter = resolveEncounter(directory, { writes: true }).encounter;
+    const [added] = directory
+      .repositoryFor(encounter.id)
+      .addInstances(
+        () => [{ monsterKey: "ogre", displayName: "Ogre 1", maxHp: 59 }],
+        origin,
+      );
+
+    expect(encounter.name).toBe("Encounter 1");
+    expect(directory.getCurrentEncounter()).toEqual(encounter);
+    expect(directory.listEncounters()).toEqual([encounter]);
+    const events = new SqliteEncounterLog(db).eventsSince(9);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      encounterId: encounter.id,
+      event: { type: "added", instances: [added] },
+    });
+    expect(events[0]!.seq).toBeGreaterThan(9);
+    db.close();
+  });
+});
+
+describe("migration to per-encounter maps", () => {
+  /** A database at version 17 with one current encounter and a map registration, still flagged active, with a room. */
+  function version17Database(): DatabaseSync {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    migrateToVersion(db, 17);
+    db.exec(
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e1', 'Tavern', 1, 100)",
+    );
+    db.exec(
+      `INSERT INTO map_registrations
+        (item_id, name, position_x, position_y, rotation, scale_x, scale_y,
+         image_offset_x, image_offset_y, image_width, image_height, image_dpi, scene_dpi, active)
+       VALUES ('map-1', 'Cave', 0, 0, 0, 1, 1, 0, 0, 1500, 1200, 150, 150, 1)`,
+    );
+    db.exec(
+      `INSERT INTO map_rooms (map_item_id, name, status, polygons, position)
+       VALUES ('map-1', 'Hall', 'confirmed',
+               '[[{"x":0,"y":0},{"x":300,"y":0},{"x":300,"y":150},{"x":0,"y":150}]]', 0)`,
+    );
+    return db;
+  }
+
+  const rows = (db: DatabaseSync, sql: string) => db.prepare(sql).all();
+  const columns = (db: DatabaseSync, table: string): unknown[] =>
+    rows(db, `PRAGMA table_info(${table})`).map((c) => c["name"]);
+
+  it("a version 17 database migrates keeping its map registrations and their rooms without the active flag, and its encounter has no map", () => {
+    const db = version17Database();
+    const maps = rows(db, "SELECT * FROM map_registrations").map((row) => {
+      const kept = { ...row };
+      delete kept["active"];
+      return kept;
+    });
+    const rooms = rows(db, "SELECT * FROM map_rooms");
+
+    migrateToVersion(db, 18);
+
+    expect(getUserVersion(db)).toBe(18);
+    expect(rows(db, "SELECT * FROM map_registrations")).toEqual(maps);
+    expect(rows(db, "SELECT * FROM map_rooms")).toEqual(rooms);
+    expect(columns(db, "map_registrations")).not.toContain("active");
+    expect(columns(db, "encounters")).toContain("map_item_id");
+    expect(rows(db, "SELECT id, map_item_id FROM encounters")).toEqual([
+      { id: "e1", map_item_id: null },
+    ]);
+    expect(
+      new SqliteEncounterDirectory(db).mapRepositoryFor("e1").getActiveMap(),
+    ).toBeUndefined();
+    expect(rows(db, "PRAGMA foreign_key_check")).toEqual([]);
+    db.close();
+  });
+
+  it("after migration 18, use_map in a new encounter on a registered map item lists that item's saved rooms", async () => {
+    const db = version17Database();
+    migrate(db);
+    const directory = new SqliteEncounterDirectory(db);
+    const table: Pick<TablePort, "sceneMap"> = {
+      sceneMap: () =>
+        Promise.resolve({
+          grid: { dpi: 150, type: "SQUARE" },
+          maps: [
+            {
+              id: "map-1",
+              name: "Cave",
+              imageWidth: 1500,
+              imageHeight: 1200,
+              imageDpi: 150,
+              imageOffset: { x: 0, y: 0 },
+              position: { x: 0, y: 0 },
+              rotation: 0,
+              scale: { x: 1, y: 1 },
+            },
+          ],
+        }),
+    };
+    const encounter = directory.createEncounter("Cave fight");
+    const maps = directory.mapRepositoryFor(encounter.id);
+
+    await useMap(table, maps);
+    const listed = await listRooms(table, maps);
+
+    expect(listed.map.itemId).toBe("map-1");
+    expect(listed.rooms.map((room) => [room.name, room.status])).toEqual([
+      ["Hall", "confirmed"],
+    ]);
+    db.close();
+  });
+});
+
+describe("migration to scene bindings", () => {
+  it("a version 18 database migrates keeping its encounters and the current one, with no scene bound and none open", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    migrateToVersion(db, 18);
+    db.exec(
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e1', 'Tavern', 1, 100)",
+    );
+    db.exec(
+      "INSERT INTO encounters (id, name, active, created_at) VALUES ('e2', 'Cave', 0, 200)",
+    );
+
+    migrate(db);
+
+    expect(getUserVersion(db)).toBe(19);
+    const directory = new SqliteEncounterDirectory(db);
+    const tavern = { id: "e1", name: "Tavern", createdAt: 100 };
+    const cave = { id: "e2", name: "Cave", createdAt: 200 };
+    expect(directory.listEncounters()).toEqual([tavern, cave]);
+    expect(directory.getCurrentEncounter()).toEqual(tavern);
+    expect(directory.getOpenScene()).toBeUndefined();
+    // Every encounter is free to bind, so none was bound by the migration.
+    directory.bindScene("scene-1", "e1");
+    directory.bindScene("scene-2", "e2");
+    directory.setOpenScene("scene-3");
+    expect(directory.getOpenScene()).toEqual({
+      sceneId: "scene-3",
+      encounter: undefined,
+    });
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    db.close();
   });
 });

@@ -1,17 +1,19 @@
-import type {
-  ChangeOrigin,
-  EncounterRepository,
-  MapRegistration,
-  MonsterInstance,
-  NewMonsterInstance,
-  Rng,
-  TableMapItem,
-  TableSceneMap,
+import {
+  type ChangeOrigin,
+  type EncounterDirectory,
+  type EncounterRepository,
+  type MapRegistration,
+  type MapRepository,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  type Rng,
+  type TableMapItem,
+  type TableSceneMap,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
-  SqliteMapRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -96,6 +98,30 @@ function recording(
   });
 }
 
+/** Delegates to `inner`, handing out each repository wrapped by `recording`. */
+function recordingDirectory(
+  inner: EncounterDirectory,
+  writes: Write[],
+): EncounterDirectory {
+  return {
+    listEncounters: () => inner.listEncounters(),
+    createEncounter: (name) => inner.createEncounter(name),
+    getCurrentEncounter: () => inner.getCurrentEncounter(),
+    setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
+    findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    repositoryFor: (id) => recording(inner.repositoryFor(id), writes),
+    mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
+    getOpenScene: () => inner.getOpenScene(),
+    setOpenScene: (sceneId) => inner.setOpenScene(sceneId),
+    bindScene: (sceneId, encounterId) => inner.bindScene(sceneId, encounterId),
+    setEncounterName: (encounterId, name) =>
+      inner.setEncounterName(encounterId, name),
+    findSceneOfEncounter: (encounterId) =>
+      inner.findSceneOfEncounter(encounterId),
+    transaction: (fn) => inner.transaction(fn),
+  };
+}
+
 let ctx: ToolContext;
 let writes: Write[];
 let issuedCommandIds: string[];
@@ -104,8 +130,16 @@ beforeEach(() => {
   let tick = 1000;
   writes = [];
   issuedCommandIds = [];
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  maps.registerMap(registered);
+  const directory = new SqliteEncounterDirectory(openDatabase(":memory:"), {
+    now: () => tick++,
+  });
+  // A scene bound to the encounter is open, so replies name no encounter.
+  directory.setOpenScene("scene-1");
+  directory
+    .mapRepositoryFor(
+      resolveEncounter(directory, { writes: true }).encounter.id,
+    )
+    .registerMap(registered);
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -113,13 +147,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.resolve({ tokens: [] }),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: recording(
-      new SqliteEncounterRepository(openDatabase(":memory:"), {
-        now: () => tick++,
-      }),
-      writes,
-    ),
-    maps,
+    encounters: recordingDirectory(directory, writes),
     monsters: loadSrdMonsters(),
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -167,21 +195,39 @@ function wolf(
 
 /** Seeds with a table origin, so the seed itself is not undoable. */
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, table);
+  return repoOf(ctx).addInstances(() => items, table);
 }
 
 function byName(name: string): MonsterInstance {
-  const found = ctx.repo.listInstances().find((i) => i.displayName === name);
+  const found = repoOf(ctx)
+    .listInstances()
+    .find((i) => i.displayName === name);
   if (!found) throw new Error(`no instance ${name}`);
   return found;
 }
 
 function names(): string[] {
-  return ctx.repo.listInstances().map((i) => i.displayName);
+  return repoOf(ctx)
+    .listInstances()
+    .map((i) => i.displayName);
 }
 
 async function saveKitchen(): Promise<void> {
   await ok("set_rooms", { rooms: [{ name: "Kitchen", ranges: ["A1:C1"] }] });
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
+  );
+}
+
+/** The current encounter's map repository, resolved as a tool call does. */
+function mapsOf(context: ToolContext): MapRepository {
+  return context.encounters.mapRepositoryFor(
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
+  );
 }
 
 describe("undo", () => {
@@ -285,7 +331,7 @@ describe("undo", () => {
 
   it("undo after heal sets the HP back", async () => {
     const [w] = seed(wolf("Wolf 1"));
-    ctx.repo.setHp(w!.id, 3, table);
+    repoOf(ctx).setHp(w!.id, 3, table);
     await ok("heal", { target: "Wolf 1", amount: 5 });
     expect(byName("Wolf 1").currentHp).toBe(8);
 
@@ -305,7 +351,7 @@ describe("undo", () => {
 
   it("undo after set_max_hp sets the max HP and HP back", async () => {
     const [w] = seed(wolf("Wolf 1"));
-    ctx.repo.setHp(w!.id, 9, table);
+    repoOf(ctx).setHp(w!.id, 9, table);
     await ok("set_max_hp", { target: "Wolf 1", maxHp: 5 });
     expect(byName("Wolf 1")).toMatchObject({ maxHp: 5, currentHp: 5 });
 
@@ -319,15 +365,15 @@ describe("undo", () => {
       wolf("Wolf 1", { maxHp: 5 }),
       wolf("Wolf 2", { maxHp: 6 }),
     );
-    ctx.repo.setHp(a!.id, 3, table);
-    const before = ctx.repo.listInstances();
+    repoOf(ctx).setHp(a!.id, 3, table);
+    const before = repoOf(ctx).listInstances();
     await ok("reset_max_hp", { targets: ["Wolf 1", "Wolf 2"], hp: "average" });
     expect(byName("Wolf 1").maxHp).toBe(11);
     expect(byName("Wolf 2").maxHp).toBe(11);
 
     await ok("undo");
 
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
   });
 
   it("undo after set_armor_class sets the armor class back", async () => {
@@ -341,29 +387,31 @@ describe("undo", () => {
 
   it("undo after remove_monsters restores the removed monsters", async () => {
     seed(wolf("Wolf 1"), wolf("Wolf 2"), wolf("Wolf 3"));
-    const before = ctx.repo.listInstances();
+    const before = repoOf(ctx).listInstances();
     await ok("remove_monsters", { targets: ["Wolf 1", "Wolf 3"] });
     expect(names()).toEqual(["Wolf 2"]);
 
     const r = await ok("undo");
 
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
     expect(text(r)).toContain("Wolf 1 restored");
     expect(text(r)).toContain("Wolf 3 restored");
   });
 
   it("undo after restore_monsters removes the restored monsters again", async () => {
     const [, w2] = seed(wolf("Wolf 1"), wolf("Wolf 2"));
-    ctx.repo.removeInstances([w2!.id], table);
+    repoOf(ctx).removeInstances([w2!.id], table);
     await ok("restore_monsters", { targets: ["Wolf 2"] });
     expect(names()).toEqual(["Wolf 1", "Wolf 2"]);
 
     const r = await ok("undo");
 
     expect(names()).toEqual(["Wolf 1"]);
-    expect(ctx.repo.listRemovedInstances().map((e) => e.instance.id)).toEqual([
-      w2!.id,
-    ]);
+    expect(
+      repoOf(ctx)
+        .listRemovedInstances()
+        .map((e) => e.instance.id),
+    ).toEqual([w2!.id]);
     expect(text(r)).toContain("Wolf 2 removed");
   });
 
@@ -382,16 +430,16 @@ describe("undo", () => {
 
   it("undo after change_monster_type sets the type, name, HP, AC, initiative and footprint back", async () => {
     seed(wolf("Wolf 1"));
-    const before = ctx.repo.listInstances();
+    const before = repoOf(ctx).listInstances();
     await ok("change_monster_type", {
       targets: ["Wolf 1"],
       monster: DIRE_WOLF,
     });
-    expect(ctx.repo.listInstances()[0]?.monsterKey).toBe(DIRE_WOLF);
+    expect(repoOf(ctx).listInstances()[0]?.monsterKey).toBe(DIRE_WOLF);
 
     await ok("undo");
 
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
   });
 
   it("undo after rename_monster sets the name back", async () => {
@@ -432,13 +480,13 @@ describe("undo", () => {
       wolf("Wolf 1", { groupId: "pack", initiative: 12 }),
       wolf("Wolf 2", { groupId: "pack", initiative: 12 }),
     );
-    const before = ctx.repo.listInstances();
+    const before = repoOf(ctx).listInstances();
     await ok("split_initiative", { targets: ["Wolf 1", "Wolf 2"], roll: true });
     expect(byName("Wolf 1").groupId).not.toBe("pack");
 
     await ok("undo");
 
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
   });
 
   it("undo after merge_initiative puts each monster back in its group with its initiative", async () => {
@@ -446,13 +494,13 @@ describe("undo", () => {
       wolf("Wolf 1", { groupId: "a", initiative: 12 }),
       wolf("Wolf 2", { groupId: "b", initiative: 9 }),
     );
-    const before = ctx.repo.listInstances();
+    const before = repoOf(ctx).listInstances();
     await ok("merge_initiative", { targets: ["Wolf 1", "Wolf 2"] });
     expect(byName("Wolf 1").groupId).toBe(byName("Wolf 2").groupId);
 
     await ok("undo");
 
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
   });
 
   it("undo after set_stats_visibility sets the visibility back", async () => {
@@ -467,20 +515,20 @@ describe("undo", () => {
 
   it('undo with nothing to undo and nothing cleared replies only "Nothing to undo."', async () => {
     seed(wolf("Wolf 1"));
-    const before = ctx.repo.listInstances();
+    const before = repoOf(ctx).listInstances();
     writes.length = 0;
 
     const r = await ok("undo");
 
     expect(text(r)).toBe("Nothing to undo.");
-    expect(ctx.repo.listInstances()).toEqual(before);
+    expect(repoOf(ctx).listInstances()).toEqual(before);
     expect(writes).toEqual([]);
   });
 
   it("undo leaves an HP changed at the table after the command and names it in the reply", async () => {
     const [w] = seed(wolf("Wolf 1"));
     await ok("apply_damage", { target: "Wolf 1", amount: 4 });
-    ctx.repo.setHp(w!.id, 5, table);
+    repoOf(ctx).setHp(w!.id, 5, table);
 
     const r = await ok("undo");
 
@@ -516,8 +564,8 @@ describe("undo", () => {
     for (const [tool, args] of mapCalls) {
       await ok("apply_damage", { target: "Wolf 1", amount: 4 });
       await ok(tool, args);
-      const rooms = ctx.maps.getRooms("map-1");
-      const active = ctx.maps.getActiveMap();
+      const rooms = mapsOf(ctx).getRooms("map-1");
+      const active = mapsOf(ctx).getActiveMap();
 
       const notCovered = await ok("undo");
       expect(text(notCovered), tool).toBe(
@@ -527,8 +575,8 @@ describe("undo", () => {
         ].join("\n"),
       );
       expect(byName("Wolf 1").currentHp, tool).toBe(7);
-      expect(ctx.maps.getRooms("map-1"), tool).toEqual(rooms);
-      expect(ctx.maps.getActiveMap(), tool).toEqual(active);
+      expect(mapsOf(ctx).getRooms("map-1"), tool).toEqual(rooms);
+      expect(mapsOf(ctx).getActiveMap(), tool).toEqual(active);
 
       const reversed = await ok("undo");
       expect(text(reversed), tool).toContain("Undid apply_damage:");
@@ -536,11 +584,71 @@ describe("undo", () => {
     }
   });
 
+  describe("undo right after rename_encounter or use_encounter says the last change is not covered and changes nothing", () => {
+    it.each([
+      {
+        tool: "rename_encounter",
+        // An encounter bound to an open scene of its own, with a wolf.
+        before: () => {
+          const crypt = ctx.encounters.createEncounter("Crypt");
+          ctx.encounters.bindScene("scene-undo", crypt.id);
+          ctx.encounters.setOpenScene("scene-undo");
+          return crypt;
+        },
+        args: { name: "Goblin Ambush" },
+        after: { name: "Goblin Ambush" },
+      },
+      {
+        tool: "use_encounter",
+        // An unbound encounter with a wolf, and an open scene with none.
+        before: () => {
+          const crypt = ctx.encounters.createEncounter("Crypt");
+          ctx.encounters.setOpenScene("scene-undo");
+          return crypt;
+        },
+        args: { encounter: "Crypt" },
+        after: { name: "Crypt" },
+      },
+    ])("$tool", async ({ tool, before, args, after }) => {
+      const crypt = before();
+      ctx.encounters
+        .repositoryFor(crypt.id)
+        .addInstances(() => [wolf("Wolf 1")], table);
+      await ok("apply_damage", {
+        target: "Wolf 1",
+        amount: 4,
+        encounter: "Crypt",
+      });
+      await ok(tool, args);
+
+      const r = await ok("undo");
+
+      expect(text(r)).toBe(
+        [
+          NOT_COVERED(tool),
+          "Next undo would reverse apply_damage: Wolf 1.",
+        ].join("\n"),
+      );
+      const wolf1 = ctx.encounters
+        .repositoryFor(crypt.id)
+        .listInstances()
+        .find((i) => i.displayName === "Wolf 1");
+      expect(wolf1?.currentHp).toBe(7);
+      expect(
+        ctx.encounters.listEncounters().find((e) => e.id === crypt.id)?.name,
+      ).toBe(after.name);
+      expect(ctx.encounters.getOpenScene()).toEqual({
+        sceneId: "scene-undo",
+        encounter: { ...crypt, name: after.name },
+      });
+    });
+  });
+
   it("undo right after a clear names restore_encounter in its reply text", async () => {
     await ok("add_monsters", { groups: [{ monster: WOLF, count: 2 }] });
     await ok("apply_damage", { target: "Wolf 1", amount: 2 });
     await ok("clear_encounter");
-    const removed = ctx.repo.listRemovedInstances();
+    const removed = repoOf(ctx).listRemovedInstances();
 
     const r = await ok("undo");
 
@@ -548,6 +656,7 @@ describe("undo", () => {
       "Nothing to undo. The last clear_encounter can be brought back with restore_encounter.",
     );
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       undone: null,
       notCovered: null,
       changes: [],
@@ -557,7 +666,7 @@ describe("undo", () => {
         "Nothing to undo. The last clear_encounter can be brought back with restore_encounter.",
     });
     expect(names()).toEqual([]);
-    expect(ctx.repo.listRemovedInstances()).toEqual(removed);
+    expect(repoOf(ctx).listRemovedInstances()).toEqual(removed);
   });
 
   it('undo\'s writes carry source mcp, one fresh command id and command "undo"', async () => {

@@ -28,7 +28,7 @@ const inst = (
 const link: Projector = {
   key: INSTANCE_METADATA_KEY,
   mode: "owned",
-  project: (i) => ({ instanceId: i.id }),
+  project: (i) => ({ instanceId: i.id, encounterId: i.encounterId }),
 };
 
 const config: SyncConfig = {
@@ -55,6 +55,7 @@ const ctx = (
 ) => ({
   viewportCenter: center,
   placed: new Set(over.placed ?? ["i1"]),
+  encounterId: "e1",
   art: {},
   ...(over.snapshot === undefined ? {} : { snapshot: over.snapshot }),
   ...(over.moves === undefined ? {} : { moves: new Set(over.moves) }),
@@ -76,9 +77,9 @@ const tokenOf = (
   visible: false,
   position: { ...at },
   metadata: {
-    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
     [SYNCED_METADATA_KEY]: {
-      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
       [NAME_BASELINE_KEY]: `Shadow ${n}`,
       [POSITION_BASELINE_KEY]: { ...record.position },
       ...(record.previous === undefined

@@ -3,11 +3,11 @@ import {
   type TableMapImage,
   type TableMapItem,
   type TableSceneMap,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
-  SqliteMapRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -64,8 +64,14 @@ function contextWith(answer: TableSceneMap): {
   imageCalls: string[];
 } {
   const imageCalls: string[] = [];
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  maps.registerMap(registered);
+  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  // A scene bound to the encounter is open, so replies name no encounter.
+  encounters.setOpenScene("scene-1");
+  encounters
+    .mapRepositoryFor(
+      resolveEncounter(encounters, { writes: true }).encounter.id,
+    )
+    .registerMap(registered);
   const ctx: ToolContext = {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -76,8 +82,7 @@ function contextWith(answer: TableSceneMap): {
         return Promise.resolve(image);
       },
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
-    maps,
+    encounters,
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -126,6 +131,44 @@ describe("get_map_image", () => {
     });
     expect(textBlocks(r)).toEqual([
       `Trollskull Manor: 64 x 48 cells, columns A-BL left to right, rows 1-48 top to bottom, labelled on the image's edges.\n\n${movedLine}`,
+    ]);
+    expect(r.structuredContent).toBeUndefined();
+  });
+
+  it("`get_map_image` asks the table for the image of the map of the encounter it acts on", async () => {
+    const sewers: TableMapItem = { ...trollskull, id: "map-2", name: "Sewers" };
+    const { ctx, imageCalls } = contextWith(scene(trollskull, sewers));
+    const tavern = ctx.encounters.createEncounter("Tavern");
+    const sewerFight = ctx.encounters.createEncounter("Sewer fight");
+    ctx.encounters.mapRepositoryFor(tavern.id).registerMap(registered);
+    ctx.encounters
+      .mapRepositoryFor(sewerFight.id)
+      .registerMap({ ...registered, itemId: "map-2", name: "Sewers" });
+    ctx.encounters.setOpenScene(null);
+    ctx.encounters.setCurrentEncounter(sewerFight.id);
+
+    const r = await getMapImage(ctx);
+
+    expect(r.isError).toBeFalsy();
+    expect(imageCalls).toEqual(["map-2"]);
+    expect(textBlocks(r).join("\n")).toMatch(
+      /^Encounter: Sewer fight\n\nSewers: /,
+    );
+  });
+
+  it("get_map_image with no scene open names the encounter in its text line and adds no structured content", async () => {
+    const { ctx } = contextWith(scene(trollskull));
+    ctx.encounters.setOpenScene(null);
+
+    const r = await getMapImage(ctx);
+
+    expect(r.isError).toBeFalsy();
+    expect(r.content).toEqual([
+      { type: "image", data: image.data, mimeType: "image/jpeg" },
+      {
+        type: "text",
+        text: "Encounter: Encounter 1\n\nTrollskull Manor: 32 x 24 cells, columns A-AF left to right, rows 1-24 top to bottom, labelled on the image's edges.",
+      },
     ]);
     expect(r.structuredContent).toBeUndefined();
   });

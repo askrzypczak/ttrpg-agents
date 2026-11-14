@@ -1,14 +1,15 @@
-import type {
-  ChangeOrigin,
-  MapRegistration,
-  MonsterInstance,
-  NewMonsterInstance,
-  TableMapItem,
+import {
+  type ChangeOrigin,
+  type MapRegistration,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  type TableMapItem,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
-  SqliteMapRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -54,8 +55,14 @@ let ctx: ToolContext;
 beforeEach(() => {
   let tick = 1000;
   let commands = 0;
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  maps.registerMap(registered);
+  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"), {
+    now: () => tick++,
+  });
+  encounters
+    .mapRepositoryFor(
+      resolveEncounter(encounters, { writes: true }).encounter.id,
+    )
+    .registerMap(registered);
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -67,10 +74,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.resolve({ tokens: [] }),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
-      now: () => tick++,
-    }),
-    maps,
+    encounters,
     monsters: loadSrdMonsters(),
     rng: { nextInt: (max) => 3 % max },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -109,7 +113,14 @@ function wolf(
 
 /** Seeds with a table origin, so the seed itself is not undoable. */
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, table);
+  return repoOf(ctx).addInstances(() => items, table);
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
+  );
 }
 
 describe("reply summary", () => {

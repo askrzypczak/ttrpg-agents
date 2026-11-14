@@ -53,7 +53,7 @@ const config: SyncConfig = {
     {
       key: INSTANCE_METADATA_KEY,
       mode: "owned",
-      project: (i) => ({ instanceId: i.id }),
+      project: (i) => ({ instanceId: i.id, encounterId: i.encounterId }),
     },
   ],
   tokenKind: defaultSyncConfig.tokenKind,
@@ -102,9 +102,9 @@ const imageToken = (
     grid: over.grid ?? wolfGrid,
     ...(over.scale === null ? {} : { scale: over.scale ?? { x: 1, y: 1 } }),
     metadata: {
-      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
       [SYNCED_METADATA_KEY]: {
-        [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+        [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
         [NAME_BASELINE_KEY]: `Dire Wolf ${n}`,
         ...(look === null ? {} : { [LOOK_BASELINE_KEY]: look }),
       },
@@ -123,9 +123,9 @@ const circleToken = (n: number): SceneItem => ({
   shape: { shapeType: "CIRCLE", width: 150, height: 150 },
   scale: { x: 1, y: 1 },
   metadata: {
-    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
     [SYNCED_METADATA_KEY]: {
-      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
       [NAME_BASELINE_KEY]: `Dire Wolf ${n}`,
       [LOOK_BASELINE_KEY]: { monsterKey: "wolf", image: null },
     },
@@ -141,6 +141,7 @@ const ctx = (
 ) => ({
   viewportCenter: { x: 1000, y: 500 },
   placed: new Set(over.placed ?? ["i1", "i2"]),
+  encounterId: "e1",
   art: over.art ?? { wolf: wolfArt, "dire-wolf": direWolfArt },
   ...(over.restyles === undefined ? {} : { restyles: new Set(over.restyles) }),
 });

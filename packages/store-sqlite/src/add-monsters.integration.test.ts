@@ -15,9 +15,11 @@ import {
   type NamingStrategy,
   type Rng,
   type ChangeOrigin,
+  resolveEncounter,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
@@ -71,10 +73,18 @@ function deps(over: Partial<AddMonstersDeps> = {}): AddMonstersDeps {
 beforeEach(() => {
   let n = 0;
   let t = 1000;
-  repo = new SqliteEncounterRepository(openDatabase(":memory:"), {
+  const store = openDatabase(":memory:");
+  const options = {
     newId: () => `id-${++n}`,
     now: () => ++t,
-  });
+  };
+  repo = new SqliteEncounterRepository(
+    store,
+    resolveEncounter(new SqliteEncounterDirectory(store, options), {
+      writes: true,
+    }).encounter.id,
+    options,
+  );
   calls = 0;
   groupN = 0;
 });
@@ -527,8 +537,11 @@ describe("addMonsters across connections", () => {
     const a = openDatabase(path);
     // Opened directly so a locked database fails at once instead of waiting.
     const b = new DatabaseSync(path, { timeout: 0 });
-    const repoA = new SqliteEncounterRepository(a);
-    const repoB = new SqliteEncounterRepository(b);
+    const encounterId = resolveEncounter(new SqliteEncounterDirectory(a), {
+      writes: true,
+    }).encounter.id;
+    const repoA = new SqliteEncounterRepository(a, encounterId);
+    const repoB = new SqliteEncounterRepository(b, encounterId);
 
     let concurrentError: unknown;
     let attempted = false;

@@ -16,7 +16,7 @@ const config: SyncConfig = {
     {
       key: INSTANCE_METADATA_KEY,
       mode: "owned",
-      project: (i) => ({ instanceId: i.id }),
+      project: (i) => ({ instanceId: i.id, encounterId: i.encounterId }),
     },
   ],
   tokenKind: () => ({
@@ -41,6 +41,7 @@ const instance = makeTestInstance({
 const ctx = (over: { moves?: string[]; snapshot?: boolean } = {}) => ({
   viewportCenter: { x: 1000, y: 500 },
   placed: new Set(["i1"]),
+  encounterId: "e1",
   art: {},
   ...(over.snapshot === undefined ? {} : { snapshot: over.snapshot }),
   ...(over.moves === undefined ? {} : { moves: new Set(over.moves) }),
@@ -53,9 +54,9 @@ const token = (at: Vec2): SceneItem => ({
   visible: false,
   position: { ...at },
   metadata: {
-    [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+    [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
     [SYNCED_METADATA_KEY]: {
-      [INSTANCE_METADATA_KEY]: { instanceId: "i1" },
+      [INSTANCE_METADATA_KEY]: { instanceId: "i1", encounterId: "e1" },
       [NAME_BASELINE_KEY]: "Shadow 1",
       [POSITION_BASELINE_KEY]: placed,
     },

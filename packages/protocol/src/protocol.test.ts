@@ -53,17 +53,23 @@ const samples: BridgeMessage[] = [
   {
     v: PROTOCOL_VERSION,
     type: "encounter-event",
-    payload: { type: "added", instances: [instance], origin, seq: 1 },
+    payload: {
+      type: "added",
+      instances: [instance],
+      origin,
+      seq: 1,
+      encounterId: "e1",
+    },
   },
   {
     v: PROTOCOL_VERSION,
     type: "encounter-event",
-    payload: { type: "removed", id: "i1", origin, seq: 2 },
+    payload: { type: "removed", id: "i1", origin, seq: 2, encounterId: "e1" },
   },
   {
     v: PROTOCOL_VERSION,
     type: "encounter-event",
-    payload: { type: "cleared", origin, seq: 3 },
+    payload: { type: "cleared", origin, seq: 3, encounterId: "e1" },
   },
   {
     v: PROTOCOL_VERSION,
@@ -75,18 +81,25 @@ const samples: BridgeMessage[] = [
       maxHp: 16,
       origin,
       seq: 4,
+      encounterId: "e1",
     },
   },
   {
     v: PROTOCOL_VERSION,
     type: "encounter-snapshot",
-    payload: { instances: [instance], seq: 7 },
+    payload: {
+      instances: [instance],
+      seq: 7,
+      encounterId: "e1",
+      sceneId: null,
+      encounterName: "Encounter 1",
+    },
   },
 ];
 
 describe("protocol", () => {
-  it("uses version 2", () => {
-    expect(PROTOCOL_VERSION).toBe(2);
+  it("uses version 3", () => {
+    expect(PROTOCOL_VERSION).toBe(3);
   });
 
   it("a hello without a token decodes", () => {
@@ -116,7 +129,13 @@ describe("protocol", () => {
       encodeMessage({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [sample], seq: 0 },
+        payload: {
+          instances: [sample],
+          seq: 0,
+          encounterId: "e1",
+          sceneId: null,
+          encounterName: "Encounter 1",
+        },
       }),
     );
     expect(decoded.ok).toBe(true);
@@ -137,7 +156,13 @@ describe("protocol", () => {
       encodeMessage({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [revealed, hidden], seq: 0 },
+        payload: {
+          instances: [revealed, hidden],
+          seq: 0,
+          encounterId: "e1",
+          sceneId: null,
+          encounterName: "Encounter 1",
+        },
       }),
     );
     expect(decoded).toEqual({
@@ -145,7 +170,13 @@ describe("protocol", () => {
       message: {
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [revealed, hidden], seq: 0 },
+        payload: {
+          instances: [revealed, hidden],
+          seq: 0,
+          encounterId: "e1",
+          sceneId: null,
+          encounterName: "Encounter 1",
+        },
       },
     });
 
@@ -155,7 +186,13 @@ describe("protocol", () => {
       JSON.stringify({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [withoutFlag], seq: 0 },
+        payload: {
+          instances: [withoutFlag],
+          seq: 0,
+          encounterId: "e1",
+          sceneId: null,
+          encounterName: "Encounter 1",
+        },
       }),
     );
     expect(missing.ok).toBe(false);
@@ -173,6 +210,7 @@ describe("protocol", () => {
         maxHp: 16,
         origin: { source: "table", commandId: "instance-edit:i1" },
         seq: 7,
+        encounterId: "e1",
       },
     };
 
@@ -187,7 +225,15 @@ describe("protocol", () => {
       "encounter-event",
       { type: "cleared", origin: { source: "mcp", commandId: "c1" } },
     ],
-    ["encounter-snapshot", { instances: [] }],
+    [
+      "encounter-snapshot",
+      {
+        instances: [],
+        encounterId: "e1",
+        sceneId: null,
+        encounterName: "Encounter 1",
+      },
+    ],
   ])(
     "an encounter-event or encounter-snapshot without seq is invalid-payload (%s)",
     (type, payload) => {
@@ -206,7 +252,7 @@ describe("protocol", () => {
     if (!r.ok) expect(r.reason).toBe("malformed-json");
   });
 
-  it.each(["null", "[]", "42", '{"type":"ping"}', '{"v":2}'])(
+  it.each(["null", "[]", "42", '{"type":"ping"}', '{"v":3}'])(
     "rejects bad envelope %s",
     (raw) => {
       const r = decodeMessage(raw);
@@ -223,21 +269,21 @@ describe("protocol", () => {
 
   it("an error without `fatal` is rejected as invalid-payload", () => {
     const r = decodeMessage(
-      '{"v":2,"type":"error","payload":{"code":"c","message":"m"}}',
+      '{"v":3,"type":"error","payload":{"code":"c","message":"m"}}',
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
   });
 
   it("rejects an unknown type", () => {
-    const r = decodeMessage('{"v":2,"type":"launch","payload":{}}');
+    const r = decodeMessage('{"v":3,"type":"launch","payload":{}}');
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("unknown-type");
   });
 
   it("rejects a bad payload", () => {
     const r = decodeMessage(
-      '{"v":2,"type":"hello","payload":{"role":"wizard","extensionVersion":"1"}}',
+      '{"v":3,"type":"hello","payload":{"role":"wizard","extensionVersion":"1"}}',
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
@@ -245,7 +291,7 @@ describe("protocol", () => {
 
   it("rejects an encounter-event with an unknown event type", () => {
     const r = decodeMessage(
-      '{"v":2,"type":"encounter-event","payload":{"type":"exploded","seq":1}}',
+      '{"v":3,"type":"encounter-event","payload":{"type":"exploded","seq":1}}',
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
@@ -253,7 +299,7 @@ describe("protocol", () => {
 
   it("rejects an encounter-snapshot with a malformed instance", () => {
     const r = decodeMessage(
-      '{"v":2,"type":"encounter-snapshot","payload":{"instances":[{"id":"x"}],"seq":0}}',
+      '{"v":3,"type":"encounter-snapshot","payload":{"instances":[{"id":"x"}],"seq":0}}',
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
@@ -346,13 +392,13 @@ describe("protocol", () => {
   });
 
   it("token-deleted without an instanceId is invalid-payload", () => {
-    const r = decodeMessage('{"v":2,"type":"token-deleted","payload":{}}');
+    const r = decodeMessage('{"v":3,"type":"token-deleted","payload":{}}');
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid-payload");
   });
 
   it("strips unknown extra fields", () => {
-    const r = decodeMessage('{"v":2,"type":"ping","payload":{},"extra":true}');
+    const r = decodeMessage('{"v":3,"type":"ping","payload":{},"extra":true}');
     expect(r).toEqual({
       ok: true,
       message: { v: PROTOCOL_VERSION, type: "ping", payload: {} },
@@ -373,6 +419,7 @@ describe("protocol", () => {
           instances: [withoutFootprint],
           origin: { source: "mcp", commandId: "c1" },
           seq: 1,
+          encounterId: "e1",
         },
       }),
     );
@@ -386,6 +433,7 @@ describe("protocol", () => {
           instances: [withFootprint],
           origin: { source: "mcp", commandId: "c1" },
           seq: 1,
+          encounterId: "e1",
         },
       },
     });
@@ -394,7 +442,13 @@ describe("protocol", () => {
       JSON.stringify({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [withoutFootprint], seq: 0 },
+        payload: {
+          instances: [withoutFootprint],
+          seq: 0,
+          encounterId: "e1",
+          sceneId: null,
+          encounterName: "Encounter 1",
+        },
       }),
     );
     expect(snapshot).toEqual({
@@ -402,7 +456,13 @@ describe("protocol", () => {
       message: {
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [withFootprint], seq: 0 },
+        payload: {
+          instances: [withFootprint],
+          seq: 0,
+          encounterId: "e1",
+          sceneId: null,
+          encounterName: "Encounter 1",
+        },
       },
     });
   });
@@ -411,7 +471,14 @@ describe("protocol", () => {
     const withSeqs = {
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [instance], restoreSeqs: { i1: 5 }, seq: 7 },
+      payload: {
+        instances: [instance],
+        restoreSeqs: { i1: 5 },
+        seq: 7,
+        encounterId: "e1",
+        sceneId: null,
+        encounterName: "Encounter 1",
+      },
     };
     expect(decodeMessage(JSON.stringify(withSeqs))).toEqual({
       ok: true,
@@ -421,7 +488,13 @@ describe("protocol", () => {
     const withoutSeqs = {
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances: [instance], seq: 7 },
+      payload: {
+        instances: [instance],
+        seq: 7,
+        encounterId: "e1",
+        sceneId: null,
+        encounterName: "Encounter 1",
+      },
     };
     expect(decodeMessage(JSON.stringify(withoutSeqs))).toStrictEqual({
       ok: true,
@@ -436,12 +509,146 @@ describe("protocol", () => {
       JSON.stringify({
         v: PROTOCOL_VERSION,
         type: "encounter-snapshot",
-        payload: { instances: [withoutSpawn], seq: 0 },
+        payload: {
+          instances: [withoutSpawn],
+          seq: 0,
+          encounterId: "e1",
+          sceneId: null,
+          encounterName: "Encounter 1",
+        },
       }),
     );
     if (!decoded.ok || decoded.message.type !== "encounter-snapshot") {
       throw new Error("expected a decoded encounter-snapshot");
     }
     expect(decoded.message.payload.instances[0]?.spawnPosition).toBeNull();
+  });
+
+  it("an encounter-event round-trips its encounterId, a string or null", () => {
+    for (const encounterId of ["e1", null]) {
+      const message = {
+        v: PROTOCOL_VERSION,
+        type: "encounter-event",
+        payload: {
+          type: "cleared",
+          origin: { source: "mcp", commandId: "c1" },
+          seq: 3,
+          encounterId,
+        },
+      };
+
+      expect(decodeMessage(JSON.stringify(message))).toEqual({
+        ok: true,
+        message,
+      });
+    }
+  });
+
+  it("an encounter-snapshot round-trips its encounterId, a string or null", () => {
+    for (const encounterId of ["e1", null]) {
+      const message = {
+        v: PROTOCOL_VERSION,
+        type: "encounter-snapshot",
+        payload: {
+          instances: [instance],
+          seq: 4,
+          encounterId,
+          sceneId: null,
+          encounterName: encounterId === null ? null : "Encounter 1",
+        },
+      };
+
+      expect(decodeMessage(JSON.stringify(message))).toEqual({
+        ok: true,
+        message,
+      });
+    }
+  });
+
+  it.each([
+    [
+      "encounter-event",
+      { type: "cleared", origin: { source: "mcp", commandId: "c1" }, seq: 1 },
+    ],
+    [
+      "encounter-snapshot",
+      { instances: [], seq: 1, sceneId: null, encounterName: null },
+    ],
+  ])(
+    "an encounter-event or encounter-snapshot without encounterId is invalid-payload (%s)",
+    (type, payload) => {
+      const r = decodeMessage(
+        JSON.stringify({ v: PROTOCOL_VERSION, type, payload }),
+      );
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("invalid-payload");
+    },
+  );
+
+  it("decodeMessage accepts a scene-open whose scene id is a string or null", () => {
+    for (const sceneId of ["s1", null]) {
+      const message = {
+        v: PROTOCOL_VERSION,
+        type: "scene-open",
+        id: "r1",
+        payload: { sceneId },
+      };
+
+      expect(decodeMessage(JSON.stringify(message))).toEqual({
+        ok: true,
+        message,
+      });
+    }
+  });
+
+  it("decodeMessage rejects a scene-open whose scene id is empty or longer than 200 characters", () => {
+    for (const sceneId of ["", "x".repeat(201)]) {
+      const r = decodeMessage(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          type: "scene-open",
+          payload: { sceneId },
+        }),
+      );
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("invalid-payload");
+    }
+    // A 200-character id is still a scene id.
+    expect(
+      decodeMessage(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          type: "scene-open",
+          payload: { sceneId: "x".repeat(200) },
+        }),
+      ).ok,
+    ).toBe(true);
+  });
+
+  it("decodeMessage rejects an encounter-snapshot without sceneId or encounterName", () => {
+    for (const fields of [
+      { encounterName: "Encounter 1" },
+      { sceneId: "s1" },
+    ]) {
+      const r = decodeMessage(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          type: "encounter-snapshot",
+          payload: { instances: [], seq: 0, encounterId: "e1", ...fields },
+        }),
+      );
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("invalid-payload");
+    }
+  });
+
+  it("decodeMessage refuses a version-2 envelope as unsupported-version", () => {
+    const r = decodeMessage('{"v":2,"type":"ping","payload":{}}');
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("unsupported-version");
   });
 });

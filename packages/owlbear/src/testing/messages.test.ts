@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { PROTOCOL_VERSION, bridgeMessageSchema } from "@ttrpg-agents/protocol";
-import { createMessageFeed } from "./messages.js";
+import { TEST_SCENE_ID, createMessageFeed } from "./messages.js";
 
 describe("createMessageFeed", () => {
   it("a new feed's snapshot and event decode with bridgeMessageSchema at seq 0 and 1", () => {
@@ -14,7 +14,13 @@ describe("createMessageFeed", () => {
     expect(snapshot).toEqual({
       v: PROTOCOL_VERSION,
       type: "encounter-snapshot",
-      payload: { instances, seq: 0 },
+      payload: {
+        instances,
+        seq: 0,
+        encounterId: "e1",
+        sceneId: TEST_SCENE_ID,
+        encounterName: "Encounter 1",
+      },
     });
     expect("art" in snapshot.payload).toBe(false);
     expect(event).toEqual({
@@ -25,6 +31,7 @@ describe("createMessageFeed", () => {
         id: "i1",
         origin: { source: "mcp", commandId: "test" },
         seq: 1,
+        encounterId: "e1",
       },
     });
     expect(bridgeMessageSchema.parse(snapshot)).toEqual(snapshot);

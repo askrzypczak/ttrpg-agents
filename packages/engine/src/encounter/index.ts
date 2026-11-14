@@ -14,6 +14,7 @@ export type {
   UndoRecord,
 } from "./repository.js";
 export * from "./add-monsters.js";
+export * from "./directory.js";
 export * from "./change-monster.js";
 export * from "./edit.js";
 export * from "./events.js";

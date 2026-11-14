@@ -1,14 +1,15 @@
-import type {
-  ChangeOrigin,
-  MapRegistration,
-  MonsterInstance,
-  NewMonsterInstance,
-  TableMapItem,
+import {
+  type ChangeOrigin,
+  type MapRegistration,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  type TableMapItem,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
-  SqliteMapRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -52,8 +53,16 @@ beforeEach(() => {
   let tick = 1000;
   let commands = 0;
   let groups = 0;
-  const maps = new SqliteMapRepository(openDatabase(":memory:"));
-  maps.registerMap(registered);
+  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"), {
+    now: () => tick++,
+  });
+  // A scene bound to the encounter is open, so replies name no encounter.
+  encounters.setOpenScene("scene-1");
+  encounters
+    .mapRepositoryFor(
+      resolveEncounter(encounters, { writes: true }).encounter.id,
+    )
+    .registerMap(registered);
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -65,10 +74,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.resolve({ tokens: [] }),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:"), {
-      now: () => tick++,
-    }),
-    maps,
+    encounters,
     monsters: loadSrdMonsters(),
     rng: { nextInt: (max) => 3 % max },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -108,7 +114,14 @@ function wolf(
 
 /** Seeds with a table origin, so the seed itself is not undoable. */
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, table);
+  return repoOf(ctx).addInstances(() => items, table);
+}
+
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
+  );
 }
 
 describe("undo replies", () => {
@@ -136,7 +149,7 @@ describe("undo replies", () => {
 
   it("undo of a max HP change names the max HP and the HP before and after", async () => {
     const [w] = seed(wolf("Wolf 1"));
-    ctx.repo.setHp(w!.id, 9, table);
+    repoOf(ctx).setHp(w!.id, 9, table);
     await ok("set_max_hp", { target: "Wolf 1", maxHp: 5 });
 
     expect(await undoText()).toBe(
@@ -165,7 +178,7 @@ describe("undo replies", () => {
   it("undo of a change to a monster removed at the table since says it was left removed", async () => {
     const [w] = seed(wolf("Wolf 1"));
     await ok("apply_damage", { target: "Wolf 1", amount: 4 });
-    ctx.repo.removeInstances([w!.id], table);
+    repoOf(ctx).removeInstances([w!.id], table);
 
     expect(await undoText()).toBe(
       "Undid apply_damage: Wolf 1 was removed at the table; left removed\nNothing left to undo.",
@@ -221,7 +234,9 @@ function replyText(r: ToolResult): string {
 }
 
 function byName(name: string): MonsterInstance {
-  const found = ctx.repo.listInstances().find((i) => i.displayName === name);
+  const found = repoOf(ctx)
+    .listInstances()
+    .find((i) => i.displayName === name);
   if (!found) throw new Error(`no instance ${name}`);
   return found;
 }
@@ -235,6 +250,7 @@ describe("undo structured content and next-undo line", () => {
     const first = await ok("undo");
 
     expect(first.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: replyText(first),
       undone: "apply_damage",
       notCovered: null,
@@ -246,6 +262,7 @@ describe("undo structured content and next-undo line", () => {
     const second = await ok("undo");
 
     expect(second.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: replyText(second),
       undone: "rename_monster",
       notCovered: null,
@@ -266,7 +283,7 @@ describe("undo structured content and next-undo line", () => {
 
   it("undo of a max HP change reports max HP and HP as separate changes", async () => {
     const [w] = seed(wolf("Wolf 1"));
-    ctx.repo.setHp(w!.id, 9, table);
+    repoOf(ctx).setHp(w!.id, 9, table);
     await ok("set_max_hp", { target: "Wolf 1", maxHp: 5 });
 
     const r = await ok("undo");
@@ -284,7 +301,7 @@ describe("undo structured content and next-undo line", () => {
       monster: "srd-2024_dire-wolf",
       hp: "average",
     });
-    const [mid] = ctx.repo.listInstances();
+    const [mid] = repoOf(ctx).listInstances();
     if (!mid) throw new Error("no instance");
 
     const r = await ok("undo");
@@ -335,7 +352,7 @@ describe("undo structured content and next-undo line", () => {
       },
     ]);
 
-    ctx.repo.setGroupId(byName("Wolf 1").id, "solo", table);
+    repoOf(ctx).setGroupId(byName("Wolf 1").id, "solo", table);
     await ok("merge_initiative", { targets: ["Wolf 1", "Wolf 2"] });
 
     const merge = await ok("undo");
@@ -402,11 +419,11 @@ describe("undo structured content and next-undo line", () => {
     );
 
     await ok("apply_damage", { target: "Wolf 1", amount: 4 });
-    ctx.repo.setHp(w1!.id, 5, table);
+    repoOf(ctx).setHp(w1!.id, 5, table);
     const changedAtTable = await ok("undo");
 
     await ok("apply_damage", { target: "Wolf 2", amount: 4 });
-    ctx.repo.removeInstances([w2!.id], table);
+    repoOf(ctx).removeInstances([w2!.id], table);
     const removedAtTable = await ok("undo");
 
     await ok("set_armor_class", { target: "Wolf 3", armorClass: 15 });
@@ -474,6 +491,7 @@ describe("undo structured content and next-undo line", () => {
     ].join("\n");
     expect(replyText(r)).toBe(reply);
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: reply,
       undone: null,
       notCovered: "set_rooms",
@@ -561,6 +579,7 @@ describe("undo structured content and next-undo line", () => {
     expect(roomChange.structuredContent?.["notCovered"]).toBe("set_rooms");
 
     expect((await ok("undo")).structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: "Nothing to undo.",
       undone: null,
       notCovered: null,

@@ -8,14 +8,18 @@ export interface MapRegistration {
   placement: MapPlacement;
 }
 
-/** Driven port: the registered maps and the active one. */
+/**
+ * Driven port: one encounter's map, and the saved rooms of every map item.
+ * A map repository belongs to one encounter; rooms are keyed by map item and
+ * shared by every encounter on that item.
+ */
 export interface MapRepository {
   /**
-   * Stores the registration and makes it the active map, replacing an
-   * earlier registration of the same item.
+   * Stores the registration, replacing an earlier registration of the same
+   * item, and makes it this repository's encounter's map.
    */
   registerMap(registration: MapRegistration): void;
-  /** The active map's registration, or undefined when no map has been used. */
+  /** The encounter's map, or undefined when the encounter has used none. */
   getActiveMap(): MapRegistration | undefined;
   /** The map item's saved rooms, in the order saved; [] when it has none. */
   getRooms(itemId: string): SavedRoom[];

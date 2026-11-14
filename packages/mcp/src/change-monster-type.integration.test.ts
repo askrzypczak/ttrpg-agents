@@ -1,12 +1,13 @@
-import type {
-  ChangeOrigin,
-  MonsterInstance,
-  NewMonsterInstance,
+import {
+  type ChangeOrigin,
+  type MonsterInstance,
+  type NewMonsterInstance,
+  resolveEncounter,
+  type EncounterRepository,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
-  SqliteEncounterRepository,
-  SqliteMapRepository,
+  SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -37,8 +38,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    repo: new SqliteEncounterRepository(openDatabase(":memory:")),
-    maps: new SqliteMapRepository(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     monsters: loadSrdMonsters(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -47,6 +47,9 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     newCommandId: () => "command",
   };
+  // A scene bound to the encounter is open, so replies name no encounter.
+  ctx.encounters.setOpenScene("scene-1");
+  resolveEncounter(ctx.encounters, { writes: true });
 });
 
 async function call(name: string, args: unknown): Promise<ToolResult> {
@@ -60,7 +63,7 @@ function text(r: ToolResult): string {
 }
 
 function seed(...items: NewMonsterInstance[]): MonsterInstance[] {
-  return ctx.repo.addInstances(() => items, origin);
+  return repoOf(ctx).addInstances(() => items, origin);
 }
 
 function wolf(displayName: string): NewMonsterInstance {
@@ -86,7 +89,7 @@ function view(i: MonsterInstance): Record<string, unknown> {
 }
 
 const stored = () =>
-  ctx.repo
+  repoOf(ctx)
     .listInstances()
     .map((i) => [
       i.displayName,
@@ -98,6 +101,13 @@ const stored = () =>
       i.footprint,
     ]);
 
+/** The current encounter's repository (created when there is none), resolved as a tool call does. */
+function repoOf(context: ToolContext): EncounterRepository {
+  return context.encounters.repositoryFor(
+    resolveEncounter(context.encounters, { writes: true }).encounter.id,
+  );
+}
+
 describe("change_monster_type", () => {
   it("change_monster_type by id and by exact name replies one line per monster with its old and new name, HP, AC and initiative", async () => {
     const [hurt, shadow] = seed(wolf("Wolf 1"), {
@@ -108,7 +118,7 @@ describe("change_monster_type", () => {
       initiative: null,
     });
     if (!hurt || !shadow) throw new Error("seed failed");
-    ctx.repo.applyDamage(hurt.id, 6, origin);
+    repoOf(ctx).applyDamage(hurt.id, 6, origin);
 
     const r = await call("change_monster_type", {
       targets: [hurt.id, "Shadow 1"],
@@ -127,8 +137,9 @@ describe("change_monster_type", () => {
       ["Goblin Boss 1", GOBLIN_BOSS, 15, 21, 17, 15, 1],
       ["Goblin Boss 2", GOBLIN_BOSS, 21, 21, 17, null, 1],
     ]);
-    const after = ctx.repo.listInstances();
+    const after = repoOf(ctx).listInstances();
     expect(r.structuredContent).toEqual({
+      encounter: "Encounter 1",
       summary: text(r),
       instances: after.map(view),
       before: [view({ ...hurt, currentHp: 5 }), view(shadow)],
@@ -147,7 +158,7 @@ describe("change_monster_type", () => {
       footprint: 2,
     });
     if (!hurt || !big) throw new Error("seed failed");
-    ctx.repo.applyDamage(hurt.id, 6, origin);
+    repoOf(ctx).applyDamage(hurt.id, 6, origin);
 
     const r = await call("change_monster_type", {
       targets: ["Wolf 1", "Dire Wolf 1"],

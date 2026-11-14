@@ -2,8 +2,17 @@ import {
   SqliteEncounterRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
+import { dirname } from "node:path";
+import type { Page } from "@playwright/test";
 import type { SceneItem } from "../src/scene-model.js";
-import { SHADOW_IDS } from "./db.js";
+import {
+  E2E_ENCOUNTER_ID,
+  SHADOW_IDS,
+  addE2eMonstersInOpenScene,
+  listE2eInstanceIds,
+  readE2eOpenScene,
+  seedE2eSceneEncounter,
+} from "./db.js";
 import { test, expect, openHarness } from "./fixtures.js";
 import { controlBridgeSocket, readItems } from "./helpers.js";
 import type { ChangeOrigin } from "@ttrpg-agents/engine";
@@ -49,6 +58,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       expect(item.visible).toBe(false);
       expect(item.metadata[INSTANCE_KEY]).toEqual({
         instanceId: SHADOW_IDS[n],
+        encounterId: E2E_ENCOUNTER_ID,
       });
     }
     // One row: same y, distinct x.
@@ -155,7 +165,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     const before = await readItems(page);
 
     const db = openDatabase(bridge.dbPath);
-    const repo = new SqliteEncounterRepository(db);
+    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID);
     let renamed = false;
     try {
       // The bridge's change-log poll pushes an event after this commit.
@@ -242,7 +252,7 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     );
 
     const db = openDatabase(bridge.dbPath);
-    const repo = new SqliteEncounterRepository(db);
+    const repo = new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID);
     let damaged = false;
     let renamed = false;
     try {
@@ -299,7 +309,11 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
     const db = openDatabase(bridge.dbPath);
     try {
       // Nobody is listening: the change reaches the store, not the table.
-      new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 7, origin);
+      new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID).setHp(
+        SHADOW_IDS[0]!,
+        7,
+        origin,
+      );
       await page.waitForTimeout(500);
       expect(await health()).toBe(16);
 
@@ -322,7 +336,11 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       await expect(panel.locator("#sync-error")).toHaveText("");
     } finally {
       try {
-        new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 16, origin);
+        new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID).setHp(
+          SHADOW_IDS[0]!,
+          16,
+          origin,
+        );
       } finally {
         db.close();
       }
@@ -335,5 +353,120 @@ test.describe("encounter -> hidden Owlbear tokens", () => {
       page.frameLocator("#extension").locator("#sync-error"),
     ).toHaveText("Encounter sync failed: Error: items are broken");
     expect(await readItems(page)).toEqual([]);
+  });
+});
+
+test.describe("scenes and their encounters", () => {
+  const SCENE_ID_KEY = "com.ttrpg-agents/scene-id";
+
+  type HostScene = { items: SceneItem[]; metadata: Record<string, unknown> };
+
+  /** Switches the fake host to `next` as Owlbear does; resolves with the scene it replaced. */
+  const switchScene = (page: Page, next: HostScene): Promise<HostScene> =>
+    page.evaluate((scene) => window.__host!.scene.switchScene(scene), next);
+
+  /** Each item's id, position and visibility, sorted by id. */
+  const placement = (items: SceneItem[]) =>
+    items
+      .map(({ id, position, visible }) => ({ id, position, visible }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+  const encounterOf = (item: SceneItem): unknown =>
+    (item.metadata[INSTANCE_KEY] as { encounterId?: unknown } | undefined)
+      ?.encounterId;
+
+  test("switching to a prepared scene of another encounter and back leaves every token of both scenes in place", async ({
+    page,
+    bridge,
+  }) => {
+    const dir = dirname(bridge.dbPath);
+    const other = seedE2eSceneEncounter(dir, "e2e-scene-b", [
+      "Shadow B1",
+      "Shadow B2",
+    ]);
+    await openHarness(page, { role: "gm" });
+    await expect.poll(async () => (await readItems(page)).length).toBe(5);
+    // The GM moved one token and revealed another on scene A.
+    const [first, second] = await readItems(page);
+    await page.evaluate(
+      ([a, b]) => {
+        window.__host!.scene.updateItems([a], { position: { x: 42, y: 24 } });
+        window.__host!.scene.updateItems([b], { visible: true });
+      },
+      [first!.id, second!.id] as const,
+    );
+    await page.waitForTimeout(500);
+    const placedA = placement(await readItems(page));
+
+    // Scene B is prepared: the extension draws its encounter's tokens.
+    let sceneA = await switchScene(page, {
+      items: [],
+      metadata: { [SCENE_ID_KEY]: "e2e-scene-b" },
+    });
+    await expect
+      .poll(async () => (await readItems(page)).map(encounterOf))
+      .toEqual([other.encounterId, other.encounterId]);
+    await page.waitForTimeout(500);
+    const placedB = placement(await readItems(page));
+
+    for (let round = 0; round < 2; round++) {
+      const sceneB = await switchScene(page, sceneA);
+      await page.waitForTimeout(1000);
+      expect(placement(await readItems(page))).toEqual(placedA);
+
+      sceneA = await switchScene(page, sceneB);
+      await page.waitForTimeout(1000);
+      expect(placement(await readItems(page))).toEqual(placedB);
+    }
+    expect(listE2eInstanceIds(dir)).toEqual(SHADOW_IDS);
+  });
+
+  test("a store write that creates an encounter for an open scene with none gets that encounter's tokens drawn", async ({
+    page,
+    bridge,
+  }) => {
+    const dir = dirname(bridge.dbPath);
+    await openHarness(page, { role: "gm", sceneId: "e2e-scene-new" });
+    await expect.poll(() => readE2eOpenScene(dir)).toBe("e2e-scene-new");
+    await page.waitForTimeout(500);
+    expect(await readItems(page)).toEqual([]);
+
+    const encounterId = addE2eMonstersInOpenScene(dir, ["Orc 1", "Orc 2"]);
+
+    expect(encounterId).not.toBe(E2E_ENCOUNTER_ID);
+    await expect
+      .poll(async () => (await readItems(page)).map((i) => i.name).sort())
+      .toEqual(["Orc 1", "Orc 2"]);
+    expect((await readItems(page)).map(encounterOf)).toEqual([
+      encounterId,
+      encounterId,
+    ]);
+  });
+
+  test("a player's client mints no scene id and records no open scene", async ({
+    page,
+    bridge,
+  }) => {
+    const dir = dirname(bridge.dbPath);
+    await openHarness(page, { role: "player", sceneId: null });
+    await expect(page.frameLocator("#extension").locator("#status")).toHaveText(
+      "This extension is only available to the GM.",
+    );
+    await page.waitForTimeout(1000);
+
+    expect(
+      await page.evaluate(() => window.__host!.scene.getMetadata()),
+    ).not.toHaveProperty(SCENE_ID_KEY);
+    expect(readE2eOpenScene(dir)).toBeUndefined();
+
+    // Control: a GM tab on such a scene mints an id and records it.
+    await openHarness(page, { role: "gm", sceneId: null });
+    await expect
+      .poll(() => page.evaluate(() => window.__host!.scene.getMetadata()))
+      .toHaveProperty([SCENE_ID_KEY]);
+    const minted = (
+      await page.evaluate(() => window.__host!.scene.getMetadata())
+    )[SCENE_ID_KEY];
+    await expect.poll(() => readE2eOpenScene(dir)).toBe(minted);
   });
 });

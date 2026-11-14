@@ -54,7 +54,7 @@ const config: SyncConfig = {
     {
       key: INSTANCE_METADATA_KEY,
       mode: "owned",
-      project: (i) => ({ instanceId: i.id }),
+      project: (i) => ({ instanceId: i.id, encounterId: i.encounterId }),
     },
     { key: HP_KEY, mode: "owned", project: (i) => i.currentHp },
   ],
@@ -75,7 +75,7 @@ const position: Vec2 = { x: 450, y: 300 };
 
 /** The synced record of a wolf token for instance `n` drawn with `image`. */
 const record = (n: number, image: string | null): Record<string, unknown> => ({
-  [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+  [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
   [HP_KEY]: 11,
   [NAME_BASELINE_KEY]: `Wolf ${n}`,
   [LOOK_BASELINE_KEY]: { monsterKey: "wolf", image },
@@ -92,7 +92,7 @@ const circleToken = (n: number, over: Partial<SceneItem> = {}): SceneItem => ({
   shape: { shapeType: "CIRCLE", width: 150, height: 150 },
   scale: { x: 1, y: 1 },
   metadata: {
-    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
     [HP_KEY]: 11,
     [SYNCED_METADATA_KEY]: record(n, null),
   },
@@ -120,7 +120,7 @@ const imageToken = (
     grid,
     scale: { x: 1, y: 1 },
     metadata: {
-      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}` },
+      [INSTANCE_METADATA_KEY]: { instanceId: `i${n}`, encounterId: "e1" },
       [HP_KEY]: 11,
       [SYNCED_METADATA_KEY]: synced,
     },
@@ -131,6 +131,7 @@ const imageToken = (
 const ctx = (reskins: string[]) => ({
   viewportCenter: { x: 1000, y: 500 },
   placed: new Set(["i1", "i2", "i3", "i4"]),
+  encounterId: "e1",
   art: { wolf: reuploaded },
   reskins: new Set(reskins),
 });
@@ -154,7 +155,10 @@ describe("planSync re-skin with re-uploaded art", () => {
       visible: true,
     });
     expect(item?.shape).toBeUndefined();
-    expect(item?.metadata[INSTANCE_METADATA_KEY]).toEqual({ instanceId: "i1" });
+    expect(item?.metadata[INSTANCE_METADATA_KEY]).toEqual({
+      instanceId: "i1",
+      encounterId: "e1",
+    });
     expect(item?.metadata[HP_KEY]).toBe(11);
     expect(item?.metadata[OTHER_KEY]).toEqual({ keep: [1, 2] });
     expect(

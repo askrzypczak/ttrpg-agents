@@ -8,6 +8,7 @@ import {
 } from "@ttrpg-agents/store-sqlite";
 import type { ChangeOrigin } from "@ttrpg-agents/engine";
 import {
+  E2E_ENCOUNTER_ID,
   SHADOW_IDS,
   e2eDbPath,
   readE2eTokenArt,
@@ -187,13 +188,21 @@ test.describe("token art from the Owlbear asset library", () => {
     // A store change reaches the table and leaves the failure shown.
     const db = openDatabase(e2eDbPath(workerDir()));
     try {
-      new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 7, origin);
+      new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID).setHp(
+        SHADOW_IDS[0]!,
+        7,
+        origin,
+      );
       await expect.poll(() => healthOf(page, SHADOW_IDS[0]!)).toBe(7);
       await expect(syncError(page)).toContainText(failure);
     } finally {
       try {
         // The worker's DB outlives the test, and the seed keeps HP as is.
-        new SqliteEncounterRepository(db).setHp(SHADOW_IDS[0]!, 16, origin);
+        new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID).setHp(
+          SHADOW_IDS[0]!,
+          16,
+          origin,
+        );
       } finally {
         db.close();
       }
@@ -796,7 +805,9 @@ test.describe("art steps named in the panel", () => {
     // An empty encounter, so no picker opens on connect.
     const db = openDatabase(bridge.dbPath);
     try {
-      new SqliteEncounterRepository(db).clearEncounter(origin);
+      new SqliteEncounterRepository(db, E2E_ENCOUNTER_ID).clearEncounter(
+        origin,
+      );
     } finally {
       db.close();
     }
@@ -833,7 +844,7 @@ test.describe("art steps named in the panel", () => {
     // Two types with no art arrive in one change.
     const add = openDatabase(bridge.dbPath);
     try {
-      new SqliteEncounterRepository(add).addInstances(
+      new SqliteEncounterRepository(add, E2E_ENCOUNTER_ID).addInstances(
         () => [
           { monsterKey: "ogre", displayName: "Ogre 1", maxHp: 59 },
           { monsterKey: "wolf", displayName: "Wolf 1", maxHp: 11 },
