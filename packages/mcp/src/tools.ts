@@ -1065,7 +1065,7 @@ const tableStatusTool = defineTool({
       inSync,
       artWaits,
       roomId,
-    } = await getTableStatus(ctx.repo, ctx.table);
+    } = await getTableStatus(ctx.encounters, ctx.table);
     const counts = `${String(tokenCount)} tokens on the scene, ${String(appliedInstanceCount)} instances applied, ${String(encounterCount)} in the encounter`;
     const room =
       roomId === undefined

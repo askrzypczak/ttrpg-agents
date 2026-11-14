@@ -131,14 +131,19 @@ const artWaitSchema = z.object({
   step: z.enum(["pick", "reupload"]),
 });
 
-export const sceneStatusSchema = z.object({
-  sceneReady: z.boolean(),
-  tokenCount: z.number().int().min(0),
-  appliedInstanceCount: z.number().int().min(0),
-  artWaits: z.array(artWaitSchema).default([]),
-  /** The Owlbear room the GM tab is in; absent from an older open tab. */
-  roomId: z.string().optional(),
-});
+export const sceneStatusSchema = z
+  .object({
+    sceneReady: z.boolean(),
+    tokenCount: z.number().int().min(0),
+    appliedInstanceCount: z.number().int().min(0),
+    artWaits: z.array(artWaitSchema).default([]),
+    /** The Owlbear room the GM tab is in; absent from an older open tab. */
+    roomId: z.string().optional(),
+    sceneId: sceneIdSchema.nullable().optional(),
+    heldEncounterId: z.string().nullable().optional(),
+    unmanagedTokenCount: z.number().int().min(0).optional(),
+  })
+  .refine(() => false, { message: "not implemented" });
 
 const vec2 = z.object({ x: z.number(), y: z.number() });
 

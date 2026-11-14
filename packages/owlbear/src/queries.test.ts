@@ -3,9 +3,9 @@ import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { PROTOCOL_VERSION, type QueryResult } from "@ttrpg-agents/protocol";
 import { describeError } from "./panel-state.js";
 import { queryReply, handleQuery, replyToQuery } from "./queries.js";
-import { createEncounterSync } from "./encounter-sync.js";
+import { createEncounterSync, type HeldScene } from "./encounter-sync.js";
 import { createFakeObr } from "./fake-adapter.js";
-import { createMessageFeed } from "./testing/messages.js";
+import { TEST_SCENE_ID, createMessageFeed } from "./testing/messages.js";
 import {
   MissingSceneError,
   SceneModel,
@@ -36,22 +36,109 @@ const unplaced: SceneItem = {
   metadata: { [INSTANCE_METADATA_KEY]: { instanceId: "i3" } },
 };
 
+/** One of our tokens, its link recording that encounter. */
+const linkedTo = (encounterId: string, n: number): SceneItem => ({
+  id: `ttrpg-instance-${encounterId}-i${String(n)}`,
+  type: "SHAPE",
+  name: `Shadow ${String(n)}`,
+  visible: true,
+  position: { x: 0, y: 0 },
+  layer: "CHARACTER",
+  metadata: {
+    [INSTANCE_METADATA_KEY]: { instanceId: `i${String(n)}`, encounterId },
+  },
+});
+
+const otherEncounters = linkedTo("e2", 7);
+
 describe("handleQuery scene-status", () => {
-  it("`scene-status` on a ready scene counts only our tokens and reports `sceneReady: true`", async () => {
+  it("scene-status reports the open scene's id and the held encounter, counts that encounter's tokens as tokenCount and our tokens of another encounter or none as unmanagedTokenCount", async () => {
     const { obr, scene } = createFakeObr();
     const sync = createEncounterSync(obr);
     await sync.handleMessage(createMessageFeed().snapshot([inst(1), inst(2)]));
-    // A foreign item, and one of our tokens the sync did not place.
-    scene.addItems([foreign, unplaced]);
+    // A foreign item, one of our tokens linked to no encounter and one linked
+    // to another encounter.
+    scene.addItems([foreign, unplaced, otherEncounters]);
 
     expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
       name: "scene-status",
       result: {
         sceneReady: true,
-        tokenCount: 3,
+        tokenCount: 2,
         appliedInstanceCount: 2,
         artWaits: [],
         roomId: "fake-room",
+        sceneId: TEST_SCENE_ID,
+        heldEncounterId: "e1",
+        unmanagedTokenCount: 2,
+      },
+    });
+  });
+
+  it.each<[string, HeldScene | undefined]>([
+    ["no snapshot yet", undefined],
+    [
+      "a snapshot for another scene",
+      { sceneId: "s2", encounterId: "e1", encounterName: "Encounter 1" },
+    ],
+    [
+      "a snapshot for no scene",
+      { sceneId: null, encounterId: null, encounterName: null },
+    ],
+    [
+      "a snapshot with no encounter",
+      { sceneId: TEST_SCENE_ID, encounterId: null, encounterName: null },
+    ],
+  ])(
+    "scene-status while the tab holds no encounter for the open scene (no snapshot yet, a snapshot for another scene, a snapshot with no encounter) reports a null held encounter, every token of ours as unmanaged and no instance applied (%s)",
+    async (_case, heldScene) => {
+      const { obr, scene } = createFakeObr();
+      scene.addItems([foreign, unplaced, otherEncounters, linkedTo("e1", 1)]);
+      const sync = {
+        appliedInstanceCount: () => 2,
+        artWaits: () => [],
+        heldScene: () => heldScene,
+      };
+
+      expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
+        name: "scene-status",
+        result: {
+          sceneReady: true,
+          tokenCount: 0,
+          appliedInstanceCount: 0,
+          artWaits: [],
+          roomId: "fake-room",
+          sceneId: TEST_SCENE_ID,
+          heldEncounterId: null,
+          unmanagedTokenCount: 3,
+        },
+      });
+    },
+  );
+
+  it("scene-status on a scene that is not ready reports a null scene id, a null held encounter and no tokens", async () => {
+    const { obr } = createFakeObr(new SceneModel("gm", false));
+    const sync = {
+      appliedInstanceCount: () => 2,
+      artWaits: () => [],
+      heldScene: (): HeldScene => ({
+        sceneId: TEST_SCENE_ID,
+        encounterId: "e1",
+        encounterName: "Encounter 1",
+      }),
+    };
+
+    expect(await handleQuery(obr, sync, { name: "scene-status" })).toEqual({
+      name: "scene-status",
+      result: {
+        sceneReady: false,
+        tokenCount: 0,
+        appliedInstanceCount: 0,
+        artWaits: [],
+        roomId: "fake-room",
+        sceneId: null,
+        heldEncounterId: null,
+        unmanagedTokenCount: 0,
       },
     });
   });

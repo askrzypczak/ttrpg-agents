@@ -1327,6 +1327,195 @@ describe("table_status", () => {
         "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
     });
   });
+
+  /** Stores an encounter with `count` instances; returns its id. */
+  function encounterWith(name: string, count: number): string {
+    const { id } = ctx.encounters.createEncounter(name);
+    ctx.encounters
+      .repositoryFor(id)
+      .addInstances(
+        () =>
+          Array.from({ length: count }, (_, i) =>
+            item(`${name} ${String(i + 1)}`, null),
+          ),
+        origin,
+      );
+    return id;
+  }
+
+  /** Opens `sceneId` in the store and binds it to `encounterId`. */
+  function openBound(sceneId: string, encounterId: string): void {
+    ctx.encounters.setOpenScene(sceneId);
+    ctx.encounters.bindScene(sceneId, encounterId);
+  }
+
+  const answer = (
+    count: number,
+    extra: Partial<TableSceneStatus> = {},
+  ): TableSceneStatus => ({
+    sceneReady: true,
+    tokenCount: count,
+    appliedInstanceCount: count,
+    artWaits: [],
+    roomId: "room-abc",
+    ...extra,
+  });
+
+  it("table_status names the open scene's encounter on the line after the status, and in its structured content", async () => {
+    const goblins = encounterWith("Goblin Ambush", 2);
+    const wolves = encounterWith("Wolf Pack", 5);
+    ctx.encounters.setCurrentEncounter(wolves);
+    openBound("scene-1", goblins);
+    ctx.table = tableAnswering(
+      answer(2, { sceneId: "scene-1", heldEncounterId: goblins }),
+    );
+
+    const r = await call("table_status");
+
+    expect(r.isError).toBeFalsy();
+    const out = text(r);
+    expect(out.split("\n")).toEqual([
+      "Owlbear is in sync (room room-abc): scene ready, 2 tokens on the scene, 2 instances applied, 2 in the encounter.",
+      "Encounter: Goblin Ambush.",
+    ]);
+    expect(r.structuredContent).toEqual({
+      summary: out,
+      sceneReady: true,
+      tokenCount: 2,
+      appliedInstanceCount: 2,
+      encounterCount: 2,
+      inSync: true,
+      roomId: "room-abc",
+      encounter: "Goblin Ambush",
+    });
+  });
+
+  it("table_status in an open scene with no encounter says the scene has none yet, gives a verdict, and creates no encounter", async () => {
+    ctx.encounters.setOpenScene("scene-1");
+    ctx.table = tableAnswering(
+      answer(0, { sceneId: "scene-1", heldEncounterId: null }),
+    );
+
+    const r = await call("table_status");
+
+    expect(r.isError).toBeFalsy();
+    expect(text(r).split("\n")).toEqual([
+      "Owlbear is in sync (room room-abc): scene ready, 0 tokens on the scene, 0 instances applied, 0 in the encounter.",
+      "This scene has no encounter yet.",
+    ]);
+    expect(r.structuredContent).toMatchObject({
+      inSync: true,
+      encounterCount: 0,
+      encounter: null,
+    });
+    expect(ctx.encounters.listEncounters()).toEqual([]);
+    expect(ctx.encounters.getOpenScene()).toEqual({
+      sceneId: "scene-1",
+      encounter: undefined,
+    });
+  });
+
+  it("table_status with no scene open says so and creates no encounter", async () => {
+    ctx.table = tableAnswering(
+      answer(0, { sceneId: null, heldEncounterId: null }),
+    );
+
+    const r = await call("table_status");
+
+    expect(r.isError).toBeFalsy();
+    expect(text(r).split("\n")).toEqual([
+      "Owlbear is out of sync (room room-abc): scene ready, 0 tokens on the scene, 0 instances applied, 0 in the encounter.",
+      "No scene is open.",
+    ]);
+    expect(r.structuredContent).toMatchObject({
+      inSync: false,
+      encounterCount: 0,
+      encounter: null,
+    });
+    expect(ctx.encounters.listEncounters()).toEqual([]);
+    expect(ctx.encounters.getOpenScene()).toBeUndefined();
+  });
+
+  it("table_status reports out of sync and says the Owlbear tab has not caught up while the tab holds another encounter", async () => {
+    const goblins = encounterWith("Goblin Ambush", 2);
+    const wolves = encounterWith("Wolf Pack", 2);
+    openBound("scene-1", goblins);
+    ctx.table = tableAnswering(
+      answer(2, { sceneId: "scene-1", heldEncounterId: wolves }),
+    );
+
+    const r = await call("table_status");
+
+    expect(r.isError).toBeFalsy();
+    expect(text(r).split("\n")).toEqual([
+      "Owlbear is out of sync (room room-abc): scene ready, 2 tokens on the scene, 2 instances applied, 2 in the encounter.",
+      "Encounter: Goblin Ambush; the Owlbear tab has not caught up yet.",
+    ]);
+    expect(r.structuredContent).toMatchObject({
+      inSync: false,
+      encounter: "Goblin Ambush",
+    });
+  });
+
+  it("table_status reports our tokens of another encounter or none in its text and structured content, only when there are some, and they leave it in sync", async () => {
+    const goblins = encounterWith("Goblin Ambush", 2);
+    openBound("scene-1", goblins);
+    const held = { sceneId: "scene-1", heldEncounterId: goblins };
+
+    ctx.table = tableAnswering(answer(2, { ...held, unmanagedTokenCount: 3 }));
+    const several = await call("table_status");
+    expect(text(several).split("\n")).toEqual([
+      "Owlbear is in sync (room room-abc): scene ready, 2 tokens on the scene, 2 instances applied, 2 in the encounter.",
+      "Encounter: Goblin Ambush.",
+      "3 tokens of ours on the scene are left alone: they belong to another encounter or to none, and do not count toward sync.",
+    ]);
+    expect(several.structuredContent).toMatchObject({
+      inSync: true,
+      unmanagedTokenCount: 3,
+    });
+
+    ctx.table = tableAnswering(answer(2, { ...held, unmanagedTokenCount: 1 }));
+    const one = await call("table_status");
+    expect(text(one).split("\n")[2]).toBe(
+      "1 token of ours on the scene is left alone: it belongs to another encounter or to none, and does not count toward sync.",
+    );
+    expect(one.structuredContent).toMatchObject({
+      inSync: true,
+      unmanagedTokenCount: 1,
+    });
+
+    ctx.table = tableAnswering(answer(2, { ...held, unmanagedTokenCount: 0 }));
+    const none = await call("table_status");
+    expect(text(none).split("\n")).toEqual([
+      "Owlbear is in sync (room room-abc): scene ready, 2 tokens on the scene, 2 instances applied, 2 in the encounter.",
+      "Encounter: Goblin Ambush.",
+    ]);
+    expect(none.structuredContent).toMatchObject({ inSync: true });
+    expect(none.structuredContent).not.toHaveProperty("unmanagedTokenCount");
+  });
+
+  it("table_status for a tab without the new fields gives a verdict from the counts and says the tab's encounter is unknown", async () => {
+    const goblins = encounterWith("Goblin Ambush", 3);
+    openBound("scene-1", goblins);
+
+    ctx.table = tableAnswering(answer(3));
+    const matching = await call("table_status");
+    expect(matching.isError).toBeFalsy();
+    expect(text(matching).split("\n")).toEqual([
+      "Owlbear is in sync (room room-abc): scene ready, 3 tokens on the scene, 3 instances applied, 3 in the encounter.",
+      "Encounter: Goblin Ambush (the tab's encounter unknown: reload the Owlbear tab).",
+    ]);
+    expect(matching.structuredContent).toMatchObject({
+      inSync: true,
+      encounter: "Goblin Ambush",
+    });
+
+    ctx.table = tableAnswering(answer(2));
+    const differing = await call("table_status");
+    expect(text(differing).split("\n")[0]).toBe(
+      "Owlbear is out of sync (room room-abc): scene ready, 2 tokens on the scene, 2 instances applied, 3 in the encounter.",
+    );
+  });
 });
 
 describe("the encounter a tool call acts on", () => {
