@@ -105,6 +105,11 @@ export interface BridgeServerOptions {
    * (null: also on the active client's disconnect and on `close()`).
    */
   openScene?: (sceneId: string | null) => void;
+  /**
+   * Name Owlbear shows for the extension: the served `manifest.json` carries
+   * it as `name` and `action.title`. Absent: the manifest is served as built.
+   */
+  extensionName?: string;
 }
 
 /** Outcome of a write the table asked for; a refusal changes nothing. */

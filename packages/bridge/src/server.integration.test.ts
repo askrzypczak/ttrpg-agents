@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { get } from "node:http";
 import { WebSocket } from "ws";
 import {
@@ -341,6 +342,94 @@ describe("bridge server", () => {
       expect(res.status).toBe(200);
     } finally {
       await s2.close();
+    }
+  });
+});
+
+describe("bridge server with an extension name", () => {
+  const NAME = "ttrpg-agents (dev)";
+  const BUILT_MANIFEST = fileURLToPath(
+    new URL("../../owlbear/public/manifest.json", import.meta.url),
+  );
+  type Manifest = Record<string, unknown> & {
+    action: Record<string, unknown>;
+  };
+  let built: Manifest;
+  let named: BridgeServer;
+
+  beforeEach(async () => {
+    const builtText = await readFile(BUILT_MANIFEST, "utf8");
+    built = JSON.parse(builtText) as Manifest;
+    await writeFile(join(dir, "manifest.json"), builtText);
+    named = await startBridgeServer({
+      port: 0,
+      staticDir: dir,
+      extensionName: NAME,
+    });
+  });
+
+  afterEach(async () => {
+    await named.close();
+  });
+
+  it("with an extension name, manifest.json is served with name and action.title set to it and every other field as in the built manifest", async () => {
+    const res = await fetch(`http://127.0.0.1:${named.port}/manifest.json`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      ...built,
+      name: NAME,
+      action: { ...built.action, title: NAME },
+    });
+  });
+
+  it("with an extension name, the renamed manifest keeps the static-file checks: a foreign Host is refused, owlbear.rodeo gets CORS, and CSP and nosniff are set", async () => {
+    const bad = await hostGet(named.port, "/manifest.json", "evil.example");
+    expect(bad.status).toBe(403);
+    expect(bad.body).not.toContain("popover");
+
+    const res = await fetch(`http://127.0.0.1:${named.port}/manifest.json`, {
+      headers: { Origin: "https://www.owlbear.rodeo" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe(
+      "https://www.owlbear.rodeo",
+    );
+    expect(res.headers.get("content-security-policy")).toBe(
+      "frame-ancestors https://www.owlbear.rodeo https://owlbear.rodeo",
+    );
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    const served = (await res.json()) as Manifest;
+    expect(served.name).toBe(NAME);
+    expect(served.action.title).toBe(NAME);
+  });
+
+  it("with an extension name, other static files are served unchanged", async () => {
+    const other = JSON.stringify(
+      { name: "other", action: { title: "other" } },
+      null,
+      2,
+    );
+    await writeFile(join(dir, "sub", "manifest.json"), other);
+    await writeFile(join(dir, "sub", "data.json"), other);
+    const base = `http://127.0.0.1:${named.port}`;
+
+    expect(await (await fetch(`${base}/sub/index.html`)).text()).toBe(
+      "<p>hi</p>",
+    );
+    expect(await (await fetch(`${base}/sub/manifest.json`)).text()).toBe(other);
+    expect(await (await fetch(`${base}/sub/data.json`)).text()).toBe(other);
+  });
+
+  it("with an extension name, a manifest.json that is not a JSON object is served as built", async () => {
+    const url = `http://127.0.0.1:${named.port}/manifest.json`;
+    for (const body of [
+      JSON.stringify([{ name: "t", action: { title: "t" } }]),
+      '{ "name": "t", ',
+    ]) {
+      await writeFile(join(dir, "manifest.json"), body);
+      const res = await fetch(url);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(body);
     }
   });
 });
