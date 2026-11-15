@@ -86,13 +86,13 @@ Upgrading to scene-bound encounters (migration 17) discards every existing encou
 | Token art per monster type (`token_art`)                                                                         | bridge (`token-art-set`); the library import                                                       | bridge (snapshots)                         |
 | Token image bytes (`token_art_image`, keyed by SHA-256)                                                          | bridge (`POST /token-images`); the library import                                                  | bridge (`GET /token-images/<sha256>`)      |
 | Open scene (`open_scene`) and scene bindings (`encounters.scene_id`)                                             | bridge (`scene-open`, none at start and on disconnect); MCP server (binds a new encounter)         | bridge (snapshots); MCP server             |
-| Stored creatures (`creatures`). A `monsterSchema` change migrates the rows.                                      | MCP server (creature tools, not yet built)                                                         | MCP server (monster index)                 |
+| Stored creatures (`creatures`). A `monsterSchema` change migrates the rows.                                      | MCP server (`create_creature`)                                                                     | MCP server (monster index)                 |
 
 Invariants the processes rely on:
 
 - A removed instance keeps its row, marked removed, so `restore_monsters` puts it back with its id and state. A clear keeps the set it removed for `restore_encounter` and deletes the instances removed before it: only the last clear's set is restorable.
 - A restore records, on each instance it puts back, the `seq` of the `added` event it logs. It is kept while the instance stays in the encounter and replaced by a later restore; snapshots carry it.
-- An undo record holds each instance's state before the command's first write to it. A map or room change leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes its encounter's records.
+- An undo record holds each instance's state before the command's first write to it. A map or room change, or a creature change (on the current encounter when there is one), leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes its encounter's records.
 - Token art is a VTT-neutral reference `{ url, mime, width, height }` with an optional `sha256` link to stored bytes. The reference is all present or all absent, and art without one (bytes never published to Owlbear, such as the library import's) must link an image. Stored bytes carry no monster key.
 
 ### Two halves of one save
