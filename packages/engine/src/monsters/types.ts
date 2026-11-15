@@ -11,6 +11,13 @@ export interface MonsterSet {
   dndBeyondPages: Map<string, string>;
 }
 
+/** A stored creature record the index leaves out: its key and a message naming the key and every reason. */
+export interface QuarantinedCreature {
+  key: string;
+  /** `Stored creature "<key>" is quarantined: <reason>; <reason>` */
+  message: string;
+}
+
 /** Read port: every monster the engine can use. */
 export interface MonsterIndex {
   /** The monster with this exact key, or undefined. */
@@ -21,6 +28,8 @@ export interface MonsterIndex {
   aliases(): ReadonlyMap<string, string>;
   /** The D&D Beyond 2024 page segment `<id>-<slug>` of a built-in monster, or undefined. */
   dndBeyondPage(key: string): string | undefined;
+  /** Stored records left out of get and list; [] when the index holds built-in data only. */
+  quarantined(): readonly QuarantinedCreature[];
 }
 
 /** A MonsterIndex over a fixed MonsterSet (by reference). */
@@ -30,5 +39,8 @@ export function staticMonsterIndex(set: MonsterSet): MonsterIndex {
     list: () => set.monsters,
     aliases: () => set.aliases,
     dndBeyondPage: (key) => set.dndBeyondPages.get(key),
+    quarantined: () => {
+      throw new Error("not implemented");
+    },
   };
 }

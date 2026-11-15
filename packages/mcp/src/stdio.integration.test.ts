@@ -14,7 +14,9 @@ import { fileURLToPath } from "node:url";
 import type { DatabaseSync } from "node:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import type { Monster } from "@ttrpg-agents/engine";
 import {
+  SqliteCreatureRepository,
   SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -77,12 +79,14 @@ async function unusedPort(): Promise<number> {
   return port;
 }
 
-async function connect(): Promise<Client> {
+/** Starts the server on a fresh database; `seed` may fill that database first. */
+async function connect(seed?: (dbPath: string) => void): Promise<Client> {
   const dir = mkdtempSync(join(tmpdir(), "ttrpg-mcp-"));
   cleanup.push(() => {
     rmSync(dir, { recursive: true, force: true });
     return Promise.resolve();
   });
+  seed?.(join(dir, "test.db"));
   // No bridge: an absent agent token file and a port nothing listens on.
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -180,6 +184,69 @@ describe("stdio server", () => {
         expectedAnnotations[tool.name],
       );
     }
+  }, 30_000);
+});
+
+describe("stdio server stored creatures", () => {
+  it("the MCP server starts over a database holding a quarantined creature: add_monsters of an SRD monster succeeds and add_monsters of the quarantined key fails naming the reason", async () => {
+    // Its statblock names another key, so the index quarantines the record.
+    const mismatched: Monster = {
+      key: "homebrew_bramble",
+      name: "Thornling",
+      source: { book: "homebrew" },
+      size: "small",
+      type: "fey",
+      alignment: "neutral",
+      ac: 11,
+      armorDetail: "",
+      hp: { average: 4, dice: "1d8" },
+      speeds: { walk: 25 },
+      abilities: { str: 8, dex: 12, con: 10, int: 9, wis: 11, cha: 13 },
+      initiativeModifier: 1,
+      cr: 0,
+      saves: { str: -1, dex: 1, con: 0, int: -1, wis: 0, cha: 1 },
+      skills: {},
+      senses: {},
+      languages: "",
+      damageVulnerabilities: [],
+      damageResistances: [],
+      damageImmunities: [],
+      conditionImmunities: [],
+      sections: {
+        traits: [],
+        actions: [],
+        bonusActions: [],
+        reactions: [],
+        legendaryActions: [],
+      },
+    };
+    const client = await connect((dbPath) => {
+      const db = openDatabase(dbPath);
+      try {
+        new SqliteCreatureRepository(db).insert(
+          "homebrew_thornling",
+          mismatched,
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    const added = await client.callTool({
+      name: "add_monsters",
+      arguments: { groups: [{ monster: "srd-2024_shadow", count: 1 }] },
+    });
+    expect(added.isError).toBeFalsy();
+
+    const refused = await client.callTool({
+      name: "add_monsters",
+      arguments: { groups: [{ monster: "homebrew_thornling", count: 1 }] },
+    });
+    expect(refused.isError).toBe(true);
+    const text = JSON.stringify(refused.content);
+    expect(text).toContain("homebrew_thornling");
+    expect(text).toContain("quarantined");
+    expect(text).toContain("homebrew_bramble");
   }, 30_000);
 });
 
