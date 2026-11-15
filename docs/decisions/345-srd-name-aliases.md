@@ -23,7 +23,7 @@ Issue: [#345](https://github.com/askrzypczak/ttrpg-agents/issues/345).
   - Name match always wins when there is one: "veteran" would never name the rename the ticket asked for.
   - A second search function beside `searchMonsters`: two search APIs for one consumer.
 - Where: `searchMonsters`, `MonsterMatch` (`packages/engine/src/monsters/search.ts`).
-- Status: superseded by 381.6
+- Status: superseded by 381.5
 
 ## 345.3 Loading fails on an unknown key, an alias that is a current name, or a repeated old name
 

@@ -18,47 +18,36 @@ Issue: [#381](https://github.com/askrzypczak/ttrpg-agents/issues/381).
 - Decided by: maintainer, 2026-11-11, epic #376 body (`createMonsterIndex(builtIn, creatures)`, reads the store on each call); epic #376 orchestrator, 2026-11-15, plan gate, not human-approved (no cache, the order).
 - Context: Several MCP processes share one database file; a creature one process stores must be visible to every other at once.
 - Options:
-  - Chosen: no cache. `get` tries the built-in set first, then the store; `list` is the built-in monsters in set order, then the valid stored creatures in key order; `aliases` and `dndBeyondPage` are the built-in set's.
+  - Chosen: no cache. `get` tries the built-in set first, then the store; `list` is the built-in monsters in set order, then the stored creatures in key order; `aliases` and `dndBeyondPage` are the built-in set's. `MonsterIndex` itself is unchanged.
   - A cache keyed on a store revision: allowed by the ticket, but nothing is slow enough yet to need it.
 - Where: `packages/engine/src/monsters/creatures.ts` (`createMonsterIndex`), `packages/mcp/src/stdio.ts`.
 - Revisit if: reading the store on every call shows up in a profile.
 - Status: active
 
-## 381.3 A stored record that fails a check is quarantined, listed by `MonsterIndex.quarantined()`, and left out of `get` and `list`
+## 381.3 A change to `monsterSchema` ships a store migration for the `creatures` rows; the index skips a row that fails the schema as a safety net only
 
-- Decided by: maintainer, 2026-11-11, epic #376 body and the ticket (quarantine on schema error, mismatched key, key outside the book's namespace, `srd` book tag); epic #376 orchestrator, 2026-11-15, plan gate, not human-approved (the port method, the message format, reusing the schema's book check).
-- Context: A bad record must not stop startup or hide the other records, and a use case asked for its key must say why. Use cases hold only the `MonsterIndex` port, so the reason has to reach them through it; #386's `list_creatures` reads it too.
+- Decided by: maintainer, 2026-11-15, in chat (relayed by the epic #376 orchestrator after the PR opened).
+- Context: Creation and edit validate a statblock before they store it (#385, #386), so a row that fails `monsterSchema` can only come from a later schema change or a hand-edited database. A schema change is a migration concern, as #377 rewrote the SRD file's `source`.
 - Options:
-  - Chosen: `quarantined(): readonly QuarantinedCreature[]` (`{ key, message }`) on the port, `[]` for `staticMonsterIndex`. The message is `Stored creature "<key>" is quarantined: <reasons joined by "; ">`; a schema failure lists every issue as `<path>: <message>` and stops there. The book tag pattern is the schema's (377.2), not re-derived.
-  - `quarantineReason(key)` on the port: serves the use cases but not #386's list.
-  - The method only on `createMonsterIndex`'s return type: use cases holding the port could not reach it.
-- Where: `packages/engine/src/monsters/types.ts` (`MonsterIndex.quarantined`, `QuarantinedCreature`), `packages/engine/src/monsters/creatures.ts` (`createMonsterIndex`).
+  - Chosen: `createMonsterIndex` parses each row with `monsterSchema.safeParse` and skips one that fails: absent from `get`, `list` and search, with no message and no throw. Key, namespace and `srd` book-tag rules are enforced at creation and edit only.
+  - Per-read quarantine with messages: the index checks key, namespace and book tag too, lists failing rows through a `MonsterIndex.quarantined()` method, and every unknown-monster error names the reason. Built in the first round of this ticket and cut: it widens the read port and every use case's error path for a state that a migration should never leave behind, and "quarantined" has no meaning in a create, edit, remove model.
+  - Refuse to start on a bad row: one hand-edited row would stop every tool.
+- Where: `packages/engine/src/monsters/creatures.ts` (`createMonsterIndex`), `docs/architecture.md` (Shared database, `creatures`).
+- Revisit if: rows that fail the schema turn up in practice, so the DM needs to see them.
 - Status: active
 
 ## 381.4 A monster counts as stored when its book tag is not reserved; `isReservedBookTag` is the one place the rule lives
 
 - Decided by: epic #376 orchestrator, 2026-11-15, plan gate, not human-approved.
-- Context: Search must rank stored creatures first on a tie (381.6) without a new port method, and #385 must refuse `srd` book tags.
+- Context: Search must rank stored creatures first on a tie (381.5) without a new port method, and #385 must refuse `srd` book tags.
 - Options:
-  - Chosen: `isReservedBookTag(book)` (`book.startsWith("srd")`), engine-internal (not exported from the package, as `proficiencyBonus` in 384). "Not reserved" means stored only because the quarantine keeps every valid stored record off reserved tags.
+  - Chosen: `isReservedBookTag(book)` (`book.startsWith("srd")`), engine-internal (not exported from the package, as `proficiencyBonus` in 384). "Not reserved" means stored because creation and edit keep every stored record off reserved tags.
   - A port method such as `isStored(key)`: every index implementation must serve it.
 - Where: `packages/engine/src/monsters/creatures.ts` (`isReservedBookTag`), `packages/engine/src/monsters/search.ts` (`searchMonsters`).
 - Revisit if: a built-in data set gets a book tag that does not start with `srd`.
 - Status: active
 
-## 381.5 Every engine unknown-monster error appends the quarantine reason and keeps its class and code
-
-- Decided by: epic #376 orchestrator, 2026-11-15, plan gate, not human-approved (the ticket named `UnknownMonsterError`; the AC was reworded).
-- Context: `add_monsters` and the restores throw their own errors with code `unknown_monster`, not `UnknownMonsterError`. A creature quarantined by a later schema change breaks a prepared scene at the instance lookups (initiative, max HP, change type, restore).
-- Options:
-  - Chosen: `withQuarantineReason(index, key, message)` (engine-internal) wraps the message at every engine site (`validateAddMonsters`, `changeMonsterType` twice, `rollInitiativeValues`, `resetMaxHp`, `restore.ts`); classes and codes are unchanged. The mcp `get_statblock` and `open_statblock` replies are unchanged; #386's `list_creatures` shows quarantined records.
-  - Only the sites given a key by the caller (the add family and `changeMonsterType`'s target): the instance sites would report a bare unknown monster.
-  - Every engine site plus the mcp statblock tools: more surface for tools that are not use cases.
-  - Throw `UnknownMonsterError` everywhere, as the ticket said: changes the error contract of `add_monsters` and the restores.
-- Where: `packages/engine/src/monsters/creatures.ts` (`withQuarantineReason`), `packages/engine/src/encounter/validate-add-monsters.ts`, `change-monster.ts`, `initiative.ts`, `max-hp.ts`, `restore.ts`.
-- Status: active
-
-## 381.6 Search ranks a stored creature before a built-in monster on a tie
+## 381.5 Search ranks a stored creature before a built-in monster on a tie
 
 - Decided by: maintainer, 2026-11-11 (357.16: a creature the DM stored wins over an SRD monster of the same name, ranked first on a tie; the ticket's Proposed change); epic #376 orchestrator, 2026-11-15, plan gate, not human-approved (the position of the new key in the sort).
 - Context: 345.2's sort had no notion of stored creatures.
@@ -70,7 +59,7 @@ Issue: [#381](https://github.com/askrzypczak/ttrpg-agents/issues/381).
 - Status: active
 - Supersedes: 345.2
 
-## 381.7 The `creatures` table holds a key and the statblock JSON, with no timestamps
+## 381.6 The `creatures` table holds a key and the statblock JSON, with no timestamps
 
 - Decided by: maintainer, 2026-11-11, the ticket (a `creatures` table, migration); epic #376 orchestrator, 2026-11-15, plan gate, on the spec-auditor's cut, not human-approved (no timestamp columns).
 - Context: The ticket proposed `created_at` and `updated_at`; nothing in #381, #385 or #386 reads them.
@@ -81,10 +70,10 @@ Issue: [#381](https://github.com/askrzypczak/ttrpg-agents/issues/381).
 - Revisit if: a feature needs to know when a creature was stored or edited (one migration adds the columns).
 - Status: active
 
-## 381.8 The in-memory `CreatureRepository` fake stays in its test file until a second consumer needs it
+## 381.7 The in-memory `CreatureRepository` fake stays in its test file until a second consumer needs it
 
 - Decided by: spec-auditor, 2026-11-15, folded by the #381 planner; epic #376 orchestrator, 2026-11-15, plan gate, not human-approved (routine rule: #385 promotes it).
-- Context: Engine rules (quarantine, ranking, unknown-monster messages) are tested in the engine, not in the store's adapter tests, so the engine tests need a repository.
+- Context: Engine rules (the merge, the skipped row) are tested in the engine, not in the store's adapter tests, so the engine tests need a repository.
 - Options:
   - Chosen: a fake local to `creatures.test.ts`; #385, the second consumer, moves it to `@ttrpg-agents/engine/testing`.
   - Export a fake from `@ttrpg-agents/engine/testing` now: an export with one consumer.
