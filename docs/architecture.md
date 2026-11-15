@@ -68,7 +68,7 @@ flowchart LR
 
 Three surfaces, each for one question:
 
-- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; one fix per problem.
+- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, stored creature count, newest backup, bridge with this profile's token, GM tab; one fix per problem.
 - **`table_status` tool**: does the open scene match the encounter?
 - **`npm run bridge:status`**: the bridge process: pid, port, checkout, commit, log.
 
@@ -78,15 +78,15 @@ One SQLite file per profile, in WAL mode, named by the `database` setting ([`doc
 
 Upgrading to scene-bound encounters (migration 17) discards every existing encounter with its instances and undo records; the change log (each row keeps its `seq`, with no encounter), maps, rooms and token art are kept. Tokens left in scenes from before belong to no encounter: delete them from the scenes by hand.
 
-| Data                                                                                                             | Written by                                                                                         | Read by                                    |
-| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Encounter (`monster_instances`, `encounters`) and its change log (`encounter_events`)                            | MCP server; the bridge for a table edit (`instance-edit`) or a GM token deletion (`token-deleted`) | bridge (event poll, snapshots); MCP server |
-| Undo records (`undo_commands`, `undo_instances`)                                                                 | MCP server, one record per MCP command that changed the encounter                                  | MCP server (`undo`)                        |
-| Map registrations (`map_registrations`), each encounter's map (`encounters.map_item_id`) and rooms (`map_rooms`) | MCP server (`use_map`, `set_rooms`, `remove_rooms`)                                                | bridge (`map-rooms` push); MCP server      |
-| Token art per monster type (`token_art`)                                                                         | bridge (`token-art-set`); the library import                                                       | bridge (snapshots)                         |
-| Token image bytes (`token_art_image`, keyed by SHA-256)                                                          | bridge (`POST /token-images`); the library import                                                  | bridge (`GET /token-images/<sha256>`)      |
-| Open scene (`open_scene`) and scene bindings (`encounters.scene_id`)                                             | bridge (`scene-open`, none at start and on disconnect); MCP server (binds a new encounter)         | bridge (snapshots); MCP server             |
-| Stored creatures (`creatures`). A `monsterSchema` change migrates the rows.                                      | MCP server (`create_creature`)                                                                     | MCP server (monster index)                 |
+| Data                                                                                                             | Written by                                                                                         | Read by                                                                                |
+| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Encounter (`monster_instances`, `encounters`) and its change log (`encounter_events`)                            | MCP server; the bridge for a table edit (`instance-edit`) or a GM token deletion (`token-deleted`) | bridge (event poll, snapshots); MCP server                                             |
+| Undo records (`undo_commands`, `undo_instances`)                                                                 | MCP server, one record per MCP command that changed the encounter                                  | MCP server (`undo`)                                                                    |
+| Map registrations (`map_registrations`), each encounter's map (`encounters.map_item_id`) and rooms (`map_rooms`) | MCP server (`use_map`, `set_rooms`, `remove_rooms`)                                                | bridge (`map-rooms` push); MCP server                                                  |
+| Token art per monster type (`token_art`)                                                                         | bridge (`token-art-set`); the library import                                                       | bridge (snapshots)                                                                     |
+| Token image bytes (`token_art_image`, keyed by SHA-256)                                                          | bridge (`POST /token-images`); the library import                                                  | bridge (`GET /token-images/<sha256>`)                                                  |
+| Open scene (`open_scene`) and scene bindings (`encounters.scene_id`)                                             | bridge (`scene-open`, none at start and on disconnect); MCP server (binds a new encounter)         | bridge (snapshots); MCP server                                                         |
+| Stored creatures (`creatures`). A `monsterSchema` change migrates the rows.                                      | MCP server (`create_creature`, `edit_creature`, `remove_creature`)                                 | MCP server (monster index); `npm run status` and `setup_status` (row count, read-only) |
 
 Invariants the processes rely on:
 
