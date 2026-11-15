@@ -807,7 +807,7 @@ describe("migration to scene bindings", () => {
       "INSERT INTO encounters (id, name, active, created_at) VALUES ('e2', 'Cave', 0, 200)",
     );
 
-    migrate(db);
+    migrateToVersion(db, 19);
 
     expect(getUserVersion(db)).toBe(19);
     const directory = new SqliteEncounterDirectory(db);

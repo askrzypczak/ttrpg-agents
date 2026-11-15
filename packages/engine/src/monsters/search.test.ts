@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createMonsterIndex, type CreatureRepository } from "./creatures.js";
 import type { Monster } from "./schema.js";
 import { getMonsterByKey, searchMonsters } from "./search.js";
+import type { MonsterSet } from "./types.js";
 import { makeTestMonsterIndex } from "../testing/index.js";
 
 function stub(key: string, name: string): Monster {
@@ -130,6 +132,74 @@ describe("searchMonsters", () => {
         { monster: byKey("warrior-veteran"), alias: "Veteran" },
       ]);
     }
+  });
+});
+
+describe("searchMonsters with stored creatures", () => {
+  function withBook(monster: Monster, book: string): Monster {
+    return { ...monster, source: { book } };
+  }
+
+  it('with a stored Bugbear Stalker (mm-2024_bugbear-stalker) beside the SRD one, searchMonsters("bugbear stalker") lists both, the stored one first', () => {
+    const builtIn = withBook(
+      stub("srd-2024_bugbear-stalker", "Bugbear Stalker"),
+      "srd-5.2",
+    );
+    const stored = withBook(
+      stub("mm-2024_bugbear-stalker", "Bugbear Stalker"),
+      "mm-2024",
+    );
+    const mixed = makeTestMonsterIndex([builtIn, stored]);
+
+    expect(
+      searchMonsters(mixed, "bugbear stalker").map((r) => r.monster.key),
+    ).toEqual(["mm-2024_bugbear-stalker", "srd-2024_bugbear-stalker"]);
+  });
+
+  it("searchMonsters still ranks a stronger built-in match before a weaker stored match", () => {
+    const ogre = withBook(stub("srd-2024_ogre", "Ogre"), "srd-5.2");
+    const ogreZombie = withBook(
+      stub("srd-2024_ogre-zombie", "Ogre Zombie"),
+      "srd-5.2",
+    );
+    const halfOgre = withBook(
+      stub("homebrew_half-ogre", "Half-Ogre"),
+      "homebrew",
+    );
+    const hogrest = withBook(stub("homebrew_hogrest", "Hogrest"), "homebrew");
+    const set: MonsterSet = {
+      monsters: [ogre, ogreZombie],
+      byKey: new Map([ogre, ogreZombie].map((m) => [m.key, m])),
+      aliases: new Map(),
+      dndBeyondPages: new Map(),
+    };
+    const storedCreatures = [halfOgre, hogrest];
+    const repo: CreatureRepository = {
+      getRecord: (key) => {
+        const data = storedCreatures.find((m) => m.key === key);
+        return data && { key, data };
+      },
+      listRecords: () =>
+        storedCreatures.map((data) => ({ key: data.key, data })),
+      insert: () => {
+        throw new Error("read-only test repository");
+      },
+      replace: () => {
+        throw new Error("read-only test repository");
+      },
+      delete: () => {
+        throw new Error("read-only test repository");
+      },
+    };
+    const mixed = createMonsterIndex(set, repo);
+
+    // Exact and prefix built-in matches before a stored whole-word and a stored substring match.
+    expect(searchMonsters(mixed, "ogre").map((r) => r.monster.name)).toEqual([
+      "Ogre",
+      "Ogre Zombie",
+      "Half-Ogre",
+      "Hogrest",
+    ]);
   });
 });
 
