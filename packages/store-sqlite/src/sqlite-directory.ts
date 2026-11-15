@@ -4,6 +4,7 @@ import type {
   Encounter,
   EncounterDirectory,
   EncounterRepository,
+  InstanceInEncounter,
   MapRepository,
   OpenScene,
 } from "@ttrpg-agents/engine";
@@ -96,6 +97,11 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
       )
       .get(instanceId) as EncounterRow | undefined;
     return row ? toEncounter(row) : undefined;
+  }
+
+  findLiveInstancesOfMonster(monsterKey: string): InstanceInEncounter[] {
+    void monsterKey;
+    throw new Error("not implemented");
   }
 
   repositoryFor(encounterId: string): EncounterRepository {

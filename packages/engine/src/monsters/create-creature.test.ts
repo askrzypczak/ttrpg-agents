@@ -430,6 +430,17 @@ describe("createCreature", () => {
     expect(storedKeys(creatures)).toEqual([]);
   });
 
+  it("createCreature's refusal of a book tag outside the pattern says a tag starts with a letter or digit", () => {
+    const { deps } = setup();
+
+    const error = thrown(() =>
+      create(deps, { book: "-homebrew", changes: required }),
+    );
+
+    expect(error).toBeInstanceOf(BookTagError);
+    expect(messageOf(error)).toContain("starting with a letter or digit");
+  });
+
   it("createCreature stores a statblock with findings and returns checkMonster's report with them", () => {
     const { deps, creatures } = setup();
     const slam: MonsterEntry = {

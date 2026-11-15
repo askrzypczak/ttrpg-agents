@@ -31,3 +31,19 @@ export class CreatureNameTakenError extends DomainError {
     this.name = "CreatureNameTakenError";
   }
 }
+
+/** A change asked of a built-in SRD monster, which cannot be changed in place. */
+export class BuiltInMonsterError extends DomainError {
+  constructor(message: string) {
+    super("built_in_monster", message);
+    this.name = "BuiltInMonsterError";
+  }
+}
+
+/** A stored creature that live instances in an encounter still use. */
+export class CreatureInUseError extends DomainError {
+  constructor(message: string) {
+    super("creature_in_use", message);
+    this.name = "CreatureInUseError";
+  }
+}

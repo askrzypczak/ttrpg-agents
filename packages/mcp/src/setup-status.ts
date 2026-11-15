@@ -34,6 +34,8 @@ function rowText(row: SetupRow): string {
       return `${row.setting.name} = ${String(row.setting.value)} (${row.setting.source})`;
     case "database":
       return databaseText(row.database);
+    case "creatures":
+      throw new Error("not implemented");
     case "backup":
       return backupText(row.backups, row.ageDays);
     case "bridge":

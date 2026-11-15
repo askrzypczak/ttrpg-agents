@@ -237,3 +237,212 @@ describe("get_statblock of a created creature", () => {
     expect(lines[header + 1]).toBe("Source: homebrew, page 7");
   });
 });
+
+/** Stores Goblin Shaman (homebrew_goblin-shaman), copied from the Goblin Warrior. */
+async function createShaman(page?: number): Promise<void> {
+  await ok("create_creature", {
+    book: "homebrew",
+    ...(page === undefined ? {} : { page }),
+    from: GOBLIN_WARRIOR,
+    changes: { name: "Goblin Shaman" },
+  });
+}
+
+/** Adds `count` Goblin Shamans to a new encounter named Ambush, then makes the encounter that was current before current again. */
+async function shamansInAmbush(count: number): Promise<void> {
+  const before = directory.getCurrentEncounter();
+  directory.createEncounter("Ambush");
+  await ok("add_monsters", {
+    encounter: "Ambush",
+    groups: [{ monster: "homebrew_goblin-shaman", count }],
+  });
+  if (before) directory.setCurrentEncounter(before.id);
+}
+
+describe("edit_creature", () => {
+  it("edit_creature changing a stored creature's AC changes get_statblock, and its reply says how many monsters in encounters keep their old AC, naming each with its encounter, while their list_encounter rows stay unchanged", async () => {
+    await createShaman();
+    await shamansInAmbush(2);
+    const rowsBefore = text(
+      await ok("list_encounter", { encounter: "Ambush" }),
+    );
+    const acBefore = stored("homebrew_goblin-shaman")?.ac;
+
+    const r = await ok("edit_creature", {
+      key: "homebrew_goblin-shaman",
+      changes: { ac: 17 },
+    });
+
+    expect(acBefore).not.toBe(17);
+    expect(stored("homebrew_goblin-shaman")?.ac).toBe(17);
+    expect(
+      text(await ok("get_statblock", { key: "homebrew_goblin-shaman" })),
+    ).toContain("- **AC** 17");
+    expect(text(r)).toContain("2 monsters in encounters keep");
+    expect(text(r)).toContain(
+      "Goblin Shaman 1 (Ambush), Goblin Shaman 2 (Ambush)",
+    );
+    expect(text(await ok("list_encounter", { encounter: "Ambush" }))).toBe(
+      rowsBefore,
+    );
+  });
+
+  it("edit_creature's reply says what it edited and in which book, a rename, then its rolls, text-only entries and findings, and its structured content carries key, monster, rolls, findings and the live instances", async () => {
+    await createShaman(7);
+    await shamansInAmbush(1);
+    const ambush = directory.listEncounters().find((e) => e.name === "Ambush");
+    if (!ambush) throw new Error("no Ambush");
+    const [instance] = directory.repositoryFor(ambush.id).listInstances();
+    if (!instance) throw new Error("no instance");
+
+    const r = await ok("edit_creature", {
+      key: "homebrew_goblin-shaman",
+      changes: { name: "Goblin Hexer" },
+    });
+
+    const monster = stored("homebrew_goblin-shaman");
+    if (!monster) throw new Error("not stored");
+    const check = checkMonster(monster);
+    const reply = text(r);
+    const [first] = reply.split("\n");
+    expect(first).toContain("Goblin Hexer (homebrew_goblin-shaman)");
+    expect(first).toContain("homebrew, page 7");
+    expect(first).toContain("Goblin Shaman");
+    expect(reply).toContain("Goblin Shaman 1 (Ambush)");
+    expect(reply.endsWith(formatCreatureCheck(check))).toBe(true);
+    expect(reply.indexOf("Goblin Shaman 1 (Ambush)")).toBeLessThan(
+      reply.indexOf(formatCreatureCheck(check)),
+    );
+    expect(r.structuredContent).toMatchObject({
+      key: "homebrew_goblin-shaman",
+      monster,
+      rolls: check.entries.filter((e) => e.rolls),
+      findings: check.findings,
+      liveInstances: [
+        { id: instance.id, name: "Goblin Shaman 1", encounter: "Ambush" },
+      ],
+    });
+  });
+
+  it("after edit_creature renames a creature, add_monsters by its key still adds it, named after its new name", async () => {
+    await createShaman();
+    await ok("edit_creature", {
+      key: "homebrew_goblin-shaman",
+      changes: { name: "Goblin Hexer" },
+    });
+
+    await ok("add_monsters", {
+      groups: [{ monster: "homebrew_goblin-shaman", count: 1 }],
+    });
+
+    const current = directory.getCurrentEncounter();
+    if (!current) throw new Error("no current encounter");
+    expect(
+      directory
+        .repositoryFor(current.id)
+        .listInstances()
+        .map((i) => ({ monsterKey: i.monsterKey, name: i.displayName })),
+    ).toEqual([
+      { monsterKey: "homebrew_goblin-shaman", name: "Goblin Hexer 1" },
+    ]);
+  });
+});
+
+describe("remove_creature", () => {
+  it("remove_creature of a creature with a live monster in another encounter replies isError naming the monster and its encounter; after remove_monsters it succeeds, and restore_monsters then fails with the unknown-monster message", async () => {
+    await createShaman();
+    await ok("add_monsters", {
+      groups: [{ monster: "srd-2024_wolf", count: 1 }],
+    });
+    await shamansInAmbush(1);
+
+    const refused = await call("remove_creature", {
+      key: "homebrew_goblin-shaman",
+    });
+    expect(refused.isError).toBe(true);
+    expect(text(refused)).toContain("Goblin Shaman 1");
+    expect(text(refused)).toContain("Ambush");
+    expect(stored("homebrew_goblin-shaman")).toBeDefined();
+
+    await ok("remove_monsters", {
+      encounter: "Ambush",
+      targets: ["Goblin Shaman 1"],
+    });
+    const removed = await ok("remove_creature", {
+      key: "homebrew_goblin-shaman",
+    });
+    expect(removed.structuredContent).toEqual({
+      key: "homebrew_goblin-shaman",
+    });
+    expect(stored("homebrew_goblin-shaman")).toBeUndefined();
+
+    const restore = await call("restore_monsters", {
+      encounter: "Ambush",
+      targets: ["Goblin Shaman 1"],
+    });
+    expect(restore.isError).toBe(true);
+    expect(text(restore)).toContain(
+      "monster type homebrew_goblin-shaman is not in the monster index",
+    );
+  });
+});
+
+describe("list_creatures", () => {
+  it("list_creatures replies a table of the stored creatures' key, name, book, page and CR, only the given book's with book, and structured content with each", async () => {
+    await ok("create_creature", {
+      book: "homebrew",
+      page: 7,
+      from: GOBLIN_WARRIOR,
+      changes: { name: "Goblin Shaman", cr: 2 },
+    });
+    await ok("create_creature", {
+      book: "my-campaign",
+      from: GOBLIN_WARRIOR,
+      changes: { name: "Goblin Hexer", cr: 0.5 },
+    });
+    const shamanRow =
+      "| homebrew_goblin-shaman | Goblin Shaman | homebrew | 7 | 2 |";
+    const hexerRow =
+      "| my-campaign_goblin-hexer | Goblin Hexer | my-campaign | - | 0.5 |";
+    const shaman = {
+      key: "homebrew_goblin-shaman",
+      name: "Goblin Shaman",
+      source: { book: "homebrew", page: 7 },
+      cr: 2,
+    };
+    const hexer = {
+      key: "my-campaign_goblin-hexer",
+      name: "Goblin Hexer",
+      source: { book: "my-campaign" },
+      cr: 0.5,
+    };
+
+    const all = await ok("list_creatures");
+    const allLines = text(all).split("\n");
+    expect(allLines).toContain("| key | name | book | page | CR |");
+    expect(allLines).toContain(shamanRow);
+    expect(allLines).toContain(hexerRow);
+    expect(allLines.indexOf(shamanRow)).toBeLessThan(
+      allLines.indexOf(hexerRow),
+    );
+    expect(text(all)).not.toContain(GOBLIN_WARRIOR);
+    expect(all.structuredContent).toEqual({ creatures: [shaman, hexer] });
+
+    const filtered = await ok("list_creatures", { book: "my-campaign" });
+    expect(text(filtered).split("\n")).toContain(hexerRow);
+    expect(text(filtered)).not.toContain("homebrew_goblin-shaman");
+    expect(filtered.structuredContent).toEqual({ creatures: [hexer] });
+  });
+
+  it("list_creatures with no stored creatures, or none in the given book, says so", async () => {
+    const none = await ok("list_creatures");
+    expect(text(none)).toContain("No stored creatures");
+    expect(none.structuredContent).toEqual({ creatures: [] });
+
+    await createShaman();
+    const noneInBook = await ok("list_creatures", { book: "my-campaign" });
+    expect(text(noneInBook)).toContain("No stored creatures");
+    expect(text(noneInBook)).toContain("my-campaign");
+    expect(noneInBook.structuredContent).toEqual({ creatures: [] });
+  });
+});

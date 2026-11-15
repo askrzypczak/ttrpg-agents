@@ -61,7 +61,7 @@ const settings: SettingFact[] = [
 ];
 
 describe("getSetupStatus", () => {
-  it("rows come in report order: profile, config file, config problems, settings, database, backup, bridge, GM tab", async () => {
+  it("rows come in report order: profile, config file, config problems, settings, database, stored creatures, backup, bridge, GM tab", async () => {
     const status = await getSetupStatus(
       makeTestSetupPorts({
         settings: {
@@ -69,6 +69,7 @@ describe("getSetupStatus", () => {
           problems: [fileWarning, fileError],
           settings,
         },
+        database: { file: { kind: "found", version: 15, creatureCount: 2 } },
       }),
     );
     expect(status.rows.map((r) => r.item)).toEqual([
@@ -80,6 +81,7 @@ describe("getSetupStatus", () => {
       "setting",
       "setting",
       "database",
+      "creatures",
       "backup",
       "bridge",
       "gm-tab",
@@ -261,6 +263,40 @@ describe("getSetupStatus", () => {
       fix: { code: "check-database" },
     });
     expect(status.ready).toBe(false);
+  });
+
+  it("a found database with a creature count gives an ok creatures row with that count", async () => {
+    const status = await withDatabase({
+      kind: "found",
+      version: 15,
+      creatureCount: 3,
+    });
+    expect(onlyRow(status.rows, "creatures")).toEqual({
+      item: "creatures",
+      state: "ok",
+      count: 3,
+    });
+    expect(status.ready).toBe(true);
+  });
+
+  it("a database without a creature count (missing, unreadable, or found with no count) gives no creatures row", async () => {
+    const files: DatabaseFile[] = [
+      { kind: "missing" },
+      { kind: "unreadable", reason: "file is not a database" },
+      { kind: "found", version: 15 },
+    ];
+    for (const file of files) {
+      const status = await withDatabase(file);
+      expect(rowsOf(status.rows, "creatures"), file.kind).toEqual([]);
+      expect(rowsOf(status.rows, "database"), file.kind).toHaveLength(1);
+    }
+    // The same report with a count does have the row.
+    const counted = await withDatabase({
+      kind: "found",
+      version: 15,
+      creatureCount: 0,
+    });
+    expect(rowsOf(counted.rows, "creatures")).toHaveLength(1);
   });
 
   it("a found backup is an ok row carrying the backup facts and its age in whole days, rounded down", async () => {

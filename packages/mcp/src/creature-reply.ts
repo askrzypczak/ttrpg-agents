@@ -4,6 +4,7 @@ import type {
   DamagePart,
   EntryRef,
   EntryReport,
+  InstanceInEncounter,
   Monster,
   MonsterCheck,
   MonsterSection,
@@ -154,4 +155,12 @@ export function creatureContent(
     rolls: check.entries.filter((e) => e.rolls),
     findings: check.findings,
   };
+}
+
+/** The edit reply's line naming the monsters in encounters that keep their copied values, or undefined when there are none. */
+export function formatKeptInstances(
+  instances: readonly InstanceInEncounter[],
+): string | undefined {
+  void instances;
+  throw new Error("not implemented");
 }

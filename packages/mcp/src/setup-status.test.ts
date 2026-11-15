@@ -247,6 +247,22 @@ describe("formatSetupStatus", () => {
     );
   });
 
+  it('a creatures row prints as "stored creatures: N"', () => {
+    const text = formatSetupStatus({
+      ready: true,
+      rows: [
+        { item: "creatures", state: "ok", count: 4 },
+        { item: "creatures", state: "ok", count: 0 },
+      ],
+    });
+    expect(text.split("\n")).toEqual([
+      "Setup: ready.",
+      "ok: stored creatures: 4",
+      "ok: stored creatures: 0",
+      POINTERS,
+    ]);
+  });
+
   it("the report ends with the pointers to the table_status tool and npm run bridge:status", async () => {
     for (const text of [
       await report(),

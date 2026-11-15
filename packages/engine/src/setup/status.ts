@@ -33,6 +33,7 @@ export type SetupRow =
       fix: SetupFix;
     }
   | { item: "setting"; state: "ok"; setting: SettingFact }
+  | { item: "creatures"; state: "ok"; count: number }
   | {
       item: "database";
       state: SetupState;

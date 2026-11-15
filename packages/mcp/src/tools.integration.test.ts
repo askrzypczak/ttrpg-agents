@@ -169,6 +169,7 @@ function handingOut(
     getCurrentEncounter: () => inner.getCurrentEncounter(),
     setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    findLiveInstancesOfMonster: (key) => inner.findLiveInstancesOfMonster(key),
     repositoryFor: () => repo,
     mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
     getOpenScene: () => inner.getOpenScene(),
@@ -190,16 +191,18 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the thirty-seven tools", () => {
+  it("exposes the forty tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
       "change_monster_type",
       "clear_encounter",
       "create_creature",
+      "edit_creature",
       "get_map_image",
       "get_statblock",
       "heal",
+      "list_creatures",
       "list_encounter",
       "list_encounters",
       "list_rooms",
@@ -208,6 +211,7 @@ describe("tool registry", () => {
       "open_statblock",
       "preview_monsters",
       "propose_rooms",
+      "remove_creature",
       "remove_monsters",
       "remove_rooms",
       "rename_encounter",
@@ -1747,6 +1751,8 @@ describe("the encounter a tool call acts on", () => {
       getCurrentEncounter: () => directory.getCurrentEncounter(),
       setCurrentEncounter: (id) => directory.setCurrentEncounter(id),
       findEncounterOfInstance: (id) => directory.findEncounterOfInstance(id),
+      findLiveInstancesOfMonster: (key) =>
+        directory.findLiveInstancesOfMonster(key),
       transaction: (fn) => directory.transaction(fn),
       mapRepositoryFor: (id) => directory.mapRepositoryFor(id),
       getOpenScene: () => directory.getOpenScene(),
@@ -2001,6 +2007,9 @@ describe("the encounter a tool call acts on", () => {
       "table_status",
       "list_encounters",
       "create_creature",
+      "edit_creature",
+      "remove_creature",
+      "list_creatures",
     ];
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...optional, ...required, ...none].sort(),
