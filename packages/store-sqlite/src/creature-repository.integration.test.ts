@@ -9,6 +9,7 @@ import {
   type Monster,
   type MonsterSet,
 } from "@ttrpg-agents/engine";
+import { makeTestMonster } from "@ttrpg-agents/engine/testing";
 import { SqliteCreatureRepository } from "./creature-repository.js";
 import { openDatabase } from "./db.js";
 
@@ -32,36 +33,7 @@ function connect(path: string): DatabaseSync {
 }
 
 function creature(key: string, name: string, book = "homebrew"): Monster {
-  return {
-    key,
-    name,
-    source: { book },
-    size: "small",
-    type: "fey",
-    alignment: "neutral",
-    ac: 11,
-    armorDetail: "",
-    hp: { average: 4, dice: "1d8" },
-    speeds: { walk: 25 },
-    abilities: { str: 8, dex: 12, con: 10, int: 9, wis: 11, cha: 13 },
-    initiativeModifier: 1,
-    cr: 0,
-    saves: { str: -1, dex: 1, con: 0, int: -1, wis: 0, cha: 1 },
-    skills: {},
-    senses: {},
-    languages: "",
-    damageVulnerabilities: [],
-    damageResistances: [],
-    damageImmunities: [],
-    conditionImmunities: [],
-    sections: {
-      traits: [],
-      actions: [],
-      bonusActions: [],
-      reactions: [],
-      legendaryActions: [],
-    },
-  };
+  return makeTestMonster({ key, name, source: { book } });
 }
 
 const thornling = creature("homebrew_thornling", "Thornling");

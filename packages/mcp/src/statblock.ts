@@ -24,6 +24,13 @@ function section(title: string, entries: MonsterEntry[]): string[] {
   return ["", `### ${title}`, ...entries.map(entryLine)];
 }
 
+/** A statblock's source: `<book>`, or `<book>, page <n>`. */
+export function formatSource(source: Monster["source"]): string {
+  return source.page === undefined
+    ? source.book
+    : `${source.book}, page ${String(source.page)}`;
+}
+
 /** Markdown statblock for a monster. */
 export function formatStatblock(m: Monster): string {
   const speeds = Object.entries(m.speeds)
@@ -45,6 +52,7 @@ export function formatStatblock(m: Monster): string {
   ];
   const lines = [
     `## ${m.name} (${m.key})`,
+    `Source: ${formatSource(m.source)}`,
     `*${m.size} ${m.type}, ${m.alignment}*`,
     "",
     `- **AC** ${String(m.ac)}${m.armorDetail ? ` (${m.armorDetail})` : ""}`,

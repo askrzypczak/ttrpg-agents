@@ -1,41 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { createMonsterIndex, type CreatureRepository } from "./creatures.js";
+import { createMonsterIndex } from "./creatures.js";
 import type { Monster } from "./schema.js";
 import { getMonsterByKey, searchMonsters } from "./search.js";
 import type { MonsterSet } from "./types.js";
-import { makeTestMonsterIndex } from "../testing/index.js";
+import {
+  makeTestCreatureRepository,
+  makeTestMonster,
+  makeTestMonsterIndex,
+} from "../testing/index.js";
 
 function stub(key: string, name: string): Monster {
-  return {
-    key,
-    name,
-    source: { book: "homebrew" },
-    size: "medium",
-    type: "beast",
-    alignment: "unaligned",
-    ac: 10,
-    armorDetail: "",
-    hp: { average: 5, dice: "1d8 + 1" },
-    speeds: { walk: 30 },
-    abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
-    initiativeModifier: 0,
-    cr: 0,
-    saves: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
-    skills: {},
-    senses: {},
-    languages: "",
-    damageVulnerabilities: [],
-    damageResistances: [],
-    damageImmunities: [],
-    conditionImmunities: [],
-    sections: {
-      traits: [],
-      actions: [],
-      bonusActions: [],
-      reactions: [],
-      legendaryActions: [],
-    },
-  };
+  return makeTestMonster({ key, name });
 }
 
 const monsters = [
@@ -174,23 +149,7 @@ describe("searchMonsters with stored creatures", () => {
       dndBeyondPages: new Map(),
     };
     const storedCreatures = [halfOgre, hogrest];
-    const repo: CreatureRepository = {
-      getRecord: (key) => {
-        const data = storedCreatures.find((m) => m.key === key);
-        return data && { key, data };
-      },
-      listRecords: () =>
-        storedCreatures.map((data) => ({ key: data.key, data })),
-      insert: () => {
-        throw new Error("read-only test repository");
-      },
-      replace: () => {
-        throw new Error("read-only test repository");
-      },
-      delete: () => {
-        throw new Error("read-only test repository");
-      },
-    };
+    const repo = makeTestCreatureRepository(storedCreatures);
     const mixed = createMonsterIndex(set, repo);
 
     // Exact and prefix built-in matches before a stored whole-word and a stored substring match.

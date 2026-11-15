@@ -12,7 +12,10 @@ import {
 import { describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 /** A 10 x 10 cell map, unrotated, at 100 dpi on a 100-unit grid. */
 const registered: MapRegistration = {
@@ -66,6 +69,7 @@ function context(): ToolContext {
     },
     encounters,
     monsters: staticMonsterIndex(loadSrdMonsters()),
+    creatures: makeTestCreatureRepository(),
     rng: { nextInt: () => 0 },
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group",

@@ -8,3 +8,14 @@ export {
   type CreatureRecord,
   type CreatureRepository,
 } from "./creatures.js";
+export {
+  createCreature,
+  type CreateCreatureDeps,
+  type CreateCreatureRequest,
+  type CreatedCreature,
+} from "./create-creature.js";
+export {
+  creatureChangesSchema,
+  type CreatureChanges,
+} from "./creature-changes.js";
+export * from "./errors.js";

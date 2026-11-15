@@ -1,4 +1,8 @@
 import type { MonsterInstance } from "../encounter/types.js";
+import type {
+  CreatureRecord,
+  CreatureRepository,
+} from "../monsters/creatures.js";
 import type { Monster } from "../monsters/schema.js";
 import {
   staticMonsterIndex,
@@ -114,4 +118,84 @@ export function makeTestMonsterIndex(
     dndBeyondPages: new Map(Object.entries(extras?.dndBeyondPages ?? {})),
   };
   return staticMonsterIndex(set);
+}
+
+/**
+ * A full invented statblock (homebrew_mossling, "Mossling") that passes
+ * monsterSchema and has no check findings, with `overrides` replacing any
+ * field. Each call returns a new object.
+ */
+export function makeTestMonster(overrides: Partial<Monster> = {}): Monster {
+  return {
+    key: "homebrew_mossling",
+    name: "Mossling",
+    source: { book: "homebrew" },
+    size: "medium",
+    type: "beast",
+    alignment: "unaligned",
+    ac: 10,
+    armorDetail: "",
+    hp: { average: 5, dice: "1d8 + 1" },
+    speeds: { walk: 30 },
+    abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    initiativeModifier: 0,
+    cr: 0,
+    saves: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+    skills: {},
+    senses: {},
+    languages: "",
+    damageVulnerabilities: [],
+    damageResistances: [],
+    damageImmunities: [],
+    conditionImmunities: [],
+    sections: {
+      traits: [],
+      actions: [],
+      bonusActions: [],
+      reactions: [],
+      legendaryActions: [],
+    },
+    ...overrides,
+  };
+}
+
+/** An in-memory CreatureRepository; `put` stores any data, as a store holding a record that fails the schema would. */
+export interface TestCreatureRepository extends CreatureRepository {
+  put(key: string, data: unknown): void;
+}
+
+/** A deep copy of JSON data, as a store that serialises its records returns it. */
+function copy(data: unknown): unknown {
+  return data === undefined ? undefined : JSON.parse(JSON.stringify(data));
+}
+
+/** An in-memory CreatureRepository seeded with each creature under its own key. Records are copied in and out. */
+export function makeTestCreatureRepository(
+  creatures: readonly Monster[] = [],
+): TestCreatureRepository {
+  const records = new Map<string, unknown>();
+  const record = (key: string): CreatureRecord => ({
+    key,
+    data: copy(records.get(key)),
+  });
+  const repo: TestCreatureRepository = {
+    put: (key, data) => {
+      records.set(key, copy(data));
+    },
+    getRecord: (key) => (records.has(key) ? record(key) : undefined),
+    listRecords: () => [...records.keys()].sort().map(record),
+    insert: (key, monster) => {
+      if (records.has(key)) throw new Error(`duplicate key ${key}`);
+      repo.put(key, monster);
+    },
+    replace: (key, monster) => {
+      if (!records.has(key)) throw new Error(`no record ${key}`);
+      repo.put(key, monster);
+    },
+    delete: (key) => {
+      records.delete(key);
+    },
+  };
+  for (const creature of creatures) repo.insert(creature.key, creature);
+  return repo;
 }

@@ -11,6 +11,8 @@ The domain engine: dice, monster schema and search, encounter events, map geomet
 - `src/monsters/dndbeyond.ts`: `dndBeyondUrl(index, monster)`, the monster's D&D Beyond 2024 page URL from `MonsterIndex.dndBeyondPage(key)`, or undefined when it has none.
 - `src/monsters/footprint.ts`: `footprintForSize(size)`, the grid cells per side a token of a size category spans (small and medium 1, large 2, huge 3, gargantuan 4, anything else 1). `addMonsters` stores it on each new instance as `footprint`.
 - `src/monsters/check.ts`: `checkMonster(monster)` reads a statblock's entries and checks its numbers. It returns a report per entry (the attack, the saving throws, the spell save DC and spell attack bonus, every dice expression, and whether the entry rolls; Multiattack never does) and findings, which are warnings that carry the printed value and every value the engine accepts: `damage_average`, `attack_bonus`, `save_dc`, `spell_save_dc`, `spell_attack_bonus`, `save_modifier` and `initiative`. It reads the 2024 wording; other wording stays text, so only its dice are listed and only its printed dice averages are checked. The proficiency bonus comes from the challenge rating (`proficiency.ts`). It is pure and never throws on entry text.
+- `src/monsters/creature-changes.ts`: `creatureChangesSchema`, the partial statblock a creature tool changes (scalars replace; `hp` without `average` gets the dice's average; abilities, saves, speeds, senses and skills merge by key, `null` removing one; damage and condition lists replace; each section takes `remove`, `replace` and `add`, by entry name ignoring case, in that order), and the engine-internal rules for applying it, validating the result, minting the key (`<book>_<slug of name>`) and refusing a name the book already has.
+- `src/monsters/create-creature.ts`: `createCreature(deps, request, origin)` builds a statblock from scratch or from a copy of any monster, checks the book tag (`monsterSchema`'s pattern, not reserved), validates it, refuses a name or key the book already holds, stores it and notes the command on the current encounter in one transaction, then returns it with `checkMonster`'s report. Findings never block.
 
 ## Encounter events
 
@@ -26,7 +28,7 @@ Each instance carries `spawnPosition`: where a new token for it is created, in s
 
 ## Test data
 
-`@ttrpg-agents/engine/testing` (`src/testing/index.ts`) exports `makeTestInstance`, a full `MonsterInstance` for tests, and `makeTestMonsterIndex`, a `MonsterIndex` over given monsters, aliases and D&D Beyond pages. It is test data only; production code must not import it (lint-enforced).
+`@ttrpg-agents/engine/testing` (`src/testing/index.ts`) exports `makeTestInstance`, a full `MonsterInstance` for tests, `makeTestMonsterIndex`, a `MonsterIndex` over given monsters, aliases and D&D Beyond pages, `makeTestMonster`, a full invented statblock that passes `monsterSchema` with no check findings, and `makeTestCreatureRepository`, an in-memory `CreatureRepository` whose `put` stores any data. It is test data only; production code must not import it (lint-enforced).
 
 ## Map
 

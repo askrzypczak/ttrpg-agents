@@ -23,7 +23,10 @@ import { z } from "zod";
 import type { ToolContext } from "./context.js";
 import { formatSetupStatus } from "./setup-status.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
@@ -60,6 +63,7 @@ beforeEach(() => {
       now: () => tick++,
     }),
     monsters,
+    creatures: makeTestCreatureRepository(),
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${++groupN}`,
@@ -186,12 +190,13 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the thirty-six tools", () => {
+  it("exposes the thirty-seven tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
       "change_monster_type",
       "clear_encounter",
+      "create_creature",
       "get_map_image",
       "get_statblock",
       "heal",
@@ -1591,6 +1596,7 @@ describe("the encounter a tool call acts on", () => {
       },
       encounters,
       monsters,
+      creatures: makeTestCreatureRepository(),
       rng: cycleRng(0, 3, 5, 7),
       now: () => new Date("2026-01-01T00:00:00Z"),
       newGroupId: () => `group-${String(++groups)}`,
@@ -1994,6 +2000,7 @@ describe("the encounter a tool call acts on", () => {
       "propose_rooms",
       "table_status",
       "list_encounters",
+      "create_creature",
     ];
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...optional, ...required, ...none].sort(),
