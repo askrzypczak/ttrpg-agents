@@ -30,7 +30,8 @@ export interface RepositoryOptions {
   newId?: () => string;
 }
 
-interface InstanceRow {
+/** A monster_instances row as SELECT * reads it. Package-internal. */
+export interface InstanceRow {
   id: string;
   encounter_id: string;
   monster_key: string;
@@ -60,7 +61,8 @@ interface RemovedRow extends InstanceRow {
  */
 const LIVE_SCOPE = "removed_seq IS NULL AND encounter_id = ?";
 
-function toInstance(row: InstanceRow): MonsterInstance {
+/** The MonsterInstance a monster_instances row holds. Package-internal. */
+export function toInstance(row: InstanceRow): MonsterInstance {
   return {
     id: row.id,
     encounterId: row.encounter_id,
