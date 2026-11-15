@@ -304,11 +304,15 @@ export function assertCreatureNameFree(
   name: string,
   exceptKey?: string,
 ): void {
-  void exceptKey;
   const wanted = name.toLowerCase();
   const holder = monsters
     .list()
-    .find((m) => m.source.book === book && m.name.toLowerCase() === wanted);
+    .find(
+      (m) =>
+        m.source.book === book &&
+        m.key !== exceptKey &&
+        m.name.toLowerCase() === wanted,
+    );
   if (holder)
     throw new CreatureNameTakenError(
       `${book} already has a creature named "${holder.name}" (${holder.key}). Change it with edit_creature, or pick another name.`,
