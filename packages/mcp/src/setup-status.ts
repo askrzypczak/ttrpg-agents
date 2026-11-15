@@ -35,7 +35,7 @@ function rowText(row: SetupRow): string {
     case "database":
       return databaseText(row.database);
     case "creatures":
-      throw new Error("not implemented");
+      return `stored creatures: ${String(row.count)}`;
     case "backup":
       return backupText(row.backups, row.ageDays);
     case "bridge":

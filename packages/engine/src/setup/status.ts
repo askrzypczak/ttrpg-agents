@@ -86,6 +86,7 @@ export async function getSetupStatus(ports: SetupPorts): Promise<SetupStatus> {
       setting,
     })),
     databaseRow(database),
+    ...creaturesRows(database),
     backupRow(backups, ports.now()),
     ...bridgeRows(bridge),
   ];
@@ -115,6 +116,13 @@ function databaseRow(database: DatabaseFacts): SetupRow {
   return fix === undefined
     ? { item: "database", state: "ok", database }
     : { item: "database", state: "problem", database, fix };
+}
+
+/** The stored creature count of a found database that has a creatures table; none otherwise, as the database row carries any fix. */
+function creaturesRows(database: DatabaseFacts): SetupRow[] {
+  const { file } = database;
+  if (file.kind !== "found" || file.creatureCount === undefined) return [];
+  return [{ item: "creatures", state: "ok", count: file.creatureCount }];
 }
 
 function databaseFix(database: DatabaseFacts): SetupFix | undefined {

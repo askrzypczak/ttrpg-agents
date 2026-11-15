@@ -1224,7 +1224,7 @@ const setupStatusTool = defineTool({
   name: "setup_status",
   annotations: { readOnlyHint: true },
   description:
-    "Check whether this setup is ready: profile, config file and its problems, settings, the encounter database, the bridge (with this profile's agent token) and the Owlbear GM tab, with one fix per problem. Does not need the bridge running: a missing bridge or tab is a row. For scene sync use table_status.",
+    "Check whether this setup is ready: profile, config file and its problems, settings, the encounter database and its stored creature count, the bridge (with this profile's agent token) and the Owlbear GM tab, with one fix per problem. Does not need the bridge running: a missing bridge or tab is a row. For scene sync use table_status.",
   inputSchema: {},
   async run(ctx) {
     const status = await getSetupStatus(ctx.setup);
