@@ -1,5 +1,6 @@
 import type {
   BrowserPort,
+  CreatureRepository,
   EncounterDirectory,
   EncounterRepository,
   MapRepository,
@@ -18,6 +19,8 @@ export interface ToolContext {
   /** Every encounter, the current one, and repositories scoped to one. */
   encounters: EncounterDirectory;
   monsters: MonsterIndex;
+  /** The creatures the DM stored: create_creature writes here, and `monsters` reads the same store. */
+  creatures: CreatureRepository;
   rng: Rng;
   now: () => Date;
   newGroupId: () => string;

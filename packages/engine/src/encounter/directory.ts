@@ -6,6 +6,7 @@ import {
   UnknownInstanceError,
 } from "./errors.js";
 import type { MapRepository } from "../map/repository.js";
+import type { ChangeOrigin } from "./origin.js";
 import type { EncounterRepository } from "./repository.js";
 import type { Encounter } from "./types.js";
 
@@ -300,4 +301,22 @@ export function useEncounter(
     directory.setCurrentEncounter(found.id);
     return found;
   });
+}
+
+/**
+ * The rule for a command that is not an encounter command: notes it
+ * (noteCommand) on the open scene's encounter, or with no scene open on the
+ * current one; does nothing in an open scene with no encounter or when no
+ * encounter is current; never creates or switches one.
+ */
+export function noteCommandOnCurrentEncounter(
+  directory: Pick<
+    EncounterDirectory,
+    "getOpenScene" | "getCurrentEncounter" | "repositoryFor"
+  >,
+  origin: ChangeOrigin,
+): void {
+  void directory;
+  void origin;
+  throw new Error("not implemented");
 }

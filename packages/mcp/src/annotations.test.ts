@@ -38,6 +38,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   list_encounters: { readOnlyHint: true },
   rename_encounter: { destructiveHint: true },
   use_encounter: { destructiveHint: false },
+  create_creature: { destructiveHint: false },
 };
 
 describe("tool annotations", () => {

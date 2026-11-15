@@ -37,6 +37,7 @@ async function main(): Promise<void> {
     return;
   }
   const db = openDatabase(settings.database);
+  const creatures = new SqliteCreatureRepository(db);
   const client = createBridgeClient({
     port: settings.bridgePort,
     tokenPath: settings.agentTokenFile,
@@ -45,10 +46,8 @@ async function main(): Promise<void> {
     table: createBridgeTable(client),
     browser: createSystemBrowser(),
     encounters: new SqliteEncounterDirectory(db),
-    monsters: createMonsterIndex(
-      loadSrdMonsters(),
-      new SqliteCreatureRepository(db),
-    ),
+    monsters: createMonsterIndex(loadSrdMonsters(), creatures),
+    creatures,
     rng,
     now: () => new Date(),
     newGroupId: randomUUID,
