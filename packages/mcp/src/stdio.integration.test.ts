@@ -15,6 +15,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Monster } from "@ttrpg-agents/engine";
+import { makeTestMonster } from "@ttrpg-agents/engine/testing";
 import {
   SqliteCreatureRepository,
   SqliteEncounterDirectory,
@@ -193,34 +194,8 @@ describe("stdio server stored creatures", () => {
   it("the MCP server starts over a database holding a stored record that fails the schema: add_monsters of an SRD monster succeeds and add_monsters of that key fails as an unknown monster", async () => {
     // Its armor class is text, so the record fails the schema.
     const malformed = {
-      key: "homebrew_thornling",
-      name: "Thornling",
-      source: { book: "homebrew" },
-      size: "small",
-      type: "fey",
-      alignment: "neutral",
+      ...makeTestMonster({ key: "homebrew_thornling", name: "Thornling" }),
       ac: "eleven",
-      armorDetail: "",
-      hp: { average: 4, dice: "1d8" },
-      speeds: { walk: 25 },
-      abilities: { str: 8, dex: 12, con: 10, int: 9, wis: 11, cha: 13 },
-      initiativeModifier: 1,
-      cr: 0,
-      saves: { str: -1, dex: 1, con: 0, int: -1, wis: 0, cha: 1 },
-      skills: {},
-      senses: {},
-      languages: "",
-      damageVulnerabilities: [],
-      damageResistances: [],
-      damageImmunities: [],
-      conditionImmunities: [],
-      sections: {
-        traits: [],
-        actions: [],
-        bonusActions: [],
-        reactions: [],
-        legendaryActions: [],
-      },
     } as unknown as Monster;
     const client = await connect((dbPath) => {
       const db = openDatabase(dbPath);
