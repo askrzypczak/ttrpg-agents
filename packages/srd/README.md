@@ -1,6 +1,6 @@
 # @ttrpg-agents/srd
 
-SRD 5.2 monster data adapter: the committed snapshot, its loader and the import script. It loads the built-in `MonsterSet`, which the engine's `staticMonsterIndex` serves through the `MonsterIndex` port.
+SRD 5.2 monster data adapter: the committed snapshot, its loader and the import script. It loads the built-in `MonsterSet`, which the engine's `createMonsterIndex` merges with the stored creatures and serves through the `MonsterIndex` port.
 
 ## Monsters
 

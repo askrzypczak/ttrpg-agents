@@ -15,7 +15,7 @@ flowchart LR
   end
   subgraph core["Engine (no I/O)"]
     uc["use cases: addMonsters, getTableStatus, useMap, ..."]
-    ports["ports: EncounterDirectory, EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
+    ports["ports: EncounterDirectory, EncounterRepository, MonsterIndex, CreatureRepository, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
   end
   subgraph driven["Driven adapters"]
     store["store-sqlite"]
@@ -27,7 +27,7 @@ flowchart LR
   bsrv -->|"reads EncounterDirectory, EncounterRepository and MapRepository, reads and writes TokenArtRepository and TokenImageRepository"| ports
   uc --> ports
   ports -.implemented by.-> store
-  srd -.->|"loads the built-in MonsterSet, served as MonsterIndex by the engine's staticMonsterIndex"| ports
+  srd -.->|"loads the built-in MonsterSet, which the engine's createMonsterIndex merges with the stored creatures into MonsterIndex"| ports
   ports -.implemented by.-> bclient
   ports -.implemented by.-> sysbrowser
   store --> db[("SQLite")]
@@ -86,6 +86,7 @@ Upgrading to scene-bound encounters (migration 17) discards every existing encou
 | Token art per monster type (`token_art`)                                                                         | bridge (`token-art-set`); the library import                                                       | bridge (snapshots)                         |
 | Token image bytes (`token_art_image`, keyed by SHA-256)                                                          | bridge (`POST /token-images`); the library import                                                  | bridge (`GET /token-images/<sha256>`)      |
 | Open scene (`open_scene`) and scene bindings (`encounters.scene_id`)                                             | bridge (`scene-open`, none at start and on disconnect); MCP server (binds a new encounter)         | bridge (snapshots); MCP server             |
+| Stored creatures (`creatures`)                                                                                   | MCP server (creature tools, not yet built)                                                         | MCP server (monster index)                 |
 
 Invariants the processes rely on:
 
@@ -96,7 +97,7 @@ Invariants the processes rely on:
 
 ### Two halves of one save
 
-A saved game has two halves. The database holds the encounter, its change log, undo records, maps, rooms and token art. Each Owlbear scene holds its tokens (position, visibility, size and art on each, and the encounter each belongs to) and, in its metadata, its id (`com.ttrpg-agents/scene-id`, which the database binds to its encounter), the instances it placed and the change-log seq it is current as of (`com.ttrpg-agents/placed-seq`). The bridge holds its change-log position in memory. Neither half can be rebuilt from the other.
+A saved game has two halves. The database holds the encounter, its change log, undo records, maps, rooms, token art and stored creatures. Each Owlbear scene holds its tokens (position, visibility, size and art on each, and the encounter each belongs to) and, in its metadata, its id (`com.ttrpg-agents/scene-id`, which the database binds to its encounter), the instances it placed and the change-log seq it is current as of (`com.ttrpg-agents/placed-seq`). The bridge holds its change-log position in memory. Neither half can be rebuilt from the other.
 
 Backups: `npm run db:backup` copies the profile's database with SQLite's online backup, safe while the bridge and the MCP server run, to `encounters-<UTC time>.db` in the `backupDir` setting (default `<data dir>/backups`, see [`docs/settings.md`](settings.md)). A directory it creates gets mode 0700, the file 0600. It refuses a directory inside the checkout: backups stay out of the repo. Backups are taken on demand only; `npm run status` shows the newest one and its age.
 
