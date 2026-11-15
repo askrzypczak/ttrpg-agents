@@ -1,4 +1,5 @@
 import { DomainError } from "../errors.js";
+import { withQuarantineReason } from "../monsters/creatures.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import type { AddMonstersGroup } from "./add-monsters.js";
 import type { EncounterRepository } from "./repository.js";
@@ -46,7 +47,11 @@ export function validateAddMonsters(
     if (monsters.get(group.monster) === undefined) {
       throw new AddMonstersError(
         "unknown_monster",
-        `${where}: unknown monster "${group.monster}"`,
+        withQuarantineReason(
+          monsters,
+          group.monster,
+          `${where}: unknown monster "${group.monster}"`,
+        ),
       );
     }
     if (

@@ -1,6 +1,7 @@
 import { createLogEntry, type RollLogEntry } from "../dice/log.js";
 import type { Rng } from "../dice/rng.js";
 import { roll } from "../dice/roll.js";
+import { withQuarantineReason } from "../monsters/creatures.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import type { HpMode } from "./add-monsters.js";
@@ -82,7 +83,11 @@ export function resetMaxHp(
     const monster = monsters.get(instance.monsterKey);
     if (monster === undefined) {
       throw new UnknownMonsterError(
-        `${instance.displayName}: unknown monster "${instance.monsterKey}"`,
+        withQuarantineReason(
+          monsters,
+          instance.monsterKey,
+          `${instance.displayName}: unknown monster "${instance.monsterKey}"`,
+        ),
       );
     }
     return { instance, monster };

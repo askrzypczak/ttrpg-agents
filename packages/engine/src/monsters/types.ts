@@ -39,8 +39,6 @@ export function staticMonsterIndex(set: MonsterSet): MonsterIndex {
     list: () => set.monsters,
     aliases: () => set.aliases,
     dndBeyondPage: (key) => set.dndBeyondPages.get(key),
-    quarantined: () => {
-      throw new Error("not implemented");
-    },
+    quarantined: () => [],
   };
 }

@@ -1,5 +1,5 @@
-import type { Monster } from "./schema.js";
-import type { MonsterIndex, MonsterSet } from "./types.js";
+import { monsterSchema, type Monster } from "./schema.js";
+import type { MonsterIndex, MonsterSet, QuarantinedCreature } from "./types.js";
 
 /** A stored creature as the store holds it: its key and its statblock as parsed JSON, not validated. */
 export interface CreatureRecord {
@@ -27,8 +27,50 @@ export interface CreatureRepository {
  * because the quarantine keeps every valid stored record off reserved tags.
  */
 export function isReservedBookTag(book: string): boolean {
-  void book;
-  throw new Error("not implemented");
+  return book.startsWith("srd");
+}
+
+const SLUG = /^[a-z0-9-]+$/;
+
+/** A stored record after its check: its statblock, or why it is quarantined. */
+type CheckedRecord =
+  { key: string; monster: Monster } | { key: string; reasons: string[] };
+
+function checkRecord(record: CreatureRecord): CheckedRecord {
+  const { key } = record;
+  const result = monsterSchema.safeParse(record.data);
+  if (!result.success) {
+    return {
+      key,
+      reasons: result.error.issues.map(
+        (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
+      ),
+    };
+  }
+  const monster = result.data;
+  const book = monster.source.book;
+  const reasons: string[] = [];
+  if (monster.key !== key) {
+    reasons.push(`its statblock's key is "${monster.key}"`);
+  }
+  if (isReservedBookTag(book)) {
+    reasons.push(`book "${book}" is reserved for built-in monsters`);
+  }
+  // The schema already checks the book tag, which has no "_".
+  const prefix = `${book}_`;
+  if (!key.startsWith(prefix) || !SLUG.test(key.slice(prefix.length))) {
+    reasons.push(
+      `key is not "${prefix}" followed by lower-case letters, digits and hyphens`,
+    );
+  }
+  return reasons.length === 0 ? { key, monster } : { key, reasons };
+}
+
+function quarantine(key: string, reasons: string[]): QuarantinedCreature {
+  return {
+    key,
+    message: `Stored creature "${key}" is quarantined: ${reasons.join("; ")}`,
+  };
 }
 
 /**
@@ -44,9 +86,28 @@ export function createMonsterIndex(
   builtIn: MonsterSet,
   creatures: CreatureRepository,
 ): MonsterIndex {
-  void builtIn;
-  void creatures;
-  throw new Error("not implemented");
+  const checkedRecords = (): CheckedRecord[] =>
+    creatures.listRecords().map(checkRecord);
+  return {
+    get: (key) => {
+      const known = builtIn.byKey.get(key);
+      if (known !== undefined) return known;
+      const record = creatures.getRecord(key);
+      if (record === undefined) return undefined;
+      const checked = checkRecord(record);
+      return "monster" in checked ? checked.monster : undefined;
+    },
+    list: () => [
+      ...builtIn.monsters,
+      ...checkedRecords().flatMap((c) => ("monster" in c ? [c.monster] : [])),
+    ],
+    aliases: () => builtIn.aliases,
+    dndBeyondPage: (key) => builtIn.dndBeyondPages.get(key),
+    quarantined: () =>
+      checkedRecords().flatMap((c) =>
+        "reasons" in c ? [quarantine(c.key, c.reasons)] : [],
+      ),
+  };
 }
 
 /** Engine-internal. `message`, or `<message>. <quarantine message>` when `key` names a quarantined stored record. */
@@ -55,8 +116,6 @@ export function withQuarantineReason(
   key: string,
   message: string,
 ): string {
-  void index;
-  void key;
-  void message;
-  throw new Error("not implemented");
+  const entry = index.quarantined().find((q) => q.key === key);
+  return entry === undefined ? message : `${message}. ${entry.message}`;
 }

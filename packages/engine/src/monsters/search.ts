@@ -1,3 +1,4 @@
+import { isReservedBookTag } from "./creatures.js";
 import type { Monster } from "./schema.js";
 import type { MonsterIndex } from "./types.js";
 
@@ -72,7 +73,8 @@ function escapeRegExp(s: string): string {
  * Case-insensitive, plural-tolerant search over current names and old names
  * (aliases). Each monster appears once, with its best match: its name, or an
  * alias that points to it when that matches more strongly. Results are ranked
- * by match strength, then name matches before alias matches, then the shorter
+ * by match strength, then name matches before alias matches, then stored
+ * creatures (book tag not reserved) before built-in monsters, then the shorter
  * monster name, then alphabetical. An alias hit carries the alias as written.
  * No match yields [].
  */
@@ -120,6 +122,8 @@ export function searchMonsters(
       (a, b) =>
         a.rank - b.rank ||
         Number(a.viaAlias) - Number(b.viaAlias) ||
+        Number(isReservedBookTag(a.match.monster.source.book)) -
+          Number(isReservedBookTag(b.match.monster.source.book)) ||
         a.match.monster.name.length - b.match.monster.name.length ||
         a.match.monster.name.localeCompare(b.match.monster.name),
     )

@@ -507,3 +507,66 @@ describe("changeMonsterType", () => {
     expect(repo.calls).toEqual([]);
   });
 });
+
+describe("changeMonsterType with a quarantined stored creature", () => {
+  const quarantine = {
+    key: "homebrew_thornling",
+    message:
+      'Stored creature "homebrew_thornling" is quarantined: its statblock\'s key is "homebrew_bramble"',
+  };
+  const withQuarantine = { ...monsters, quarantined: () => [quarantine] };
+
+  function thrownBy(fn: () => unknown): unknown {
+    try {
+      fn();
+    } catch (error) {
+      return error;
+    }
+    throw new Error("expected a throw");
+  }
+
+  it.each([
+    {
+      site: "the target monster key",
+      instance: wolf("w1", "Wolf 1"),
+      target: "homebrew_thornling",
+    },
+    {
+      site: "a target's current monster",
+      instance: makeTestInstance({
+        id: "t1",
+        monsterKey: "homebrew_thornling",
+        displayName: "Thornling 1",
+        initiative: 12,
+      }),
+      target: "dire-wolf",
+    },
+  ])(
+    "changeMonsterType throws UnknownMonsterError naming the quarantine reason when $site is quarantined",
+    ({ instance, target }) => {
+      const repo = memoryRepo([instance]);
+
+      const error = thrownBy(() =>
+        changeMonsterType(
+          {
+            repo,
+            monsters: withQuarantine,
+            rng: cycleRng(0),
+            now: () => new Date(NOW),
+          },
+          [instance.id],
+          target,
+          "average",
+          origin,
+        ),
+      );
+
+      expect(error).toBeInstanceOf(UnknownMonsterError);
+      expect((error as UnknownMonsterError).code).toBe("unknown_monster");
+      expect((error as UnknownMonsterError).message).toContain(
+        quarantine.message,
+      );
+      expect(repo.calls).toEqual([]);
+    },
+  );
+});

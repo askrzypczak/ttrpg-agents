@@ -1,6 +1,7 @@
 import type { RollLogEntry } from "../dice/log.js";
 import type { Rng } from "../dice/rng.js";
 import { footprintForSize } from "../monsters/footprint.js";
+import { withQuarantineReason } from "../monsters/creatures.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import {
   createNumberedNaming,
@@ -69,7 +70,13 @@ export function changeMonsterType(
   const { repo, monsters, rng, now } = deps;
   const monster = monsters.get(monsterKey);
   if (monster === undefined) {
-    throw new UnknownMonsterError(`unknown monster "${monsterKey}"`);
+    throw new UnknownMonsterError(
+      withQuarantineReason(
+        monsters,
+        monsterKey,
+        `unknown monster "${monsterKey}"`,
+      ),
+    );
   }
   const live = repo.listInstances();
   const byId = new Map(live.map((i) => [i.id, i] as const));
@@ -85,7 +92,11 @@ export function changeMonsterType(
     const old = monsters.get(instance.monsterKey);
     if (old === undefined) {
       throw new UnknownMonsterError(
-        `${instance.displayName}: unknown monster "${instance.monsterKey}"`,
+        withQuarantineReason(
+          monsters,
+          instance.monsterKey,
+          `${instance.displayName}: unknown monster "${instance.monsterKey}"`,
+        ),
       );
     }
     return old.initiativeModifier;
