@@ -1,7 +1,6 @@
 import { createLogEntry, type RollLogEntry } from "../dice/log.js";
 import type { Rng } from "../dice/rng.js";
 import { roll } from "../dice/roll.js";
-import { withQuarantineReason } from "../monsters/creatures.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import type { InitiativeMode } from "./add-monsters.js";
@@ -63,11 +62,7 @@ export function rollInitiativeValues(
     const monster = monsters.get(item.monsterKey);
     if (monster === undefined) {
       throw new UnknownMonsterError(
-        withQuarantineReason(
-          monsters,
-          item.monsterKey,
-          `${item.displayName}: unknown monster "${item.monsterKey}"`,
-        ),
+        `${item.displayName}: unknown monster "${item.monsterKey}"`,
       );
     }
     return { item, monster };

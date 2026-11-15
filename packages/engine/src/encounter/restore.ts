@@ -1,5 +1,4 @@
 import { DomainError } from "../errors.js";
-import { withQuarantineReason } from "../monsters/creatures.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import { createNumberedNaming, type NamingStrategy } from "./add-monsters.js";
@@ -156,11 +155,7 @@ function monsterOf(monsters: MonsterIndex, instance: MonsterInstance): Monster {
   if (!monster) {
     throw new RestoreMonstersError(
       "unknown_monster",
-      withQuarantineReason(
-        monsters,
-        instance.monsterKey,
-        `Cannot restore ${instance.displayName}: monster type ${instance.monsterKey} is not in the monster index`,
-      ),
+      `Cannot restore ${instance.displayName}: monster type ${instance.monsterKey} is not in the monster index`,
     );
   }
   return monster;

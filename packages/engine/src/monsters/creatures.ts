@@ -1,5 +1,5 @@
 import { monsterSchema, type Monster } from "./schema.js";
-import type { MonsterIndex, MonsterSet, QuarantinedCreature } from "./types.js";
+import type { MonsterIndex, MonsterSet } from "./types.js";
 
 /** A stored creature as the store holds it: its key and its statblock as parsed JSON, not validated. */
 export interface CreatureRecord {
@@ -24,98 +24,45 @@ export interface CreatureRepository {
 /**
  * Whether a book tag is reserved for built-in data: it begins with "srd".
  * Engine-internal. A monster with a tag that is not reserved counts as stored,
- * because the quarantine keeps every valid stored record off reserved tags.
+ * because creation and edit keep every stored record off reserved tags.
  */
 export function isReservedBookTag(book: string): boolean {
   return book.startsWith("srd");
 }
 
-const SLUG = /^[a-z0-9-]+$/;
-
-/** A stored record after its check: its statblock, or why it is quarantined. */
-type CheckedRecord =
-  { key: string; monster: Monster } | { key: string; reasons: string[] };
-
-function checkRecord(record: CreatureRecord): CheckedRecord {
-  const { key } = record;
+/** The record's statblock, or undefined when it fails monsterSchema. */
+function parseRecord(record: CreatureRecord): Monster | undefined {
   const result = monsterSchema.safeParse(record.data);
-  if (!result.success) {
-    return {
-      key,
-      reasons: result.error.issues.map(
-        (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
-      ),
-    };
-  }
-  const monster = result.data;
-  const book = monster.source.book;
-  const reasons: string[] = [];
-  if (monster.key !== key) {
-    reasons.push(`its statblock's key is "${monster.key}"`);
-  }
-  if (isReservedBookTag(book)) {
-    reasons.push(`book "${book}" is reserved for built-in monsters`);
-  }
-  // The schema already checks the book tag, which has no "_".
-  const prefix = `${book}_`;
-  if (!key.startsWith(prefix) || !SLUG.test(key.slice(prefix.length))) {
-    reasons.push(
-      `key is not "${prefix}" followed by lower-case letters, digits and hyphens`,
-    );
-  }
-  return reasons.length === 0 ? { key, monster } : { key, reasons };
-}
-
-function quarantine(key: string, reasons: string[]): QuarantinedCreature {
-  return {
-    key,
-    message: `Stored creature "${key}" is quarantined: ${reasons.join("; ")}`,
-  };
+  return result.success ? result.data : undefined;
 }
 
 /**
  * A MonsterIndex over the built-in set and the stored creatures, reading the
- * repository on every call. get: built-in first, then a valid stored record.
- * list: built-in monsters in set order, then valid stored creatures in the
- * repository's order. aliases and dndBeyondPage: the built-in set's.
- * quarantined: every stored record that fails monsterSchema, whose statblock
- * key differs from its record key, whose book tag is reserved, or whose key is
- * not `<source.book>_<slug>` with a slug of one or more of [a-z0-9-].
+ * repository on every call. get: built-in first, then a stored record that
+ * parses. list: built-in monsters in set order, then the stored creatures that
+ * parse, in the repository's order. A stored record that fails monsterSchema is
+ * skipped (a schema change migrates the rows; this is a safety net). aliases and
+ * dndBeyondPage: the built-in set's.
  */
 export function createMonsterIndex(
   builtIn: MonsterSet,
   creatures: CreatureRepository,
 ): MonsterIndex {
-  const checkedRecords = (): CheckedRecord[] =>
-    creatures.listRecords().map(checkRecord);
   return {
     get: (key) => {
       const known = builtIn.byKey.get(key);
       if (known !== undefined) return known;
       const record = creatures.getRecord(key);
-      if (record === undefined) return undefined;
-      const checked = checkRecord(record);
-      return "monster" in checked ? checked.monster : undefined;
+      return record === undefined ? undefined : parseRecord(record);
     },
     list: () => [
       ...builtIn.monsters,
-      ...checkedRecords().flatMap((c) => ("monster" in c ? [c.monster] : [])),
+      ...creatures.listRecords().flatMap((record) => {
+        const monster = parseRecord(record);
+        return monster === undefined ? [] : [monster];
+      }),
     ],
     aliases: () => builtIn.aliases,
     dndBeyondPage: (key) => builtIn.dndBeyondPages.get(key),
-    quarantined: () =>
-      checkedRecords().flatMap((c) =>
-        "reasons" in c ? [quarantine(c.key, c.reasons)] : [],
-      ),
   };
-}
-
-/** Engine-internal. `message`, or `<message>. <quarantine message>` when `key` names a quarantined stored record. */
-export function withQuarantineReason(
-  index: MonsterIndex,
-  key: string,
-  message: string,
-): string {
-  const entry = index.quarantined().find((q) => q.key === key);
-  return entry === undefined ? message : `${message}. ${entry.message}`;
 }
