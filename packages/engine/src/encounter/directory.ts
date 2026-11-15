@@ -316,7 +316,7 @@ export function noteCommandOnCurrentEncounter(
   >,
   origin: ChangeOrigin,
 ): void {
-  void directory;
-  void origin;
-  throw new Error("not implemented");
+  const open = directory.getOpenScene();
+  const encounter = open ? open.encounter : directory.getCurrentEncounter();
+  if (encounter) directory.repositoryFor(encounter.id).noteCommand(origin);
 }

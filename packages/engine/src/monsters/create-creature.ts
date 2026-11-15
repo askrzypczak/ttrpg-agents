@@ -1,9 +1,25 @@
-import type { EncounterDirectory } from "../encounter/directory.js";
+import {
+  noteCommandOnCurrentEncounter,
+  type EncounterDirectory,
+} from "../encounter/directory.js";
+import { UnknownMonsterError } from "../encounter/errors.js";
 import type { ChangeOrigin } from "../encounter/origin.js";
-import type { MonsterCheck } from "./check.js";
-import type { CreatureChanges } from "./creature-changes.js";
-import type { CreatureRepository } from "./creatures.js";
-import type { Monster } from "./schema.js";
+import { checkMonster, type MonsterCheck } from "./check.js";
+import {
+  applyCreatureChanges,
+  assertCreatureNameFree,
+  creatureKey,
+  parseCreatureDraft,
+  type CreatureChanges,
+  type CreatureDraft,
+} from "./creature-changes.js";
+import { isReservedBookTag, type CreatureRepository } from "./creatures.js";
+import {
+  BookTagError,
+  CreatureNameTakenError,
+  InvalidCreatureError,
+} from "./errors.js";
+import { monsterSchema, type Monster } from "./schema.js";
 import type { MonsterIndex } from "./types.js";
 
 export interface CreateCreatureRequest {
@@ -32,14 +48,81 @@ export interface CreatedCreature {
   check: MonsterCheck;
 }
 
+/** The statblock a create from scratch starts from: what a statblock may print empty starts empty; every other field must come from the changes. */
+function emptyStatblock(): CreatureDraft {
+  return {
+    armorDetail: "",
+    skills: {},
+    senses: {},
+    damageVulnerabilities: [],
+    damageResistances: [],
+    damageImmunities: [],
+    conditionImmunities: [],
+    sections: {
+      traits: [],
+      actions: [],
+      bonusActions: [],
+      reactions: [],
+      legendaryActions: [],
+    },
+  };
+}
+
+/** Throws BookTagError for a tag outside monsterSchema's pattern or one reserved for built-in data. */
+function assertBookTag(book: string): void {
+  if (!monsterSchema.shape.source.shape.book.safeParse(book).success)
+    throw new BookTagError(
+      `"${book}" is not a book tag: use lower-case letters, digits and hyphens, such as "homebrew" or "mm-2024".`,
+    );
+  if (isReservedBookTag(book))
+    throw new BookTagError(
+      `The book tag "${book}" is reserved for the built-in SRD monsters; use another, such as "homebrew".`,
+    );
+}
+
 /** Builds, validates and stores a creature, notes the command on the current encounter and checks it. Throws BookTagError, UnknownMonsterError, CreatureEntryError, InvalidCreatureError or CreatureNameTakenError, storing nothing. */
 export function createCreature(
   deps: CreateCreatureDeps,
   request: CreateCreatureRequest,
   origin: ChangeOrigin,
 ): CreatedCreature {
-  void deps;
-  void request;
-  void origin;
-  throw new Error("not implemented");
+  const { monsters, creatures, directory } = deps;
+  const { book, page, from: fromKey } = request;
+  assertBookTag(book);
+
+  let from: Monster | undefined;
+  if (fromKey !== undefined) {
+    from = monsters.get(fromKey);
+    if (from === undefined)
+      throw new UnknownMonsterError(
+        `Unknown monster "${fromKey}". Use search_monsters to find keys.`,
+      );
+  }
+  // applyCreatureChanges copies its base, so the built-in set is never changed.
+  const draft = applyCreatureChanges(from ?? emptyStatblock(), request.changes);
+  draft.source = page === undefined ? { book } : { book, page };
+  const parsed = parseCreatureDraft(draft);
+  const key = creatureKey(book, parsed.name);
+  if (key === undefined)
+    throw new InvalidCreatureError(
+      "The statblock is not valid; nothing was saved:\nname: must contain a letter or digit",
+    );
+  const monster: Monster = { ...parsed, key };
+
+  directory.transaction(() => {
+    // Another process shares the database: check under the write lock.
+    assertCreatureNameFree(monsters, book, monster.name);
+    if (creatures.getRecord(key) !== undefined) {
+      const holder = monsters.get(key);
+      const named = holder ? `"${holder.name}"` : "a stored creature";
+      throw new CreatureNameTakenError(
+        `The key ${key} is taken by ${named}. Change that creature with edit_creature, or pick another name.`,
+      );
+    }
+    creatures.insert(key, monster);
+    noteCommandOnCurrentEncounter(directory, origin);
+  });
+
+  const check = checkMonster(monster);
+  return from === undefined ? { monster, check } : { monster, from, check };
 }
