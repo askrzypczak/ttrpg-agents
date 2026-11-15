@@ -386,6 +386,22 @@ describe("remove_creature", () => {
       "monster type homebrew_goblin-shaman is not in the monster index",
     );
   });
+
+  it("remove_creature of a stored row that fails the schema removes it by key and replies with the key", async () => {
+    // The store writes what it is given; this row fails monsterSchema.
+    creatures.insert("homebrew_broken", {
+      name: "Broken",
+    } as unknown as Monster);
+
+    const removed = await ok("remove_creature", { key: "homebrew_broken" });
+
+    expect(text(removed)).toBe("Removed homebrew_broken.");
+    expect(removed.structuredContent).toEqual({
+      key: "homebrew_broken",
+      summary: text(removed),
+    });
+    expect(creatures.getRecord("homebrew_broken")).toBeUndefined();
+  });
 });
 
 describe("list_creatures", () => {

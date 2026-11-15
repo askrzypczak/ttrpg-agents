@@ -1,10 +1,13 @@
 import type {
   CheckFinding,
+  Encounter,
   EntryReport,
+  InstanceInEncounter,
   MonsterCheck,
 } from "@ttrpg-agents/engine";
+import { makeTestInstance } from "@ttrpg-agents/engine/testing";
 import { describe, expect, it } from "vitest";
-import { formatCreatureCheck } from "./creature-reply.js";
+import { formatCreatureCheck, formatKeptInstances } from "./creature-reply.js";
 
 function entry(
   fields: Pick<EntryReport, "section" | "position" | "name"> &
@@ -195,4 +198,41 @@ describe("formatCreatureCheck", () => {
     expect(clean.split("\n")).toContain("Findings: none");
     expect(clean).not.toContain("edit_creature");
   });
+});
+
+describe("formatKeptInstances", () => {
+  const ambush: Encounter = { id: "enc-1", name: "Ambush", createdAt: 1 };
+  const bridge: Encounter = { id: "enc-2", name: "Bridge", createdAt: 2 };
+  const kept = (
+    encounter: Encounter,
+    id: string,
+    displayName: string,
+  ): InstanceInEncounter => ({
+    encounter,
+    instance: makeTestInstance({
+      id,
+      encounterId: encounter.id,
+      monsterKey: "homebrew_mossling",
+      displayName,
+    }),
+  });
+
+  it.each<[string, InstanceInEncounter[], string | undefined]>([
+    ["none", [], undefined],
+    [
+      "one",
+      [kept(ambush, "i1", "Mossling 1")],
+      "1 monster in an encounter keeps the max HP, AC, size and name they had: Mossling 1 (Ambush). reset_max_hp, set_armor_class and change_monster_type update them.",
+    ],
+    [
+      "two",
+      [kept(ambush, "i1", "Mossling 1"), kept(bridge, "i2", "Mossling 2")],
+      "2 monsters in encounters keep the max HP, AC, size and name they had: Mossling 1 (Ambush), Mossling 2 (Bridge). reset_max_hp, set_armor_class and change_monster_type update them.",
+    ],
+  ])(
+    "formatKeptInstances names each kept monster with its encounter, in the singular for one, and gives nothing for none (%s)",
+    (_case, instances, expected) => {
+      expect(formatKeptInstances(instances)).toBe(expected);
+    },
+  );
 });

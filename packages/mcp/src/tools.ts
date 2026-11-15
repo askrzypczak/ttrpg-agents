@@ -8,15 +8,18 @@ import {
   createCreature,
   creatureChangesSchema,
   dndBeyondUrl,
+  editCreature,
   formatColumnLabel,
   getMapImage,
   getSetupStatus,
   getTableStatus,
+  listCreatures,
   listEncounterSummaries,
   listRooms,
   moveMonstersIntoRoom,
   previewMonstersInRooms,
   proposeRooms,
+  removeCreature,
   removeRooms,
   mergeInitiative,
   renameEncounter,
@@ -49,7 +52,11 @@ import {
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 import type { ToolCallContext, ToolContext } from "./context.js";
-import { creatureContent, formatCreatureCheck } from "./creature-reply.js";
+import {
+  creatureContent,
+  formatCreatureCheck,
+  formatKeptInstances,
+} from "./creature-reply.js";
 import { formatSetupStatus } from "./setup-status.js";
 import { formatSource, formatStatblock, signed } from "./statblock.js";
 
@@ -1087,7 +1094,7 @@ const undoTool = defineTool({
   takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
-    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms), encounter renames and bindings (rename_encounter, use_encounter) and creature changes (create_creature) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
+    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms), encounter renames and bindings (rename_encounter, use_encounter) and creature changes (create_creature, edit_creature, remove_creature) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
   inputSchema: {},
   run(ctx, _args, origin) {
     const snapshot = ctx.repo.listInstances();
@@ -1488,6 +1495,121 @@ const createCreatureTool = defineTool({
     return ok(
       `Created ${monster.name} (${monster.key}) in ${formatSource(monster.source)}${copied}.\n\n${formatCreatureCheck(check)}`,
       creatureContent(monster, check),
+    );
+  },
+});
+
+const editCreatureTool = defineTool({
+  name: "edit_creature",
+  annotations: { destructiveHint: true },
+  description:
+    "Change a stored creature (by key; list_creatures lists them) with the same changes as create_creature, plus page. Its key and book never change; a rename to a name another creature of the book has (any case) is refused. Built-in SRD monsters cannot be edited: store a changed copy with create_creature, from: <key>. Monsters already in encounters keep their max HP, AC, size and name; the reply names them. The reply lists the entries that roll, the text-only ones and number findings, which never block. Creates no encounter; undo does not cover it.",
+  inputSchema: {
+    key: z.string().describe("The stored creature's key."),
+    page: z.number().int().min(1).optional(),
+    changes: creatureChangesSchema.optional(),
+  },
+  run(ctx, { key, page, changes }, origin) {
+    const edited = editCreature(
+      {
+        monsters: ctx.monsters,
+        creatures: ctx.creatures,
+        directory: ctx.encounters,
+      },
+      {
+        key,
+        ...(page !== undefined && { page }),
+        changes: changes ?? {},
+      },
+      origin(),
+    );
+    const { monster, before, check, liveInstances } = edited;
+    const renamed =
+      before.name === monster.name ? "" : `, renamed from ${before.name}`;
+    const kept = formatKeptInstances(liveInstances);
+    return ok(
+      [
+        `Edited ${monster.name} (${monster.key}) in ${formatSource(monster.source)}${renamed}.`,
+        ...(kept === undefined ? [] : [kept]),
+        "",
+        formatCreatureCheck(check),
+      ].join("\n"),
+      {
+        ...creatureContent(monster, check),
+        liveInstances: liveInstances.map(({ encounter, instance }) => ({
+          id: instance.id,
+          name: instance.displayName,
+          encounter: encounter.name,
+        })),
+      },
+    );
+  },
+});
+
+const removeCreatureTool = defineTool({
+  name: "remove_creature",
+  annotations: { destructiveHint: true },
+  description:
+    "Delete a stored creature by key (list_creatures lists them). Refused while a monster in any encounter uses it: the reply names them; remove them with remove_monsters or give them another type with change_monster_type first. Built-in SRD monsters cannot be removed. Creates no encounter; undo does not cover it.",
+  inputSchema: { key: z.string().describe("The stored creature's key.") },
+  run(ctx, { key }, origin) {
+    const removed = removeCreature(
+      {
+        monsters: ctx.monsters,
+        creatures: ctx.creatures,
+        directory: ctx.encounters,
+      },
+      key,
+      origin(),
+    );
+    const what =
+      removed.monster === undefined
+        ? removed.key
+        : `${removed.monster.name} (${removed.key})`;
+    return ok(`Removed ${what}.`, { key: removed.key });
+  },
+});
+
+const listCreaturesTool = defineTool({
+  name: "list_creatures",
+  annotations: { readOnlyHint: true },
+  description:
+    "List the stored creatures (not the built-in SRD monsters) with key, name, book, page and CR, sorted by key; with book, only that book's.",
+  inputSchema: {
+    book: z
+      .string()
+      .optional()
+      .describe("Only this book tag's creatures, e.g. homebrew."),
+  },
+  run(ctx, { book }) {
+    const creatures = listCreatures(ctx.monsters, book);
+    const content = {
+      creatures: creatures.map((m) => ({
+        key: m.key,
+        name: m.name,
+        source: m.source,
+        cr: m.cr,
+      })),
+    };
+    if (creatures.length === 0)
+      return ok(
+        book === undefined
+          ? "No stored creatures."
+          : `No stored creatures in ${book}.`,
+        content,
+      );
+    return ok(
+      table(
+        ["key", "name", "book", "page", "CR"],
+        creatures.map((m) => [
+          m.key,
+          m.name,
+          m.source.book,
+          m.source.page ?? null,
+          m.cr,
+        ]),
+      ),
+      content,
     );
   },
 });
@@ -2001,4 +2123,7 @@ export const tools: readonly ToolDefinition[] = [
   renameEncounterTool,
   useEncounterTool,
   createCreatureTool,
+  editCreatureTool,
+  removeCreatureTool,
+  listCreaturesTool,
 ];
