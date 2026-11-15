@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Rng } from "../dice/rng.js";
-import { makeTestInstance, makeTestMonsterIndex } from "../testing/index.js";
-import { UnknownMonsterError } from "./errors.js";
-import { resetMaxHp, rollMaxHp, type MaxHpRollDeps } from "./max-hp.js";
-import type { EncounterRepository } from "./repository.js";
+import { rollMaxHp, type MaxHpRollDeps } from "./max-hp.js";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 
@@ -79,45 +76,5 @@ describe("rollMaxHp", () => {
       total: -3,
       label: "Rat 1 HP",
     });
-  });
-});
-
-describe("resetMaxHp", () => {
-  it("resetMaxHp for an instance whose stored creature is quarantined throws UnknownMonsterError naming the quarantine reason", () => {
-    const quarantine = {
-      key: "homebrew_thornling",
-      message:
-        'Stored creature "homebrew_thornling" is quarantined: its statblock\'s key is "homebrew_bramble"',
-    };
-    const monsters = {
-      ...makeTestMonsterIndex([]),
-      quarantined: () => [quarantine],
-    };
-    const thornling = makeTestInstance({
-      id: "t1",
-      monsterKey: "homebrew_thornling",
-      displayName: "Thornling 1",
-    });
-    const repo = {
-      listInstances: () => [thornling],
-    } as unknown as EncounterRepository;
-
-    let error: unknown;
-    try {
-      resetMaxHp(
-        { repo, monsters, rng: cycleRng(0), now: () => new Date(NOW) },
-        ["t1"],
-        "average",
-        { source: "mcp", commandId: "c1" },
-      );
-    } catch (e) {
-      error = e;
-    }
-
-    expect(error).toBeInstanceOf(UnknownMonsterError);
-    expect((error as UnknownMonsterError).code).toBe("unknown_monster");
-    expect((error as UnknownMonsterError).message).toContain(
-      quarantine.message,
-    );
   });
 });

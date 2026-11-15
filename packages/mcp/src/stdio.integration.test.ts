@@ -188,16 +188,16 @@ describe("stdio server", () => {
 });
 
 describe("stdio server stored creatures", () => {
-  it("the MCP server starts over a database holding a quarantined creature: add_monsters of an SRD monster succeeds and add_monsters of the quarantined key fails naming the reason", async () => {
-    // Its statblock names another key, so the index quarantines the record.
-    const mismatched: Monster = {
-      key: "homebrew_bramble",
+  it("the MCP server starts over a database holding a stored record that fails the schema: add_monsters of an SRD monster succeeds and add_monsters of that key fails as an unknown monster", async () => {
+    // Its armor class is text, so the record fails the schema.
+    const malformed = {
+      key: "homebrew_thornling",
       name: "Thornling",
       source: { book: "homebrew" },
       size: "small",
       type: "fey",
       alignment: "neutral",
-      ac: 11,
+      ac: "eleven",
       armorDetail: "",
       hp: { average: 4, dice: "1d8" },
       speeds: { walk: 25 },
@@ -219,13 +219,13 @@ describe("stdio server stored creatures", () => {
         reactions: [],
         legendaryActions: [],
       },
-    };
+    } as unknown as Monster;
     const client = await connect((dbPath) => {
       const db = openDatabase(dbPath);
       try {
         new SqliteCreatureRepository(db).insert(
           "homebrew_thornling",
-          mismatched,
+          malformed,
         );
       } finally {
         db.close();
@@ -243,10 +243,10 @@ describe("stdio server stored creatures", () => {
       arguments: { groups: [{ monster: "homebrew_thornling", count: 1 }] },
     });
     expect(refused.isError).toBe(true);
-    const text = JSON.stringify(refused.content);
-    expect(text).toContain("homebrew_thornling");
-    expect(text).toContain("quarantined");
-    expect(text).toContain("homebrew_bramble");
+    const text = (refused.content as { text?: string }[])
+      .map((part) => part.text ?? "")
+      .join("\n");
+    expect(text).toContain('unknown monster "homebrew_thornling"');
   }, 30_000);
 });
 

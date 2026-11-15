@@ -79,12 +79,4 @@ describe("staticMonsterIndex", () => {
     expect(index.dndBeyondPage("homebrew_thornling")).toBe("9000001-thornling");
     expect(index.dndBeyondPage("homebrew_mossback")).toBeUndefined();
   });
-
-  it("staticMonsterIndex lists no quarantined records", () => {
-    const index = staticMonsterIndex(
-      setOf([creature("homebrew_thornling", "Thornling")]),
-    );
-
-    expect(index.quarantined()).toEqual([]);
-  });
 });

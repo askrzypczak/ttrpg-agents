@@ -1,18 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { UnknownMonsterError } from "../encounter/errors.js";
-import { rollInitiativeValues } from "../encounter/initiative.js";
-import {
-  AddMonstersError,
-  validateAddMonsters,
-} from "../encounter/validate-add-monsters.js";
 import {
   createMonsterIndex,
-  withQuarantineReason,
   type CreatureRecord,
   type CreatureRepository,
 } from "./creatures.js";
 import type { Monster } from "./schema.js";
-import type { MonsterIndex, MonsterSet } from "./types.js";
+import { searchMonsters } from "./search.js";
+import type { MonsterSet } from "./types.js";
 
 /** An in-memory repository; `put` stores any data, as a store holding a bad record would. */
 class MemoryCreatureRepository implements CreatureRepository {
@@ -99,21 +93,6 @@ function builtInSet(
   };
 }
 
-function quarantineMessage(index: MonsterIndex, key: string): string {
-  const entry = index.quarantined().find((q) => q.key === key);
-  if (entry === undefined) throw new Error(`${key} is not quarantined`);
-  return entry.message;
-}
-
-function caught(fn: () => unknown): unknown {
-  try {
-    fn();
-  } catch (error) {
-    return error;
-  }
-  throw new Error("expected a throw");
-}
-
 describe("createMonsterIndex", () => {
   it("createMonsterIndex gets a valid stored creature by key and lists it after every built-in monster", () => {
     const repo = new MemoryCreatureRepository();
@@ -124,7 +103,6 @@ describe("createMonsterIndex", () => {
     expect(index.get("homebrew_thornling")).toEqual(thornling);
     expect(index.get("srd-2024_shadow")).toEqual(shadow);
     expect(index.list()).toEqual([shadow, ghoul, mossback, thornling]);
-    expect(index.quarantined()).toEqual([]);
   });
 
   it("createMonsterIndex reads the repository on each call, so a record inserted after the index was built is returned by get and list", () => {
@@ -139,116 +117,17 @@ describe("createMonsterIndex", () => {
     expect(index.list()).toEqual([shadow, ghoul, thornling]);
   });
 
-  it("a stored record that fails monsterSchema is quarantined with a message naming its key and each failing field", () => {
-    const repo = new MemoryCreatureRepository();
-    repo.put("homebrew_thornling", {
-      ...thornling,
-      ac: "eleven",
-      hp: { average: -1, dice: "1d8" },
-    });
-    const index = createMonsterIndex(builtInSet(), repo);
-
-    expect(index.quarantined().map((q) => q.key)).toEqual([
-      "homebrew_thornling",
-    ]);
-    const message = quarantineMessage(index, "homebrew_thornling");
-    expect(message).toContain("homebrew_thornling");
-    expect(message).toMatch(/(^|[^a-z.])ac:/);
-    expect(message).toContain("hp.average");
-  });
-
-  it("a stored record whose statblock key differs from its record key is quarantined with a message naming both keys", () => {
-    const repo = new MemoryCreatureRepository();
-    repo.put(
-      "homebrew_thornling",
-      creature("homebrew_bramble", "Thornling", "homebrew"),
-    );
-    const index = createMonsterIndex(builtInSet(), repo);
-
-    expect(index.get("homebrew_thornling")).toBeUndefined();
-    const message = quarantineMessage(index, "homebrew_thornling");
-    expect(message).toContain("homebrew_thornling");
-    expect(message).toContain("homebrew_bramble");
-  });
-
-  it("a stored record whose key is not its book tag, one underscore and a slug of lower-case letters, digits and hyphens is quarantined", () => {
-    const badKeys = [
-      "thornling",
-      "otherbook_thornling",
-      "homebrew_Thornling",
-      "homebrew_",
-      "homebrew_thorn_ling",
-    ];
-    const repo = new MemoryCreatureRepository();
-    for (const key of badKeys) {
-      repo.put(key, creature(key, "Thornling", "homebrew"));
-    }
-    repo.insert("homebrew_thorn-ling-2", {
-      ...thornling,
-      key: "homebrew_thorn-ling-2",
-    });
-    const index = createMonsterIndex(builtInSet(), repo);
-
-    expect(
-      index
-        .quarantined()
-        .map((q) => q.key)
-        .sort(),
-    ).toEqual([...badKeys].sort());
-    for (const key of badKeys) {
-      const message = quarantineMessage(index, key);
-      expect(message, key).toContain(`"${key}"`);
-      expect(message, key).toContain('"homebrew_"');
-      expect(index.get(key), key).toBeUndefined();
-    }
-    expect(index.get("homebrew_thorn-ling-2")?.key).toBe(
-      "homebrew_thorn-ling-2",
-    );
-  });
-
-  it("a stored record whose book tag begins with srd is quarantined", () => {
-    const repo = new MemoryCreatureRepository();
-    repo.put(
-      "srd-5.2_thornling",
-      creature("srd-5.2_thornling", "Thornling", "srd-5.2"),
-    );
-    repo.put("srdish_thornling", creature("srdish_thornling", "X", "srdish"));
-    const index = createMonsterIndex(builtInSet(), repo);
-
-    expect(
-      index
-        .quarantined()
-        .map((q) => q.key)
-        .sort(),
-    ).toEqual(["srd-5.2_thornling", "srdish_thornling"]);
-    expect(index.get("srd-5.2_thornling")).toBeUndefined();
-    const message = quarantineMessage(index, "srd-5.2_thornling");
-    expect(message).toContain('"srd-5.2_thornling"');
-    expect(message).toContain('"srd-5.2"');
-    expect(quarantineMessage(index, "srdish_thornling")).toContain('"srdish"');
-  });
-
-  it("quarantined records are absent from get and list while the valid stored records and every built-in monster still load", () => {
+  it("a stored record that fails monsterSchema is skipped by get and list while the valid stored records and every built-in monster still load", () => {
     const repo = new MemoryCreatureRepository();
     repo.insert(mossback.key, mossback);
-    repo.put("homebrew_thornling", { ...thornling, name: "" });
-    repo.put(
-      "homebrew_puddlewisp",
-      creature("homebrew_other", "Puddlewisp", "homebrew"),
-    );
+    repo.put("homebrew_thornling", { ...thornling, ac: "eleven" });
     const index = createMonsterIndex(builtInSet(), repo);
 
     expect(index.get("homebrew_thornling")).toBeUndefined();
-    expect(index.get("homebrew_puddlewisp")).toBeUndefined();
     expect(index.get("homebrew_mossback")).toEqual(mossback);
     expect(index.get("srd-2024_ghoul")).toEqual(ghoul);
     expect(index.list()).toEqual([shadow, ghoul, mossback]);
-    expect(
-      index
-        .quarantined()
-        .map((q) => q.key)
-        .sort(),
-    ).toEqual(["homebrew_puddlewisp", "homebrew_thornling"]);
+    expect(searchMonsters(index, "thornling")).toEqual([]);
   });
 
   it("createMonsterIndex serves the built-in set's aliases and D&D Beyond pages, and no page for a stored creature", () => {
@@ -266,81 +145,5 @@ describe("createMonsterIndex", () => {
     expect(index.dndBeyondPage("srd-2024_shadow")).toBe("9000001-shadow");
     expect(index.dndBeyondPage("srd-2024_ghoul")).toBeUndefined();
     expect(index.dndBeyondPage("homebrew_thornling")).toBeUndefined();
-  });
-});
-
-describe("withQuarantineReason", () => {
-  it("withQuarantineReason appends the quarantine message for a quarantined key and returns the message unchanged for any other key", () => {
-    const repo = new MemoryCreatureRepository();
-    repo.insert(mossback.key, mossback);
-    repo.put(
-      "homebrew_thornling",
-      creature("homebrew_bramble", "Thornling", "homebrew"),
-    );
-    const index = createMonsterIndex(builtInSet(), repo);
-    const reason = quarantineMessage(index, "homebrew_thornling");
-
-    expect(
-      withQuarantineReason(
-        index,
-        "homebrew_thornling",
-        'unknown monster "homebrew_thornling"',
-      ),
-    ).toBe(`unknown monster "homebrew_thornling". ${reason}`);
-    for (const key of [
-      "homebrew_nobody",
-      "homebrew_mossback",
-      "srd-2024_shadow",
-    ]) {
-      expect(withQuarantineReason(index, key, `unknown monster "${key}"`)).toBe(
-        `unknown monster "${key}"`,
-      );
-    }
-  });
-});
-
-describe("unknown-monster errors for a quarantined stored creature", () => {
-  function indexWithQuarantinedThornling(): MonsterIndex {
-    const repo = new MemoryCreatureRepository();
-    repo.put(
-      "homebrew_thornling",
-      creature("homebrew_bramble", "Thornling", "homebrew"),
-    );
-    return createMonsterIndex(builtInSet(), repo);
-  }
-
-  it("validateAddMonsters with a quarantined stored key throws AddMonstersError unknown_monster whose message names the quarantine reason", () => {
-    const index = indexWithQuarantinedThornling();
-    const reason = quarantineMessage(index, "homebrew_thornling");
-
-    const error = caught(() =>
-      validateAddMonsters(
-        index,
-        [{ monster: "homebrew_thornling", count: 1 }],
-        10,
-        "group",
-      ),
-    );
-
-    expect(error).toBeInstanceOf(AddMonstersError);
-    expect((error as AddMonstersError).code).toBe("unknown_monster");
-    expect((error as AddMonstersError).message).toContain(reason);
-  });
-
-  it("rollInitiativeValues for an instance whose stored creature is quarantined throws UnknownMonsterError whose message names the quarantine reason", () => {
-    const index = indexWithQuarantinedThornling();
-    const reason = quarantineMessage(index, "homebrew_thornling");
-
-    const error = caught(() =>
-      rollInitiativeValues(
-        { monsters: index, rng: { nextInt: () => 0 }, now: () => new Date(0) },
-        [{ monsterKey: "homebrew_thornling", displayName: "Thornling 1" }],
-        "each",
-      ),
-    );
-
-    expect(error).toBeInstanceOf(UnknownMonsterError);
-    expect((error as UnknownMonsterError).code).toBe("unknown_monster");
-    expect((error as UnknownMonsterError).message).toContain(reason);
   });
 });
