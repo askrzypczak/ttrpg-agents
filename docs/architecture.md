@@ -86,7 +86,7 @@ Upgrading to scene-bound encounters (migration 17) discards every existing encou
 | Token art per monster type (`token_art`)                                                                         | bridge (`token-art-set`); the library import                                                       | bridge (snapshots)                         |
 | Token image bytes (`token_art_image`, keyed by SHA-256)                                                          | bridge (`POST /token-images`); the library import                                                  | bridge (`GET /token-images/<sha256>`)      |
 | Open scene (`open_scene`) and scene bindings (`encounters.scene_id`)                                             | bridge (`scene-open`, none at start and on disconnect); MCP server (binds a new encounter)         | bridge (snapshots); MCP server             |
-| Stored creatures (`creatures`)                                                                                   | MCP server (creature tools, not yet built)                                                         | MCP server (monster index)                 |
+| Stored creatures (`creatures`). A `monsterSchema` change migrates the rows.                                      | MCP server (creature tools, not yet built)                                                         | MCP server (monster index)                 |
 
 Invariants the processes rely on:
 
