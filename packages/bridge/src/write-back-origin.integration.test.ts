@@ -94,6 +94,7 @@ function recordingDirectory(
     getCurrentEncounter: () => inner.getCurrentEncounter(),
     setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    findLiveInstancesOfMonster: (key) => inner.findLiveInstancesOfMonster(key),
     repositoryFor: () => recording,
     mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
     getOpenScene: () => inner.getOpenScene(),

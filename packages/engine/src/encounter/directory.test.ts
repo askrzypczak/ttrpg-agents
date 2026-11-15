@@ -9,6 +9,7 @@ import {
   resolveEncounter,
   useEncounter,
   type EncounterDirectory,
+  type InstanceInEncounter,
   type OpenScene,
 } from "./directory.js";
 import {
@@ -139,6 +140,10 @@ class FakeDirectory implements EncounterDirectory {
   findEncounterOfInstance(instanceId: string): Encounter | undefined {
     const id = this.holders.get(instanceId);
     return this.encounters.find((e) => e.id === id);
+  }
+
+  findLiveInstancesOfMonster(): InstanceInEncounter[] {
+    throw new Error("not used by these tests");
   }
 
   repositoryFor(encounterId: string): EncounterRepository {

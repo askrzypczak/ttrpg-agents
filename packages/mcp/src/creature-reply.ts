@@ -4,6 +4,7 @@ import type {
   DamagePart,
   EntryRef,
   EntryReport,
+  InstanceInEncounter,
   Monster,
   MonsterCheck,
   MonsterSection,
@@ -154,4 +155,22 @@ export function creatureContent(
     rolls: check.entries.filter((e) => e.rolls),
     findings: check.findings,
   };
+}
+
+/** The edit reply's line naming the monsters in encounters that keep their copied values, or undefined when there are none. */
+export function formatKeptInstances(
+  instances: readonly InstanceInEncounter[],
+): string | undefined {
+  if (instances.length === 0) return undefined;
+  const names = instances
+    .map(
+      ({ encounter, instance }) =>
+        `${instance.displayName} (${encounter.name})`,
+    )
+    .join(", ");
+  const who =
+    instances.length === 1
+      ? "1 monster in an encounter keeps"
+      : `${String(instances.length)} monsters in encounters keep`;
+  return `${who} the max HP, AC, size and name they had: ${names}. reset_max_hp, set_armor_class and change_monster_type update them.`;
 }

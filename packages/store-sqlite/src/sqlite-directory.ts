@@ -4,11 +4,14 @@ import type {
   Encounter,
   EncounterDirectory,
   EncounterRepository,
+  InstanceInEncounter,
   MapRepository,
   OpenScene,
 } from "@ttrpg-agents/engine";
 import {
   SqliteEncounterRepository,
+  toInstance,
+  type InstanceRow,
   type RepositoryOptions,
 } from "./sqlite-repository.js";
 import { SqliteMapRepository } from "./map-repository.js";
@@ -96,6 +99,29 @@ export class SqliteEncounterDirectory implements EncounterDirectory {
       )
       .get(instanceId) as EncounterRow | undefined;
     return row ? toEncounter(row) : undefined;
+  }
+
+  findLiveInstancesOfMonster(monsterKey: string): InstanceInEncounter[] {
+    const rows = this.db
+      .prepare(
+        `SELECT m.*, e.id AS e_id, e.name AS e_name, e.created_at AS e_created_at
+         FROM monster_instances m JOIN encounters e ON e.id = m.encounter_id
+         WHERE m.monster_key = ? AND m.removed_seq IS NULL
+         ORDER BY e.created_at, e.rowid, m.created_at, m.rowid`,
+      )
+      .all(monsterKey) as unknown as (InstanceRow & {
+      e_id: string;
+      e_name: string;
+      e_created_at: number;
+    })[];
+    return rows.map((row) => ({
+      encounter: toEncounter({
+        id: row.e_id,
+        name: row.e_name,
+        created_at: row.e_created_at,
+      }),
+      instance: toInstance(row),
+    }));
   }
 
   repositoryFor(encounterId: string): EncounterRepository {

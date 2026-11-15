@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { makeTestMonster } from "@ttrpg-agents/engine/testing";
+import { SqliteCreatureRepository } from "./creature-repository.js";
 import { createDatabaseProbe } from "./database-probe.js";
 import { openDatabase } from "./db.js";
 import { LATEST_VERSION, getUserVersion } from "./migrations.js";
@@ -78,7 +80,7 @@ describe("database probe", () => {
     ).toEqual({
       path,
       expectedVersion: LATEST_VERSION,
-      file: { kind: "found", version: LATEST_VERSION },
+      file: { kind: "found", version: LATEST_VERSION, creatureCount: 0 },
     });
   });
 
@@ -91,7 +93,7 @@ describe("database probe", () => {
     ).toEqual({
       path,
       expectedVersion: LATEST_VERSION,
-      file: { kind: "found", version: LATEST_VERSION + 3 },
+      file: { kind: "found", version: LATEST_VERSION + 3, creatureCount: 0 },
     });
   });
 
@@ -108,10 +110,55 @@ describe("database probe", () => {
     expect(facts).toEqual({
       path,
       expectedVersion: LATEST_VERSION,
-      file: { kind: "found", version: LATEST_VERSION - 1 },
+      file: { kind: "found", version: LATEST_VERSION - 1, creatureCount: 0 },
     });
     expect(snapshot(path)).toEqual(before);
     expect(before.version).toBe(LATEST_VERSION - 1);
+  });
+
+  it("a database reports the number of rows in its creatures table as its creature count", () => {
+    const path = join(tempDir(), "encounters.db");
+    const db = openDatabase(path);
+    const creatures = new SqliteCreatureRepository(db);
+    creatures.insert("homebrew_mossling", makeTestMonster());
+    creatures.insert(
+      "homebrew_bog-mossling",
+      makeTestMonster({ key: "homebrew_bog-mossling", name: "Bog Mossling" }),
+    );
+    db.prepare("INSERT INTO creatures (key, data) VALUES (?, ?)").run(
+      "homebrew_broken",
+      JSON.stringify({ name: "Broken" }),
+    );
+    db.close();
+
+    expect(
+      createDatabaseProbe(path, join(dirname(path), "backups")).check(),
+    ).toEqual({
+      path,
+      expectedVersion: LATEST_VERSION,
+      file: { kind: "found", version: LATEST_VERSION, creatureCount: 3 },
+    });
+  });
+
+  it("a database file with no creatures table reports no creature count", () => {
+    const path = join(tempDir(), "encounters.db");
+    const db = new DatabaseSync(path);
+    db.exec("CREATE TABLE encounters (id TEXT PRIMARY KEY)");
+    db.exec("PRAGMA user_version = 19");
+    db.close();
+    const counted = join(tempDir(), "encounters.db");
+    openDatabase(counted).close();
+
+    const facts = createDatabaseProbe(
+      path,
+      join(dirname(path), "backups"),
+    ).check();
+
+    expect(facts.file).toEqual({ kind: "found", version: 19 });
+    expect(
+      createDatabaseProbe(counted, join(dirname(counted), "backups")).check()
+        .file,
+    ).toEqual({ kind: "found", version: LATEST_VERSION, creatureCount: 0 });
   });
 
   it("a file that is not a SQLite database is reported unreadable with SQLite's reason", () => {

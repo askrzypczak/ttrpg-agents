@@ -69,7 +69,7 @@ function emptyStatblock(): CreatureDraft {
 function assertBookTag(book: string): void {
   if (!monsterSchema.shape.source.shape.book.safeParse(book).success)
     throw new BookTagError(
-      `"${book}" is not a book tag: use lower-case letters, digits and hyphens, such as "homebrew" or "mm-2024".`,
+      `"${book}" is not a book tag: use lower-case letters, digits and hyphens, starting with a letter or digit, such as "homebrew" or "mm-2024".`,
     );
   if (isReservedBookTag(book))
     throw new BookTagError(

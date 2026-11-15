@@ -297,16 +297,22 @@ export function creatureKey(book: string, name: string): string | undefined {
   return slug === "" ? undefined : `${book}_${slug}`;
 }
 
-/** Throws CreatureNameTakenError (naming edit_creature) when a creature of book has name, ignoring case. Engine-internal. */
+/** Throws CreatureNameTakenError (naming edit_creature) when a creature of book has name, ignoring case; the creature with `exceptKey` does not count as a holder. Engine-internal. */
 export function assertCreatureNameFree(
   monsters: MonsterIndex,
   book: string,
   name: string,
+  exceptKey?: string,
 ): void {
   const wanted = name.toLowerCase();
   const holder = monsters
     .list()
-    .find((m) => m.source.book === book && m.name.toLowerCase() === wanted);
+    .find(
+      (m) =>
+        m.source.book === book &&
+        m.key !== exceptKey &&
+        m.name.toLowerCase() === wanted,
+    );
   if (holder)
     throw new CreatureNameTakenError(
       `${book} already has a creature named "${holder.name}" (${holder.key}). Change it with edit_creature, or pick another name.`,

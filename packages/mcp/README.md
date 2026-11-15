@@ -61,6 +61,9 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `rename_encounter`     | Rename the open scene's (else the current) encounter, or the one named in `encounter`; non-empty, unique ignoring case                            |
 | `use_encounter`        | Make a named encounter that has no scene the open scene's encounter (the scene must have none); refused with the reason otherwise                 |
 | `create_creature`      | Store a creature in a book, from scratch or copied (`from`) with changes; key `<book>_<slug>`; replies its rolls, text-only entries, findings     |
+| `edit_creature`        | Change a stored creature by key with the same changes plus `page`; key and book kept; monsters in encounters keep their values and are named      |
+| `remove_creature`      | Delete a stored creature by key; refused while a monster in any encounter uses it, naming them                                                    |
+| `list_creatures`       | The stored creatures (key, name, book, page, CR), of one book with `book`                                                                         |
 
 Every tool that reads or changes an encounter takes an optional `encounter`, an
 encounter's name in any case (`use_encounter` requires it); `list_encounters`,
@@ -73,11 +76,15 @@ reply "This scene has no encounter yet.". A reply begins with
 `Encounter: <name>` when no scene is open or the call named an encounter other
 than the open scene's; its structured content carries the name as `encounter`.
 
-`create_creature` (like the creature tools that follow it) takes no `encounter`
-and never creates one. It notes its command on the open scene's encounter, or
-with no scene open on the current one, when there is one, so `undo` right after
-it says it does not cover the creature change. Its findings never block: the
-creature is stored and the reply lists them with the values the engine expects.
+The creature tools (`create_creature`, `edit_creature`, `remove_creature`,
+`list_creatures`) take no `encounter` and never create one. The three that
+change a creature note their command on the open scene's encounter, or with no
+scene open on the current one, when there is one, so `undo` right after one says
+it does not cover the creature change. Findings never block: the creature is
+stored and the reply lists them with the values the engine expects.
+`edit_creature` leaves the monsters already in encounters as they are (max HP,
+AC, size and name) and names them; `remove_creature` is refused while a monster
+in any encounter uses the creature.
 
 `table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`,
 `move_monsters`, and `add_monsters` or `preview_monsters` with a `room`, need the bridge running (`npm run bridge`) and a GM
