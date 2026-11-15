@@ -68,7 +68,7 @@ export const creatureChangesSchema = z.strictObject({
     })
     .optional(),
   /** Skill key -> bonus; null removes a skill. */
-  skills: z.record(z.string(), shape.initiativeModifier.nullable()).optional(),
+  skills: z.record(z.string(), shape.skills.valueType.nullable()).optional(),
   damageVulnerabilities: shape.damageVulnerabilities.optional(),
   damageResistances: shape.damageResistances.optional(),
   damageImmunities: shape.damageImmunities.optional(),

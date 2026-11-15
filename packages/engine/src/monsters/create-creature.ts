@@ -9,16 +9,13 @@ import {
   applyCreatureChanges,
   assertCreatureNameFree,
   creatureKey,
+  nameWithoutKeyError,
   parseCreatureDraft,
   type CreatureChanges,
   type CreatureDraft,
 } from "./creature-changes.js";
 import { isReservedBookTag, type CreatureRepository } from "./creatures.js";
-import {
-  BookTagError,
-  CreatureNameTakenError,
-  InvalidCreatureError,
-} from "./errors.js";
+import { BookTagError, CreatureNameTakenError } from "./errors.js";
 import { monsterSchema, type Monster } from "./schema.js";
 import type { MonsterIndex } from "./types.js";
 
@@ -103,10 +100,7 @@ export function createCreature(
   draft.source = page === undefined ? { book } : { book, page };
   const parsed = parseCreatureDraft(draft);
   const key = creatureKey(book, parsed.name);
-  if (key === undefined)
-    throw new InvalidCreatureError(
-      "The statblock is not valid; nothing was saved:\nname: must contain a letter or digit",
-    );
+  if (key === undefined) throw nameWithoutKeyError();
   const monster: Monster = { ...parsed, key };
 
   directory.transaction(() => {
