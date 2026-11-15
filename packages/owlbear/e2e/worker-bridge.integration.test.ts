@@ -46,6 +46,8 @@ it("two worker bridges started at once have distinct origins and each serves its
   for (const bridge of started) {
     const response = await fetch(`${bridge.origin}/manifest.json`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(MANIFEST);
+    // The served name depends on the checkout's profile (dev or default).
+    const served = (await response.json()) as Record<string, unknown>;
+    expect({ ...served, name: MANIFEST.name }).toEqual(MANIFEST);
   }
 }, 20_000);

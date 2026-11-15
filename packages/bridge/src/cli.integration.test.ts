@@ -203,7 +203,7 @@ describe("bridge CLI", () => {
   );
 
   it(
-    "a manifest request with an old install URL's ?token= gets the manifest as built, even when BRIDGE_TOKEN_FILE holds that token",
+    "a manifest request with an old install URL's ?token= gets the same manifest as one without it, even when BRIDGE_TOKEN_FILE holds that token",
     async () => {
       const built =
         JSON.stringify(
@@ -215,12 +215,74 @@ describe("bridge CLI", () => {
       const bridge = spawnTracked(process.execPath, [CLI]);
       const port = await listeningPort(bridge);
 
+      const plain = await fetch(
+        `http://127.0.0.1:${String(port)}/manifest.json`,
+      );
       const res = await fetch(
         `http://127.0.0.1:${String(port)}/manifest.json?token=${EXTENSION_TOKEN}`,
       );
 
+      expect(plain.status).toBe(200);
       expect(res.status).toBe(200);
-      expect(await res.text()).toBe(built);
+      const body = await res.text();
+      expect(body).toBe(await plain.text());
+      expect(body).not.toContain(EXTENSION_TOKEN);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a bridge in the dev profile serves manifest.json with name and action.title ttrpg-agents (dev)",
+    async () => {
+      await writeFile(
+        join(dir, "static", "manifest.json"),
+        JSON.stringify({
+          name: "t",
+          action: { title: "t", popover: "/index.html" },
+        }),
+      );
+      const home = join(dir, "home");
+      await mkdir(home);
+      env.HOME = home;
+      env.TTRPG_AGENTS_PROFILE = "dev";
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const port = await listeningPort(bridge);
+
+      const res = await fetch(`http://127.0.0.1:${String(port)}/manifest.json`);
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        name: "ttrpg-agents (dev)",
+        action: { title: "ttrpg-agents (dev)", popover: "/index.html" },
+      });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a bridge in the default profile serves manifest.json with name and action.title ttrpg-agents",
+    async () => {
+      await writeFile(
+        join(dir, "static", "manifest.json"),
+        JSON.stringify({
+          name: "t",
+          action: { title: "t", popover: "/index.html" },
+        }),
+      );
+      const home = join(dir, "home");
+      await mkdir(home);
+      env.HOME = home;
+      env.TTRPG_AGENTS_PROFILE = "default";
+      const bridge = spawnTracked(process.execPath, [CLI]);
+      const port = await listeningPort(bridge);
+
+      const res = await fetch(`http://127.0.0.1:${String(port)}/manifest.json`);
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        name: "ttrpg-agents",
+        action: { title: "ttrpg-agents", popover: "/index.html" },
+      });
     },
     TIMEOUT,
   );

@@ -53,6 +53,8 @@ const server = await startBridgeServer({
   port,
   staticDir,
   agentToken,
+  // Owlbear lists the dev bridge's extension beside the real one, under its own name.
+  extensionName: profile.name === "dev" ? "ttrpg-agents (dev)" : "ttrpg-agents",
   snapshot: snapshots.snapshot,
   mapRooms: () => mapRoomsMessage(encounters),
   removeInstance: (id, commandId) => removeInstance(encounters, id, commandId),

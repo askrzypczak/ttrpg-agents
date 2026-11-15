@@ -54,7 +54,7 @@ see [`docs/settings.md`](../../docs/settings.md).
 Every process started in a worktree uses the dev profile: its own database, agent token and state file, and port 5299 (see Profiles in [`docs/settings.md`](../../docs/settings.md)). The real bridge and database are untouched.
 
 1. In the branch's worktree (after `npm ci`), run `npm run bridge:start` (`bridge:restart` after a change). It starts a dev bridge beside the real one; `npm run bridge:status` shows `profile: dev` and this checkout. One dev bridge runs at a time: stop the other worktree's first.
-2. Once, add the dev extension in Owlbear from the dev bridge's install URL, `http://localhost:5299/manifest.json`, and switch it on in the test room only. Keep only one of the two extensions on in a room: both act on the same tokens.
+2. Once, add the dev extension in Owlbear from the dev bridge's install URL, `http://localhost:5299/manifest.json`. Owlbear lists it as `ttrpg-agents (dev)`, beside the real `ttrpg-agents`: switch `ttrpg-agents (dev)` on in the test room only. Keep only one of the two extensions on in a room: both act on the same tokens. A dev extension added before the bridge named it keeps the name `ttrpg-agents`: remove it from your Owlbear profile and add the URL again (Owlbear can show the new name only after a page reload).
 3. Start the Claude Code session in the worktree, so its MCP server opens the same dev database. Reconnect it (`/mcp`) after a rebuild.
 
 To drive the real table from a branch, set `TTRPG_AGENTS_PROFILE=default` for both the bridge command and the Claude Code session, for example `TTRPG_AGENTS_PROFILE=default npm run bridge:restart`. The branch's migrations then run on the real database.
