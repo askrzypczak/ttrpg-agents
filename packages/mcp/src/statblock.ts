@@ -26,8 +26,9 @@ function section(title: string, entries: MonsterEntry[]): string[] {
 
 /** A statblock's source: `<book>`, or `<book>, page <n>`. */
 export function formatSource(source: Monster["source"]): string {
-  void source;
-  throw new Error("not implemented");
+  return source.page === undefined
+    ? source.book
+    : `${source.book}, page ${String(source.page)}`;
 }
 
 /** Markdown statblock for a monster. */
@@ -51,6 +52,7 @@ export function formatStatblock(m: Monster): string {
   ];
   const lines = [
     `## ${m.name} (${m.key})`,
+    `Source: ${formatSource(m.source)}`,
     `*${m.size} ${m.type}, ${m.alignment}*`,
     "",
     `- **AC** ${String(m.ac)}${m.armorDetail ? ` (${m.armorDetail})` : ""}`,
