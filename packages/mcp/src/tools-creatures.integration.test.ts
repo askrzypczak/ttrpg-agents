@@ -373,6 +373,7 @@ describe("remove_creature", () => {
     });
     expect(removed.structuredContent).toEqual({
       key: "homebrew_goblin-shaman",
+      summary: text(removed),
     });
     expect(stored("homebrew_goblin-shaman")).toBeUndefined();
 
@@ -426,23 +427,35 @@ describe("list_creatures", () => {
       allLines.indexOf(hexerRow),
     );
     expect(text(all)).not.toContain(GOBLIN_WARRIOR);
-    expect(all.structuredContent).toEqual({ creatures: [shaman, hexer] });
+    expect(all.structuredContent).toEqual({
+      creatures: [shaman, hexer],
+      summary: text(all),
+    });
 
     const filtered = await ok("list_creatures", { book: "my-campaign" });
     expect(text(filtered).split("\n")).toContain(hexerRow);
     expect(text(filtered)).not.toContain("homebrew_goblin-shaman");
-    expect(filtered.structuredContent).toEqual({ creatures: [hexer] });
+    expect(filtered.structuredContent).toEqual({
+      creatures: [hexer],
+      summary: text(filtered),
+    });
   });
 
   it("list_creatures with no stored creatures, or none in the given book, says so", async () => {
     const none = await ok("list_creatures");
     expect(text(none)).toContain("No stored creatures");
-    expect(none.structuredContent).toEqual({ creatures: [] });
+    expect(none.structuredContent).toEqual({
+      creatures: [],
+      summary: text(none),
+    });
 
     await createShaman();
     const noneInBook = await ok("list_creatures", { book: "my-campaign" });
     expect(text(noneInBook)).toContain("No stored creatures");
     expect(text(noneInBook)).toContain("my-campaign");
-    expect(noneInBook.structuredContent).toEqual({ creatures: [] });
+    expect(noneInBook.structuredContent).toEqual({
+      creatures: [],
+      summary: text(noneInBook),
+    });
   });
 });
