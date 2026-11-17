@@ -1,6 +1,6 @@
 ---
 name: dm-prep
-description: Prepare D&D creatures between sessions through the ttrpg-agents MCP tools. Use when the DM says things like "make a goblin shaman", "make a tougher goblin warrior", "add this statblock from page 52 of my Monster Manual", "here is a statblock", "create this creature", "store this monster", "change the goblin shaman's AC", "that's a typo, the Talons do 10", "remove the goblin shaman", "what creatures have I stored", or pastes the text of a creature's statblock.
+description: Prepare D&D creatures between sessions through the ttrpg-agents MCP tools. Use when the DM says things like "make a goblin shaman", "make a tougher goblin warrior", "add this statblock from page 52 of my Monster Manual", "here is a statblock", "create this creature", "store this monster", "change the stored goblin shaman's AC", "that's a typo, the Talons do 10", "remove the goblin shaman from my creatures", "what creatures have I stored", or pastes the text of a creature's statblock.
 ---
 
 # DM prep
@@ -21,7 +21,7 @@ Every number comes from tool output or from the statblock text the DM provided. 
 "Make a goblin shaman", "make a tougher goblin warrior":
 
 - Call `search_monsters` for the base creature, unless its key is known from this session. If one match is clear, use it; if several unrelated or differently-sized matches fit, ask which one and call nothing else until the DM answers.
-- Then ONE `create_creature` with `from` the base key and every change the DM named in `changes`: `name`, `ac`, `hp` as `{ dice }` (omit `average`; the engine sets it), `abilities`, `saves`, `speeds`, `senses` and `skills` (they merge by key; `null` removes one), and `sections.<section>.remove`, `.replace` or `.add`.
+- Then ONE `create_creature` with `from` the base key and every change the DM named in `changes`: `name`, `ac`, `hp` as `{ dice }` (omit `average`; the engine sets it), `abilities`, `saves`, `speeds`, `senses` and `skills` (they merge by key; `null` removes a speed, sense or skill), and `sections.<section>.remove`, `.replace` or `.add`.
 - `book` is `homebrew` unless the DM names another. Do not ask about the book for an invented creature.
 - Use only the values the DM gave. If a change needs a number they did not give, ask for it.
 
@@ -29,7 +29,7 @@ Every number comes from tool output or from the statblock text the DM provided. 
 
 The DM pastes or types a statblock, or names a text file that holds it ("add this statblock from page 52 of my Monster Manual"):
 
-- ONE `create_creature` with no `from` (unless the DM says "like a goblin"), giving every required field transcribed from the text: `name`, `size`, `type`, `alignment`, `ac`, `hp` (`{ dice }`), `speeds`, `abilities`, `saves`, `initiativeModifier`, `cr` and `languages`; add skills, senses, resistances and immunities when printed. Put each trait, action, bonus action, reaction and legendary action in `sections.<section>.add` as the text gives it.
+- ONE `create_creature` with no `from` (unless the DM says "like a goblin"), giving every required field transcribed from the text: `name`, `size`, `type`, `alignment`, `ac`, `hp` (`{ dice }`), `speeds`, `abilities`, `saves`, `initiativeModifier`, `cr` and `languages`; add `skills`, `senses`, `armorDetail` and the four lists `damageVulnerabilities`, `damageResistances`, `damageImmunities` and `conditionImmunities` when printed. Put each trait, action, bonus action, reaction and legendary action in `sections.<section>.add` as the text gives it.
 - Copy every number and every entry's wording as printed, including a number that looks wrong. Never correct while transcribing: the check reports a mismatch and the DM decides.
 - `book` is the DM's short tag for the book, and `page` is the page when the DM gave it. When the DM has not named a book, ask for the tag once (a short lower-case word such as `mm-2024`), call nothing until they answer, then reuse it for every creature from that book for the rest of the conversation. Ask again only for a different book. Never pass a tag starting with `srd`.
 - Call no `search_monsters` first: a creature from text is new.
