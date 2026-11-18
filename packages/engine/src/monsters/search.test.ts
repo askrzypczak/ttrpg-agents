@@ -1,39 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { createMonsterIndex } from "./creatures.js";
 import type { Monster } from "./schema.js";
 import { getMonsterByKey, searchMonsters } from "./search.js";
-import type { MonsterIndex } from "./types.js";
+import type { MonsterSet } from "./types.js";
+import {
+  makeTestCreatureRepository,
+  makeTestMonster,
+  makeTestMonsterIndex,
+} from "../testing/index.js";
 
 function stub(key: string, name: string): Monster {
-  return {
-    key,
-    name,
-    source: "private",
-    size: "medium",
-    type: "beast",
-    alignment: "unaligned",
-    ac: 10,
-    armorDetail: "",
-    hp: { average: 5, dice: "1d8 + 1" },
-    speeds: { walk: 30 },
-    abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
-    initiativeModifier: 0,
-    cr: 0,
-    saves: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
-    skills: {},
-    senses: {},
-    languages: "",
-    damageVulnerabilities: [],
-    damageResistances: [],
-    damageImmunities: [],
-    conditionImmunities: [],
-    sections: {
-      traits: [],
-      actions: [],
-      bonusActions: [],
-      reactions: [],
-      legendaryActions: [],
-    },
-  };
+  return makeTestMonster({ key, name });
 }
 
 const monsters = [
@@ -48,20 +25,17 @@ const monsters = [
   stub("warrior-veteran", "Warrior Veteran"),
   stub("venomous-snake", "Venomous Snake"),
 ];
-const index: MonsterIndex = {
-  monsters,
-  byKey: new Map(monsters.map((m) => [m.key, m] as const)),
-  aliases: new Map([
-    ["Thug", "tough"],
-    ["Veteran", "warrior-veteran"],
-    ["Poisonous Snake", "venomous-snake"],
-  ]),
-  dndBeyondPages: new Map(),
-};
+const index = makeTestMonsterIndex(monsters, {
+  aliases: {
+    Thug: "tough",
+    Veteran: "warrior-veteran",
+    "Poisonous Snake": "venomous-snake",
+  },
+});
 const names = (q: string) =>
   searchMonsters(index, q).map((r) => r.monster.name);
 const byKey = (key: string): Monster => {
-  const m = index.byKey.get(key);
+  const m = index.get(key);
   if (!m) throw new Error(`no stub monster ${key}`);
   return m;
 };
@@ -133,6 +107,58 @@ describe("searchMonsters", () => {
         { monster: byKey("warrior-veteran"), alias: "Veteran" },
       ]);
     }
+  });
+});
+
+describe("searchMonsters with stored creatures", () => {
+  function withBook(monster: Monster, book: string): Monster {
+    return { ...monster, source: { book } };
+  }
+
+  it('with a stored Bugbear Stalker (mm-2024_bugbear-stalker) beside the SRD one, searchMonsters("bugbear stalker") lists both, the stored one first', () => {
+    const builtIn = withBook(
+      stub("srd-2024_bugbear-stalker", "Bugbear Stalker"),
+      "srd-5.2",
+    );
+    const stored = withBook(
+      stub("mm-2024_bugbear-stalker", "Bugbear Stalker"),
+      "mm-2024",
+    );
+    const mixed = makeTestMonsterIndex([builtIn, stored]);
+
+    expect(
+      searchMonsters(mixed, "bugbear stalker").map((r) => r.monster.key),
+    ).toEqual(["mm-2024_bugbear-stalker", "srd-2024_bugbear-stalker"]);
+  });
+
+  it("searchMonsters still ranks a stronger built-in match before a weaker stored match", () => {
+    const ogre = withBook(stub("srd-2024_ogre", "Ogre"), "srd-5.2");
+    const ogreZombie = withBook(
+      stub("srd-2024_ogre-zombie", "Ogre Zombie"),
+      "srd-5.2",
+    );
+    const halfOgre = withBook(
+      stub("homebrew_half-ogre", "Half-Ogre"),
+      "homebrew",
+    );
+    const hogrest = withBook(stub("homebrew_hogrest", "Hogrest"), "homebrew");
+    const set: MonsterSet = {
+      monsters: [ogre, ogreZombie],
+      byKey: new Map([ogre, ogreZombie].map((m) => [m.key, m])),
+      aliases: new Map(),
+      dndBeyondPages: new Map(),
+    };
+    const storedCreatures = [halfOgre, hogrest];
+    const repo = makeTestCreatureRepository(storedCreatures);
+    const mixed = createMonsterIndex(set, repo);
+
+    // Exact and prefix built-in matches before a stored whole-word and a stored substring match.
+    expect(searchMonsters(mixed, "ogre").map((r) => r.monster.name)).toEqual([
+      "Ogre",
+      "Ogre Zombie",
+      "Half-Ogre",
+      "Hogrest",
+    ]);
   });
 });
 

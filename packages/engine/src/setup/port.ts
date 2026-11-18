@@ -20,7 +20,7 @@ export interface SettingsFacts {
 }
 export type DatabaseFile =
   | { kind: "missing" }
-  | { kind: "found"; version: number }
+  | { kind: "found"; version: number; creatureCount?: number }
   | { kind: "unreadable"; reason: string };
 export interface DatabaseFacts {
   path: string;

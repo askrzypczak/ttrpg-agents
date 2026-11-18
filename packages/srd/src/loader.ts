@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   monsterSchema,
   type Monster,
-  type MonsterIndex,
+  type MonsterSet,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
@@ -74,7 +74,7 @@ function loadFile(file: string): Monster[] {
  * result has no aliases or D&D Beyond pages; add them with {@link loadAliases}
  * and {@link loadDndBeyondPages}.
  */
-export function loadMonsters(sources: MonsterFileSource[]): MonsterIndex {
+export function loadMonsters(sources: MonsterFileSource[]): MonsterSet {
   const monsters: Monster[] = [];
   const byKey = new Map<string, Monster>();
   const origin = new Map<string, string>();
@@ -112,18 +112,18 @@ function aliasLabel(raw: unknown, i: number): string {
 }
 
 /**
- * Add the aliases (old monster names) in `file` to `index`. The file holds a
+ * Add the aliases (old monster names) in `file` to `set`. The file holds a
  * JSON array of `{ name, key, note }`; the result maps each name, as written,
  * to its key. Throws {@link MonsterLoadError} naming the file and entry on
  * invalid data, an unknown key, an alias that is a current monster name, or
  * an alias repeated from an earlier entry (names compare case-insensitively).
  */
-export function loadAliases(file: string, index: MonsterIndex): MonsterIndex {
+export function loadAliases(file: string, set: MonsterSet): MonsterSet {
   const data = readJsonFile(file);
   if (!Array.isArray(data)) {
     throw new MonsterLoadError(`${file}: expected an array of aliases`);
   }
-  const currentNames = new Set(index.monsters.map((m) => m.name.toLowerCase()));
+  const currentNames = new Set(set.monsters.map((m) => m.name.toLowerCase()));
   const seen = new Set<string>();
   const aliases = new Map<string, string>();
   for (const [i, raw] of data.entries()) {
@@ -138,7 +138,7 @@ export function loadAliases(file: string, index: MonsterIndex): MonsterIndex {
     }
     const { name, key } = result.data;
     const lower = name.toLowerCase();
-    if (!index.byKey.has(key)) {
+    if (!set.byKey.has(key)) {
       throw new MonsterLoadError(
         `${file}: alias "${name}" points to unknown key "${key}"`,
       );
@@ -156,7 +156,7 @@ export function loadAliases(file: string, index: MonsterIndex): MonsterIndex {
     seen.add(lower);
     aliases.set(name, key);
   }
-  return { ...index, aliases };
+  return { ...set, aliases };
 }
 
 /** A D&D Beyond page path segment: `<id>-<slug>`, the slug required. */
@@ -167,16 +167,13 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Add the D&D Beyond 2024 pages in `file` to `index`. The file holds a JSON
+ * Add the D&D Beyond 2024 pages in `file` to `set`. The file holds a JSON
  * object mapping monster keys to page path segments `<id>-<slug>`. Throws
  * {@link MonsterLoadError} naming the file (and the key, where there is one)
- * when the file is not an object, a key is not in the index, or a value is
+ * when the file is not an object, a key is not in the set, or a value is
  * not an `<id>-<slug>` string.
  */
-export function loadDndBeyondPages(
-  file: string,
-  index: MonsterIndex,
-): MonsterIndex {
+export function loadDndBeyondPages(file: string, set: MonsterSet): MonsterSet {
   const data = readJsonFile(file);
   if (!isJsonObject(data)) {
     throw new MonsterLoadError(
@@ -185,7 +182,7 @@ export function loadDndBeyondPages(
   }
   const pages = new Map<string, string>();
   for (const [key, segment] of Object.entries(data)) {
-    if (!index.byKey.has(key)) {
+    if (!set.byKey.has(key)) {
       throw new MonsterLoadError(
         `${file}: D&D Beyond page for unknown key "${key}"`,
       );
@@ -197,7 +194,7 @@ export function loadDndBeyondPages(
     }
     pages.set(key, segment);
   }
-  return { ...index, dndBeyondPages: pages };
+  return { ...set, dndBeyondPages: pages };
 }
 
 /** Path of the committed SRD 5.2 snapshot (works from src/ and dist/). */
@@ -222,7 +219,7 @@ const SRD_DNDBEYOND_PATH = resolve(
  * Load the committed SRD 5.2 snapshot with its aliases (see {@link loadAliases})
  * and its D&D Beyond 2024 pages (see {@link loadDndBeyondPages}).
  */
-export function loadSrdMonsters(): MonsterIndex {
+export function loadSrdMonsters(): MonsterSet {
   return loadDndBeyondPages(
     SRD_DNDBEYOND_PATH,
     loadAliases(SRD_ALIASES_PATH, loadMonsters([{ path: SRD_MONSTERS_PATH }])),

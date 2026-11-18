@@ -1,3 +1,4 @@
+import { isReservedBookTag } from "./creatures.js";
 import type { Monster } from "./schema.js";
 import type { MonsterIndex } from "./types.js";
 
@@ -15,7 +16,7 @@ export function getMonsterByKey(
   index: MonsterIndex,
   key: string,
 ): Monster | undefined {
-  return index.byKey.get(key);
+  return index.get(key);
 }
 
 /** The query plus singular forms of its last word (ghouls, harpies, ogres). */
@@ -72,7 +73,8 @@ function escapeRegExp(s: string): string {
  * Case-insensitive, plural-tolerant search over current names and old names
  * (aliases). Each monster appears once, with its best match: its name, or an
  * alias that points to it when that matches more strongly. Results are ranked
- * by match strength, then name matches before alias matches, then the shorter
+ * by match strength, then name matches before alias matches, then stored
+ * creatures (book tag not reserved) before built-in monsters, then the shorter
  * monster name, then alphabetical. An alias hit carries the alias as written.
  * No match yields [].
  */
@@ -84,13 +86,13 @@ export function searchMonsters(
   if (q === "") return [];
   const variants = queryVariants(q);
   const aliasesByKey = new Map<string, string[]>();
-  for (const [alias, key] of index.aliases) {
+  for (const [alias, key] of index.aliases()) {
     const list = aliasesByKey.get(key) ?? [];
     list.push(alias);
     aliasesByKey.set(key, list);
   }
   const scored: { match: MonsterMatch; rank: number; viaAlias: boolean }[] = [];
-  for (const monster of index.monsters) {
+  for (const monster of index.list()) {
     const nameRank = bestScore(monster.name.toLowerCase(), variants);
     let bestAlias: { alias: string; rank: number } | undefined;
     for (const alias of aliasesByKey.get(monster.key) ?? []) {
@@ -120,6 +122,8 @@ export function searchMonsters(
       (a, b) =>
         a.rank - b.rank ||
         Number(a.viaAlias) - Number(b.viaAlias) ||
+        Number(isReservedBookTag(a.match.monster.source.book)) -
+          Number(isReservedBookTag(b.match.monster.source.book)) ||
         a.match.monster.name.length - b.match.monster.name.length ||
         a.match.monster.name.localeCompare(b.match.monster.name),
     )

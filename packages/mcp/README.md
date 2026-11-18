@@ -48,7 +48,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                            |
 | `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                       |
 | `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number                  |
-| `undo`                 | Undo the agent's last change, again the one before; table edits stay; not clears, map/room changes, encounter renames/bindings; names next undo   |
+| `undo`                 | Undo the last change, again the one before; table edits stay; not clears, map/room, encounter rename/binding or creature changes; names next undo |
 | `table_status`         | Owlbear room and scene status, in sync or not with the open scene's encounter (named); our tokens left alone; art for the GM to pick or re-upload |
 | `setup_status`         | Is this setup ready: profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; a fix under each problem       |
 | `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                                   |
@@ -60,6 +60,10 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `list_encounters`      | Every encounter: name, live monster count, whether its scene is the open one, another or none, which is current; creates none                     |
 | `rename_encounter`     | Rename the open scene's (else the current) encounter, or the one named in `encounter`; non-empty, unique ignoring case                            |
 | `use_encounter`        | Make a named encounter that has no scene the open scene's encounter (the scene must have none); refused with the reason otherwise                 |
+| `create_creature`      | Store a creature in a book, from scratch or copied (`from`) with changes; key `<book>_<slug>`; replies its rolls, text-only entries, findings     |
+| `edit_creature`        | Change a stored creature by key with the same changes plus `page`; key and book kept; monsters in encounters keep their values and are named      |
+| `remove_creature`      | Delete a stored creature by key; refused while a monster in any encounter uses it, naming them                                                    |
+| `list_creatures`       | The stored creatures (key, name, book, page, CR), of one book with `book`                                                                         |
 
 Every tool that reads or changes an encounter takes an optional `encounter`, an
 encounter's name in any case (`use_encounter` requires it); `list_encounters`,
@@ -71,6 +75,16 @@ reply "This scene has no encounter yet.". A reply begins with
 `New encounter: <name>` when the call created its encounter, or with
 `Encounter: <name>` when no scene is open or the call named an encounter other
 than the open scene's; its structured content carries the name as `encounter`.
+
+The creature tools (`create_creature`, `edit_creature`, `remove_creature`,
+`list_creatures`) take no `encounter` and never create one. The three that
+change a creature note their command on the open scene's encounter, or with no
+scene open on the current one, when there is one, so `undo` right after one says
+it does not cover the creature change. Findings never block: the creature is
+stored and the reply lists them with the values the engine expects.
+`edit_creature` leaves the monsters already in encounters as they are (max HP,
+AC, size and name) and names them; `remove_creature` is refused while a monster
+in any encounter uses the creature.
 
 `table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`,
 `move_monsters`, and `add_monsters` or `preview_monsters` with a `room`, need the bridge running (`npm run bridge`) and a GM

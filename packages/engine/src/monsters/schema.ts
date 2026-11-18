@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { DiceParseError, average, parseDice } from "../dice/index.js";
 
-export const MONSTER_SOURCES = ["srd-5.2", "private"] as const;
+// Lower-case letters, digits and hyphens; a dot only in tags that start with
+// `srd`, which are reserved for built-in data.
+const BOOK_TAG = /^(?:srd[a-z0-9.-]*|[a-z0-9][a-z0-9-]*)$/;
 
 // Unbounded: Open5e has bad values (e.g. Octopus CHA -3), kept as-is.
 const abilityScore = z.number().int();
@@ -23,7 +25,10 @@ export const monsterEntrySchema = z.object({
 export const monsterSchema = z.object({
   key: z.string().min(1),
   name: z.string().min(1),
-  source: z.enum(MONSTER_SOURCES),
+  source: z.object({
+    book: z.string().regex(BOOK_TAG),
+    page: z.number().int().positive().optional(),
+  }),
   size: z.string().min(1),
   type: z.string().min(1),
   alignment: z.string(),
@@ -104,4 +109,3 @@ export const monsterSchema = z.object({
 
 export type MonsterEntry = z.infer<typeof monsterEntrySchema>;
 export type Monster = z.infer<typeof monsterSchema>;
-export type MonsterSource = (typeof MONSTER_SOURCES)[number];

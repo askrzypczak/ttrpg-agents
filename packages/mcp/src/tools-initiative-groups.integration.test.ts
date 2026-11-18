@@ -5,6 +5,7 @@ import {
   type Rng,
   resolveEncounter,
   type EncounterRepository,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -14,15 +15,18 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "table", commandId: "seed" };
 
 const WOLF = "srd-2024_wolf";
 const GOBLIN = "srd-2024_goblin-warrior";
-const monsters = loadSrdMonsters();
-const wolf = monsters.byKey.get(WOLF);
-if (!wolf || !monsters.byKey.has(GOBLIN)) {
+const monsters = staticMonsterIndex(loadSrdMonsters());
+const wolf = monsters.get(WOLF);
+if (!wolf || monsters.get(GOBLIN) === undefined) {
   throw new Error("SRD fixtures missing");
 }
 
@@ -54,6 +58,7 @@ beforeEach(() => {
     },
     encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     monsters,
+    creatures: makeTestCreatureRepository(),
     rng: cycleRng(6, 12),
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${String(++groups)}`,

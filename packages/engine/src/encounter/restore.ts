@@ -151,7 +151,7 @@ function resolveRemoved(
 }
 
 function monsterOf(monsters: MonsterIndex, instance: MonsterInstance): Monster {
-  const monster = monsters.byKey.get(instance.monsterKey);
+  const monster = monsters.get(instance.monsterKey);
   if (!monster) {
     throw new RestoreMonstersError(
       "unknown_monster",

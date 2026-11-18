@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { dndBeyondUrl } from "./dndbeyond.js";
 import type { Monster } from "./schema.js";
-import type { MonsterIndex } from "./types.js";
+import { makeTestMonsterIndex } from "../testing/index.js";
 
 function stub(key: string, name: string): Monster {
   return {
     key,
     name,
-    source: "private",
+    source: { book: "homebrew" },
     size: "medium",
     type: "beast",
     alignment: "unaligned",
@@ -38,12 +38,9 @@ function stub(key: string, name: string): Monster {
 
 const wolf = stub("wolf", "Wolf");
 const giantFly = stub("giant-fly", "Giant Fly");
-const index: MonsterIndex = {
-  monsters: [wolf, giantFly],
-  byKey: new Map([wolf, giantFly].map((m) => [m.key, m] as const)),
-  aliases: new Map(),
-  dndBeyondPages: new Map([["wolf", "5195300-wolf"]]),
-};
+const index = makeTestMonsterIndex([wolf, giantFly], {
+  dndBeyondPages: { wolf: "5195300-wolf" },
+});
 
 describe("dndBeyondUrl", () => {
   it("dndBeyondUrl gives the D&D Beyond monsters URL for a monster with a page", () => {

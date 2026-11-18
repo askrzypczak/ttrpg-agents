@@ -247,6 +247,15 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    version: 20,
+    sql: `
+      CREATE TABLE creatures (
+        key TEXT PRIMARY KEY,
+        data TEXT NOT NULL CHECK (json_valid(data))
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

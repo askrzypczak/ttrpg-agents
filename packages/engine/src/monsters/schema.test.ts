@@ -5,7 +5,7 @@ function stub(hp: Monster["hp"]): Monster {
   return {
     key: "test-beast",
     name: "Test Beast",
-    source: "private",
+    source: { book: "homebrew" },
     size: "medium",
     type: "beast",
     alignment: "unaligned",
@@ -63,5 +63,47 @@ describe("monsterSchema hp", () => {
     expect(issue).toBeDefined();
     expect(issue?.message).toMatch(/\b12\b/);
     expect(issue?.message).toMatch(/\b10\b/);
+  });
+});
+
+describe("monsterSchema source", () => {
+  const withSource = (source: unknown): unknown => ({
+    ...stub({ average: 4, dice: "1d8" }),
+    source,
+  });
+  const issuePaths = (source: unknown) =>
+    monsterSchema
+      .safeParse(withSource(source))
+      .error?.issues.map((i) => i.path) ?? [];
+
+  it('monsterSchema accepts source { book: "mm-2024", page: 52 } and { book: "srd-5.2" } without a page', () => {
+    const withPage = monsterSchema.safeParse(
+      withSource({ book: "mm-2024", page: 52 }),
+    );
+    expect(withPage.success).toBe(true);
+    expect(withPage.data?.source).toEqual({ book: "mm-2024", page: 52 });
+
+    const withoutPage = monsterSchema.safeParse(
+      withSource({ book: "srd-5.2" }),
+    );
+    expect(withoutPage.success).toBe(true);
+    expect(withoutPage.data?.source).toEqual({ book: "srd-5.2" });
+  });
+
+  it('monsterSchema rejects the old string source "srd-5.2" with an issue at source', () => {
+    expect(issuePaths("srd-5.2")).toContainEqual(["source"]);
+  });
+
+  it('monsterSchema rejects a source book with upper case, a space, an underscore or a dot outside an srd tag ("MM-2024", "monster manual", "mm_2024", "mm-2.5") with an issue at source.book', () => {
+    for (const book of ["MM-2024", "monster manual", "mm_2024", "mm-2.5"]) {
+      expect(issuePaths({ book }), book).toContainEqual(["source", "book"]);
+    }
+  });
+
+  it("monsterSchema rejects a source page of 0 with an issue at source.page", () => {
+    expect(issuePaths({ book: "homebrew", page: 0 })).toContainEqual([
+      "source",
+      "page",
+    ]);
   });
 });

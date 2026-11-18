@@ -116,7 +116,7 @@ PR: [#357](https://github.com/askrzypczak/ttrpg-agents/pull/357). No ticket: the
   - Decide now how several game systems are supported: left open; 129.1 (the deferred split of the engine) stands.
 - Where: `MONSTER_SOURCES` (`packages/engine/src/monsters/schema.ts`); `MonsterIndex` (`packages/engine/src/monsters/types.ts`).
 - Revisit if: a second rule system is wanted (129.1), or on-demand import is too slow for a whole book.
-- Status: active
+- Status: superseded by 376.1 for the import half (the agent reading PDF pages); the storage half (in the database, per feature) stands
 
 ## 357.11 After the review, scene-bound encounters come ahead of creatures and art, and every epic of the roadmap is filed in one pass
 

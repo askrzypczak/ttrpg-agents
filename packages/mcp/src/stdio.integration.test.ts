@@ -14,7 +14,10 @@ import { fileURLToPath } from "node:url";
 import type { DatabaseSync } from "node:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import type { Monster } from "@ttrpg-agents/engine";
+import { makeTestMonster } from "@ttrpg-agents/engine/testing";
 import {
+  SqliteCreatureRepository,
   SqliteEncounterDirectory,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -60,6 +63,10 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   list_encounters: { readOnlyHint: true },
   rename_encounter: { destructiveHint: true },
   use_encounter: { destructiveHint: false },
+  create_creature: { destructiveHint: false },
+  edit_creature: { destructiveHint: true },
+  remove_creature: { destructiveHint: true },
+  list_creatures: { readOnlyHint: true },
 };
 
 let cleanup: (() => Promise<void>)[] = [];
@@ -77,12 +84,14 @@ async function unusedPort(): Promise<number> {
   return port;
 }
 
-async function connect(): Promise<Client> {
+/** Starts the server on a fresh database; `seed` may fill that database first. */
+async function connect(seed?: (dbPath: string) => void): Promise<Client> {
   const dir = mkdtempSync(join(tmpdir(), "ttrpg-mcp-"));
   cleanup.push(() => {
     rmSync(dir, { recursive: true, force: true });
     return Promise.resolve();
   });
+  seed?.(join(dir, "test.db"));
   // No bridge: an absent agent token file and a port nothing listens on.
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -101,7 +110,7 @@ async function connect(): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all thirty-six tools and serves a call", async () => {
+  it("lists all forty tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
@@ -110,9 +119,12 @@ describe("stdio server", () => {
       "apply_damage",
       "change_monster_type",
       "clear_encounter",
+      "create_creature",
+      "edit_creature",
       "get_map_image",
       "get_statblock",
       "heal",
+      "list_creatures",
       "list_encounter",
       "list_encounters",
       "list_rooms",
@@ -121,6 +133,7 @@ describe("stdio server", () => {
       "open_statblock",
       "preview_monsters",
       "propose_rooms",
+      "remove_creature",
       "remove_monsters",
       "remove_rooms",
       "rename_encounter",
@@ -153,11 +166,11 @@ describe("stdio server", () => {
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
   }, 30_000);
 
-  it("stdio server (spawned via `bin/stdio.mjs`) lists thirty-six tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
+  it("stdio server (spawned via `bin/stdio.mjs`) lists forty tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(36);
+    expect(tools).toHaveLength(40);
     expect(tools.map((t) => t.name)).toContain("setup_status");
     const tableStatus = tools.find((t) => t.name === "table_status");
     expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });
@@ -180,6 +193,43 @@ describe("stdio server", () => {
         expectedAnnotations[tool.name],
       );
     }
+  }, 30_000);
+});
+
+describe("stdio server stored creatures", () => {
+  it("the MCP server starts over a database holding a stored record that fails the schema: add_monsters of an SRD monster succeeds and add_monsters of that key fails as an unknown monster", async () => {
+    // Its armor class is text, so the record fails the schema.
+    const malformed = {
+      ...makeTestMonster({ key: "homebrew_thornling", name: "Thornling" }),
+      ac: "eleven",
+    } as unknown as Monster;
+    const client = await connect((dbPath) => {
+      const db = openDatabase(dbPath);
+      try {
+        new SqliteCreatureRepository(db).insert(
+          "homebrew_thornling",
+          malformed,
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    const added = await client.callTool({
+      name: "add_monsters",
+      arguments: { groups: [{ monster: "srd-2024_shadow", count: 1 }] },
+    });
+    expect(added.isError).toBeFalsy();
+
+    const refused = await client.callTool({
+      name: "add_monsters",
+      arguments: { groups: [{ monster: "homebrew_thornling", count: 1 }] },
+    });
+    expect(refused.isError).toBe(true);
+    const text = (refused.content as { text?: string }[])
+      .map((part) => part.text ?? "")
+      .join("\n");
+    expect(text).toContain('unknown monster "homebrew_thornling"');
   }, 30_000);
 });
 

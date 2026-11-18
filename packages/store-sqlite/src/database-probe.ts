@@ -9,7 +9,7 @@ import type {
 import { LATEST_VERSION, getUserVersion } from "./migrations.js";
 
 /**
- * Reads the schema version of the database at `path` read-only; never creates or migrates it.
+ * Reads the schema version and stored creature count of the database at `path` read-only; never creates or migrates it.
  * A read-only open of a WAL database that no process has open can leave empty
  * `-wal` and `-shm` files beside it; that is SQLite's own housekeeping, and the
  * next read-write close removes them.
@@ -34,7 +34,11 @@ function readFile(path: string): DatabaseFile {
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(path, { readOnly: true });
-    return { kind: "found", version: getUserVersion(db) };
+    const version = getUserVersion(db);
+    const creatureCount = countCreatures(db);
+    return creatureCount === undefined
+      ? { kind: "found", version }
+      : { kind: "found", version, creatureCount };
   } catch (error) {
     return {
       kind: "unreadable",
@@ -43,6 +47,20 @@ function readFile(path: string): DatabaseFile {
   } finally {
     db?.close();
   }
+}
+
+/** The rows of the creatures table, or undefined when the file has none (older than its migration). */
+function countCreatures(db: DatabaseSync): number | undefined {
+  const table = db
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'creatures'",
+    )
+    .get();
+  if (table === undefined) return undefined;
+  const row = db.prepare("SELECT COUNT(*) AS n FROM creatures").get() as {
+    n: number;
+  };
+  return row.n;
 }
 
 const BACKUP_FILE = /^encounters-.*\.db$/;

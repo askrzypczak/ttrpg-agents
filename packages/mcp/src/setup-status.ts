@@ -34,6 +34,8 @@ function rowText(row: SetupRow): string {
       return `${row.setting.name} = ${String(row.setting.value)} (${row.setting.source})`;
     case "database":
       return databaseText(row.database);
+    case "creatures":
+      return `stored creatures: ${String(row.count)}`;
     case "backup":
       return backupText(row.backups, row.ageDays);
     case "bridge":

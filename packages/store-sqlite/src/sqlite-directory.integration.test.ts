@@ -106,6 +106,44 @@ describe("SqliteEncounterDirectory", () => {
     ).toBeUndefined();
   });
 
+  it("findLiveInstancesOfMonster lists the live instances of a monster key in every encounter with their encounter, oldest encounter first, leaving out removed and cleared instances and other keys", () => {
+    const older = directory.createEncounter("Ambush");
+    const newer = directory.createEncounter("Bridge");
+    const cleared = directory.createEncounter("Camp");
+    const repoNewer = directory.repositoryFor(newer.id);
+    const repoOlder = directory.repositoryFor(older.id);
+    const repoCleared = directory.repositoryFor(cleared.id);
+    repoNewer.addInstances(() => [ogre("Ogre 1")], origin);
+    const [, removed] = repoOlder.addInstances(
+      () => [
+        ogre("Ogre 1"),
+        ogre("Ogre 2"),
+        { monsterKey: "goblin", displayName: "Goblin 1", maxHp: 7 },
+        ogre("Ogre 3"),
+      ],
+      origin,
+    );
+    repoOlder.removeInstances([removed!.id], origin);
+    repoCleared.addInstances(() => [ogre("Ogre 1")], origin);
+    repoCleared.clearEncounter(origin);
+
+    const ogresIn = (repo: typeof repoOlder) =>
+      repo.listInstances().filter((i) => i.monsterKey === "ogre");
+    expect(directory.findLiveInstancesOfMonster("ogre")).toEqual([
+      ...ogresIn(repoOlder).map((instance) => ({ encounter: older, instance })),
+      ...ogresIn(repoNewer).map((instance) => ({ encounter: newer, instance })),
+    ]);
+    expect(
+      directory
+        .findLiveInstancesOfMonster("ogre")
+        .map(
+          (found) => `${found.instance.displayName} (${found.encounter.name})`,
+        ),
+    ).toEqual(["Ogre 1 (Ambush)", "Ogre 3 (Ambush)", "Ogre 1 (Bridge)"]);
+    expect(directory.findLiveInstancesOfMonster("goblin")).toHaveLength(1);
+    expect(directory.findLiveInstancesOfMonster("troll")).toEqual([]);
+  });
+
   it("allows only one active encounter at the database level", () => {
     const encounter = directory.createEncounter("Encounter 1");
     directory.setCurrentEncounter(encounter.id);

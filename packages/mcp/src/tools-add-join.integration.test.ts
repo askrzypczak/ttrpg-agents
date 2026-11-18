@@ -2,6 +2,7 @@ import {
   type Rng,
   resolveEncounter,
   type EncounterRepository,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -11,10 +12,13 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 const SHADOW = "srd-2024_shadow";
-const monsters = loadSrdMonsters();
+const monsters = staticMonsterIndex(loadSrdMonsters());
 
 /** Test-only Rng: yields the given values in order, cycling, each reduced mod max. */
 function cycleRng(...values: number[]): Rng {
@@ -41,6 +45,7 @@ beforeEach(() => {
     },
     encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
     monsters,
+    creatures: makeTestCreatureRepository(),
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${++groupN}`,

@@ -6,13 +6,20 @@ import {
   UnknownInstanceError,
 } from "./errors.js";
 import type { MapRepository } from "../map/repository.js";
+import type { ChangeOrigin } from "./origin.js";
 import type { EncounterRepository } from "./repository.js";
-import type { Encounter } from "./types.js";
+import type { Encounter, MonsterInstance } from "./types.js";
 
 /** The scene open at the table and the encounter bound to it, or undefined when none is. */
 export interface OpenScene {
   sceneId: string;
   encounter: Encounter | undefined;
+}
+
+/** A live instance and the encounter that holds it. */
+export interface InstanceInEncounter {
+  encounter: Encounter;
+  instance: MonsterInstance;
 }
 
 /** Every encounter in the store, the current one, and repositories scoped to one. */
@@ -27,6 +34,8 @@ export interface EncounterDirectory {
   setCurrentEncounter(id: string): void;
   /** The encounter whose instances (live or removed) include this id, or undefined. */
   findEncounterOfInstance(instanceId: string): Encounter | undefined;
+  /** The live instances whose monsterKey is this one, in every encounter: oldest encounter first, then each encounter's instance order. Removed and cleared instances are left out. */
+  findLiveInstancesOfMonster(monsterKey: string): InstanceInEncounter[];
   /** A repository whose every method reads and changes that encounter only. */
   repositoryFor(encounterId: string): EncounterRepository;
   /** A map repository whose map is that encounter's; rooms are keyed by map item and shared by every encounter on it. */
@@ -300,4 +309,22 @@ export function useEncounter(
     directory.setCurrentEncounter(found.id);
     return found;
   });
+}
+
+/**
+ * The rule for a command that is not an encounter command: notes it
+ * (noteCommand) on the open scene's encounter, or with no scene open on the
+ * current one; does nothing in an open scene with no encounter or when no
+ * encounter is current; never creates or switches one.
+ */
+export function noteCommandOnCurrentEncounter(
+  directory: Pick<
+    EncounterDirectory,
+    "getOpenScene" | "getCurrentEncounter" | "repositoryFor"
+  >,
+  origin: ChangeOrigin,
+): void {
+  const open = directory.getOpenScene();
+  const encounter = open ? open.encounter : directory.getCurrentEncounter();
+  if (encounter) directory.repositoryFor(encounter.id).noteCommand(origin);
 }

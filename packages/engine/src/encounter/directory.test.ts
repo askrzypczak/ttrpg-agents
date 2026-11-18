@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   listEncounterSummaries,
   nextEncounterName,
+  noteCommandOnCurrentEncounter,
   openScene,
   renameEncounter,
   repositoryForInstance,
   resolveEncounter,
   useEncounter,
   type EncounterDirectory,
+  type InstanceInEncounter,
   type OpenScene,
 } from "./directory.js";
 import {
@@ -18,6 +20,7 @@ import {
   UnknownInstanceError,
 } from "./errors.js";
 import type { MapRepository } from "../map/repository.js";
+import type { ChangeOrigin } from "./origin.js";
 import type { EncounterRepository } from "./repository.js";
 import type { Encounter } from "./types.js";
 
@@ -37,6 +40,8 @@ class FakeDirectory implements EncounterDirectory {
   /** Each mutating call, with whether it ran inside a transaction. */
   readonly writes: { call: string; inTransaction: boolean }[] = [];
   transactions = 0;
+  /** Each command noted on an encounter's repository, in order. */
+  readonly notes: { encounterId: string; origin: ChangeOrigin }[] = [];
   /** How many times a repository (encounter or map) was asked for. */
   repositoryRequests = 0;
   private depth = 0;
@@ -53,6 +58,9 @@ class FakeDirectory implements EncounterDirectory {
       tag: encounter.id,
       listInstances: () =>
         (this.live.get(encounter.id) ?? []).map((id) => ({ id })),
+      noteCommand: (origin: ChangeOrigin) => {
+        this.notes.push({ encounterId: encounter.id, origin });
+      },
     } as unknown as EncounterRepository);
     return encounter;
   }
@@ -132,6 +140,10 @@ class FakeDirectory implements EncounterDirectory {
   findEncounterOfInstance(instanceId: string): Encounter | undefined {
     const id = this.holders.get(instanceId);
     return this.encounters.find((e) => e.id === id);
+  }
+
+  findLiveInstancesOfMonster(): InstanceInEncounter[] {
+    throw new Error("not used by these tests");
   }
 
   repositoryFor(encounterId: string): EncounterRepository {
@@ -845,5 +857,62 @@ describe("listEncounterSummaries", () => {
     });
     expect(empty.listEncounters()).toEqual([]);
     expect(empty.writes).toEqual([]);
+  });
+});
+
+describe("noteCommandOnCurrentEncounter", () => {
+  const origin: ChangeOrigin = {
+    source: "mcp",
+    commandId: "command-1",
+    command: "create_creature",
+  };
+
+  it("noteCommandOnCurrentEncounter notes the command on the open scene's encounter", () => {
+    const directory = new FakeDirectory();
+    const current = directory.add("Encounter 1");
+    const bound = directory.add("Bridge fight");
+    directory.currentId = current.id;
+    directory.openSceneId = "scene-1";
+    directory.bindings.set("scene-1", bound.id);
+
+    noteCommandOnCurrentEncounter(directory, origin);
+
+    expect(directory.notes).toEqual([{ encounterId: bound.id, origin }]);
+    expect(directory.writes).toEqual([]);
+  });
+
+  it("noteCommandOnCurrentEncounter with no scene open notes the command on the current encounter", () => {
+    const directory = new FakeDirectory();
+    directory.add("Encounter 1");
+    const current = directory.add("Bridge fight");
+    directory.currentId = current.id;
+
+    noteCommandOnCurrentEncounter(directory, origin);
+
+    expect(directory.notes).toEqual([{ encounterId: current.id, origin }]);
+    expect(directory.writes).toEqual([]);
+  });
+
+  it("noteCommandOnCurrentEncounter in an open scene with no encounter notes nothing and creates none", () => {
+    const directory = new FakeDirectory();
+    const current = directory.add("Encounter 1");
+    directory.currentId = current.id;
+    directory.openSceneId = "scene-1";
+
+    noteCommandOnCurrentEncounter(directory, origin);
+
+    expect(directory.notes).toEqual([]);
+    expect(directory.listEncounters()).toEqual([current]);
+    expect(directory.writes).toEqual([]);
+  });
+
+  it("noteCommandOnCurrentEncounter with no scene open and no current encounter notes nothing and creates none", () => {
+    const directory = new FakeDirectory();
+
+    noteCommandOnCurrentEncounter(directory, origin);
+
+    expect(directory.notes).toEqual([]);
+    expect(directory.listEncounters()).toEqual([]);
+    expect(directory.writes).toEqual([]);
   });
 });

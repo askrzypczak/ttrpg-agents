@@ -9,6 +9,7 @@ import {
   type NewMonsterInstance,
   type Rng,
   resolveEncounter,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import { openDatabase } from "./db.js";
@@ -19,8 +20,8 @@ const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
 const WOLF = "srd-2024_wolf";
 const GOBLIN = "srd-2024_goblin-warrior";
-const monsters = loadSrdMonsters();
-if (!monsters.byKey.has(WOLF) || !monsters.byKey.has(GOBLIN)) {
+const monsters = staticMonsterIndex(loadSrdMonsters());
+if (monsters.get(WOLF) === undefined || monsters.get(GOBLIN) === undefined) {
   throw new Error("SRD fixtures missing");
 }
 

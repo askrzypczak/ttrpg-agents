@@ -5,6 +5,7 @@ import {
   type Rng,
   resolveEncounter,
   type EncounterRepository,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -14,7 +15,10 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "seed" };
 
@@ -38,7 +42,8 @@ beforeEach(() => {
     encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
       now: () => tick++,
     }),
-    monsters: loadSrdMonsters(),
+    monsters: staticMonsterIndex(loadSrdMonsters()),
+    creatures: makeTestCreatureRepository(),
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group-1",

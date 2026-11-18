@@ -15,7 +15,7 @@ flowchart LR
   end
   subgraph core["Engine (no I/O)"]
     uc["use cases: addMonsters, getTableStatus, useMap, ..."]
-    ports["ports: EncounterDirectory, EncounterRepository, MonsterIndex, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
+    ports["ports: EncounterDirectory, EncounterRepository, MonsterIndex, CreatureRepository, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
   end
   subgraph driven["Driven adapters"]
     store["store-sqlite"]
@@ -27,7 +27,7 @@ flowchart LR
   bsrv -->|"reads EncounterDirectory, EncounterRepository and MapRepository, reads and writes TokenArtRepository and TokenImageRepository"| ports
   uc --> ports
   ports -.implemented by.-> store
-  ports -.implemented by.-> srd
+  srd -.->|"loads the built-in MonsterSet, which the engine's createMonsterIndex merges with the stored creatures into MonsterIndex"| ports
   ports -.implemented by.-> bclient
   ports -.implemented by.-> sysbrowser
   store --> db[("SQLite")]
@@ -68,7 +68,7 @@ flowchart LR
 
 Three surfaces, each for one question:
 
-- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; one fix per problem.
+- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, stored creature count, newest backup, bridge with this profile's token, GM tab; one fix per problem.
 - **`table_status` tool**: does the open scene match the encounter?
 - **`npm run bridge:status`**: the bridge process: pid, port, checkout, commit, log.
 
@@ -78,25 +78,26 @@ One SQLite file per profile, in WAL mode, named by the `database` setting ([`doc
 
 Upgrading to scene-bound encounters (migration 17) discards every existing encounter with its instances and undo records; the change log (each row keeps its `seq`, with no encounter), maps, rooms and token art are kept. Tokens left in scenes from before belong to no encounter: delete them from the scenes by hand.
 
-| Data                                                                                                             | Written by                                                                                         | Read by                                    |
-| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Encounter (`monster_instances`, `encounters`) and its change log (`encounter_events`)                            | MCP server; the bridge for a table edit (`instance-edit`) or a GM token deletion (`token-deleted`) | bridge (event poll, snapshots); MCP server |
-| Undo records (`undo_commands`, `undo_instances`)                                                                 | MCP server, one record per MCP command that changed the encounter                                  | MCP server (`undo`)                        |
-| Map registrations (`map_registrations`), each encounter's map (`encounters.map_item_id`) and rooms (`map_rooms`) | MCP server (`use_map`, `set_rooms`, `remove_rooms`)                                                | bridge (`map-rooms` push); MCP server      |
-| Token art per monster type (`token_art`)                                                                         | bridge (`token-art-set`); the library import                                                       | bridge (snapshots)                         |
-| Token image bytes (`token_art_image`, keyed by SHA-256)                                                          | bridge (`POST /token-images`); the library import                                                  | bridge (`GET /token-images/<sha256>`)      |
-| Open scene (`open_scene`) and scene bindings (`encounters.scene_id`)                                             | bridge (`scene-open`, none at start and on disconnect); MCP server (binds a new encounter)         | bridge (snapshots); MCP server             |
+| Data                                                                                                             | Written by                                                                                         | Read by                                                                                |
+| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Encounter (`monster_instances`, `encounters`) and its change log (`encounter_events`)                            | MCP server; the bridge for a table edit (`instance-edit`) or a GM token deletion (`token-deleted`) | bridge (event poll, snapshots); MCP server                                             |
+| Undo records (`undo_commands`, `undo_instances`)                                                                 | MCP server, one record per MCP command that changed the encounter                                  | MCP server (`undo`)                                                                    |
+| Map registrations (`map_registrations`), each encounter's map (`encounters.map_item_id`) and rooms (`map_rooms`) | MCP server (`use_map`, `set_rooms`, `remove_rooms`)                                                | bridge (`map-rooms` push); MCP server                                                  |
+| Token art per monster type (`token_art`)                                                                         | bridge (`token-art-set`); the library import                                                       | bridge (snapshots)                                                                     |
+| Token image bytes (`token_art_image`, keyed by SHA-256)                                                          | bridge (`POST /token-images`); the library import                                                  | bridge (`GET /token-images/<sha256>`)                                                  |
+| Open scene (`open_scene`) and scene bindings (`encounters.scene_id`)                                             | bridge (`scene-open`, none at start and on disconnect); MCP server (binds a new encounter)         | bridge (snapshots); MCP server                                                         |
+| Stored creatures (`creatures`). A `monsterSchema` change migrates the rows.                                      | MCP server (`create_creature`, `edit_creature`, `remove_creature`)                                 | MCP server (monster index); `npm run status` and `setup_status` (row count, read-only) |
 
 Invariants the processes rely on:
 
 - A removed instance keeps its row, marked removed, so `restore_monsters` puts it back with its id and state. A clear keeps the set it removed for `restore_encounter` and deletes the instances removed before it: only the last clear's set is restorable.
 - A restore records, on each instance it puts back, the `seq` of the `added` event it logs. It is kept while the instance stays in the encounter and replaced by a later restore; snapshots carry it.
-- An undo record holds each instance's state before the command's first write to it. A map or room change leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes its encounter's records.
+- An undo record holds each instance's state before the command's first write to it. A map or room change, or a creature change (on the current encounter when there is one), leaves a record with no instances, so `undo` can say it does not cover it; table changes leave none; a clear that clears monsters deletes its encounter's records.
 - Token art is a VTT-neutral reference `{ url, mime, width, height }` with an optional `sha256` link to stored bytes. The reference is all present or all absent, and art without one (bytes never published to Owlbear, such as the library import's) must link an image. Stored bytes carry no monster key.
 
 ### Two halves of one save
 
-A saved game has two halves. The database holds the encounter, its change log, undo records, maps, rooms and token art. Each Owlbear scene holds its tokens (position, visibility, size and art on each, and the encounter each belongs to) and, in its metadata, its id (`com.ttrpg-agents/scene-id`, which the database binds to its encounter), the instances it placed and the change-log seq it is current as of (`com.ttrpg-agents/placed-seq`). The bridge holds its change-log position in memory. Neither half can be rebuilt from the other.
+A saved game has two halves. The database holds the encounter, its change log, undo records, maps, rooms, token art and stored creatures. Each Owlbear scene holds its tokens (position, visibility, size and art on each, and the encounter each belongs to) and, in its metadata, its id (`com.ttrpg-agents/scene-id`, which the database binds to its encounter), the instances it placed and the change-log seq it is current as of (`com.ttrpg-agents/placed-seq`). The bridge holds its change-log position in memory. Neither half can be rebuilt from the other.
 
 Backups: `npm run db:backup` copies the profile's database with SQLite's online backup, safe while the bridge and the MCP server run, to `encounters-<UTC time>.db` in the `backupDir` setting (default `<data dir>/backups`, see [`docs/settings.md`](settings.md)). A directory it creates gets mode 0700, the file 0600. It refuses a directory inside the checkout: backups stay out of the repo. Backups are taken on demand only; `npm run status` shows the newest one and its age.
 

@@ -1,6 +1,7 @@
 import {
   TableUnavailableError,
   applyInstanceEdit,
+  staticMonsterIndex,
   getSetupStatus,
   type EncounterDirectory,
   type EncounterRepository,
@@ -22,11 +23,14 @@ import { z } from "zod";
 import type { ToolContext } from "./context.js";
 import { formatSetupStatus } from "./setup-status.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
-const monsters = loadSrdMonsters();
+const monsters = staticMonsterIndex(loadSrdMonsters());
 const SHADOW = "srd-2024_shadow";
 
 /** Test-only Rng: yields the given values in order, cycling, each reduced mod max. */
@@ -59,6 +63,7 @@ beforeEach(() => {
       now: () => tick++,
     }),
     monsters,
+    creatures: makeTestCreatureRepository(),
     rng: cycleRng(0, 3, 5, 7),
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${++groupN}`,
@@ -164,6 +169,7 @@ function handingOut(
     getCurrentEncounter: () => inner.getCurrentEncounter(),
     setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    findLiveInstancesOfMonster: (key) => inner.findLiveInstancesOfMonster(key),
     repositoryFor: () => repo,
     mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
     getOpenScene: () => inner.getOpenScene(),
@@ -185,15 +191,18 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the thirty-six tools", () => {
+  it("exposes the forty tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
       "change_monster_type",
       "clear_encounter",
+      "create_creature",
+      "edit_creature",
       "get_map_image",
       "get_statblock",
       "heal",
+      "list_creatures",
       "list_encounter",
       "list_encounters",
       "list_rooms",
@@ -202,6 +211,7 @@ describe("tool registry", () => {
       "open_statblock",
       "preview_monsters",
       "propose_rooms",
+      "remove_creature",
       "remove_monsters",
       "remove_rooms",
       "rename_encounter",
@@ -258,11 +268,17 @@ describe("search_monsters", () => {
       expect(results[0]).toMatchObject({
         key: "srd-2024_tough",
         name: "Tough",
-        source: "srd-5.2",
+        source: { book: "srd-5.2" },
         alias: "Thug",
       });
       const lines = text(r).split("\n");
       expect(lines[0]).toBe("Thug is now Tough (srd-5.2).");
+      const row = lines.find((l) => l.startsWith("| srd-2024_tough |"));
+      const cells = row
+        ?.split("|")
+        .slice(1, -1)
+        .map((c) => c.trim());
+      expect(cells?.[3]).toBe("srd-5.2");
       expect(text(r)).toContain("srd-2024_tough");
       expect(r.structuredContent?.["summary"]).toBe(text(r));
     }
@@ -280,7 +296,7 @@ describe("search_monsters", () => {
 describe("get_statblock", () => {
   it("formats a known monster", async () => {
     const r = await call("get_statblock", { key: SHADOW });
-    const monster = monsters.byKey.get(SHADOW);
+    const monster = monsters.get(SHADOW);
     expect(r.isError).toBeUndefined();
     expect(text(r)).toContain("## Shadow");
     expect(text(r)).toContain(`**AC** ${String(monster?.ac)}`);
@@ -1584,6 +1600,7 @@ describe("the encounter a tool call acts on", () => {
       },
       encounters,
       monsters,
+      creatures: makeTestCreatureRepository(),
       rng: cycleRng(0, 3, 5, 7),
       now: () => new Date("2026-01-01T00:00:00Z"),
       newGroupId: () => `group-${String(++groups)}`,
@@ -1734,6 +1751,8 @@ describe("the encounter a tool call acts on", () => {
       getCurrentEncounter: () => directory.getCurrentEncounter(),
       setCurrentEncounter: (id) => directory.setCurrentEncounter(id),
       findEncounterOfInstance: (id) => directory.findEncounterOfInstance(id),
+      findLiveInstancesOfMonster: (key) =>
+        directory.findLiveInstancesOfMonster(key),
       transaction: (fn) => directory.transaction(fn),
       mapRepositoryFor: (id) => directory.mapRepositoryFor(id),
       getOpenScene: () => directory.getOpenScene(),
@@ -1987,6 +2006,10 @@ describe("the encounter a tool call acts on", () => {
       "propose_rooms",
       "table_status",
       "list_encounters",
+      "create_creature",
+      "edit_creature",
+      "remove_creature",
+      "list_creatures",
     ];
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...optional, ...required, ...none].sort(),

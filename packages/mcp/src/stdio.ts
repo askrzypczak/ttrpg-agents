@@ -11,9 +11,10 @@ import {
   createBridgeTable,
 } from "@ttrpg-agents/bridge/client";
 import { SETTINGS, describeProfile, loadConfig } from "@ttrpg-agents/config";
-import type { Rng } from "@ttrpg-agents/engine";
+import { createMonsterIndex, type Rng } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
+  SqliteCreatureRepository,
   SqliteEncounterDirectory,
   createDatabaseProbe,
   openDatabase,
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
     return;
   }
   const db = openDatabase(settings.database);
+  const creatures = new SqliteCreatureRepository(db);
   const client = createBridgeClient({
     port: settings.bridgePort,
     tokenPath: settings.agentTokenFile,
@@ -44,7 +46,8 @@ async function main(): Promise<void> {
     table: createBridgeTable(client),
     browser: createSystemBrowser(),
     encounters: new SqliteEncounterDirectory(db),
-    monsters: loadSrdMonsters(),
+    monsters: createMonsterIndex(loadSrdMonsters(), creatures),
+    creatures,
     rng,
     now: () => new Date(),
     newGroupId: randomUUID,

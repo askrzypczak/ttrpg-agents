@@ -5,6 +5,7 @@ import {
   type NewMonsterInstance,
   type Rng,
   resolveEncounter,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -14,7 +15,10 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 const SHADOW = "srd-2024_shadow";
 const seedOrigin: ChangeOrigin = { source: "table", commandId: "seed" };
@@ -119,6 +123,7 @@ function recordingDirectory(
     getCurrentEncounter: () => inner.getCurrentEncounter(),
     setCurrentEncounter: (id) => inner.setCurrentEncounter(id),
     findEncounterOfInstance: (id) => inner.findEncounterOfInstance(id),
+    findLiveInstancesOfMonster: (key) => inner.findLiveInstancesOfMonster(key),
     repositoryFor: (id) => recordingRepo(inner.repositoryFor(id), writes),
     mapRepositoryFor: (id) => inner.mapRepositoryFor(id),
     getOpenScene: () => inner.getOpenScene(),
@@ -148,7 +153,8 @@ beforeEach(() => {
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
     encounters: recordingDirectory(inner, writes),
-    monsters: loadSrdMonsters(),
+    monsters: staticMonsterIndex(loadSrdMonsters()),
+    creatures: makeTestCreatureRepository(),
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => "group-1",

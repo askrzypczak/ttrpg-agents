@@ -5,6 +5,7 @@ import {
   type TableSceneMap,
   resolveEncounter,
   type EncounterRepository,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -15,12 +16,15 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 const SHADOW = "srd-2024_shadow";
 const TROLL = "srd-2024_troll";
 const GOBLIN = "srd-2024_goblin-warrior";
-const monsters = loadSrdMonsters();
+const monsters = staticMonsterIndex(loadSrdMonsters());
 
 /** A 10 x 10 cell map, unrotated, at the scene origin on a 150-unit grid: display cell A1 is its top-left cell. */
 const manor: TableMapItem = {
@@ -93,6 +97,7 @@ beforeEach(() => {
     },
     encounters,
     monsters,
+    creatures: makeTestCreatureRepository(),
     rng,
     now: () => new Date("2026-01-01T00:00:00Z"),
     newGroupId: () => `group-${String(++groupN)}`,

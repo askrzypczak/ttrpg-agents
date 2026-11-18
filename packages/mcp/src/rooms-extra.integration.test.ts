@@ -3,6 +3,7 @@ import {
   type MapRegistration,
   type TableMapItem,
   type TableSceneMap,
+  staticMonsterIndex,
 } from "@ttrpg-agents/engine";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -12,7 +13,10 @@ import {
 import { describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestCreatureRepository,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 
 /** Trollskull Manor: 3000x4000 px at 125 dpi on a 150-unit grid, rotated 270 (32 x 24 cells). */
 const trollskull: TableMapItem = {
@@ -74,7 +78,8 @@ describe("list_rooms cells", () => {
         mapImage: () => Promise.reject(new Error("not stubbed")),
       },
       encounters,
-      monsters: loadSrdMonsters(),
+      monsters: staticMonsterIndex(loadSrdMonsters()),
+      creatures: makeTestCreatureRepository(),
       rng: { nextInt: () => 0 },
       now: () => new Date("2026-01-01T00:00:00Z"),
       newGroupId: () => "group",
