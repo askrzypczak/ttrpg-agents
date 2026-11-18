@@ -14,3 +14,15 @@ Epic [#376](https://github.com/askrzypczak/ttrpg-agents/issues/376). Decisions t
 - Revisit if: the maintainer wants statblocks read from photos or scans; the tools need no change, only a skill flow and an accuracy spike.
 - Status: active
 - Supersedes: 357.10 (the "imported on demand by the agent reading PDF pages" half; the storage half stands)
+
+## 376.2 The `dm-prep` prompt evals are run by the maintainer while reviewing the epic PR, not before #391 is integrated
+
+- Decided by: maintainer, 2026-11-18, in chat with the epic #376 orchestrator.
+- Context: #391's AC asks for each eval row to pass in a recorded run. A skill is a prompt, so the run is a fresh `claude -p` session against the MCP server. The agent container's nested Claude has no login and the session's own MCP connection cannot be repointed, so the run is a Mac step; the maintainer's way of moving prompts out of the container was not working at the time.
+- Options:
+  - Chosen: integrate #391 with the run deferred; the ten rows (`dm-prep` 1 to 8, `dm-encounter` 51 and 52) are the manual test of the epic PR, and a failing row is a skill wording fix on `epic-376` before the merge.
+  - Run before integration: blocks the epic on a copy-paste path that was broken.
+  - Drop the run from the AC: loses the only test a prompt has.
+- Where: PR #478's "Recorded run" table; the epic PR's manual test section.
+- Revisit if: the container's Claude gets a login (then the run becomes a builder step).
+- Status: active
