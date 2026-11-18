@@ -5,6 +5,7 @@ import {
   monsterSchema,
   type Monster,
   type MonsterSet,
+  type TooManyTokensIndex,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
 
@@ -224,4 +225,9 @@ export function loadSrdMonsters(): MonsterSet {
     SRD_DNDBEYOND_PATH,
     loadAliases(SRD_ALIASES_PATH, loadMonsters([{ path: SRD_MONSTERS_PATH }])),
   );
+}
+
+/** Load the committed TooManyTokens index, validated by the engine's schema. Throws MonsterLoadError naming the file. */
+export function loadTooManyTokensIndex(): TooManyTokensIndex {
+  throw new Error("not implemented");
 }
