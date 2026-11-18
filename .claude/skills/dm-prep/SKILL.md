@@ -34,6 +34,7 @@ The DM pastes or types a statblock, or names a text file that holds it ("add thi
 - `book` is the DM's short tag for the book, and `page` is the page when the DM gave it. When the DM has not named a book, ask for the tag once (a short lower-case word such as `mm-2024`), call nothing until they answer, then reuse it for every creature from that book for the rest of the conversation. Ask again only for a different book. Never pass a tag starting with `srd`.
 - Call no `search_monsters` first: a creature from text is new.
 - Statblock text that is cut off or missing a required field: ask for the missing part; do not fill it in.
+- A 2014-layout statblock prints only some saving throws and no initiative modifier, and `create_creature` needs all six `saves` and `initiativeModifier`. Derive them from the printed ability scores: an unprinted save is that ability's modifier, and initiative is the DEX modifier. Say in the reply which fields were filled that way. The check accepts both (a save may be the modifier or modifier plus proficiency).
 
 ## Reading the reply
 
@@ -49,7 +50,7 @@ The DM pastes or types a statblock, or names a text file that holds it ("add thi
 
 ## Editing a creature
 
-"Make the goblin shaman AC 14":
+"Change the stored goblin shaman's AC to 14":
 
 - Resolve the key: `<book>_<name as lower-case words joined by hyphens>`, or call `list_creatures` when unsure. Then ONE `edit_creature` with `key`, `page` only to set one (it cannot clear it) and the `changes`, as for `create_creature`.
 - When the reply names monsters in encounters that keep their max HP, AC, size and name, relay that line, and offer `reset_max_hp`, `set_armor_class` or `change_monster_type` to update them. Make none of those calls unless the DM agrees.
@@ -57,7 +58,7 @@ The DM pastes or types a statblock, or names a text file that holds it ("add thi
 
 ## Removing a creature
 
-"Remove the goblin shaman" is ONE `remove_creature` with the key. When it is refused because monsters in an encounter use it, relay the refusal verbatim and stop: do not remove or retype those monsters unless the DM asks. SRD monsters cannot be removed.
+"Remove the goblin shaman from my creatures" is ONE `remove_creature` with the key. When it is refused because monsters in an encounter use it, relay the refusal verbatim and stop: do not remove or retype those monsters unless the DM asks. SRD monsters cannot be removed.
 
 ## Listing
 
@@ -66,6 +67,8 @@ The DM pastes or types a statblock, or names a text file that holds it ("add thi
 ## Same names
 
 A stored creature and an SRD monster with the same name are not a choice: use the stored one (search lists it first) and name its book. Two stored creatures from different books with the same name: use the book the DM named, otherwise ask which book and do nothing until they answer.
+
+A name that is both a stored creature and a monster in an encounter (a stored Goblin Shaman and Goblin Shaman 1 on the table): "the stored goblin shaman" and "from my creatures" mean the creature; "goblin shaman 1" and "in the encounter" mean the monster, which is `dm-encounter`'s job. When the DM's words say neither ("make the goblin shaman AC 14", "remove the goblin shaman"), ask whether they mean the stored creature, the monster in the encounter, or both, and make no call until they answer.
 
 ## Book content
 
