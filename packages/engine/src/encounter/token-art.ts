@@ -90,7 +90,13 @@ export type AssignTokenArtResult =
   | { outcome: "set"; replaced: StoredTokenArt | null }
   | { outcome: "kept"; reason: "has_art" };
 
-/** Assigns art to a monster type by the precedence rule, in one repository transaction. */
+/**
+ * Assigns art to a monster type by the precedence rule, in one repository
+ * transaction: the DM's latest explicit choice (`table` or `agent`) replaces
+ * any art; a `default` fills only a type with no art. A `table` set that
+ * carries the stored art's image hash republishes the same image, so it keeps
+ * the stored source.
+ */
 export function assignTokenArt(
   repo: TokenArtRepository,
   monsterKey: string,
@@ -98,10 +104,21 @@ export function assignTokenArt(
   source: TokenArtSource,
   origin: ChangeOrigin,
 ): AssignTokenArtResult {
-  void repo;
-  void monsterKey;
-  void art;
-  void source;
-  void origin;
-  throw new Error("not implemented");
+  return repo.transaction(() => {
+    const stored = repo.getTokenArt(monsterKey);
+    if (stored !== undefined && source === "default")
+      return { outcome: "kept", reason: "has_art" };
+    const sameImage =
+      stored !== undefined &&
+      source === "table" &&
+      art.sha256 !== undefined &&
+      art.sha256 === stored.art.sha256;
+    repo.setTokenArt(
+      monsterKey,
+      art,
+      sameImage ? stored.source : source,
+      origin,
+    );
+    return { outcome: "set", replaced: stored ?? null };
+  });
 }
