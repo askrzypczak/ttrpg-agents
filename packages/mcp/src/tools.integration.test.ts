@@ -25,7 +25,9 @@ import { formatSetupStatus } from "./setup-status.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
 } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
@@ -69,6 +71,8 @@ beforeEach(() => {
     newGroupId: () => `group-${++groupN}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
     newCommandId: () => "command",
   };
   // A scene bound to the encounter is open, so replies name no encounter.
@@ -1606,6 +1610,8 @@ describe("the encounter a tool call acts on", () => {
       newGroupId: () => `group-${String(++groups)}`,
       browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
       setup: makeTestSetupPorts(),
+      tokeniser: makeTestTokeniser(),
+      imageSource: makeTestImageSource(),
       newCommandId: () => "command",
     };
   }

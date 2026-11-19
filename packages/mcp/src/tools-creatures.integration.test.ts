@@ -3,7 +3,11 @@ import {
   createMonsterIndex,
   type Monster,
 } from "@ttrpg-agents/engine";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestImageSource,
+  makeTestSetupPorts,
+  makeTestTokeniser,
+} from "@ttrpg-agents/engine/testing";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
@@ -43,6 +47,8 @@ beforeEach(() => {
     newGroupId: () => `group-${String(tick)}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
     newCommandId: () => `command-${String(++commands)}`,
   };
 });
