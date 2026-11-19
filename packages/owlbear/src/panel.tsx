@@ -114,7 +114,7 @@ export function Panel({
           table, by a redraw for an agent's monster change of a token whose art
           or size had been changed on the table or that had to be replaced with
           a new token (its attachments deleted), or by any redraw of a token
-          with art you picked again in this panel:
+          with art you picked again in this panel or art set through the agent:
         </p>
         <ul id="overrides-list">
           {(view?.overrides ?? []).map((text, i) => (

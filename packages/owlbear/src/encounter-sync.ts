@@ -208,7 +208,7 @@ function fold(
           : i,
       );
     case "art-changed":
-      throw new Error("not implemented");
+      return desired;
   }
 }
 
@@ -417,6 +417,19 @@ type Facts = Map<string, Map<EditField, "moved" | number | null>>;
  * `artWaits` names the pickers open or still to open in the current
  * reconcile, then the listed types. Without `options.loadImage` stored art is
  * used as it is, and art without a url never draws.
+ *
+ * An `art-changed` event (no encounter: art is per monster type) from a
+ * `table` origin is the store's record of this tab's own pick and changes
+ * nothing. One from an `mcp` origin (art set through the agent or the library
+ * import) becomes the type's art: it replaces any art, the GM's panel pick of
+ * this session included, clears the type's declined, gone, checked and
+ * uploaded state, gets its own check as a snapshot's art does (once per art
+ * change), and redraws the held encounter's tokens of the type with it in the
+ * next reconcile, each reported through `onOverride`. Art without a url lists
+ * its type for re-upload instead and leaves its tokens as they are. A type
+ * with art gets no fresh picker, even when the art arrived before its first
+ * instance. A liveness check of the replaced art that ends later changes
+ * nothing, and a Pick art pick that resolves later still wins.
  *
  * An image file chosen in the panel (`uploadArtFile`) is uploaded under the
  * name of its hash, outside the reconcile chain, and remembered for the
@@ -1000,13 +1013,19 @@ export function createEncounterSync(
   /**
    * Checks whether the url of a type's stored art still answers; a dead one
    * lists the type for re-upload, unless the GM picked its re-upload
-   * meanwhile. A check that cannot tell keeps the art as stored. Never
+   * meanwhile or the type's art has another url since (an `mcp`
+   * `art-changed`). A check that cannot tell keeps the art as stored. Never
    * rejects.
    */
   async function checkLiveness(monsterKey: string, url: string): Promise<void> {
     try {
       const alive = await obr.isImageAlive(url);
-      if (!alive && !Object.hasOwn(panelPicked, monsterKey)) {
+      if (
+        !alive &&
+        !Object.hasOwn(panelPicked, monsterKey) &&
+        Object.hasOwn(art, monsterKey) &&
+        art[monsterKey]?.url === url
+      ) {
         gone.add(monsterKey);
         reportArtLists();
       }
@@ -1096,6 +1115,58 @@ export function createEncounterSync(
       return;
     }
     if (alive) await storePicked(monsterKey, linked, storeImage);
+  }
+
+  /**
+   * Starts the check of a type's stored art, once until the type is marked
+   * unchecked again, outside the reconcile chain: art with a url and a hash
+   * gets its liveness check (with `options.loadImage`), art with a url and no
+   * hash the bytes backfill (with `options.storeImage`). Art without a url,
+   * and a type already checked, get nothing.
+   */
+  function checkStoredArt(monsterKey: string, value: TokenArt): void {
+    const { url } = value;
+    if (url === undefined || checked.has(monsterKey)) return;
+    if (value.sha256 === undefined) {
+      if (options.storeImage === undefined) return;
+      checked.add(monsterKey);
+      // Tokens never wait for the bytes.
+      void backfillImage(monsterKey, value, options.storeImage);
+      return;
+    }
+    if (options.loadImage === undefined) return;
+    checked.add(monsterKey);
+    // Only a reconcile about to draw tokens of the type waits for it. Its
+    // completion removes its own entry only: a later art change may have
+    // started another check for the type.
+    const check: Promise<void> = checkLiveness(monsterKey, url).then(() => {
+      if (pendingChecks.get(monsterKey) === check)
+        pendingChecks.delete(monsterKey);
+    });
+    pendingChecks.set(monsterKey, check);
+  }
+
+  /**
+   * Makes art set through the agent (an `mcp` `art-changed`) the type's art:
+   * it replaces any art, the GM's panel pick of this session included, and
+   * clears what the session knew about the type's earlier art (declined,
+   * gone, checked, uploaded). The new art gets its own check, and the held
+   * encounter's tokens of the type are redrawn with it in the next reconcile.
+   */
+  function takeAgentArt(monsterKey: string, value: TokenArt): void {
+    art = { ...art, [monsterKey]: value };
+    declined.delete(monsterKey);
+    gone.delete(monsterKey);
+    checked.delete(monsterKey);
+    uploaded.delete(monsterKey);
+    delete panelPicked[monsterKey];
+    checkStoredArt(monsterKey, value);
+    for (const instance of desired ?? [])
+      if (
+        instance.monsterKey === monsterKey &&
+        instance.encounterId === held?.encounterId
+      )
+        reskins.add(instance.id);
   }
 
   /**
@@ -1233,7 +1304,9 @@ export function createEncounterSync(
       .filter(
         (monsterKey) =>
           !declined.has(monsterKey) &&
-          art[monsterKey] === undefined &&
+          // Art from a snapshot or an `art-changed`, even art that arrived
+          // before the type's first instance.
+          !Object.hasOwn(art, monsterKey) &&
           // A type whose Pick art picker is open gets circles; the pick
           // redraws them.
           !inflight.has(monsterKey),
@@ -1551,39 +1624,10 @@ export function createEncounterSync(
           encounterName: message.payload.encounterName,
         };
         art = { ...art, ...message.payload.art };
-        if (options.storeImage !== undefined)
-          for (const [monsterKey, value] of Object.entries(
-            message.payload.art ?? {},
-          ))
-            if (
-              value.url !== undefined &&
-              value.sha256 === undefined &&
-              !checked.has(monsterKey)
-            ) {
-              checked.add(monsterKey);
-              // Not part of the reconcile chain, as a pick's upload is: tokens
-              // never wait for the bytes.
-              void backfillImage(monsterKey, value, options.storeImage);
-            }
-        if (options.loadImage !== undefined)
-          for (const [monsterKey, value] of Object.entries(
-            message.payload.art ?? {},
-          ))
-            if (
-              value.url !== undefined &&
-              value.sha256 !== undefined &&
-              !checked.has(monsterKey)
-            ) {
-              checked.add(monsterKey);
-              // Not part of the reconcile chain either: only a reconcile
-              // about to draw tokens of the type waits for it.
-              pendingChecks.set(
-                monsterKey,
-                checkLiveness(monsterKey, value.url).then(() => {
-                  pendingChecks.delete(monsterKey);
-                }),
-              );
-            }
+        for (const [monsterKey, value] of Object.entries(
+          message.payload.art ?? {},
+        ))
+          checkStoredArt(monsterKey, value);
         seq = message.payload.seq;
         desiredSeq = message.payload.seq;
         restoredAt = new Map(Object.entries(message.payload.restoreSeqs ?? {}));
@@ -1617,6 +1661,12 @@ export function createEncounterSync(
             outbox?.settle(event.origin.commandId);
           return Promise.resolve();
         }
+        // The store's record of this tab's own art pick: the tab already has
+        // the art.
+        if (event.type === "art-changed" && event.origin.source === "table")
+          return Promise.resolve();
+        if (event.type === "art-changed")
+          takeAgentArt(event.monsterKey, event.art);
         if (event.type === "added")
           for (const i of event.instances) restoredAt.set(i.id, eventSeq);
         if (event.type === "removed") left.add(event.id);
