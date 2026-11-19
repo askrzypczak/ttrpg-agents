@@ -273,14 +273,15 @@ then puts the returned hash on the art (if it is still the picked image) and
 sends a second `token-art-set` with `sha256`. Each pick gets one attempt: a
 failed fetch or upload calls `options.onArtStoreFailed` once ("Could not store
 the image of the token art for ..."), shown in `#sync-error` until the panel
-reloads. Art with a url and no hash gets its bytes on each snapshot, once per type per session: when
+reloads. Art with a url and no hash gets its bytes on each snapshot, once per type per session, and again after an `mcp` `art-changed` (see Art changes from the store): when
 `ObrAdapter.isImageAlive(url)` answers, the bytes are fetched and uploaded as
 after a pick; a gone url, or a check that cannot tell, leaves the art as it
 is, silently.
 
 **Re-upload.** With `options.loadImage` (`downloadTokenImage`, a
 `GET /token-images/<sha256>`), stored art is checked on each snapshot, once
-per type per session, for every row with a hash and a url not picked this
+per type per session, and again after an `mcp` `art-changed` (see Art changes
+from the store), for every row with a hash and a url not picked this
 session: `isImageAlive` makes a no-cache fetch (2xx alive, 4xx gone, anything
 else, or no answer within 5 s, cannot tell and keeps the art). A reconcile
 about to draw a type whose check is pending waits for it. A type whose url is
@@ -347,6 +348,21 @@ art for ...") and changes nothing else. Both calls share the `inflight` guard:
 they are ignored while another art call for the type runs or its fresh picker
 is open or queued. Neither is an art wait.
 
+**Art changes from the store.** Every art write in the store logs an
+`art-changed` event with no encounter, so the sync applies it whatever
+encounter it holds. A `table` one is the store's record of this tab's own pick
+and changes nothing. An `mcp` one (art set through the agent or the library
+import) goes through `takeAgentArt`: it becomes the type's art, replacing a
+panel pick of this session too, and clears the type's `declined`, `gone`,
+`checked` and `uploaded` state. The new art then gets the step a snapshot's
+art gets (`checkStoredArt`: the liveness check, or the bytes backfill), once
+per art change, and the held encounter's tokens of the type join `reskins`
+(below). Art without a url lists the type for re-upload instead and leaves its
+tokens as they are. The fresh picker never opens for a type with art, even art
+that arrived before the type's first instance. A liveness check of the
+replaced art that ends later changes nothing, and a Pick art pick that
+resolves later still wins.
+
 `EncounterSync.artWaits()` names the types whose fresh picker is open or still
 to open (`pick`), then the listed types (`reupload`), with their monster names;
 the `scene-status` answer carries it (`src/queries.ts`).
@@ -377,9 +393,10 @@ whose replacement is on the scene is deleted first. The instance always keeps
 a linked token, so no `token-deleted` is sent. Every replacement is reported in
 `plan.overrides`.
 
-Any panel pick (Pick art, a re-upload pick or the pick of an uploaded file)
-redraws every token of its type the same way (`reskins`; a monster change wins
-over it), and every in-place redraw from a panel pick is reported: with the
+Any panel pick (Pick art, a re-upload pick or the pick of an uploaded file),
+and any `mcp` `art-changed`, redraws every token of its type the same way
+(`reskins`; a monster change wins over it), and every in-place redraw from
+either is reported: with the
 table-change note as above, else with `reskinNote`; a token already drawn with
 the pick is not written and gets no note.
 

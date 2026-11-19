@@ -176,9 +176,13 @@ the option the type is `unexpected-type`. The client's `role` is never read.
 
 An authenticated client can also send `token-art-set` (`{ monsterKey, art }`,
 sent by the extension after the GM picks an image for a monster type). The
-server's optional `setTokenArt` option stores it (`cli.ts` wires
-`SqliteTokenArtRepository.setTokenArt`). An accepted request gets no reply: the
-extension keeps its own pick, and the snapshot on every connect carries the
+server's optional `setTokenArt` option stores it with the request id as its
+command id, or a fresh one when the request has none (`cli.ts` wires the
+engine's `assignTokenArt` with source `table` and a `table` origin). The store
+logs an `art-changed` event with no encounter, which the poll broadcasts; the
+extension ignores a `table` one, as it keeps its own pick. Art set through the
+agent or the library import reaches it the same way, with an `mcp` origin. An
+accepted request gets no reply, and the snapshot on every connect carries the
 `art` map (monster key -> image reference `{ url, mime, width, height }`) from
 the same store. A failed write is a non-fatal `token-art-failed` `error`.
 Without the option the type is `unexpected-type`.
