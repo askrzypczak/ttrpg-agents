@@ -53,7 +53,7 @@ Issue: [#221](https://github.com/askrzypczak/ttrpg-agents/issues/221).
   - Push the change live (an event or a fresh snapshot for art changes, and re-checking types already handled): new protocol and extension work for a maintainer tool run between sessions.
 - Where: `packages/store-sqlite/README.md` (Token art library); `docs/architecture.md` (Shared database; Who owns what).
 - Revisit if: the import is run during play often enough that reloading the tab gets in the way.
-- Status: active
+- Status: superseded by 378.2
 
 ## 221.6 No lint block for `packages/store-sqlite/scripts`
 

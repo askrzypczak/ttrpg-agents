@@ -88,4 +88,4 @@ Issue: [#220](https://github.com/askrzypczak/ttrpg-agents/issues/220).
   - Leave it: rare (needs a socket drop around the pick), but the tokens then show "Image Unavailable" for the rest of the session.
 - Where: `republished` and `usableArt` in `createEncounterSync` (`packages/owlbear/src/encounter-sync.ts`); test "a stale snapshot after a republish keeps the republished art" (`packages/owlbear/src/encounter-sync-art-republish.test.ts`).
 - Revisit if: art can change from another source during a session (#221 import), which the overlay would hide until reload.
-- Status: active
+- Status: superseded in part by 378.4 (an `mcp` `art-changed` replaces the kept art; the rule against stale snapshots stands)
