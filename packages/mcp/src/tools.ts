@@ -2088,16 +2088,19 @@ function clearedListLine(cleared: readonly MonsterInstance[]): string[] {
   ];
 }
 
+/** The input shared by preview_token and set_token_art: the image, focus and zoom. */
+const tokenInput = {
+  image: z.string(),
+  focus: z.object({ x: z.number(), y: z.number() }).optional(),
+  zoom: z.number().optional(),
+};
+
 const previewTokenTool = defineTool({
   name: "preview_token",
   annotations: { readOnlyHint: true },
   description:
     "Preview a round token made from an image: an absolute file path or an https URL (PNG, JPEG or WebP, at most 20 MiB and 8192 px a side). The crop centres on the image's most salient point (sharp's attention strategy) unless focus (fractions 0 to 1 of the width and height) is given, which overrides it. Zoom 1 to 8 (default 1) narrows the crop. Replies with the token and its source size, focus, zoom and crop. Stores nothing.",
-  inputSchema: {
-    image: z.string(),
-    focus: z.object({ x: z.number(), y: z.number() }).optional(),
-    zoom: z.number().optional(),
-  },
+  inputSchema: tokenInput,
   async run(ctx, { image, focus, zoom }) {
     const token = await makeToken(ctx, image, { focus, zoom });
     return {
@@ -2110,6 +2113,20 @@ const previewTokenTool = defineTool({
         { type: "text", text: tokenPreviewText(token) },
       ],
     };
+  },
+});
+
+const setTokenArtTool = defineTool({
+  name: "set_token_art",
+  annotations: { destructiveHint: true },
+  description:
+    "Make a round token from an image (an absolute file path or an https URL; PNG, JPEG or WebP, at most 20 MiB and 8192 px a side) as preview_token does (focus, zoom) and set it as the token art of a monster type, by monster key (search_monsters and list_creatures give keys). It replaces the type's art whatever set it (a GM pick in Owlbear, an earlier image or variant, the TooManyTokens default); the reply names what it replaced. The GM then publishes it from the extension panel: Re-upload, then Pick the uploaded image. Takes no encounter and creates none; undo does not cover it.",
+  inputSchema: {
+    monster: z.string().describe("The monster key."),
+    ...tokenInput,
+  },
+  run() {
+    throw new Error("not implemented");
   },
 });
 
@@ -2170,4 +2187,5 @@ export const tools: readonly ToolDefinition[] = [
   removeCreatureTool,
   listCreaturesTool,
   previewTokenTool,
+  setTokenArtTool,
 ];

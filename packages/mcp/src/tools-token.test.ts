@@ -3,6 +3,8 @@ import {
   type CreatureRepository,
   type EncounterDirectory,
   type MonsterIndex,
+  type TokenArtRepository,
+  type TokenImageRepository,
   type Tokeniser,
 } from "@ttrpg-agents/engine";
 import {
@@ -51,6 +53,8 @@ function contextWith(tokeniser: Tokeniser) {
     setup: makeTestSetupPorts(),
     tokeniser,
     imageSource: makeTestImageSource({ [PATH]: pngDeclaring(1000, 600) }),
+    art: refusingStore<TokenArtRepository>("art", storeCalls),
+    images: refusingStore<TokenImageRepository>("images", storeCalls),
   };
   return { ctx, storeCalls };
 }

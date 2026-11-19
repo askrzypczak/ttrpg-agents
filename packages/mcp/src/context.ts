@@ -9,6 +9,8 @@ import type {
   Rng,
   SetupPorts,
   TablePort,
+  TokenArtRepository,
+  TokenImageRepository,
   Tokeniser,
 } from "@ttrpg-agents/engine";
 
@@ -34,6 +36,10 @@ export interface ToolContext {
   tokeniser: Tokeniser;
   /** Loads source images from absolute paths and https URLs. */
   imageSource: ImageSource;
+  /** Token art per monster type with its source: set_token_art writes it. */
+  art: TokenArtRepository;
+  /** Token image bytes by SHA-256: set_token_art stores its token here. */
+  images: TokenImageRepository;
 }
 
 /** What a tool's run receives: the context plus the encounter of this call. */

@@ -20,6 +20,8 @@ import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   createDatabaseProbe,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -79,6 +81,8 @@ async function main(): Promise<void> {
     },
     tokeniser,
     imageSource: createNodeImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
   });
   await server.connect(new StdioServerTransport());
 }
