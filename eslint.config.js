@@ -16,6 +16,8 @@ const ADAPTER_MESSAGE =
   "Adapters depend on @ttrpg-agents/engine only (and, in tests, on each other and on srd).";
 const MCP_MESSAGE =
   "@ttrpg-agents/mcp must not import the bridge (a separate process); only mcp/src/stdio.ts and mcp/src/status-cli.ts, the composition roots, may import @ttrpg-agents/bridge/client.";
+const MCP_IMAGING_MESSAGE =
+  "Only mcp/src/stdio.ts and mcp/src/status-cli.ts, the composition roots, may import @ttrpg-agents/imaging; everything else uses the engine's Tokeniser, ImageSource and TokeniserProbe ports.";
 const CLIENT_MESSAGE =
   "bridge/src/client.ts is imported by mcp: it may use only Node builtins, @ttrpg-agents/engine, @ttrpg-agents/protocol and ./token-file.js (no ws, no server code).";
 const BRIDGE_MESSAGE =
@@ -155,9 +157,13 @@ export default tseslint.config(
     },
   },
   {
-    // Adapters (store, SRD data) depend on the engine only. Their tests may
-    // also use each other and the SRD data.
-    files: ["packages/store-sqlite/src/**/*.ts", "packages/srd/src/**/*.ts"],
+    // Adapters (store, SRD data, imaging) depend on the engine only. The
+    // store and SRD tests may also use each other and the SRD data.
+    files: [
+      "packages/store-sqlite/src/**/*.ts",
+      "packages/srd/src/**/*.ts",
+      "packages/imaging/src/**/*.ts",
+    ],
     ignores: ["packages/*/src/**/*.test.ts"],
     rules: {
       "no-restricted-imports": [
@@ -185,9 +191,20 @@ export default tseslint.config(
     },
   },
   {
+    // The imaging adapter's tests use the engine only, as its source does.
+    files: ["packages/imaging/src/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [workspaceBan(["engine"], ADAPTER_MESSAGE)] },
+      ],
+    },
+  },
+  {
     // The MCP server and the bridge are separate entry points. The bridge
     // imports nothing from mcp; mcp imports nothing from the bridge except in
-    // its composition roots (stdio.ts and status-cli.ts, next block).
+    // its composition roots (stdio.ts and status-cli.ts, which also wire in
+    // the imaging adapter; two blocks down).
     files: ["packages/mcp/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [
@@ -198,6 +215,10 @@ export default tseslint.config(
               group: ["@ttrpg-agents/bridge", "@ttrpg-agents/bridge/*"],
               message: MCP_MESSAGE,
             },
+            {
+              group: ["@ttrpg-agents/imaging", "@ttrpg-agents/imaging/*"],
+              message: MCP_IMAGING_MESSAGE,
+            },
             configPattern,
           ],
         },
@@ -206,7 +227,7 @@ export default tseslint.config(
   },
   {
     // Later matching configs replace earlier rule options, so restate the
-    // bridge ban for production source, adding the test-data ban.
+    // bridge and imaging bans for production source, adding the test-data ban.
     files: ["packages/mcp/src/**/*.ts"],
     ignores: ["packages/mcp/src/**/*.test.ts"],
     rules: {
@@ -217,6 +238,10 @@ export default tseslint.config(
             {
               group: ["@ttrpg-agents/bridge", "@ttrpg-agents/bridge/*"],
               message: MCP_MESSAGE,
+            },
+            {
+              group: ["@ttrpg-agents/imaging", "@ttrpg-agents/imaging/*"],
+              message: MCP_IMAGING_MESSAGE,
             },
             configPattern,
             testingPattern,

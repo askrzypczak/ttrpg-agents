@@ -17,7 +17,9 @@ import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
 } from "@ttrpg-agents/engine/testing";
 
 const SHADOW = "srd-2024_shadow";
@@ -160,6 +162,8 @@ beforeEach(() => {
     newGroupId: () => "group-1",
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
     newCommandId: () => {
       const id = `command-${String(issuedCommandIds.length + 1)}`;
       issuedCommandIds.push(id);

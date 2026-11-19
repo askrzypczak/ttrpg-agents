@@ -15,13 +15,14 @@ flowchart LR
   end
   subgraph core["Engine (no I/O)"]
     uc["use cases: addMonsters, getTableStatus, useMap, ..."]
-    ports["ports: EncounterDirectory, EncounterRepository, MonsterIndex, CreatureRepository, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe"]
+    ports["ports: EncounterDirectory, EncounterRepository, MonsterIndex, CreatureRepository, TablePort, MapRepository, BrowserPort, DatabaseProbe, BridgeProbe, Tokeniser, ImageSource, TokeniserProbe"]
   end
   subgraph driven["Driven adapters"]
     store["store-sqlite"]
     srd["srd"]
     bclient["bridge client"]
     sysbrowser["mcp system browser (macOS open)"]
+    imaging["imaging (sharp, image loading)"]
   end
   mcp --> uc
   bsrv -->|"reads EncounterDirectory, EncounterRepository and MapRepository, reads and writes TokenArtRepository and TokenImageRepository"| ports
@@ -30,6 +31,8 @@ flowchart LR
   srd -.->|"loads the built-in MonsterSet, which the engine's createMonsterIndex merges with the stored creatures into MonsterIndex"| ports
   ports -.implemented by.-> bclient
   ports -.implemented by.-> sysbrowser
+  ports -.implemented by.-> imaging
+  imaging -->|"reads files, fetches https"| images["local image files, https image hosts"]
   store --> db[("SQLite")]
   bclient -->|"HTTP + agent token (queries only)"| bsrv
   sysbrowser --> browser["DM's browser"]
@@ -38,6 +41,8 @@ flowchart LR
 ```
 
 The bridge is both sides. Its server is a driving adapter: a table edit becomes an engine command on the encounter that holds the instance, current or not (`instance-edit` runs `applyInstanceEdit`, `token-deleted` calls `EncounterRepository.removeInstances`, on the repository `EncounterDirectory` hands out for it), `scene-open` runs `openScene`, snapshots come from the open scene's encounter (with no scene open, the current one) and `TokenArtRepository`, events from `EncounterLog`, the current encounter's map and its rooms from the `MapRepository` `EncounterDirectory` hands out for it, and the token image routes run the engine's `storeTokenImage` over `TokenImageRepository`. Its client is a driven adapter, the driven end of `TablePort` and `BridgeProbe`, wired in by `mcp/src/stdio.ts` and `mcp/src/status-cli.ts`. That channel carries queries only: the agent changes the game through the engine's model (the rule is in `CLAUDE.md`).
+
+`imaging` is a driven adapter wired in by the mcp composition roots only: `mcp/src/stdio.ts` passes it as the `Tokeniser`, the `ImageSource` and the setup report's `TokeniserProbe`, and `mcp/src/status-cli.ts` as the probe. It loads sharp on first use, so the MCP server starts when sharp cannot load; the setup report then shows the tokeniser as a problem. The engine owns the crop maths, the limits and the token style. Mechanics: [`packages/imaging/README.md`](../packages/imaging/README.md).
 
 ## Runtime (processes)
 
@@ -49,6 +54,8 @@ flowchart LR
   mcp -->|"writes"| db[("SQLite file")]
   mcp -->|"TablePort via the bridge client: POST /agent/query"| bridge
   mcp -->|"open_statblock: macOS open"| browser["DM's browser"]
+  mcp -->|"preview_token: reads"| imagefiles["local image files"]
+  mcp -->|"preview_token: HTTPS GET"| imagehosts["https image hosts"]
   bridge["Bridge"] -->|"polls"| db
   ext["Owlbear extension"] <-->|"WebSocket (own origin)"| bridge
   ext -->|"HTTP POST and GET /token-images (own origin)"| bridge
@@ -57,7 +64,7 @@ flowchart LR
 
 ## Processes
 
-- **MCP server**: stdio, started by Claude Code from `.mcp.json` through `packages/mcp/bin/stdio.mjs`. It writes the database and asks the table through the bridge (see "Queries to the table").
+- **MCP server**: stdio, started by Claude Code from `.mcp.json` through `packages/mcp/bin/stdio.mjs`. It writes the database and asks the table through the bridge (see "Queries to the table"). For `preview_token` it reads local image files and fetches https images (5 s and 20 MiB per image) and renders the token in process with sharp.
 - **Browser opener**: the MCP server runs macOS `open <url>` for `open_statblock`, a short-lived process that hands a D&D Beyond page to the DM's default browser (other platforms are refused; the reply still carries the link).
 - **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199, or 5299 in the dev profile (the `bridgePort` setting, see [`docs/settings.md`](settings.md)): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
 - **Extension**: runs in the GM's Owlbear tab as the bridge's client, reconciles the scene to the encounter and answers the agent's queries. It fetches images from Owlbear for token art and for the `map-image` query. Mechanics: [`packages/owlbear/README.md`](../packages/owlbear/README.md).
@@ -68,7 +75,7 @@ flowchart LR
 
 Three surfaces, each for one question:
 
-- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, stored creature count, newest backup, bridge with this profile's token, GM tab; one fix per problem.
+- **`setup_status` tool and `npm run status`**: is this setup ready? Profile, config, settings, database, stored creature count, newest backup, bridge with this profile's token, GM tab, tokeniser; one fix per problem.
 - **`table_status` tool**: does the open scene match the encounter?
 - **`npm run bridge:status`**: the bridge process: pid, port, checkout, commit, log.
 

@@ -40,6 +40,10 @@ function rowText(row: SetupRow): string {
       return backupText(row.backups, row.ageDays);
     case "bridge":
       return bridgeText(row.bridge);
+    case "tokeniser":
+      return row.tokeniser.kind === "loaded"
+        ? "tokeniser (sharp): loaded"
+        : `tokeniser (sharp): cannot load: ${row.tokeniser.reason}`;
     case "gm-tab":
       switch (row.tab) {
         case "none":
@@ -130,5 +134,7 @@ function fixText(fix: SetupFix): string {
       return "point the database setting at the encounter database (see docs/settings.md)";
     case "take-backup":
       return "take a backup: npm run db:backup";
+    case "reinstall-dependencies":
+      return "reinstall this checkout's dependencies so sharp's prebuilt binary for this platform installs: npm ci";
   }
 }

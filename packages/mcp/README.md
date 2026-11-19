@@ -50,7 +50,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number                  |
 | `undo`                 | Undo the last change, again the one before; table edits stay; not clears, map/room, encounter rename/binding or creature changes; names next undo |
 | `table_status`         | Owlbear room and scene status, in sync or not with the open scene's encounter (named); our tokens left alone; art for the GM to pick or re-upload |
-| `setup_status`         | Is this setup ready: profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; a fix under each problem       |
+| `setup_status`         | Is this setup ready: profile, config, settings, database, newest backup, bridge with this profile's token, GM tab, tokeniser; a fix per problem   |
 | `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                                   |
 | `set_rooms`            | Name rooms on the map in use by display-cell ranges (confirmed, or proposed); a room named like a saved one replaces it                           |
 | `list_rooms`           | The saved rooms of the map in use with their status and ranges where the map sits now                                                             |
@@ -64,6 +64,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `edit_creature`        | Change a stored creature by key with the same changes plus `page`; key and book kept; monsters in encounters keep their values and are named      |
 | `remove_creature`      | Delete a stored creature by key; refused while a monster in any encounter uses it, naming them                                                    |
 | `list_creatures`       | The stored creatures (key, name, book, page, CR), of one book with `book`                                                                         |
+| `preview_token`        | Preview a round token of an absolute path or https URL at its most salient point or `focus`, `zoom` 1 to 8; image and crop line; stores nothing   |
 
 Every tool that reads or changes an encounter takes an optional `encounter`, an
 encounter's name in any case (`use_encounter` requires it); `list_encounters`,

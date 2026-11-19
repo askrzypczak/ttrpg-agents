@@ -67,6 +67,35 @@ export {
   type TooManyTokensIndex,
   type TooManyTokensVariant,
 } from "./too-many-tokens.js";
+// #380 tokeniser
+export {
+  IMAGE_LOAD_TIMEOUT_MS,
+  parseImageLocation,
+  type ImageLocation,
+  type ImageSource,
+} from "./image-source.js";
+export {
+  TOKEN_STYLE,
+  TOKEN_ZOOM_MAX,
+  makeToken,
+  tokenCrop,
+  type FocalPoint,
+  type MadeToken,
+  type MakeTokenDeps,
+  type SquareCrop,
+  type TokenStyle,
+  type Tokeniser,
+} from "./tokeniser.js";
+export {
+  TOKEN_SOURCE_MAX_BYTES,
+  TOKEN_SOURCE_MAX_SIDE,
+  validateTokenSource,
+} from "./token-image.js";
+export {
+  ImageUnavailableError,
+  InvalidTokenRequestError,
+  TokeniserError,
+} from "./errors.js";
 // #378 token art source and precedence
 export {
   assignTokenArt,

@@ -22,7 +22,9 @@ import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
 } from "@ttrpg-agents/engine/testing";
 
 // SRD 5.2: Wolf AC 12, HP 11; Dire Wolf large, AC 14, HP 22.
@@ -160,6 +162,8 @@ beforeEach(() => {
     newGroupId: () => `group-${String(tick)}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
     newCommandId: () => {
       const id = `command-${String(issuedCommandIds.length + 1)}`;
       issuedCommandIds.push(id);

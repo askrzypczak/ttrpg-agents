@@ -82,3 +82,27 @@ export class SameMonsterError extends DomainError {
     this.name = "SameMonsterError";
   }
 }
+
+/** A token request with a bad image location, focus or zoom. */
+export class InvalidTokenRequestError extends DomainError {
+  constructor(message: string) {
+    super("invalid_token_request", message);
+    this.name = "InvalidTokenRequestError";
+  }
+}
+
+/** A source image that cannot be loaded or is refused; the message names the location and the cause. */
+export class ImageUnavailableError extends DomainError {
+  constructor(message: string) {
+    super("image_unavailable", message);
+    this.name = "ImageUnavailableError";
+  }
+}
+
+/** The tokeniser cannot load its image library, a render failed, or its output failed validation. */
+export class TokeniserError extends DomainError {
+  constructor(message: string) {
+    super("tokeniser_failed", message);
+    this.name = "TokeniserError";
+  }
+}

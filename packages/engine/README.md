@@ -29,7 +29,7 @@ Each instance carries `spawnPosition`: where a new token for it is created, in s
 
 ## Test data
 
-`@ttrpg-agents/engine/testing` (`src/testing/index.ts`) exports `makeTestInstance`, a full `MonsterInstance` for tests, `makeTestMonsterIndex`, a `MonsterIndex` over given monsters, aliases and D&D Beyond pages, `makeTestMonster`, a full invented statblock that passes `monsterSchema` with no check findings, and `makeTestCreatureRepository`, an in-memory `CreatureRepository` whose `put` stores any data. It is test data only; production code must not import it (lint-enforced).
+`@ttrpg-agents/engine/testing` (`src/testing/index.ts`) exports `makeTestInstance`, a full `MonsterInstance` for tests, `makeTestMonsterIndex`, a `MonsterIndex` over given monsters, aliases and D&D Beyond pages, `makeTestMonster`, a full invented statblock that passes `monsterSchema` with no check findings, `makeTestCreatureRepository`, an in-memory `CreatureRepository` whose `put` stores any data, `pngDeclaring` and `webpDeclaring`, image headers declaring a size, `makeTestImageSource`, an `ImageSource` over given bytes by path or URL that records its loads, and `makeTestTokeniser`, a `Tokeniser` that records its renders and answers a 512 px square WebP header. It is test data only; production code must not import it (lint-enforced).
 
 ## Map
 
@@ -53,3 +53,13 @@ Each instance carries `spawnPosition`: where a new token for it is created, in s
 ## Browser
 
 `src/browser.ts`: `BrowserPort` (driven port: `showPage(url)` shows a page to the DM in their browser, and rejects with the reason when it cannot), implemented in `mcp` (`src/system-browser.ts`).
+
+## Tokens
+
+The engine owns the crop maths, the limits and the token style; `@ttrpg-agents/imaging` implements the ports below.
+
+- `src/encounter/image-source.ts`: the `ImageSource` driven port (`load(location)` answers a source image's bytes, or rejects with `ImageUnavailableError` naming the path or URL and the cause), `IMAGE_LOAD_TIMEOUT_MS` (5 s) and `parseImageLocation(image)`: an `https://` URL is a url and a string starting with `/` a path; an `http:` URL, another scheme, a relative or an empty path throw `InvalidTokenRequestError`.
+- `src/encounter/tokeniser.ts`: the `Tokeniser` driven port (`focalPoint(bytes)`, the image's most salient point as fractions of its width and height, and `renderToken(bytes, crop, style)`; both reject with `TokeniserError`), `TOKEN_STYLE` (a 512 px square with a `#6e4b2a` ring 0.03 of the side wide) and `TOKEN_ZOOM_MAX` (8).
+- `tokenCrop(size, { focus, zoom })`: the square, in source pixels, whose side is the shorter side divided by the zoom (at least 1 px), centred on the focus and moved inside the image where it would cross an edge. A zoom outside 1 to 8 or a focus outside 0 to 1 throws `InvalidTokenRequestError`. Crops are in the stored pixel grid: EXIF orientation is ignored.
+- `makeToken(deps, image, { focus?, zoom? })` checks the focus and zoom before loading anything, loads the image, refuses a source that `validateTokenSource` refuses (PNG, JPEG or WebP, at most 20 MiB and 8,192 px a side) with `ImageUnavailableError`, crops at the focus (default: the tokeniser's focal point) and zoom (default 1), and renders with `TOKEN_STYLE`. An output that fails `validateTokenImage` or is not a 512 px square WebP is a `TokeniserError`. It stores nothing.
+- `src/setup/port.ts`: the `TokeniserProbe` driven port (`check()`, never rejects). The setup report's last row is the tokeniser: ok when its image library loaded, else a problem with the reason and the `reinstall-dependencies` fix.

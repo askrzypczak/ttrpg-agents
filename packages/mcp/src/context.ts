@@ -3,11 +3,13 @@ import type {
   CreatureRepository,
   EncounterDirectory,
   EncounterRepository,
+  ImageSource,
   MapRepository,
   MonsterIndex,
   Rng,
   SetupPorts,
   TablePort,
+  Tokeniser,
 } from "@ttrpg-agents/engine";
 
 /** Everything a tool handler needs; injected so tests stay deterministic. */
@@ -28,6 +30,10 @@ export interface ToolContext {
   newCommandId: () => string;
   /** Settings facts and the database and bridge probes, for the setup report. */
   setup: SetupPorts;
+  /** Renders token images (in production sharp, via the imaging adapter). */
+  tokeniser: Tokeniser;
+  /** Loads source images from absolute paths and https URLs. */
+  imageSource: ImageSource;
 }
 
 /** What a tool's run receives: the context plus the encounter of this call. */

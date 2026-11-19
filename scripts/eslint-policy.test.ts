@@ -205,6 +205,54 @@ describe("lint policy for the mcp composition roots", () => {
   });
 });
 
+// The imaging adapter is wired in by the mcp composition roots only, and itself
+// depends on the engine only.
+const IMAGING_IMPORT =
+  'import { createSharpTokeniser } from "@ttrpg-agents/imaging";\nexport const make = createSharpTokeniser;\n';
+const IMAGING_FILES = [
+  "packages/imaging/src/sharp-tokeniser.ts",
+  "packages/imaging/src/sharp-tokeniser.test.ts",
+];
+
+describe("lint policy for the imaging adapter", () => {
+  it("an mcp file other than the composition roots may not import @ttrpg-agents/imaging, and the roots may (control: a sibling is refused)", async () => {
+    for (const sibling of [
+      "packages/mcp/src/server.ts",
+      "packages/mcp/src/tools.ts",
+      "packages/mcp/src/annotations.test.ts",
+    ]) {
+      expect(
+        restrictedImports(await lint(IMAGING_IMPORT, sibling)),
+        sibling,
+      ).toContainEqual(expect.objectContaining({ severity: 2 }));
+    }
+    for (const rootFile of MCP_ROOTS) {
+      const messages = await lint(IMAGING_IMPORT, rootFile);
+      expect(restrictedImports(messages), rootFile).toEqual([]);
+    }
+  });
+
+  it("imaging/src may import @ttrpg-agents/engine but no other workspace package", async () => {
+    for (const file of IMAGING_FILES) {
+      const engine = await lint(
+        'import { TOKEN_STYLE } from "@ttrpg-agents/engine";\nexport const style = TOKEN_STYLE;\n',
+        file,
+      );
+      expect(restrictedImports(engine), file).toEqual([]);
+      for (const text of [
+        'import { createServer } from "@ttrpg-agents/mcp";\nexport const make = createServer;\n',
+        'import "@ttrpg-agents/protocol";\n',
+        'import "@ttrpg-agents/store-sqlite";\n',
+      ]) {
+        expect(
+          restrictedImports(await lint(text, file)),
+          `${file}: ${text}`,
+        ).toContainEqual(expect.objectContaining({ severity: 2 }));
+      }
+    }
+  });
+});
+
 // Only composition roots read settings: process.env is refused elsewhere in
 // packages/*/src (tests excepted). Every path must exist on disk (see above).
 const ENV_READ = "export const x = process.env.HOME;\n";

@@ -67,8 +67,18 @@ const ALLOWED: Record<string, Edges> = {
     // bridge and config: only mcp/src/stdio.ts (the composition root) imports
     // @ttrpg-agents/bridge/client, the adapter that implements the engine's
     // TablePort, and @ttrpg-agents/config; lint enforces that file-level rule.
-    dependencies: ["bridge", "config", "engine", "srd", "store-sqlite"],
+    // imaging: composition roots only (stdio.ts and status-cli.ts).
+    dependencies: [
+      "bridge",
+      "config",
+      "engine",
+      "imaging",
+      "srd",
+      "store-sqlite",
+    ],
   }),
+  // The sharp tokeniser and image loading: engine only.
+  imaging: edges({ dependencies: ["engine"] }),
 };
 
 /** The short-named workspace edges declared in a parsed package.json, sorted. */
@@ -240,6 +250,7 @@ describe("workspace package edges", () => {
       "bridge",
       "config",
       "engine",
+      "imaging",
       "mcp",
       "owlbear",
       "protocol",

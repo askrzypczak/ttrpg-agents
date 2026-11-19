@@ -5,6 +5,7 @@ import type {
   DatabaseFacts,
   SettingFact,
   SetupPorts,
+  TokeniserFacts,
 } from "./port.js";
 
 export type SetupState = "ok" | "warning" | "problem";
@@ -22,7 +23,8 @@ export type SetupFix =
   | { code: "reload-gm-tab" }
   | { code: "update-checkout" }
   | { code: "check-database" }
-  | { code: "take-backup" };
+  | { code: "take-backup" }
+  | { code: "reinstall-dependencies" };
 export type SetupRow =
   | { item: "profile"; state: "ok"; profile: string }
   | { item: "config-file"; state: "ok"; path: string; found: boolean }
@@ -55,6 +57,12 @@ export type SetupRow =
       tab: "connected" | "none" | "not-answering";
       roomId?: string;
       fix?: SetupFix;
+    }
+  | {
+      item: "tokeniser";
+      state: "ok" | "problem";
+      tokeniser: TokeniserFacts;
+      fix?: SetupFix;
     };
 export interface SetupStatus {
   ready: boolean;
@@ -63,12 +71,15 @@ export interface SetupStatus {
 
 const DAY_MS = 86_400_000;
 
-/** Asks both probes once and returns the rows in report order; `ready` = no row in state `problem`. */
+/** Asks each probe once and returns the rows in report order; `ready` = no row in state `problem`. */
 export async function getSetupStatus(ports: SetupPorts): Promise<SetupStatus> {
   const { settings } = ports;
   const database = ports.database.check();
   const backups = ports.database.checkBackups();
-  const bridge = await ports.bridge.check();
+  const [bridge, tokeniser] = await Promise.all([
+    ports.bridge.check(),
+    ports.tokeniser.check(),
+  ]);
   const rows: SetupRow[] = [
     { item: "profile", state: "ok", profile: settings.profile },
     {
@@ -89,6 +100,7 @@ export async function getSetupStatus(ports: SetupPorts): Promise<SetupStatus> {
     ...creaturesRows(database),
     backupRow(backups, ports.now()),
     ...bridgeRows(bridge),
+    tokeniserRow(tokeniser),
   ];
   return { ready: rows.every((row) => row.state !== "problem"), rows };
 }
@@ -218,4 +230,16 @@ function bridgeRows(bridge: BridgeFacts): SetupRow[] {
             },
       ];
   }
+}
+
+/** A tokeniser whose image library loaded is ok; one that failed is a problem fixed by reinstalling the dependencies. */
+function tokeniserRow(tokeniser: TokeniserFacts): SetupRow {
+  return tokeniser.kind === "loaded"
+    ? { item: "tokeniser", state: "ok", tokeniser }
+    : {
+        item: "tokeniser",
+        state: "problem",
+        tokeniser,
+        fix: { code: "reinstall-dependencies" },
+      };
 }

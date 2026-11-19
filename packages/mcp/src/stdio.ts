@@ -12,6 +12,10 @@ import {
 } from "@ttrpg-agents/bridge/client";
 import { SETTINGS, describeProfile, loadConfig } from "@ttrpg-agents/config";
 import { createMonsterIndex, type Rng } from "@ttrpg-agents/engine";
+import {
+  createNodeImageSource,
+  createSharpTokeniser,
+} from "@ttrpg-agents/imaging";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
@@ -42,6 +46,7 @@ async function main(): Promise<void> {
     port: settings.bridgePort,
     tokenPath: settings.agentTokenFile,
   });
+  const tokeniser = createSharpTokeniser();
   const server = createServer({
     table: createBridgeTable(client),
     browser: createSystemBrowser(),
@@ -70,7 +75,10 @@ async function main(): Promise<void> {
         tokenPath: settings.agentTokenFile,
       }),
       now: () => new Date(),
+      tokeniser,
     },
+    tokeniser,
+    imageSource: createNodeImageSource(),
   });
   await server.connect(new StdioServerTransport());
 }
