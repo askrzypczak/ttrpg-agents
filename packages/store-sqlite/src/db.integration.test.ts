@@ -326,11 +326,11 @@ describe("migrations", () => {
     expect(Object.keys(listed.shadow ?? {})).not.toContain("sha256");
     // The migrated table takes art with only a hash, and still checks the
     // hash against the stored images.
-    repo.setTokenArt("wight", { sha256 });
+    repo.setTokenArt("wight", { sha256 }, "agent", origin);
     expect(repo.listTokenArt().wight).toEqual({ sha256 });
     let error: unknown;
     try {
-      repo.setTokenArt("ghast", { sha256: "cd".repeat(32) });
+      repo.setTokenArt("ghast", { sha256: "cd".repeat(32) }, "agent", origin);
     } catch (e) {
       error = e;
     }
@@ -343,7 +343,9 @@ describe("migrations", () => {
     const db = openDatabase(":memory:");
     let error: unknown;
     try {
-      db.exec("INSERT INTO token_art (monster_key) VALUES ('shadow')");
+      db.exec(
+        "INSERT INTO token_art (monster_key, source) VALUES ('shadow', 'table')",
+      );
     } catch (e) {
       error = e;
     }
@@ -369,8 +371,8 @@ describe("migrations", () => {
     const insert = (monsterKey: string, columns: string[]) =>
       db
         .prepare(
-          `INSERT INTO token_art (monster_key, sha256${columns.map((c) => `, ${c}`).join("")})
-           VALUES (?, ?${columns.map(() => ", ?").join("")})`,
+          `INSERT INTO token_art (monster_key, source, sha256${columns.map((c) => `, ${c}`).join("")})
+           VALUES (?, 'table', ?${columns.map(() => ", ?").join("")})`,
         )
         .run(monsterKey, sha256, ...columns.map((c) => full[c] ?? null));
     const partials = [

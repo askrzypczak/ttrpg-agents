@@ -22,6 +22,15 @@ import {
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
 
+/**
+ * The origin seeded art is logged under: a `table` one, which a running
+ * extension ignores, so a seed never redraws tokens by itself.
+ */
+export const seedOrigin: ChangeOrigin = {
+  source: "table",
+  commandId: "e2e-seed",
+};
+
 /** Throwaway SQLite file in `dir` for an e2e bridge (TTRPG_AGENTS_DB); never the real one. */
 export function e2eDbPath(dir: string): string {
   return join(dir, "encounter.sqlite");
@@ -160,6 +169,8 @@ export function seedE2eTokenArt(
       art === null
         ? { sha256: stored.sha256 }
         : { ...art, sha256: stored.sha256 },
+      art === null ? "agent" : "table",
+      seedOrigin,
     );
     return stored.sha256;
   } finally {

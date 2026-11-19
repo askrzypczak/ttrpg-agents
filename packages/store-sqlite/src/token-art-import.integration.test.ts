@@ -322,12 +322,17 @@ describe("importTokenArtLibrary", () => {
       "wolf.png": pngDeclaring(4, 4),
       "zz.gif": PNG_1X1,
     });
-    art.setTokenArt("wolf", {
-      url: "https://cdn.owlbear.rodeo/assets/wolf.png",
-      mime: "image/png",
-      width: 300,
-      height: 280,
-    });
+    art.setTokenArt(
+      "wolf",
+      {
+        url: "https://cdn.owlbear.rodeo/assets/wolf.png",
+        mime: "image/png",
+        width: 300,
+        height: 280,
+      },
+      "table",
+      { source: "table", commandId: "seed" },
+    );
 
     const summary = importTokenArtLibrary(db, library, { replace: false });
 

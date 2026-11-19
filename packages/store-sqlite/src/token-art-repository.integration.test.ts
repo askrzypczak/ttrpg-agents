@@ -51,8 +51,8 @@ describe("SqliteTokenArtRepository", () => {
 
   it("stores art and lists it by monster key", () => {
     const repo = new SqliteTokenArtRepository(openDatabase(":memory:"));
-    repo.setTokenArt("shadow", shadowArt);
-    repo.setTokenArt("ghoul", ghoulArt);
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
+    repo.setTokenArt("ghoul", ghoulArt, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({
       shadow: shadowArt,
       ghoul: ghoulArt,
@@ -61,8 +61,8 @@ describe("SqliteTokenArtRepository", () => {
 
   it("replaces the art of a monster key that already has some", () => {
     const repo = new SqliteTokenArtRepository(openDatabase(":memory:"));
-    repo.setTokenArt("shadow", shadowArt);
-    repo.setTokenArt("shadow", ghoulArt);
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
+    repo.setTokenArt("shadow", ghoulArt, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({ shadow: ghoulArt });
   });
 
@@ -72,7 +72,7 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({
       shadow: { ...shadowArt, sha256 },
     });
@@ -84,8 +84,8 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", shadowArt);
-    repo.setTokenArt("ghoul", { ...ghoulArt, sha256 });
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
+    repo.setTokenArt("ghoul", { ...ghoulArt, sha256 }, "table", tableOrigin);
     const listed = repo.listTokenArt();
     expect(listed.shadow).toEqual(shadowArt);
     expect(Object.keys(listed.shadow ?? {})).not.toContain("sha256");
@@ -99,9 +99,9 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
     expect(repo.listTokenArt().shadow?.sha256).toBe(sha256);
-    repo.setTokenArt("shadow", ghoulArt);
+    repo.setTokenArt("shadow", ghoulArt, "table", tableOrigin);
     const listed = repo.listTokenArt();
     expect(listed.shadow).toEqual(ghoulArt);
     expect(Object.keys(listed.shadow ?? {})).not.toContain("sha256");
@@ -110,10 +110,15 @@ describe("SqliteTokenArtRepository", () => {
   it("refuses art that refers to a hash with no stored image", () => {
     const db = openDatabase(":memory:");
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", shadowArt);
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
     let error: unknown;
     try {
-      repo.setTokenArt("ghoul", { ...ghoulArt, sha256: "a".repeat(64) });
+      repo.setTokenArt(
+        "ghoul",
+        { ...ghoulArt, sha256: "a".repeat(64) },
+        "table",
+        tableOrigin,
+      );
     } catch (e) {
       error = e;
     }
@@ -129,7 +134,7 @@ describe("SqliteTokenArtRepository", () => {
     );
     const repo = new SqliteTokenArtRepository(db);
     const key = "homebrew: the Unlisted One / 7";
-    repo.setTokenArt(key, { ...shadowArt, sha256 });
+    repo.setTokenArt(key, { ...shadowArt, sha256 }, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({
       [key]: { ...shadowArt, sha256 },
     });
@@ -154,8 +159,8 @@ describe("SqliteTokenArtRepository", () => {
       },
     });
     const repo = new SqliteTokenArtRepository(spied);
-    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
-    repo.setTokenArt("ghoul", ghoulArt);
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
+    repo.setTokenArt("ghoul", ghoulArt, "table", tableOrigin);
 
     prepared.length = 0;
     const listed = repo.listTokenArt();
@@ -174,8 +179,8 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", { sha256 });
-    repo.setTokenArt("ghoul", ghoulArt);
+    repo.setTokenArt("shadow", { sha256 }, "agent", mcpOrigin);
+    repo.setTokenArt("ghoul", ghoulArt, "table", tableOrigin);
     const listed = repo.listTokenArt();
     expect(listed).toEqual({ shadow: { sha256 }, ghoul: ghoulArt });
     expect(Object.keys(listed.shadow ?? {})).toEqual(["sha256"]);
@@ -187,8 +192,8 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", { sha256 });
-    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    repo.setTokenArt("shadow", { sha256 }, "agent", mcpOrigin);
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({ shadow: { ...shadowArt, sha256 } });
   });
 
@@ -197,7 +202,12 @@ describe("SqliteTokenArtRepository", () => {
     dirs.push(dir);
     const path = join(dir, "enc.db");
     const first = openDatabase(path);
-    new SqliteTokenArtRepository(first).setTokenArt("shadow", shadowArt);
+    new SqliteTokenArtRepository(first).setTokenArt(
+      "shadow",
+      shadowArt,
+      "table",
+      tableOrigin,
+    );
     first.close();
 
     const second = openDatabase(path);

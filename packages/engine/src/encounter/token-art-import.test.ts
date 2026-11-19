@@ -55,13 +55,24 @@ function fakeArt(initial: Record<string, TokenArt> = {}) {
     listTokenArt(): Record<string, TokenArt> {
       return { ...stored };
     },
+    getTokenArt(monsterKey: string): StoredTokenArt | undefined {
+      const value = Object.hasOwn(stored, monsterKey)
+        ? stored[monsterKey]
+        : undefined;
+      return value === undefined ? undefined : { art: value, source: "table" };
+    },
     setTokenArt(monsterKey: string, value: TokenArt): void {
       writes.push({ monsterKey, art: value });
       stored[monsterKey] = value;
     },
+    transaction<T>(fn: () => T): T {
+      return fn();
+    },
   };
   return { art, stored, writes };
 }
+
+const importOrigin: ChangeOrigin = { source: "mcp", commandId: "import-0" };
 
 /** A byte reader that counts its calls. */
 function reader(bytes: Uint8Array) {
@@ -79,9 +90,14 @@ describe("importTokenArt", () => {
     const { images, saved } = fakeImages(NEW_HASH);
     const { read } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "srd-2024_goblin", read, {
-      replace: false,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      read,
+      { replace: false },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "stored", sha256: NEW_HASH });
     expect(saved).toEqual([
@@ -96,9 +112,14 @@ describe("importTokenArt", () => {
     const { images, saved } = fakeImages(NEW_HASH);
     const { read, calls } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "srd-2024_goblin", read, {
-      replace: false,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      read,
+      { replace: false },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "skipped", reason: "has_art" });
     expect(calls.count).toBe(0);
@@ -114,9 +135,14 @@ describe("importTokenArt", () => {
     const { images, saved } = fakeImages(NEW_HASH);
     const { read } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "srd-2024_goblin", read, {
-      replace: true,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      read,
+      { replace: true },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "stored", sha256: NEW_HASH });
     expect(saved).toHaveLength(1);
@@ -129,9 +155,14 @@ describe("importTokenArt", () => {
     const { images } = fakeImages(NEW_HASH);
     const { read } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "srd-2024_goblin", read, {
-      replace: true,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      read,
+      { replace: true },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "skipped", reason: "same_image" });
     expect(writes).toEqual([]);
@@ -153,6 +184,7 @@ describe("importTokenArt", () => {
       "srd-2024_goblin",
       reader(notAnImage).read,
       { replace: false },
+      importOrigin,
     );
     const replacing = importTokenArt(
       art,
@@ -160,6 +192,7 @@ describe("importTokenArt", () => {
       "srd-2024_wolf",
       reader(notAnImage).read,
       { replace: true },
+      importOrigin,
     );
 
     const rejection = {
@@ -179,9 +212,14 @@ describe("importTokenArt", () => {
     const { images } = fakeImages(NEW_HASH);
     const { read } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "constructor", read, {
-      replace: false,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "constructor",
+      read,
+      { replace: false },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "stored", sha256: NEW_HASH });
     expect(writes).toEqual([

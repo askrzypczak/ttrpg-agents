@@ -71,7 +71,11 @@ async function startServer(
     port: 0,
     staticDir: dir,
     snapshot: () => snapshotMessage(directory, art, new SqliteEncounterLog(db)),
-    setTokenArt: (monsterKey, value) => art.setTokenArt(monsterKey, value),
+    setTokenArt: (monsterKey, value, commandId) =>
+      art.setTokenArt(monsterKey, value, "table", {
+        source: "table",
+        commandId,
+      }),
     ...options,
   });
   servers.push(server);
@@ -217,7 +221,7 @@ async function expectStillOpen(client: Client): Promise<void> {
 
 describe("token-art-set over the bridge", () => {
   it("the snapshot sent on connect includes the stored art", async () => {
-    artRepo.setTokenArt("shadow", shadowArt);
+    artRepo.setTokenArt("shadow", shadowArt, "table", origin);
     const server = await startServer();
 
     const client = await authed(server);
@@ -238,7 +242,7 @@ describe("token-art-set over the bridge", () => {
       height: 1,
       bytes: png,
     });
-    artRepo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    artRepo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", origin);
     const server = await startServer();
 
     const client = await authed(server);
@@ -262,8 +266,8 @@ describe("token-art-set over the bridge", () => {
       height: 1,
       bytes: png,
     });
-    artRepo.setTokenArt("shadow", { sha256 });
-    artRepo.setTokenArt("ghoul", shadowArt);
+    artRepo.setTokenArt("shadow", { sha256 }, "agent", origin);
+    artRepo.setTokenArt("ghoul", shadowArt, "table", origin);
     const server = await startServer();
 
     const client = await authed(server);
