@@ -5,6 +5,7 @@ import type {
   DatabaseFacts,
   SettingFact,
   SetupPorts,
+  TokeniserFacts,
 } from "./port.js";
 
 export type SetupState = "ok" | "warning" | "problem";
@@ -22,7 +23,8 @@ export type SetupFix =
   | { code: "reload-gm-tab" }
   | { code: "update-checkout" }
   | { code: "check-database" }
-  | { code: "take-backup" };
+  | { code: "take-backup" }
+  | { code: "reinstall-dependencies" };
 export type SetupRow =
   | { item: "profile"; state: "ok"; profile: string }
   | { item: "config-file"; state: "ok"; path: string; found: boolean }
@@ -54,6 +56,12 @@ export type SetupRow =
       port: number;
       tab: "connected" | "none" | "not-answering";
       roomId?: string;
+      fix?: SetupFix;
+    }
+  | {
+      item: "tokeniser";
+      state: "ok" | "problem";
+      tokeniser: TokeniserFacts;
       fix?: SetupFix;
     };
 export interface SetupStatus {

@@ -2085,6 +2085,21 @@ function clearedListLine(cleared: readonly MonsterInstance[]): string[] {
   ];
 }
 
+const previewTokenTool = defineTool({
+  name: "preview_token",
+  annotations: { readOnlyHint: true },
+  description:
+    "Preview a round token made from an image: an absolute file path or an https URL (PNG, JPEG or WebP). Optional focus (fractions of the width and height) and zoom (1 to 8). Stores nothing.",
+  inputSchema: {
+    image: z.string(),
+    focus: z.object({ x: z.number(), y: z.number() }).optional(),
+    zoom: z.number().optional(),
+  },
+  run() {
+    throw new Error("not implemented");
+  },
+});
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -2126,4 +2141,5 @@ export const tools: readonly ToolDefinition[] = [
   editCreatureTool,
   removeCreatureTool,
   listCreaturesTool,
+  previewTokenTool,
 ];

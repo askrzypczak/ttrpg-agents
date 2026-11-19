@@ -67,6 +67,7 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   edit_creature: { destructiveHint: true },
   remove_creature: { destructiveHint: true },
   list_creatures: { readOnlyHint: true },
+  preview_token: { readOnlyHint: true },
 };
 
 let cleanup: (() => Promise<void>)[] = [];
@@ -110,7 +111,7 @@ async function connect(seed?: (dbPath: string) => void): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all forty tools and serves a call", async () => {
+  it("lists all forty-one tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
@@ -132,6 +133,7 @@ describe("stdio server", () => {
       "move_monsters",
       "open_statblock",
       "preview_monsters",
+      "preview_token",
       "propose_rooms",
       "remove_creature",
       "remove_monsters",
@@ -166,11 +168,11 @@ describe("stdio server", () => {
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
   }, 30_000);
 
-  it("stdio server (spawned via `bin/stdio.mjs`) lists forty tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
+  it("stdio server (spawned via `bin/stdio.mjs`) lists forty-one tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(40);
+    expect(tools).toHaveLength(41);
     expect(tools.map((t) => t.name)).toContain("setup_status");
     const tableStatus = tools.find((t) => t.name === "table_status");
     expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });

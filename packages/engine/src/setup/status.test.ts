@@ -61,7 +61,7 @@ const settings: SettingFact[] = [
 ];
 
 describe("getSetupStatus", () => {
-  it("rows come in report order: profile, config file, config problems, settings, database, stored creatures, backup, bridge, GM tab", async () => {
+  it("rows come in report order: profile, config file, config problems, settings, database, stored creatures, backup, bridge, GM tab, tokeniser", async () => {
     const status = await getSetupStatus(
       makeTestSetupPorts({
         settings: {
@@ -85,6 +85,7 @@ describe("getSetupStatus", () => {
       "backup",
       "bridge",
       "gm-tab",
+      "tokeniser",
     ]);
     const problems = rowsOf(status.rows, "config-problem");
     expect(
@@ -458,5 +459,40 @@ describe("getSetupStatus", () => {
       roomId: "room-xyz",
     });
     expect(status.ready).toBe(true);
+  });
+
+  it("a tokeniser that loaded gives an ok tokeniser row, the last row of the report", async () => {
+    for (const answer of [
+      { kind: "gm-tab-connected", roomId: "room-xyz" },
+      { kind: "unreachable" },
+    ] as const) {
+      const status = await getSetupStatus(
+        makeTestSetupPorts({
+          bridge: { answer },
+          tokeniser: { kind: "loaded" },
+        }),
+      );
+      expect(status.rows.at(-1), answer.kind).toEqual({
+        item: "tokeniser",
+        state: "ok",
+        tokeniser: { kind: "loaded" },
+      });
+      expect(rowsOf(status.rows, "tokeniser"), answer.kind).toHaveLength(1);
+    }
+  });
+
+  it("a tokeniser that failed to load gives a problem tokeniser row with the reason and the reinstall-dependencies fix, and the setup is not ready", async () => {
+    const tokeniser = {
+      kind: "failed",
+      reason: 'Could not load the "sharp" module using the linux-x64 runtime',
+    } as const;
+    const status = await getSetupStatus(makeTestSetupPorts({ tokeniser }));
+    expect(status.rows.at(-1)).toEqual({
+      item: "tokeniser",
+      state: "problem",
+      tokeniser,
+      fix: { code: "reinstall-dependencies" },
+    });
+    expect(status.ready).toBe(false);
   });
 });

@@ -42,6 +42,7 @@ const expected: Record<string, ToolAnnotations | undefined> = {
   edit_creature: { destructiveHint: true },
   remove_creature: { destructiveHint: true },
   list_creatures: { readOnlyHint: true },
+  preview_token: { readOnlyHint: true },
 };
 
 describe("tool annotations", () => {

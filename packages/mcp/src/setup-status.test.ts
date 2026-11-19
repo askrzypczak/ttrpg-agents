@@ -263,6 +263,30 @@ describe("formatSetupStatus", () => {
     ]);
   });
 
+  it("formats the tokeniser row as loaded, or as cannot load with the reason and an npm ci fix line", () => {
+    const reason =
+      'Could not load the "sharp" module using the linux-x64 runtime';
+    const text = formatSetupStatus({
+      ready: false,
+      rows: [
+        { item: "tokeniser", state: "ok", tokeniser: { kind: "loaded" } },
+        {
+          item: "tokeniser",
+          state: "problem",
+          tokeniser: { kind: "failed", reason },
+          fix: { code: "reinstall-dependencies" },
+        },
+      ],
+    });
+    expect(text.split("\n")).toEqual([
+      "Setup: not ready.",
+      "ok: tokeniser (sharp): loaded",
+      `problem: tokeniser (sharp): cannot load: ${reason}`,
+      "  fix: reinstall this checkout's dependencies so sharp's prebuilt binary for this platform installs: npm ci",
+      POINTERS,
+    ]);
+  });
+
   it("the report ends with the pointers to the table_status tool and npm run bridge:status", async () => {
     for (const text of [
       await report(),

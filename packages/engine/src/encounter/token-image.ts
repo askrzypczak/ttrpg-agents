@@ -70,6 +70,18 @@ export function validateTokenImage(bytes: Uint8Array): TokenImageValidation {
   return { ok: true, image: { mime, width, height } };
 }
 
+/** The largest source image a token is made from, in bytes. */
+export const TOKEN_SOURCE_MAX_BYTES = 20 * 1024 * 1024;
+
+/** The largest width or height of a source image a token is made from, in pixels. */
+export const TOKEN_SOURCE_MAX_SIDE = 8192;
+
+/** Checks a token's source image as validateTokenImage does, with the source caps. */
+export function validateTokenSource(bytes: Uint8Array): TokenImageValidation {
+  void bytes;
+  throw new Error("not implemented");
+}
+
 function reject(
   code: TokenImageErrorCode,
   message: string,
