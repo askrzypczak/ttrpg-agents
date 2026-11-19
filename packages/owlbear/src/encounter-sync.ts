@@ -1326,7 +1326,8 @@ export function createEncounterSync(
         picking = queue.slice(i + 1);
         announceStep(undefined);
         if (chosen === undefined) {
-          declined.add(monsterKey);
+          // Art set through the agent while the picker was open stays usable.
+          if (!Object.hasOwn(art, monsterKey)) declined.add(monsterKey);
           continue;
         }
         checked.add(monsterKey);

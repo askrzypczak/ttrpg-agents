@@ -543,4 +543,32 @@ describe("createEncounterSync art-changed", () => {
     ]);
     expect(s.errors).toEqual([]);
   });
+
+  it("a fresh picker the GM cancels after an mcp art-changed for its type leaves the agent's art usable and its token drawn with it", async () => {
+    const feed = createMessageFeed();
+    const s = setup();
+    const pick = deferred<PublishedTokenArt | undefined>();
+    s.answer(() => pick.promise);
+
+    const snapshotApplied = s.sync.handleMessage(
+      feed.snapshot([inst(1, "goblin")]),
+    );
+    await settle();
+    expect(s.fake.pickImageCalls()).toBe(1);
+
+    const eventApplied = s.sync.handleMessage(
+      artChanged(feed, "goblin", newArt),
+    );
+    await settle();
+    pick.resolve(undefined);
+    await snapshotApplied;
+    await eventApplied;
+    await settle();
+
+    expectImages(s.tokenOf, ["goblin-1"], newArt);
+    expect(s.stateOf("goblin")).toBe("art");
+    expect(s.fake.pickImageCalls()).toBe(1);
+    expect(s.reported).toEqual([]);
+    expect(s.errors).toEqual([]);
+  });
 });
