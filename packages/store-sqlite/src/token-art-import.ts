@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { importTokenArt } from "@ttrpg-agents/engine";
+import { importTokenArt, type ChangeOrigin } from "@ttrpg-agents/engine";
 import { SqliteTokenArtRepository } from "./token-art-repository.js";
 import { SqliteTokenImageRepository } from "./token-image-repository.js";
 
@@ -51,6 +52,7 @@ export function importTokenArtLibrary(
     claims.set(key, [...(claims.get(key) ?? []), file]);
   }
 
+  const origin: ChangeOrigin = { source: "mcp", commandId: randomUUID() };
   const art = new SqliteTokenArtRepository(db);
   const images = new SqliteTokenImageRepository(db);
   const summary: TokenArtImportSummary = {
@@ -81,6 +83,7 @@ export function importTokenArtLibrary(
       key,
       () => new Uint8Array(readFileSync(join(dir, file))),
       options,
+      origin,
     );
     switch (result.outcome) {
       case "stored":

@@ -1,3 +1,4 @@
+import type { ChangeOrigin } from "./origin.js";
 import type { TokenArtRepository } from "./token-art.js";
 import {
   storeTokenImage,
@@ -23,6 +24,7 @@ export function importTokenArt(
   monsterKey: string,
   readBytes: () => Uint8Array,
   options: { replace: boolean },
+  origin: ChangeOrigin,
 ): TokenArtImportResult {
   const all = art.listTokenArt();
   const existing = Object.hasOwn(all, monsterKey) ? all[monsterKey] : undefined;
@@ -36,6 +38,6 @@ export function importTokenArt(
   if (existing?.sha256 === result.sha256)
     return { outcome: "skipped", reason: "same_image" };
 
-  art.setTokenArt(monsterKey, { sha256: result.sha256 });
+  art.setTokenArt(monsterKey, { sha256: result.sha256 }, "agent", origin);
   return { outcome: "stored", sha256: result.sha256 };
 }

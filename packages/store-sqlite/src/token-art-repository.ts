@@ -1,8 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
 import type {
+  ChangeOrigin,
   PublishedTokenArt,
+  StoredTokenArt,
   TokenArt,
   TokenArtRepository,
+  TokenArtSource,
 } from "@ttrpg-agents/engine";
 
 /**
@@ -46,7 +49,19 @@ export class SqliteTokenArtRepository implements TokenArtRepository {
     return art;
   }
 
-  setTokenArt(monsterKey: string, art: TokenArt): void {
+  getTokenArt(monsterKey: string): StoredTokenArt | undefined {
+    void monsterKey;
+    throw new Error("not implemented");
+  }
+
+  setTokenArt(
+    monsterKey: string,
+    art: TokenArt,
+    source: TokenArtSource,
+    origin: ChangeOrigin,
+  ): void {
+    void source;
+    void origin;
     this.db
       .prepare(
         `INSERT INTO token_art (monster_key, url, mime, width, height, sha256)
@@ -63,5 +78,10 @@ export class SqliteTokenArtRepository implements TokenArtRepository {
         art.height ?? null,
         art.sha256 ?? null,
       );
+  }
+
+  transaction<T>(fn: () => T): T {
+    void fn;
+    throw new Error("not implemented");
   }
 }

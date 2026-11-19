@@ -828,3 +828,86 @@ describe("migration to scene bindings", () => {
     db.close();
   });
 });
+
+describe("migration to token art sources", () => {
+  it("a version 20 database migrates to the latest version tagging art with a url table and art without a url agent", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    migrateToVersion(db, 20);
+    const sha256 = "ab".repeat(32);
+    db.prepare(
+      `INSERT INTO token_art_image (sha256, mime, width, height, bytes)
+       VALUES (?, 'image/png', 1, 1, ?)`,
+    ).run(sha256, new Uint8Array([1, 2, 3]));
+    db.exec(
+      `INSERT INTO token_art (monster_key, url, mime, width, height)
+       VALUES ('shadow', 'https://cdn.owlbear.rodeo/assets/shadow.png', 'image/png', 300, 280)`,
+    );
+    db.prepare(
+      `INSERT INTO token_art (monster_key, url, mime, width, height, sha256)
+       VALUES ('ghoul', 'https://cdn.owlbear.rodeo/assets/ghoul.webp', 'image/webp', 512, 512, ?)`,
+    ).run(sha256);
+    db.prepare(
+      "INSERT INTO token_art (monster_key, sha256) VALUES ('wight', ?)",
+    ).run(sha256);
+
+    migrate(db);
+
+    expect(LATEST_VERSION).toBeGreaterThan(20);
+    expect(getUserVersion(db)).toBe(LATEST_VERSION);
+    const rows = db
+      .prepare(
+        "SELECT monster_key, url, sha256, source FROM token_art ORDER BY monster_key",
+      )
+      .all();
+    expect(rows).toEqual([
+      {
+        monster_key: "ghoul",
+        url: "https://cdn.owlbear.rodeo/assets/ghoul.webp",
+        sha256,
+        source: "table",
+      },
+      {
+        monster_key: "shadow",
+        url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+        sha256: null,
+        source: "table",
+      },
+      { monster_key: "wight", url: null, sha256, source: "agent" },
+    ]);
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    db.close();
+  });
+
+  it("the token_art table refuses a source other than table, agent or default", () => {
+    const db = openDatabase(":memory:");
+    const insert = (monsterKey: string, source: string) =>
+      db
+        .prepare(
+          `INSERT INTO token_art (monster_key, url, mime, width, height, source)
+           VALUES (?, 'https://cdn.owlbear.rodeo/assets/shadow.png', 'image/png', 300, 280, ?)`,
+        )
+        .run(monsterKey, source);
+    for (const source of ["gm", "mcp", "TABLE", ""]) {
+      let error: unknown;
+      try {
+        insert(`refused-${source}`, source);
+      } catch (e) {
+        error = e;
+      }
+      // SQLITE_CONSTRAINT_CHECK
+      expect(error, source).toMatchObject({ errcode: 275 });
+    }
+    expect(new SqliteTokenArtRepository(db).listTokenArt()).toEqual({});
+    // Control: each of the three sources is stored.
+    for (const source of ["table", "agent", "default"]) insert(source, source);
+    expect(
+      db.prepare("SELECT source FROM token_art ORDER BY source").all(),
+    ).toEqual([
+      { source: "agent" },
+      { source: "default" },
+      { source: "table" },
+    ]);
+    db.close();
+  });
+});

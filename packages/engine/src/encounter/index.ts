@@ -58,3 +58,10 @@ export {
   type TokenImageStoreResult,
   type TokenImageValidation,
 } from "./token-image.js";
+// #378 token art source and precedence
+export {
+  assignTokenArt,
+  type AssignTokenArtResult,
+  type StoredTokenArt,
+  type TokenArtSource,
+} from "./token-art.js";

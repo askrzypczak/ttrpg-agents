@@ -101,6 +101,8 @@ function fieldsChanged(event: EncounterEvent, id: string): UndoField[] {
       return event.id === id ? ["type"] : [];
     case "position-changed":
       return event.id === id ? ["position"] : [];
+    case "art-changed":
+      throw new Error("not implemented");
   }
 }
 

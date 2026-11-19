@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { changeOriginSchema } from "./origin.js";
+import { tokenArtSchema } from "./token-art.js";
 import { monsterInstanceSchema } from "./types.js";
 
 /** Source of truth for `EncounterEvent`; the protocol reuses it as the wire shape. */
@@ -55,6 +56,12 @@ export const encounterEventSchema = z.discriminatedUnion("type", [
     armorClass: z.number(),
     initiative: z.number().nullable(),
     footprint: z.number().int().min(1),
+    origin: changeOriginSchema,
+  }),
+  z.object({
+    type: z.literal("art-changed"),
+    monsterKey: z.string(),
+    art: tokenArtSchema,
     origin: changeOriginSchema,
   }),
 ]);

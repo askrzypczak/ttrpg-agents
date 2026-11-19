@@ -207,6 +207,8 @@ function fold(
             }
           : i,
       );
+    case "art-changed":
+      throw new Error("not implemented");
   }
 }
 

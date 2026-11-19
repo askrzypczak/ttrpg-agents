@@ -6,6 +6,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { validateTokenImage } from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterLog } from "./sqlite-log.js";
 import {
   formatTokenArtImportSummary,
   importTokenArtLibrary,
@@ -340,5 +341,82 @@ describe("importTokenArtLibrary", () => {
         "Stored 2, skipped 1, rejected 2.",
       ].join("\n"),
     );
+  });
+
+  it("importTokenArtLibrary logs one art-changed event with a null encounter id, origin mcp and one command id per call, for each stored file and none for a skipped or rejected file", () => {
+    const { library, db, art } = setup({
+      "goblin.png": PNG_1X1,
+      "orc.webp": WEBP_1X1,
+      "bad.png": NOT_AN_IMAGE,
+      "zz.gif": PNG_1X1,
+      "wolf.png": PNG_1X1,
+    });
+    art.setTokenArt(
+      "wolf",
+      {
+        url: "https://cdn.owlbear.rodeo/assets/wolf.png",
+        mime: "image/png",
+        width: 300,
+        height: 280,
+      },
+      "table",
+      { source: "table", commandId: "seed" },
+    );
+    const log = new SqliteEncounterLog(db);
+    const start = log.latestSeq();
+
+    importTokenArtLibrary(db, library, { replace: false });
+
+    const first = log.eventsSince(start);
+    expect(first).toEqual([
+      {
+        seq: expect.any(Number) as number,
+        encounterId: null,
+        event: {
+          type: "art-changed",
+          monsterKey: "goblin",
+          art: { sha256: sha256Of(PNG_1X1) },
+          origin: { source: "mcp", commandId: expect.any(String) as string },
+        },
+      },
+      {
+        seq: expect.any(Number) as number,
+        encounterId: null,
+        event: {
+          type: "art-changed",
+          monsterKey: "orc",
+          art: { sha256: sha256Of(WEBP_1X1) },
+          origin: { source: "mcp", commandId: expect.any(String) as string },
+        },
+      },
+    ]);
+    const commandIds = first.map((e) =>
+      "event" in e ? e.event.origin.commandId : undefined,
+    );
+    expect(commandIds[0]).toBe(commandIds[1]);
+
+    // A second call stores the new file only, under a command id of its own.
+    writeFileSync(join(library, "kobold.jpg"), JPEG_1X1);
+    const middle = log.latestSeq();
+    importTokenArtLibrary(db, library, { replace: false });
+
+    const second = log.eventsSince(middle);
+    expect(second).toHaveLength(1);
+    const [only] = second;
+    expect(only).toMatchObject({
+      encounterId: null,
+      event: {
+        type: "art-changed",
+        monsterKey: "kobold",
+        art: { sha256: sha256Of(JPEG_1X1) },
+        origin: { source: "mcp" },
+      },
+    });
+    const secondId =
+      only !== undefined && "event" in only
+        ? only.event.origin.commandId
+        : undefined;
+    expect(secondId).toEqual(expect.any(String));
+    expect(secondId).not.toBe(commandIds[0]);
   });
 });
