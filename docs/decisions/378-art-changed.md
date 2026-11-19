@@ -36,12 +36,12 @@ Issue: [#378](https://github.com/askrzypczak/ttrpg-agents/issues/378).
 
 ## 378.4 An `mcp` `art-changed` clears the type's session state and checks the new art's liveness once per art change
 
-- Decided by: epic #375 orchestrator, 2026-11-18, plan gate (Q6, Q7), not human-approved.
+- Decided by: epic #375 orchestrator, 2026-11-18, plan gate (Q6, Q7), not human-approved; the cancelled fresh picker rule by the epic #375 orchestrator, 2026-11-19, first review of PR #481, not human-approved.
 - Context: The extension kept a type's panel pick for the session over later art (220.8, 274.2) and checked stored art's liveness once per type per session (310.2). Art set through the agent during play must replace a pick and be checked.
 - Options:
-  - Chosen: an `mcp` `art-changed` sets the type's art, clears its `declined`, `gone`, `checked`, `uploaded` and `panelPicked` entries, runs the per-art step a snapshot runs (a url with a hash gets a liveness check, a url without a hash the bytes backfill), and adds the held encounter's instances of the type to `reskins`. A liveness check of the replaced art that ends after the event changes nothing. A panel pick that resolves after the event still wins. The rule against stale snapshots stands.
+  - Chosen: an `mcp` `art-changed` sets the type's art, clears its `declined`, `gone`, `checked`, `uploaded` and `panelPicked` entries, runs the per-art step a snapshot runs (a url with a hash gets a liveness check, a url without a hash the bytes backfill), and adds the held encounter's instances of the type to `reskins`. A liveness check of the replaced art that ends after the event changes nothing. A panel pick that resolves after the event still wins. A fresh picker of the type that the GM cancels after the event does not decline the type, so the agent's art stays usable and its tokens are redrawn. The rule against stale snapshots stands.
   - Keep the session's pick over agent art: the DM's latest choice through the agent would not show until a reload.
-- Where: the `art-changed` branch of `handleMessage` and the per-art helper in `createEncounterSync` (`packages/owlbear/src/encounter-sync.ts`).
+- Where: the `art-changed` branch of `handleMessage` and the per-art helper and the fresh-pick loop in `createEncounterSync` (`packages/owlbear/src/encounter-sync.ts`).
 - Revisit if: dead-art checks become too frequent.
 - Status: active
 - Supersedes: 220.8 in part, 274.2 in part, 310.2 in part
