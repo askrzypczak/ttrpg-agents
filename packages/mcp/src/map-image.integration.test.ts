@@ -9,6 +9,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -70,7 +72,8 @@ function contextWith(answer: TableSceneMap): {
   imageCalls: string[];
 } {
   const imageCalls: string[] = [];
-  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  const db = openDatabase(":memory:");
+  const encounters = new SqliteEncounterDirectory(db);
   // A scene bound to the encounter is open, so replies name no encounter.
   encounters.setOpenScene("scene-1");
   encounters
@@ -98,6 +101,8 @@ function contextWith(answer: TableSceneMap): {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
   return { ctx, imageCalls };

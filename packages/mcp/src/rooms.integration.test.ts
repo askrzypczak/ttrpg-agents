@@ -17,6 +17,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -71,7 +73,8 @@ function contextWith(
   sceneTokens: TablePort["sceneTokens"] = () =>
     Promise.reject(new Error("not stubbed")),
 ): ToolContext {
-  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  const db = openDatabase(":memory:");
+  const encounters = new SqliteEncounterDirectory(db);
   if (active) {
     encounters
       .mapRepositoryFor(
@@ -96,6 +99,8 @@ function contextWith(
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
 }

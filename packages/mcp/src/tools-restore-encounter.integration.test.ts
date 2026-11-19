@@ -10,6 +10,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -34,6 +36,7 @@ let tick: number;
 
 beforeEach(() => {
   tick = 1000;
+  const db = openDatabase(":memory:");
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("table not stubbed")),
@@ -41,7 +44,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
+    encounters: new SqliteEncounterDirectory(db, {
       now: () => tick++,
     }),
     monsters: staticMonsterIndex(loadSrdMonsters()),
@@ -53,6 +56,8 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
   // A scene bound to the encounter is open, so replies name no encounter.

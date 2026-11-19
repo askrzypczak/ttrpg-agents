@@ -10,6 +10,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -146,7 +148,8 @@ let issuedCommandIds: string[];
 beforeEach(() => {
   writes = [];
   issuedCommandIds = [];
-  const inner = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  const db = openDatabase(":memory:");
+  const inner = new SqliteEncounterDirectory(db);
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("table not stubbed")),
@@ -164,6 +167,8 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => {
       const id = `command-${String(issuedCommandIds.length + 1)}`;
       issuedCommandIds.push(id);

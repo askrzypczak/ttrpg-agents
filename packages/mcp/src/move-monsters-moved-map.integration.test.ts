@@ -7,6 +7,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -52,7 +54,8 @@ const movedLine =
   "The map moved since it was registered; cells are read where it is now. Use the map again to confirm the new position.";
 
 function context(): ToolContext {
-  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  const db = openDatabase(":memory:");
+  const encounters = new SqliteEncounterDirectory(db);
   encounters
     .mapRepositoryFor(
       resolveEncounter(encounters, { writes: true }).encounter.id,
@@ -79,6 +82,8 @@ function context(): ToolContext {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
 }

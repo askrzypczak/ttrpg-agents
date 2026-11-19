@@ -16,6 +16,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -64,7 +66,8 @@ function scene(...maps: TableMapItem[]): TableSceneMap {
 }
 
 function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
-  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  const db = openDatabase(":memory:");
+  const encounters = new SqliteEncounterDirectory(db);
   encounters
     .mapRepositoryFor(
       resolveEncounter(encounters, { writes: true }).encounter.id,
@@ -87,6 +90,8 @@ function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
 }

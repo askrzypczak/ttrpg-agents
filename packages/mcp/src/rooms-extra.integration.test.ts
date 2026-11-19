@@ -8,6 +8,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -66,7 +68,8 @@ describe("list_rooms cells", () => {
       grid: { dpi: 150, type: "SQUARE" },
       maps: [trollskull],
     };
-    const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+    const db = openDatabase(":memory:");
+    const encounters = new SqliteEncounterDirectory(db);
     encounters
       .mapRepositoryFor(
         resolveEncounter(encounters, { writes: true }).encounter.id,
@@ -89,6 +92,8 @@ describe("list_rooms cells", () => {
       setup: makeTestSetupPorts(),
       tokeniser: makeTestTokeniser(),
       imageSource: makeTestImageSource(),
+      art: new SqliteTokenArtRepository(db),
+      images: new SqliteTokenImageRepository(db),
       newCommandId: () => "command",
     };
     const saved = await call(ctx, "set_rooms", {

@@ -22,49 +22,50 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 
 ## Tools
 
-| Tool                   | Purpose                                                                                                                                           |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_monsters`      | Name search (top 10) with keys; old SRD 5.1 names match too, shown as renamed (alias) hits                                                        |
-| `get_statblock`        | Markdown statblock by key                                                                                                                         |
-| `open_statblock`       | Open a monster's D&D Beyond 2024 page (by key) in the default browser; replies with the link; needs a login that owns the 2024 Monster Manual     |
-| `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init; `join` (id or exact name) adds to that monster's group and initiative           |
-| `preview_monsters`     | Dry run of `add_monsters` (same arguments and checks): names, AC, average HP and dice, init modifier, footprint, room cells; adds nothing         |
-| `move_monsters`        | Move monsters (ids or exact names, all-or-nothing) into a saved room, keeping their state; one already in that room avoids its own cells          |
-| `list_encounter`       | Encounter in initiative order with AC and HP, and the removed monsters that can be restored                                                       |
-| `apply_damage`         | Damage by instance id or exact name (clamped at 0)                                                                                                |
-| `heal`                 | Heal by instance id or exact name (clamped at max)                                                                                                |
-| `set_hp`               | Set an exact current HP by id or exact name (clamped to 0..max); reports before/after and any clamp                                               |
-| `set_max_hp`           | Set an exact max HP by id or exact name; HP is lowered if above it, never raised; reports before/after and any clamp                              |
-| `reset_max_hp`         | Reset max HP (by id or exact name, all-or-nothing) to the statblock average or a new roll; full HP stays full; reports before and after           |
-| `set_armor_class`      | Set an exact armor class by id or exact name; reports before/after and any clamp                                                                  |
-| `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                            |
-| `restore_monsters`     | Bring back removed monsters by instance id or exact name, all-or-nothing, with HP and initiative; a taken name gets a new number                  |
-| `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                            |
-| `change_monster_type`  | Change monsters (id or exact name, all-or-nothing) to another type: new name, HP, AC, size; keeps damage, initiative roll, group, place           |
-| `set_initiative`       | Set an exact initiative by instance id or exact name; reports before and after                                                                    |
-| `roll_initiative`      | Roll initiative for several monsters by id or exact name (one roll per group, or each); reports roll, modifier, before and after                  |
-| `split_initiative`     | Give several monsters their own initiative group each, by id or exact name; keeps each value, or rolls each with `roll`                           |
-| `merge_initiative`     | Put several monsters in one initiative group by id or exact name; each takes the first named monster's initiative, no roll                        |
-| `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                            |
-| `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                       |
-| `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number                  |
-| `undo`                 | Undo the last change, again the one before; table edits stay; not clears, map/room, encounter rename/binding or creature changes; names next undo |
-| `table_status`         | Owlbear room and scene status, in sync or not with the open scene's encounter (named); our tokens left alone; art for the GM to pick or re-upload |
-| `setup_status`         | Is this setup ready: profile, config, settings, database, newest backup, bridge with this profile's token, GM tab, tokeniser; a fix per problem   |
-| `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                                   |
-| `set_rooms`            | Name rooms on the map in use by display-cell ranges (confirmed, or proposed); a room named like a saved one replaces it                           |
-| `list_rooms`           | The saved rooms of the map in use with their status and ranges where the map sits now                                                             |
-| `remove_rooms`         | Remove saved rooms by name, all-or-nothing                                                                                                        |
-| `get_map_image`        | Gridded image of the map in use as the DM sees it (an image block) and its grid size; needs the bridge                                            |
-| `propose_rooms`        | Room proposals from ranges read on the map image: each range shrunk by one cell where the room is at least three cells wide; saves nothing        |
-| `list_encounters`      | Every encounter: name, live monster count, whether its scene is the open one, another or none, which is current; creates none                     |
-| `rename_encounter`     | Rename the open scene's (else the current) encounter, or the one named in `encounter`; non-empty, unique ignoring case                            |
-| `use_encounter`        | Make a named encounter that has no scene the open scene's encounter (the scene must have none); refused with the reason otherwise                 |
-| `create_creature`      | Store a creature in a book, from scratch or copied (`from`) with changes; key `<book>_<slug>`; replies its rolls, text-only entries, findings     |
-| `edit_creature`        | Change a stored creature by key with the same changes plus `page`; key and book kept; monsters in encounters keep their values and are named      |
-| `remove_creature`      | Delete a stored creature by key; refused while a monster in any encounter uses it, naming them                                                    |
-| `list_creatures`       | The stored creatures (key, name, book, page, CR), of one book with `book`                                                                         |
-| `preview_token`        | Preview a round token of an absolute path or https URL at its most salient point or `focus`, `zoom` 1 to 8; image and crop line; stores nothing   |
+| Tool                   | Purpose                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `search_monsters`      | Name search (top 10) with keys; old SRD 5.1 names match too, shown as renamed (alias) hits                                                                   |
+| `get_statblock`        | Markdown statblock by key                                                                                                                                    |
+| `open_statblock`       | Open a monster's D&D Beyond 2024 page (by key) in the default browser; replies with the link; needs a login that owns the 2024 Monster Manual                |
+| `add_monsters`         | Add groups (`monster`, `count`, `hp`) in one call; rolls HP/init; `join` (id or exact name) adds to that monster's group and initiative                      |
+| `preview_monsters`     | Dry run of `add_monsters` (same arguments and checks): names, AC, average HP and dice, init modifier, footprint, room cells; adds nothing                    |
+| `move_monsters`        | Move monsters (ids or exact names, all-or-nothing) into a saved room, keeping their state; one already in that room avoids its own cells                     |
+| `list_encounter`       | Encounter in initiative order with AC and HP, and the removed monsters that can be restored                                                                  |
+| `apply_damage`         | Damage by instance id or exact name (clamped at 0)                                                                                                           |
+| `heal`                 | Heal by instance id or exact name (clamped at max)                                                                                                           |
+| `set_hp`               | Set an exact current HP by id or exact name (clamped to 0..max); reports before/after and any clamp                                                          |
+| `set_max_hp`           | Set an exact max HP by id or exact name; HP is lowered if above it, never raised; reports before/after and any clamp                                         |
+| `reset_max_hp`         | Reset max HP (by id or exact name, all-or-nothing) to the statblock average or a new roll; full HP stays full; reports before and after                      |
+| `set_armor_class`      | Set an exact armor class by id or exact name; reports before/after and any clamp                                                                             |
+| `remove_monsters`      | Remove several targets, all-or-nothing                                                                                                                       |
+| `restore_monsters`     | Bring back removed monsters by instance id or exact name, all-or-nothing, with HP and initiative; a taken name gets a new number                             |
+| `rename_monster`       | Rename by instance id or exact name; unique, non-empty                                                                                                       |
+| `change_monster_type`  | Change monsters (id or exact name, all-or-nothing) to another type: new name, HP, AC, size; keeps damage, initiative roll, group, place                      |
+| `set_initiative`       | Set an exact initiative by instance id or exact name; reports before and after                                                                               |
+| `roll_initiative`      | Roll initiative for several monsters by id or exact name (one roll per group, or each); reports roll, modifier, before and after                             |
+| `split_initiative`     | Give several monsters their own initiative group each, by id or exact name; keeps each value, or rolls each with `roll`                                      |
+| `merge_initiative`     | Put several monsters in one initiative group by id or exact name; each takes the first named monster's initiative, no roll                                   |
+| `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                                       |
+| `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                                  |
+| `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number                             |
+| `undo`                 | Undo the last change, again the one before; table edits stay; not clears, map/room, encounter rename/binding, creature or token art changes; names next undo |
+| `table_status`         | Owlbear room and scene status, in sync or not with the open scene's encounter (named); our tokens left alone; art for the GM to pick or re-upload            |
+| `setup_status`         | Is this setup ready: profile, config, settings, database, newest backup, bridge with this profile's token, GM tab, tokeniser; a fix per problem              |
+| `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                                              |
+| `set_rooms`            | Name rooms on the map in use by display-cell ranges (confirmed, or proposed); a room named like a saved one replaces it                                      |
+| `list_rooms`           | The saved rooms of the map in use with their status and ranges where the map sits now                                                                        |
+| `remove_rooms`         | Remove saved rooms by name, all-or-nothing                                                                                                                   |
+| `get_map_image`        | Gridded image of the map in use as the DM sees it (an image block) and its grid size; needs the bridge                                                       |
+| `propose_rooms`        | Room proposals from ranges read on the map image: each range shrunk by one cell where the room is at least three cells wide; saves nothing                   |
+| `list_encounters`      | Every encounter: name, live monster count, whether its scene is the open one, another or none, which is current; creates none                                |
+| `rename_encounter`     | Rename the open scene's (else the current) encounter, or the one named in `encounter`; non-empty, unique ignoring case                                       |
+| `use_encounter`        | Make a named encounter that has no scene the open scene's encounter (the scene must have none); refused with the reason otherwise                            |
+| `create_creature`      | Store a creature in a book, from scratch or copied (`from`) with changes; key `<book>_<slug>`; replies its rolls, text-only entries, findings                |
+| `edit_creature`        | Change a stored creature by key with the same changes plus `page`; key and book kept; monsters in encounters keep their values and are named                 |
+| `remove_creature`      | Delete a stored creature by key; refused while a monster in any encounter uses it, naming them                                                               |
+| `list_creatures`       | The stored creatures (key, name, book, page, CR), of one book with `book`                                                                                    |
+| `preview_token`        | Preview a round token of an absolute path or https URL at its most salient point or `focus`, `zoom` 1 to 8; image and crop line; stores nothing              |
+| `set_token_art`        | Make a round token as `preview_token` does and set it as a monster type's art, by key, replacing any art; the reply names what it replaced                   |
 
 Every tool that reads or changes an encounter takes an optional `encounter`, an
 encounter's name in any case (`use_encounter` requires it); `list_encounters`,
@@ -86,6 +87,15 @@ stored and the reply lists them with the values the engine expects.
 `edit_creature` leaves the monsters already in encounters as they are (max HP,
 AC, size and name) and names them; `remove_creature` is refused while a monster
 in any encounter uses the creature.
+
+`set_token_art` takes no `encounter` and never creates one. Like the creature
+tools it notes its command on the open scene's encounter, or with no scene open
+on the current one, when there is one, so `undo` right after it says it does not
+cover the art change. It replaces the type's art whatever set it (a GM pick, an
+earlier variant or the default) and stores the token's bytes in the same
+transaction. A token whose hash the type's art already has keeps that art and
+its url, and changes and notes nothing. The GM publishes new art from the
+extension panel (Re-upload, then Pick the uploaded image).
 
 `table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`,
 `move_monsters`, and `add_monsters` or `preview_monsters` with a `room`, need the bridge running (`npm run bridge`) and a GM

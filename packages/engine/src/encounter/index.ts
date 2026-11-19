@@ -103,3 +103,9 @@ export {
   type StoredTokenArt,
   type TokenArtSource,
 } from "./token-art.js";
+// #382 own token art
+export {
+  setOwnTokenArt,
+  type SetOwnTokenArtDeps,
+  type SetOwnTokenArtResult,
+} from "./own-token-art.js";

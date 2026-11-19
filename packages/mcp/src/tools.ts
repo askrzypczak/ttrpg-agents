@@ -37,6 +37,7 @@ import {
   useEncounter,
   useMap,
   makeToken,
+  setOwnTokenArt,
   type ChangeOrigin,
   type EncounterRepository,
   type MadeToken,
@@ -47,7 +48,9 @@ import {
   type ResolvedEncounter,
   type RestoredMonster,
   type RoomPlacement,
+  type SetOwnTokenArtResult,
   type TableArtWait,
+  type TokenArtSource,
   type TokenImageMime,
   type UndoChange,
   type UndoField,
@@ -1097,7 +1100,7 @@ const undoTool = defineTool({
   takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
-    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms), encounter renames and bindings (rename_encounter, use_encounter) and creature changes (create_creature, edit_creature, remove_creature) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
+    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms), encounter renames and bindings (rename_encounter, use_encounter), creature changes (create_creature, edit_creature, remove_creature) and token art changes (set_token_art) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
   inputSchema: {},
   run(ctx, _args, origin) {
     const snapshot = ctx.repo.listInstances();
@@ -2088,16 +2091,19 @@ function clearedListLine(cleared: readonly MonsterInstance[]): string[] {
   ];
 }
 
+/** The input shared by preview_token and set_token_art: the image, focus and zoom. */
+const tokenInput = {
+  image: z.string(),
+  focus: z.object({ x: z.number(), y: z.number() }).optional(),
+  zoom: z.number().optional(),
+};
+
 const previewTokenTool = defineTool({
   name: "preview_token",
   annotations: { readOnlyHint: true },
   description:
     "Preview a round token made from an image: an absolute file path or an https URL (PNG, JPEG or WebP, at most 20 MiB and 8192 px a side). The crop centres on the image's most salient point (sharp's attention strategy) unless focus (fractions 0 to 1 of the width and height) is given, which overrides it. Zoom 1 to 8 (default 1) narrows the crop. Replies with the token and its source size, focus, zoom and crop. Stores nothing.",
-  inputSchema: {
-    image: z.string(),
-    focus: z.object({ x: z.number(), y: z.number() }).optional(),
-    zoom: z.number().optional(),
-  },
+  inputSchema: tokenInput,
   async run(ctx, { image, focus, zoom }) {
     const token = await makeToken(ctx, image, { focus, zoom });
     return {
@@ -2110,6 +2116,51 @@ const previewTokenTool = defineTool({
         { type: "text", text: tokenPreviewText(token) },
       ],
     };
+  },
+});
+
+const setTokenArtTool = defineTool({
+  name: "set_token_art",
+  annotations: { destructiveHint: true },
+  description:
+    "Make a round token from an image (an absolute file path or an https URL; PNG, JPEG or WebP, at most 20 MiB and 8192 px a side) as preview_token does (focus, zoom) and set it as the token art of a monster type, by monster key (search_monsters and list_creatures give keys). It replaces the type's art whatever set it (a GM pick in Owlbear, an earlier image or variant, the TooManyTokens default); the reply names what it replaced. The GM then publishes it from the extension panel: Re-upload, then Pick the uploaded image. Takes no encounter and creates none; undo does not cover it.",
+  inputSchema: {
+    monster: z.string().describe("The monster key."),
+    ...tokenInput,
+  },
+  async run(ctx, { monster, image, focus, zoom }, origin) {
+    const result = await setOwnTokenArt(
+      {
+        imageSource: ctx.imageSource,
+        tokeniser: ctx.tokeniser,
+        monsters: ctx.monsters,
+        art: ctx.art,
+        images: ctx.images,
+        directory: ctx.encounters,
+      },
+      monster,
+      image,
+      { focus, zoom },
+      origin(),
+    );
+    const text = setTokenArtText(result, image);
+    if (result.outcome === "set")
+      return ok(text, {
+        outcome: "set",
+        monsterKey: result.monster.key,
+        sha256: result.sha256,
+        replaced: result.replaced?.source ?? null,
+        kept: null,
+        published: result.published,
+      });
+    return ok(text, {
+      outcome: "unchanged",
+      monsterKey: result.monster.key,
+      sha256: result.sha256,
+      replaced: null,
+      kept: result.kept.source,
+      published: result.published,
+    });
   },
 });
 
@@ -2126,6 +2177,33 @@ function tokenPreviewText({ source, focus, zoom, crop }: MadeToken): string {
     `Zoom: ${String(zoom)}.`,
     `Crop: ${String(crop.side)} px square at x ${String(crop.left)}, y ${String(crop.top)}.`,
   ].join(" ");
+}
+
+const ART_SOURCE_WORDS: Record<TokenArtSource, string> = {
+  table: "a GM pick in Owlbear",
+  agent: "art set through the agent (the DM's own image or a chosen variant)",
+  default: "the TooManyTokens default",
+};
+
+/** The reply of set_token_art: what was set or kept, the token's source, focus, zoom and crop, and how the art reaches the table. */
+function setTokenArtText(result: SetOwnTokenArtResult, image: string): string {
+  const { name, key } = result.monster;
+  const waits = `It waits on the GM: in the extension panel, click Re-upload next to ${name}, then Pick the uploaded image. ${name} is listed there while the open scene's encounter has one. Until it is published, new ${name} tokens are circles and existing ones keep their look.`;
+  if (result.outcome === "unchanged")
+    return [
+      `${name} (${key}) already has this token as its art, from ${ART_SOURCE_WORDS[result.kept.source]}; nothing changed.`,
+      tokenPreviewText(result.token),
+      result.published ? "It is published in Owlbear." : waits,
+    ].join("\n");
+  const replaced =
+    result.replaced === null
+      ? "It had no art before."
+      : `It replaces ${ART_SOURCE_WORDS[result.replaced.source]}.`;
+  return [
+    `Set ${name} (${key}) token art to a token made from ${image}. ${replaced}`,
+    tokenPreviewText(result.token),
+    waits,
+  ].join("\n");
 }
 
 export const tools: readonly ToolDefinition[] = [
@@ -2170,4 +2248,5 @@ export const tools: readonly ToolDefinition[] = [
   removeCreatureTool,
   listCreaturesTool,
   previewTokenTool,
+  setTokenArtTool,
 ];

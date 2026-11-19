@@ -16,6 +16,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -53,6 +55,7 @@ let groupN: number;
 beforeEach(() => {
   tick = 1000;
   groupN = 0;
+  const db = openDatabase(":memory:");
   ctx = {
     table: {
       sceneStatus: () =>
@@ -61,7 +64,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
+    encounters: new SqliteEncounterDirectory(db, {
       now: () => tick++,
     }),
     monsters,
@@ -73,6 +76,8 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
   // A scene bound to the encounter is open, so replies name no encounter.
@@ -195,7 +200,7 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the forty-one tools", () => {
+  it("exposes the forty-two tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -232,6 +237,7 @@ describe("tool registry", () => {
       "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "set_token_art",
       "setup_status",
       "split_initiative",
       "table_status",
@@ -1596,6 +1602,7 @@ describe("the encounter a tool call acts on", () => {
   /** A full tool context over `encounters`, independent of the shared one. */
   function contextOver(encounters: EncounterDirectory): ToolContext {
     let groups = 0;
+    const db = openDatabase(":memory:");
     return {
       table: {
         sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -1613,6 +1620,8 @@ describe("the encounter a tool call acts on", () => {
       setup: makeTestSetupPorts(),
       tokeniser: makeTestTokeniser(),
       imageSource: makeTestImageSource(),
+      art: new SqliteTokenArtRepository(db),
+      images: new SqliteTokenImageRepository(db),
       newCommandId: () => "command",
     };
   }
@@ -2018,6 +2027,7 @@ describe("the encounter a tool call acts on", () => {
       "remove_creature",
       "list_creatures",
       "preview_token",
+      "set_token_art",
     ];
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...optional, ...required, ...none].sort(),
