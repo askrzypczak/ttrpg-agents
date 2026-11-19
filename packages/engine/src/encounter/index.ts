@@ -58,6 +58,15 @@ export {
   type TokenImageStoreResult,
   type TokenImageValidation,
 } from "./token-image.js";
+// #379 TooManyTokens index
+export {
+  defaultVariant,
+  tooManyTokensIndexSchema,
+  tooManyTokensUrls,
+  tooManyTokensVariants,
+  type TooManyTokensIndex,
+  type TooManyTokensVariant,
+} from "./too-many-tokens.js";
 // #378 token art source and precedence
 export {
   assignTokenArt,
