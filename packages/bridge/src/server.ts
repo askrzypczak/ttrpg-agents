@@ -93,7 +93,7 @@ export interface BridgeServerOptions {
   /** Removes an instance from the store when the GM deletes its token on the table. */
   removeInstance?: (instanceId: string, commandId: string) => WriteBackResult;
   /** Stores the art the GM picked for a monster type. */
-  setTokenArt?: (monsterKey: string, art: TokenArt) => void;
+  setTokenArt?: (monsterKey: string, art: TokenArt, commandId: string) => void;
   /** Applies HP, max HP or armor class edited on the table to the store. */
   editInstance?: (edit: InstanceEdit, commandId: string) => WriteBackResult;
   /** Validates and stores the bytes posted to `POST /token-images`. */
@@ -174,7 +174,9 @@ interface Hooks {
   mapRooms: (() => BridgeMessage) | undefined;
   removeInstance:
     ((instanceId: string, commandId: string) => WriteBackResult) | undefined;
-  setTokenArt: ((monsterKey: string, art: TokenArt) => void) | undefined;
+  setTokenArt:
+    | ((monsterKey: string, art: TokenArt, commandId: string) => void)
+    | undefined;
   editInstance:
     ((edit: InstanceEdit, commandId: string) => WriteBackResult) | undefined;
   openScene: ((sceneId: string | null) => void) | undefined;
@@ -334,7 +336,11 @@ function handleMessage(
         break;
       }
       try {
-        hooks.setTokenArt(message.payload.monsterKey, message.payload.art);
+        hooks.setTokenArt(
+          message.payload.monsterKey,
+          message.payload.art,
+          commandIdOf(message.id),
+        );
       } catch (e) {
         send(
           ws,

@@ -256,6 +256,34 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    // Each art row records who set it: a GM pick in Owlbear (table), the
+    // agent or the library import (agent), or a default. Existing art with a
+    // url came from a GM pick; art without one only from the import. The
+    // table is rebuilt so the column has no default and a write must name it.
+    version: 21,
+    sql: `
+      CREATE TABLE token_art_new (
+        monster_key TEXT PRIMARY KEY,
+        url TEXT CHECK (url LIKE 'https://%'),
+        mime TEXT CHECK (mime LIKE 'image/%'),
+        width INTEGER CHECK (width > 0),
+        height INTEGER CHECK (height > 0),
+        sha256 TEXT REFERENCES token_art_image (sha256),
+        source TEXT NOT NULL CHECK (source IN ('table', 'agent', 'default')),
+        CHECK (
+          (url IS NOT NULL AND mime IS NOT NULL AND width IS NOT NULL AND height IS NOT NULL)
+          OR (url IS NULL AND mime IS NULL AND width IS NULL AND height IS NULL AND sha256 IS NOT NULL)
+        )
+      );
+      INSERT INTO token_art_new (monster_key, url, mime, width, height, sha256, source)
+        SELECT monster_key, url, mime, width, height, sha256,
+          CASE WHEN url IS NULL THEN 'agent' ELSE 'table' END
+        FROM token_art;
+      DROP TABLE token_art;
+      ALTER TABLE token_art_new RENAME TO token_art;
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));

@@ -96,3 +96,10 @@ export {
   InvalidTokenRequestError,
   TokeniserError,
 } from "./errors.js";
+// #378 token art source and precedence
+export {
+  assignTokenArt,
+  type AssignTokenArtResult,
+  type StoredTokenArt,
+  type TokenArtSource,
+} from "./token-art.js";

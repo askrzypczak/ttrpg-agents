@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ChangeOrigin } from "./origin.js";
 
 /** Art that names an image Owlbear can draw: a reference, never the bytes. */
 export type PublishedTokenArt = {
@@ -59,10 +60,65 @@ export const tokenArtSchema = z.union([
   }),
 ]) satisfies z.ZodType<TokenArt>;
 
+/** Who set a monster type's stored art: a GM pick in Owlbear (`table`), the DM through the agent or the library import (`agent`), or the TooManyTokens default (`default`). */
+export type TokenArtSource = "table" | "agent" | "default";
+
+/** A monster type's stored art and its source. */
+export interface StoredTokenArt {
+  art: TokenArt;
+  source: TokenArtSource;
+}
+
 /** Monster key -> the art its tokens are created with. */
 export interface TokenArtRepository {
   /** All stored art, keyed by monster key. */
   listTokenArt(): Record<string, TokenArt>;
-  /** Stores the art of a monster key, replacing any it had. */
-  setTokenArt(monsterKey: string, art: TokenArt): void;
+  /** The art of a monster key with its source, or undefined when it has none. */
+  getTokenArt(monsterKey: string): StoredTokenArt | undefined;
+  /** In one write transaction: stores the art and its source, replacing any, and logs one `art-changed` event with no encounter under `origin`. */
+  setTokenArt(
+    monsterKey: string,
+    art: TokenArt,
+    source: TokenArtSource,
+    origin: ChangeOrigin,
+  ): void;
+  /** Runs `fn` in one write transaction; repository calls inside it join it; a throw rolls them back and is rethrown. */
+  transaction<T>(fn: () => T): T;
+}
+
+export type AssignTokenArtResult =
+  | { outcome: "set"; replaced: StoredTokenArt | null }
+  | { outcome: "kept"; reason: "has_art" };
+
+/**
+ * Assigns art to a monster type by the precedence rule, in one repository
+ * transaction: the DM's latest explicit choice (`table` or `agent`) replaces
+ * any art; a `default` fills only a type with no art. A `table` set that
+ * carries the stored art's image hash republishes the same image, so it keeps
+ * the stored source.
+ */
+export function assignTokenArt(
+  repo: TokenArtRepository,
+  monsterKey: string,
+  art: TokenArt,
+  source: TokenArtSource,
+  origin: ChangeOrigin,
+): AssignTokenArtResult {
+  return repo.transaction(() => {
+    const stored = repo.getTokenArt(monsterKey);
+    if (stored !== undefined && source === "default")
+      return { outcome: "kept", reason: "has_art" };
+    const sameImage =
+      stored !== undefined &&
+      source === "table" &&
+      art.sha256 !== undefined &&
+      art.sha256 === stored.art.sha256;
+    repo.setTokenArt(
+      monsterKey,
+      art,
+      sameImage ? stored.source : source,
+      origin,
+    );
+    return { outcome: "set", replaced: stored ?? null };
+  });
 }

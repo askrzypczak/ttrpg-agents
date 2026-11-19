@@ -29,7 +29,9 @@ import {
 /** A store with no token art. */
 const noArt: TokenArtRepository = {
   listTokenArt: () => ({}),
+  getTokenArt: () => undefined,
   setTokenArt: () => {},
+  transaction: (fn) => fn(),
 };
 
 const origin: ChangeOrigin = { source: "table", commandId: "test" };

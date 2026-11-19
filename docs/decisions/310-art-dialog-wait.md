@@ -24,7 +24,7 @@ Issue: [#310](https://github.com/askrzypczak/ttrpg-agents/issues/310).
   - Check only the types of the encounter's instances: after a clear there are none, so a restore would still find dead art late.
   - Draw with the stored url while the check is pending: a dead url draws a broken image until the re-upload.
 - Where: the liveness map and the snapshot handler in `createEncounterSync` (`packages/owlbear/src/encounter-sync.ts`).
-- Status: active
+- Status: superseded in part by 378.4 (art from an `mcp` `art-changed` gets its own check, once per art change; the snapshot rule stands)
 - Supersedes: 220.5
 
 ## 310.3 Art without a url lists its type for upload when the encounter has an instance of it; its tokens are circles until the GM uploads

@@ -24,6 +24,7 @@ import type {
   RestoreNamer,
   UndoRecord,
 } from "@ttrpg-agents/engine";
+import { appendEvent, writeTransaction } from "./change-log-write.js";
 
 export interface RepositoryOptions {
   now?: () => number;
@@ -684,14 +685,7 @@ export class SqliteEncounterRepository implements EncounterRepository {
    * origin is logged without its command name.
    */
   private record(event: EncounterEvent): number {
-    const { source, commandId } = event.origin;
-    const logged = { ...event, origin: { source, commandId } };
-    const { lastInsertRowid } = this.db
-      .prepare(
-        "INSERT INTO encounter_events (event, encounter_id) VALUES (?, ?)",
-      )
-      .run(JSON.stringify(logged), this.encounterId);
-    return Number(lastInsertRowid);
+    return appendEvent(this.db, event, this.encounterId);
   }
 
   /** Records the HP values an instance has after a change. */
@@ -831,15 +825,6 @@ export class SqliteEncounterRepository implements EncounterRepository {
 
   /** Runs fn in a transaction; nests by joining an already-open one. */
   transaction<T>(fn: () => T): T {
-    if (this.db.isTransaction) return fn();
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
-      const result = fn();
-      this.db.exec("COMMIT");
-      return result;
-    } catch (err) {
-      this.db.exec("ROLLBACK");
-      throw err;
-    }
+    return writeTransaction(this.db, fn);
   }
 }

@@ -14,6 +14,7 @@ import {
   readE2eTokenArt,
   readE2eTokenImage,
   seedE2eTokenArt,
+  seedOrigin,
 } from "./db.js";
 import { e2eDir } from "./env.js";
 import { test, expect, openHarness } from "./fixtures.js";
@@ -718,7 +719,12 @@ test.describe("stored token art whose Owlbear asset may be gone", () => {
     // Link-only art: a url and no hash, as picked before bytes were stored.
     const db = openDatabase(e2eDbPath(workerDir()));
     try {
-      new SqliteTokenArtRepository(db).setTokenArt("shadow", storedImage);
+      new SqliteTokenArtRepository(db).setTokenArt(
+        "shadow",
+        storedImage,
+        "table",
+        seedOrigin,
+      );
     } finally {
       db.close();
     }

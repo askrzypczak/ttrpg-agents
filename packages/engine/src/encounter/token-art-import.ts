@@ -1,4 +1,5 @@
-import type { TokenArtRepository } from "./token-art.js";
+import type { ChangeOrigin } from "./origin.js";
+import { assignTokenArt, type TokenArtRepository } from "./token-art.js";
 import {
   storeTokenImage,
   type TokenImageErrorCode,
@@ -15,7 +16,8 @@ export type TokenArtImportResult =
  * without a url ({ sha256 }). A key that has art keeps it unless `replace`;
  * with `replace`, art that already links the same image is kept too, so its
  * published reference survives. `readBytes` is called only when the art may
- * change; the bytes go through `storeTokenImage`.
+ * change; the bytes go through `storeTokenImage`. The art is assigned with
+ * source `agent` under `origin`.
  */
 export function importTokenArt(
   art: TokenArtRepository,
@@ -23,9 +25,9 @@ export function importTokenArt(
   monsterKey: string,
   readBytes: () => Uint8Array,
   options: { replace: boolean },
+  origin: ChangeOrigin,
 ): TokenArtImportResult {
-  const all = art.listTokenArt();
-  const existing = Object.hasOwn(all, monsterKey) ? all[monsterKey] : undefined;
+  const existing = art.getTokenArt(monsterKey)?.art;
   if (existing !== undefined && !options.replace)
     return { outcome: "skipped", reason: "has_art" };
 
@@ -36,6 +38,6 @@ export function importTokenArt(
   if (existing?.sha256 === result.sha256)
     return { outcome: "skipped", reason: "same_image" };
 
-  art.setTokenArt(monsterKey, { sha256: result.sha256 });
+  assignTokenArt(art, monsterKey, { sha256: result.sha256 }, "agent", origin);
   return { outcome: "stored", sha256: result.sha256 };
 }
