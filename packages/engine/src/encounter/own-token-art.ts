@@ -1,8 +1,21 @@
-import type { EncounterDirectory } from "./directory.js";
+import {
+  noteCommandOnCurrentEncounter,
+  type EncounterDirectory,
+} from "./directory.js";
+import { UnknownMonsterError } from "./errors.js";
 import type { ChangeOrigin } from "./origin.js";
-import type { StoredTokenArt, TokenArtRepository } from "./token-art.js";
-import type { TokenImageRepository } from "./token-image.js";
-import type { FocalPoint, MadeToken, MakeTokenDeps } from "./tokeniser.js";
+import {
+  assignTokenArt,
+  type StoredTokenArt,
+  type TokenArtRepository,
+} from "./token-art.js";
+import { storeTokenImage, type TokenImageRepository } from "./token-image.js";
+import {
+  makeToken,
+  type FocalPoint,
+  type MadeToken,
+  type MakeTokenDeps,
+} from "./tokeniser.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 
@@ -53,7 +66,46 @@ export async function setOwnTokenArt(
   options: { focus?: FocalPoint; zoom?: number },
   origin: ChangeOrigin,
 ): Promise<SetOwnTokenArtResult> {
-  await Promise.resolve();
-  void [deps, monsterKey, image, options, origin];
-  throw new Error("not implemented");
+  const monster = deps.monsters.get(monsterKey);
+  if (monster === undefined)
+    throw new UnknownMonsterError(
+      `Unknown monster "${monsterKey}". Use search_monsters to find keys.`,
+    );
+  const token = await makeToken(deps, image, options);
+  return deps.art.transaction((): SetOwnTokenArtResult => {
+    const stored = storeTokenImage(deps.images, token.bytes);
+    if (!stored.ok)
+      throw new Error(
+        `The token image was refused by the store: ${stored.message}`,
+      );
+    const { sha256 } = stored;
+    const kept = deps.art.getTokenArt(monsterKey);
+    if (kept?.art.sha256 === sha256)
+      return {
+        outcome: "unchanged",
+        monster,
+        token,
+        sha256,
+        kept,
+        published: kept.art.url !== undefined,
+      };
+    const assigned = assignTokenArt(
+      deps.art,
+      monsterKey,
+      { sha256 },
+      "agent",
+      origin,
+    );
+    if (assigned.outcome === "kept")
+      throw new Error(`The art of ${monsterKey} was kept, not set.`);
+    noteCommandOnCurrentEncounter(deps.directory, origin);
+    return {
+      outcome: "set",
+      monster,
+      token,
+      sha256,
+      replaced: assigned.replaced,
+      published: false,
+    };
+  });
 }
