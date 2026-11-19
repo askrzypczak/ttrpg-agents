@@ -38,8 +38,38 @@ const MIME_BY_TYPE = new Map<string | undefined, TokenImageMime>([
 
 /** Checks image bytes against the allow-list and caps; the claimed type is never an input. */
 export function validateTokenImage(bytes: Uint8Array): TokenImageValidation {
-  if (bytes.byteLength > TOKEN_IMAGE_MAX_BYTES)
-    return reject("too_large", "Image is larger than 1 MiB.");
+  return validateImage(bytes, {
+    maxBytes: TOKEN_IMAGE_MAX_BYTES,
+    maxSide: TOKEN_IMAGE_MAX_SIDE,
+  });
+}
+
+/** The largest source image a token is made from, in bytes. */
+export const TOKEN_SOURCE_MAX_BYTES = 20 * 1024 * 1024;
+
+/** The largest width or height of a source image a token is made from, in pixels. */
+export const TOKEN_SOURCE_MAX_SIDE = 8192;
+
+/** Checks a token's source image as validateTokenImage does, with the source caps. */
+export function validateTokenSource(bytes: Uint8Array): TokenImageValidation {
+  return validateImage(bytes, {
+    maxBytes: TOKEN_SOURCE_MAX_BYTES,
+    maxSide: TOKEN_SOURCE_MAX_SIDE,
+  });
+}
+
+const MIB = 1024 * 1024;
+
+/** The allow-list and header checks, with the byte and side caps as parameters. */
+function validateImage(
+  bytes: Uint8Array,
+  caps: { maxBytes: number; maxSide: number },
+): TokenImageValidation {
+  if (bytes.byteLength > caps.maxBytes)
+    return reject(
+      "too_large",
+      `Image is larger than ${String(caps.maxBytes / MIB)} MiB.`,
+    );
   // The library's SVG check runs on the first bytes only, so an SVG whose
   // size cannot be measured is still identified as SVG here.
   if (SVG.validate(bytes))
@@ -62,24 +92,12 @@ export function validateTokenImage(bytes: Uint8Array): TokenImageValidation {
   const { width, height } = size;
   if (!isPositiveInteger(width) || !isPositiveInteger(height))
     return reject("unreadable", UNREADABLE);
-  if (Math.max(width, height) > TOKEN_IMAGE_MAX_SIDE)
+  if (Math.max(width, height) > caps.maxSide)
     return reject(
       "dimensions_too_large",
-      `Image sides must be at most ${TOKEN_IMAGE_MAX_SIDE} px.`,
+      `Image sides must be at most ${String(caps.maxSide)} px.`,
     );
   return { ok: true, image: { mime, width, height } };
-}
-
-/** The largest source image a token is made from, in bytes. */
-export const TOKEN_SOURCE_MAX_BYTES = 20 * 1024 * 1024;
-
-/** The largest width or height of a source image a token is made from, in pixels. */
-export const TOKEN_SOURCE_MAX_SIDE = 8192;
-
-/** Checks a token's source image as validateTokenImage does, with the source caps. */
-export function validateTokenSource(bytes: Uint8Array): TokenImageValidation {
-  void bytes;
-  throw new Error("not implemented");
 }
 
 function reject(

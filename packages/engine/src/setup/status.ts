@@ -71,12 +71,15 @@ export interface SetupStatus {
 
 const DAY_MS = 86_400_000;
 
-/** Asks both probes once and returns the rows in report order; `ready` = no row in state `problem`. */
+/** Asks each probe once and returns the rows in report order; `ready` = no row in state `problem`. */
 export async function getSetupStatus(ports: SetupPorts): Promise<SetupStatus> {
   const { settings } = ports;
   const database = ports.database.check();
   const backups = ports.database.checkBackups();
-  const bridge = await ports.bridge.check();
+  const [bridge, tokeniser] = await Promise.all([
+    ports.bridge.check(),
+    ports.tokeniser.check(),
+  ]);
   const rows: SetupRow[] = [
     { item: "profile", state: "ok", profile: settings.profile },
     {
@@ -97,6 +100,7 @@ export async function getSetupStatus(ports: SetupPorts): Promise<SetupStatus> {
     ...creaturesRows(database),
     backupRow(backups, ports.now()),
     ...bridgeRows(bridge),
+    tokeniserRow(tokeniser),
   ];
   return { ready: rows.every((row) => row.state !== "problem"), rows };
 }
@@ -226,4 +230,16 @@ function bridgeRows(bridge: BridgeFacts): SetupRow[] {
             },
       ];
   }
+}
+
+/** A tokeniser whose image library loaded is ok; one that failed is a problem fixed by reinstalling the dependencies. */
+function tokeniserRow(tokeniser: TokeniserFacts): SetupRow {
+  return tokeniser.kind === "loaded"
+    ? { item: "tokeniser", state: "ok", tokeniser }
+    : {
+        item: "tokeniser",
+        state: "problem",
+        tokeniser,
+        fix: { code: "reinstall-dependencies" },
+      };
 }
