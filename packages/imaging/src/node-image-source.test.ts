@@ -57,6 +57,15 @@ function chunked(times: number): ReadableStream<Uint8Array> {
   });
 }
 
+/** A body that sends `length` bytes, then neither sends more nor closes. */
+function stalled(length: number): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(length));
+    },
+  });
+}
+
 /** Never answers; rejects with the abort reason once the signal aborts. */
 const hanging = (init: RequestInit | undefined) =>
   new Promise<Response>((_resolve, reject) => {
@@ -120,6 +129,15 @@ describe("createNodeImageSource", () => {
       {
         url: URL_A,
         answers: [hanging],
+        fetches: 1,
+        timeoutMs: 50,
+      },
+    ],
+    [
+      "a body that stops arriving before a short `timeoutMs`",
+      {
+        url: URL_A,
+        answers: [() => Promise.resolve(new Response(stalled(10)))],
         fetches: 1,
         timeoutMs: 50,
       },
