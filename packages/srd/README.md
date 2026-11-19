@@ -1,11 +1,11 @@
 # @ttrpg-agents/srd
 
-SRD 5.2 monster data adapter: the committed snapshot, its loader and the import script. It loads the built-in `MonsterSet`, which the engine's `createMonsterIndex` merges with the stored creatures and serves through the `MonsterIndex` port.
+SRD 5.2 monster data adapter: the committed snapshot, the committed TooManyTokens index, their loaders and the import scripts. It loads the built-in `MonsterSet`, which the engine's `createMonsterIndex` merges with the stored creatures and serves through the `MonsterIndex` port.
 
 ## Monsters
 
 - `src/map-open5e.ts`: pure mapper from an Open5e v2 creature to `Monster`.
-- `src/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadAliases(file, set)` adds the alias file's entries (see Aliases). `loadDndBeyondPages(file, set)` adds the D&D Beyond page file's entries (see D&D Beyond pages). `loadSrdMonsters()` loads the committed snapshot with its aliases and pages. The loaders return a `MonsterSet`.
+- `src/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadAliases(file, set)` adds the alias file's entries (see Aliases). `loadDndBeyondPages(file, set)` adds the D&D Beyond page file's entries (see D&D Beyond pages). `loadSrdMonsters()` loads the committed snapshot with its aliases and pages. The monster loaders return a `MonsterSet`. `loadTooManyTokensIndex()` loads the TooManyTokens index (see TooManyTokens index below).
 
 ## SRD 5.2 data
 
@@ -34,3 +34,21 @@ A new pair needs evidence in its PR that it is the SRD 5.1 to 5.2 successor: the
 `data/srd-5.2/dndbeyond.json` is a JSON object that maps each monster key to its D&D Beyond 2024 page path `<id>-<slug>` (the part after `/monsters/`), sorted by key. It is hand-curated from the maintainer's harvest of the Free Rules creature page (see #278), not written by the import script. The slug is required: D&D Beyond returns 404 without it.
 
 `loadDndBeyondPages` (used by `loadSrdMonsters()`) fails, naming the file and entry, when the file is not an object, a key is not in the snapshot or a value is not `<id>-<slug>`. Giant Fly has no 2024 page and no entry; the test suite lists it as the one exception.
+
+## TooManyTokens index
+
+`data/too-many-tokens/index.json` lists the folders and WebP file names of the TooManyTokens pack (`IsThisMyRealName/too-many-tokens-dnd`, MIT) at one pinned commit. It holds no images and no text: the images are fetched at run time from the URLs the engine builds. `data/too-many-tokens/ATTRIBUTION.md` carries the pack's license. Each folder has its monster `key` (or `null`) and its file names. The file is generated, not hand-edited.
+
+`loadTooManyTokensIndex()` validates the file against the engine's schema and throws `MonsterLoadError`, naming the file, when it is not valid. The engine's `tooManyTokensVariants`, `defaultVariant` and `tooManyTokensUrls` (`packages/engine/src/encounter/too-many-tokens.ts`) use the index: the images of a monster, its default image, and the jsDelivr and raw URLs of an image, pinned to the commit.
+
+Regenerate when the pack changes (needs network; tests never do; no CI job):
+
+```
+npm run import:too-many-tokens -w @ttrpg-agents/srd
+```
+
+The script (`scripts/import-too-many-tokens.ts`) reads the pack's head commit and its full tree from the GitHub API, keeps the `.webp` files one folder deep and writes the index for that commit. It writes nothing when the tree is truncated. The index has no timestamp, so the same commit gives the same file.
+
+A folder's `key` is the first of these that matches: its exact current name in `monsters.json` (case-sensitive), its name in `aliases.json`, its name in `data/too-many-tokens/folder-keys.json`, else `null`.
+
+`folder-keys.json` is hand-curated. A new pair needs an SRD 5.1 folder name whose SRD 5.2 successor has the same CR, and evidence in its PR, as for aliases. The test suite checks that every entry names a folder in the index and that every key in the index is a monster key.
