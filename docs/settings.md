@@ -48,7 +48,7 @@ Each process prints every problem to stderr when it starts; the MCP server keeps
 
 ## Check a setup
 
-`npm run status`, or the `setup_status` MCP tool, lists the profile, the config file and its problems, every setting with its source, the database, its stored creature count, the newest backup, the bridge (reached with this profile's agent token) and the GM tab, with a fix under each problem. `npm run status` always exits 0, whatever it finds.
+`npm run status`, or the `setup_status` MCP tool, lists the profile, the config file and its problems, every setting with its source, the database, its stored creature count, the newest backup, the bridge (reached with this profile's agent token), the GM tab and whether the tokeniser's image library (sharp) loads, with a fix under each problem. `npm run status` always exits 0, whatever it finds.
 
 ## No secrets
 

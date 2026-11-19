@@ -60,9 +60,16 @@ export interface DatabaseProbe {
 export interface BridgeProbe {
   check(): Promise<BridgeFacts>;
 }
+export type TokeniserFacts =
+  { kind: "loaded" } | { kind: "failed"; reason: string };
+/** Driven port: whether the tokeniser's image library loads. Never rejects. */
+export interface TokeniserProbe {
+  check(): Promise<TokeniserFacts>;
+}
 export interface SetupPorts {
   settings: SettingsFacts;
   database: DatabaseProbe;
   bridge: BridgeProbe;
   now: () => Date;
+  tokeniser: TokeniserProbe;
 }

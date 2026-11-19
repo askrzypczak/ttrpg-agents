@@ -10,11 +10,12 @@ Read, commit and review in this order:
 2. `config`: settings loader for the composition roots
 3. `store-sqlite`: encounter store, a driven adapter
 4. `srd`: monster data, a driven adapter
-5. `protocol`: bridge wire contract
-6. `bridge`: HTTP and WebSocket server, and the client `mcp` uses for queries
-7. `mcp`: driving adapter (tools and formatting)
-8. `owlbear`: browser extension, a client of the bridge
-9. docs and skills
+5. `imaging`: sharp tokeniser and image loading, a driven adapter
+6. `protocol`: bridge wire contract
+7. `bridge`: HTTP and WebSocket server, and the client `mcp` uses for queries
+8. `mcp`: driving adapter (tools and formatting)
+9. `owlbear`: browser extension, a client of the bridge
+10. docs and skills
 
 Each layer imports only layers above it. The exception is test-only imports, such as the `store-sqlite` tests using `srd`. Reading top-down, every type is met before the code that uses it, so a reviewer meets the engine's rules before any adapter that translates them, and the adapter code can be read as translation.
 

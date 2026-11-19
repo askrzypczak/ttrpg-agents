@@ -36,8 +36,10 @@ import {
   undoLastCommand,
   useEncounter,
   useMap,
+  makeToken,
   type ChangeOrigin,
   type EncounterRepository,
+  type MadeToken,
   type MapRepository,
   type MonsterInstance,
   type PreviewInstance,
@@ -46,6 +48,7 @@ import {
   type RestoredMonster,
   type RoomPlacement,
   type TableArtWait,
+  type TokenImageMime,
   type UndoChange,
   type UndoField,
   type UndoNext,
@@ -1224,7 +1227,7 @@ const setupStatusTool = defineTool({
   name: "setup_status",
   annotations: { readOnlyHint: true },
   description:
-    "Check whether this setup is ready: profile, config file and its problems, settings, the encounter database and its stored creature count, the bridge (with this profile's agent token) and the Owlbear GM tab, with one fix per problem. Does not need the bridge running: a missing bridge or tab is a row. For scene sync use table_status.",
+    "Check whether this setup is ready: profile, config file and its problems, settings, the encounter database and its stored creature count, the bridge (with this profile's agent token), the Owlbear GM tab and the tokeniser, with one fix per problem. Does not need the bridge running: a missing bridge or tab is a row. For scene sync use table_status.",
   inputSchema: {},
   async run(ctx) {
     const status = await getSetupStatus(ctx.setup);
@@ -2085,6 +2088,46 @@ function clearedListLine(cleared: readonly MonsterInstance[]): string[] {
   ];
 }
 
+const previewTokenTool = defineTool({
+  name: "preview_token",
+  annotations: { readOnlyHint: true },
+  description:
+    "Preview a round token made from an image: an absolute file path or an https URL (PNG, JPEG or WebP, at most 20 MiB and 8192 px a side). The crop centres on the image's most salient point (sharp's attention strategy) unless focus (fractions 0 to 1 of the width and height) is given, which overrides it. Zoom 1 to 8 (default 1) narrows the crop. Replies with the token and its source size, focus, zoom and crop. Stores nothing.",
+  inputSchema: {
+    image: z.string(),
+    focus: z.object({ x: z.number(), y: z.number() }).optional(),
+    zoom: z.number().optional(),
+  },
+  async run(ctx, { image, focus, zoom }) {
+    const token = await makeToken(ctx, image, { focus, zoom });
+    return {
+      content: [
+        {
+          type: "image",
+          data: Buffer.from(token.bytes).toString("base64"),
+          mimeType: "image/webp",
+        },
+        { type: "text", text: tokenPreviewText(token) },
+      ],
+    };
+  },
+});
+
+const MIME_WORD: Record<TokenImageMime, string> = {
+  "image/png": "PNG",
+  "image/jpeg": "JPEG",
+  "image/webp": "WebP",
+};
+
+function tokenPreviewText({ source, focus, zoom, crop }: MadeToken): string {
+  return [
+    `Source: ${String(source.width)} x ${String(source.height)} px ${MIME_WORD[source.mime]}.`,
+    `Focus: x ${focus.x.toFixed(2)}, y ${focus.y.toFixed(2)}.`,
+    `Zoom: ${String(zoom)}.`,
+    `Crop: ${String(crop.side)} px square at x ${String(crop.left)}, y ${String(crop.top)}.`,
+  ].join(" ");
+}
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -2126,4 +2169,5 @@ export const tools: readonly ToolDefinition[] = [
   editCreatureTool,
   removeCreatureTool,
   listCreaturesTool,
+  previewTokenTool,
 ];

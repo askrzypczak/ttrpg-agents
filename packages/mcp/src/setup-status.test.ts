@@ -85,6 +85,7 @@ describe("formatSetupStatus", () => {
         "ok: backup /home/test/.local/share/ttrpg-agents/backups/encounters-20261112T090000Z.db, taken 2026-11-12 09:00 UTC (less than a day ago)",
         "ok: bridge on port 5199: reached",
         "ok: GM tab: connected, room room-abc",
+        "ok: tokeniser (sharp): loaded",
         POINTERS,
       ].join("\n"),
     );
@@ -259,6 +260,30 @@ describe("formatSetupStatus", () => {
       "Setup: ready.",
       "ok: stored creatures: 4",
       "ok: stored creatures: 0",
+      POINTERS,
+    ]);
+  });
+
+  it("formats the tokeniser row as loaded, or as cannot load with the reason and an npm ci fix line", () => {
+    const reason =
+      'Could not load the "sharp" module using the linux-x64 runtime';
+    const text = formatSetupStatus({
+      ready: false,
+      rows: [
+        { item: "tokeniser", state: "ok", tokeniser: { kind: "loaded" } },
+        {
+          item: "tokeniser",
+          state: "problem",
+          tokeniser: { kind: "failed", reason },
+          fix: { code: "reinstall-dependencies" },
+        },
+      ],
+    });
+    expect(text.split("\n")).toEqual([
+      "Setup: not ready.",
+      "ok: tokeniser (sharp): loaded",
+      `problem: tokeniser (sharp): cannot load: ${reason}`,
+      "  fix: reinstall this checkout's dependencies so sharp's prebuilt binary for this platform installs: npm ci",
       POINTERS,
     ]);
   });

@@ -11,5 +11,7 @@ export type {
   SettingFact,
   SettingsFacts,
   SetupPorts,
+  TokeniserFacts,
+  TokeniserProbe,
 } from "./port.js";
 export * from "./status.js";

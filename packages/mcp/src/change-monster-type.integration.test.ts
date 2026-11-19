@@ -16,7 +16,9 @@ import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
 } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "table", commandId: "seed" };
@@ -50,6 +52,8 @@ beforeEach(() => {
     newGroupId: () => "group",
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
     newCommandId: () => "command",
   };
   // A scene bound to the encounter is open, so replies name no encounter.
