@@ -85,6 +85,7 @@ describe("formatSetupStatus", () => {
         "ok: backup /home/test/.local/share/ttrpg-agents/backups/encounters-20261112T090000Z.db, taken 2026-11-12 09:00 UTC (less than a day ago)",
         "ok: bridge on port 5199: reached",
         "ok: GM tab: connected, room room-abc",
+        "ok: tokeniser (sharp): loaded",
         POINTERS,
       ].join("\n"),
     );

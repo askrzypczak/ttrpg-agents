@@ -41,7 +41,9 @@ function rowText(row: SetupRow): string {
     case "bridge":
       return bridgeText(row.bridge);
     case "tokeniser":
-      throw new Error("not implemented");
+      return row.tokeniser.kind === "loaded"
+        ? "tokeniser (sharp): loaded"
+        : `tokeniser (sharp): cannot load: ${row.tokeniser.reason}`;
     case "gm-tab":
       switch (row.tab) {
         case "none":
@@ -133,6 +135,6 @@ function fixText(fix: SetupFix): string {
     case "take-backup":
       return "take a backup: npm run db:backup";
     case "reinstall-dependencies":
-      throw new Error("not implemented");
+      return "reinstall this checkout's dependencies so sharp's prebuilt binary for this platform installs: npm ci";
   }
 }
