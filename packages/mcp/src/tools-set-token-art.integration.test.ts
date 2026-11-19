@@ -130,7 +130,6 @@ describe("set_token_art", () => {
           origin: {
             source: "mcp",
             commandId: expect.any(String) as string,
-            command: "set_token_art",
           },
         },
       },
@@ -208,5 +207,52 @@ describe("set_token_art", () => {
     });
     expect(directory.listEncounters()).toEqual([]);
     expect(directory.getCurrentEncounter()).toBeUndefined();
+  });
+
+  it("set_token_art with a token whose hash the type's art already has keeps that art, logs no art-changed event and says nothing changed", async () => {
+    ctx.images.saveTokenImage({
+      mime: "image/webp",
+      width: 512,
+      height: 512,
+      bytes: webpDeclaring(512, 512),
+    });
+    art.setTokenArt(
+      WOLF,
+      { ...publishedArt("Wolf"), sha256: TOKEN_HASH },
+      "table",
+      seedOrigin,
+    );
+    const before = log.latestSeq();
+
+    const r = await ok("set_token_art", {
+      monster: WOLF,
+      image: PATH,
+      focus: { x: 0.5, y: 0.4 },
+    });
+
+    expect(text(r)).toBe(
+      [
+        `Wolf (${WOLF}) already has this token as its art, from a GM pick in Owlbear; nothing changed.`,
+        PREVIEW_LINE,
+        "It is published in Owlbear.",
+      ].join("\n"),
+    );
+    expect(r.structuredContent).toEqual({
+      outcome: "unchanged",
+      monsterKey: WOLF,
+      sha256: TOKEN_HASH,
+      replaced: null,
+      kept: "table",
+      published: true,
+      summary: text(r),
+    });
+    const artEvents = log
+      .eventsSince(before)
+      .filter((e) => "event" in e && e.event.type === "art-changed");
+    expect(artEvents).toEqual([]);
+    expect(art.getTokenArt(WOLF)).toEqual({
+      art: { ...publishedArt("Wolf"), sha256: TOKEN_HASH },
+      source: "table",
+    });
   });
 });
