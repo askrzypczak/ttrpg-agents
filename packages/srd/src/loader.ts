@@ -5,6 +5,7 @@ import {
   monsterSchema,
   type Monster,
   type MonsterSet,
+  tooManyTokensIndexSchema,
   type TooManyTokensIndex,
 } from "@ttrpg-agents/engine";
 import { z } from "zod";
@@ -227,7 +228,21 @@ export function loadSrdMonsters(): MonsterSet {
   );
 }
 
+/** Path of the committed TooManyTokens index (works from src/ and dist/). */
+const TOO_MANY_TOKENS_PATH = resolve(
+  fileURLToPath(import.meta.url),
+  "../../data/too-many-tokens/index.json",
+);
+
 /** Load the committed TooManyTokens index, validated by the engine's schema. Throws MonsterLoadError naming the file. */
 export function loadTooManyTokensIndex(): TooManyTokensIndex {
-  throw new Error("not implemented");
+  const data = readJsonFile(TOO_MANY_TOKENS_PATH);
+  const result = tooManyTokensIndexSchema.safeParse(data);
+  if (result.success) return result.data;
+  const issues = result.error.issues
+    .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+    .join("; ");
+  throw new MonsterLoadError(
+    `${TOO_MANY_TOKENS_PATH}: invalid index: ${issues}`,
+  );
 }
