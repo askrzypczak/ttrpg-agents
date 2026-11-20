@@ -30,6 +30,7 @@ import {
   makeTestImageSource,
   makeTestSetupPorts,
   makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
@@ -76,6 +77,7 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
     art: new SqliteTokenArtRepository(db),
     images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
@@ -1620,6 +1622,7 @@ describe("the encounter a tool call acts on", () => {
       setup: makeTestSetupPorts(),
       tokeniser: makeTestTokeniser(),
       imageSource: makeTestImageSource(),
+      tooManyTokens: makeTestTooManyTokensIndex(),
       art: new SqliteTokenArtRepository(db),
       images: new SqliteTokenImageRepository(db),
       newCommandId: () => "command",

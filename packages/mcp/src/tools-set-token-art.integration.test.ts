@@ -11,6 +11,7 @@ import {
   makeTestTokeniser,
   pngDeclaring,
   webpDeclaring,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
@@ -74,6 +75,7 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource({ [PATH]: pngDeclaring(1000, 600) }),
+    tooManyTokens: makeTestTooManyTokensIndex(),
     art,
     images: new SqliteTokenImageRepository(db),
     newCommandId: () => `command-${String(++commands)}`,

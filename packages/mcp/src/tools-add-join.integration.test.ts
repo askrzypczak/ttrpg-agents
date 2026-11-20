@@ -19,6 +19,7 @@ import {
   makeTestImageSource,
   makeTestSetupPorts,
   makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 const SHADOW = "srd-2024_shadow";
@@ -58,6 +59,7 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
     art: new SqliteTokenArtRepository(db),
     images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",

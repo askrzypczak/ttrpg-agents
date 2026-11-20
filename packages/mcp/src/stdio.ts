@@ -16,7 +16,7 @@ import {
   createNodeImageSource,
   createSharpTokeniser,
 } from "@ttrpg-agents/imaging";
-import { loadSrdMonsters } from "@ttrpg-agents/srd";
+import { loadSrdMonsters, loadTooManyTokensIndex } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
   SqliteEncounterDirectory,
@@ -83,6 +83,7 @@ async function main(): Promise<void> {
     imageSource: createNodeImageSource(),
     art: new SqliteTokenArtRepository(db),
     images: new SqliteTokenImageRepository(db),
+    tooManyTokens: loadTooManyTokensIndex(),
   });
   await server.connect(new StdioServerTransport());
 }
