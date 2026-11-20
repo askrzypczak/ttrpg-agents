@@ -97,6 +97,17 @@ transaction. A token whose hash the type's art already has keeps that art and
 its url, and changes and notes nothing. The GM publishes new art from the
 extension panel (Re-upload, then Pick the uploaded image).
 
+`add_monsters`, `change_monster_type`, `restore_monsters` and
+`restore_encounter` give a monster type with no art its TooManyTokens default
+before its monsters are written: the server fetches the image from
+cdn.jsdelivr.net, else raw.githubusercontent.com (5 s per image), stores the
+bytes and sets the art with source `default`. The reply gets one line per such
+type: `<Name>: token art set to the TooManyTokens default.`, or
+`No TooManyTokens art for <Name>; the GM will be asked to pick.` with the
+reason. A failed fetch never fails the call: the monsters are written and the
+GM picks the art as before. A type with art, or one the pack does not cover,
+gets no line. `undo` of these calls leaves the art.
+
 `table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`,
 `move_monsters`, and `add_monsters` or `preview_monsters` with a `room`, need the bridge running (`npm run bridge`) and a GM
 tab open: they ask the table through the engine's `TablePort` (wired to the bridge
