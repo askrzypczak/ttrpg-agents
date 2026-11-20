@@ -3,7 +3,7 @@ import {
   TargetError,
   addMonstersInRooms,
   canRestoreEncounter,
-  changeMonsterType,
+  changeMonsterTypeWithDefaultArt,
   compareByInitiative,
   createCreature,
   creatureChangesSchema,
@@ -26,8 +26,8 @@ import {
   resetMaxHp,
   resolveEncounter,
   resolveTargets,
-  restoreEncounter,
-  restoreMonsters,
+  restoreEncounterWithDefaultArt,
+  restoreMonstersWithDefaultArt,
   rollInitiative,
   setRooms,
   splitInitiative,
@@ -39,6 +39,8 @@ import {
   makeToken,
   setOwnTokenArt,
   type ChangeOrigin,
+  type DefaultArtDeps,
+  type DefaultArtOutcome,
   type EncounterRepository,
   type MadeToken,
   type MapRepository,
@@ -427,11 +429,13 @@ const addMonstersTool = defineTool({
         newGroupId: ctx.newGroupId,
         table: ctx.table,
         maps: ctx.maps,
+        defaultArt: defaultArtDeps(ctx),
       },
       groups,
       origin(),
       initiative === undefined ? {} : { initiative },
     );
+    const artLines = defaultArtLines(result.art);
     const text = [
       table(
         ["id", "name", "AC", "HP", "initiative"],
@@ -448,6 +452,7 @@ const addMonstersTool = defineTool({
         line,
       ]),
       ...(result.moved ? ["", movedLine] : []),
+      ...(artLines.length > 0 ? ["", ...artLines] : []),
       ...(result.rolls.length > 0
         ? [
             "",
@@ -749,14 +754,22 @@ const removeMonstersTool = defineTool({
   },
 });
 
-/** The reply of a restore: "Restored N: name (HP, was old name), ...". */
-function restoredReply(restored: readonly RestoredMonster[]): ToolResult {
+/** The reply of a restore: "Restored N: name (HP, was old name), ...", then the default art lines. */
+function restoredReply(
+  restored: readonly RestoredMonster[],
+  art: readonly DefaultArtOutcome[],
+): ToolResult {
   const parts = restored.map(({ instance, renamedFrom }) => {
     const hp = `${String(instance.currentHp)}/${String(instance.maxHp)} HP`;
     const was = renamedFrom === null ? "" : `, was ${renamedFrom}`;
     return `${instance.displayName} (${hp}${was})`;
   });
-  return ok(`Restored ${String(restored.length)}: ${parts.join(", ")}`, {
+  const artLines = defaultArtLines(art);
+  const text = [
+    `Restored ${String(restored.length)}: ${parts.join(", ")}`,
+    ...(artLines.length > 0 ? ["", ...artLines] : []),
+  ].join("\n");
+  return ok(text, {
     restored: restored.map(({ instance, renamedFrom }) => ({
       ...instanceView(instance),
       renamedFrom,
@@ -771,11 +784,15 @@ const restoreMonstersTool = defineTool({
   description:
     "Bring back monsters removed from the encounter, by instance id or exact name, with the HP, initiative and group they had. All targets must resolve, otherwise nothing is restored. list_encounter names what can be restored; a name taken meanwhile gets a new number.",
   inputSchema: { targets: z.array(z.string()).min(1) },
-  run(ctx, { targets }, origin) {
-    let restored: RestoredMonster[];
+  async run(ctx, { targets }, origin) {
+    let result: { restored: RestoredMonster[]; art: DefaultArtOutcome[] };
     try {
-      restored = restoreMonsters(
-        { repo: ctx.repo, monsters: ctx.monsters },
+      result = await restoreMonstersWithDefaultArt(
+        {
+          repo: ctx.repo,
+          monsters: ctx.monsters,
+          defaultArt: defaultArtDeps(ctx),
+        },
         targets,
         origin(),
       );
@@ -785,7 +802,7 @@ const restoreMonstersTool = defineTool({
       }
       throw e;
     }
-    return restoredReply(restored);
+    return restoredReply(result.restored, result.art);
   },
 });
 
@@ -818,7 +835,7 @@ const changeMonsterTypeTool = defineTool({
     monster: z.string(),
     hp: z.enum(["rolled", "average"]).optional(),
   },
-  run(ctx, { targets, monster, hp }, origin) {
+  async run(ctx, { targets, monster, hp }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -828,8 +845,14 @@ const changeMonsterTypeTool = defineTool({
       }
       throw e;
     }
-    const result = changeMonsterType(
-      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+    const result = await changeMonsterTypeWithDefaultArt(
+      {
+        repo: ctx.repo,
+        monsters: ctx.monsters,
+        rng: ctx.rng,
+        now: ctx.now,
+        defaultArt: defaultArtDeps(ctx),
+      },
       resolved.map((i) => i.id),
       monster,
       hp ?? "rolled",
@@ -853,8 +876,10 @@ const changeMonsterTypeTool = defineTool({
       (r) =>
         `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
     );
+    const artLines = defaultArtLines(result.art);
     const text = [
       ...lines,
+      ...(artLines.length > 0 ? ["", ...artLines] : []),
       ...(rollLines.length > 0 ? ["", "Rolls:", ...rollLines] : []),
     ].join("\n");
     return ok(text, {
@@ -1088,10 +1113,16 @@ const restoreEncounterTool = defineTool({
   description:
     "Bring back every monster the last clear_encounter removed, with the HP, initiative, group and stats visibility they had; their tokens are created again. Monsters added since stay; a name taken meanwhile gets a new number. Fails when nothing cleared is left to restore.",
   inputSchema: {},
-  run(ctx, _args, origin) {
-    return restoredReply(
-      restoreEncounter({ repo: ctx.repo, monsters: ctx.monsters }, origin()),
+  async run(ctx, _args, origin) {
+    const { restored, art } = await restoreEncounterWithDefaultArt(
+      {
+        repo: ctx.repo,
+        monsters: ctx.monsters,
+        defaultArt: defaultArtDeps(ctx),
+      },
+      origin(),
     );
+    return restoredReply(restored, art);
   },
 });
 
@@ -2184,6 +2215,33 @@ const ART_SOURCE_WORDS: Record<TokenArtSource, string> = {
   agent: "art set through the agent (the DM's own image or a chosen variant)",
   default: "the TooManyTokens default",
 };
+
+/** What the engine needs to give a monster type with no art its TooManyTokens default. */
+function defaultArtDeps(ctx: ToolContext): DefaultArtDeps {
+  return {
+    art: ctx.art,
+    images: ctx.images,
+    imageSource: ctx.imageSource,
+    tooManyTokens: ctx.tooManyTokens,
+  };
+}
+
+/** One reply line per type that got its default art or failed to; none for a type that has art or no default. */
+function defaultArtLines(art: readonly DefaultArtOutcome[]): string[] {
+  return art.flatMap((a) => {
+    switch (a.outcome) {
+      case "set":
+        return [`${a.name}: token art set to ${ART_SOURCE_WORDS.default}.`];
+      case "failed":
+        return [
+          `No TooManyTokens art for ${a.name}; the GM will be asked to pick. ${a.reason}`,
+        ];
+      case "has-art":
+      case "not-covered":
+        return [];
+    }
+  });
+}
 
 /** The reply of set_token_art: what was set or kept, the token's source, focus, zoom and crop, and how the art reaches the table. */
 function setTokenArtText(result: SetOwnTokenArtResult, image: string): string {
