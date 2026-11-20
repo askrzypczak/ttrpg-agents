@@ -9,6 +9,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -16,7 +18,10 @@ import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "table", commandId: "seed" };
@@ -35,6 +40,7 @@ const ZOMBIE = "srd-2024_zombie";
 let ctx: ToolContext;
 
 beforeEach(() => {
+  const db = openDatabase(":memory:");
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -42,7 +48,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(db),
     monsters: staticMonsterIndex(loadSrdMonsters()),
     creatures: makeTestCreatureRepository(),
     rng: { nextInt: () => 0 },
@@ -50,6 +56,11 @@ beforeEach(() => {
     newGroupId: () => "group",
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
   // A scene bound to the encounter is open, so replies name no encounter.

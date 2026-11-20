@@ -18,6 +18,7 @@
     "@ttrpg-agents/bridge": "*",
     "@ttrpg-agents/config": "*",
     "@ttrpg-agents/engine": "*",
+    "@ttrpg-agents/imaging": "*",
     "@ttrpg-agents/srd": "*",
     "@ttrpg-agents/store-sqlite": "*",
     "zod": "^4.6.7"

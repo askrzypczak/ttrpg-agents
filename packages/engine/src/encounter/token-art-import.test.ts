@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { TokenArt, TokenArtRepository } from "./token-art.js";
+import type { ChangeOrigin } from "./origin.js";
+import type {
+  StoredTokenArt,
+  TokenArt,
+  TokenArtRepository,
+  TokenArtSource,
+} from "./token-art.js";
 import { importTokenArt } from "./token-art-import.js";
 import {
   validateTokenImage,
@@ -49,13 +55,24 @@ function fakeArt(initial: Record<string, TokenArt> = {}) {
     listTokenArt(): Record<string, TokenArt> {
       return { ...stored };
     },
+    getTokenArt(monsterKey: string): StoredTokenArt | undefined {
+      const value = Object.hasOwn(stored, monsterKey)
+        ? stored[monsterKey]
+        : undefined;
+      return value === undefined ? undefined : { art: value, source: "table" };
+    },
     setTokenArt(monsterKey: string, value: TokenArt): void {
       writes.push({ monsterKey, art: value });
       stored[monsterKey] = value;
     },
+    transaction<T>(fn: () => T): T {
+      return fn();
+    },
   };
   return { art, stored, writes };
 }
+
+const importOrigin: ChangeOrigin = { source: "mcp", commandId: "import-0" };
 
 /** A byte reader that counts its calls. */
 function reader(bytes: Uint8Array) {
@@ -73,9 +90,14 @@ describe("importTokenArt", () => {
     const { images, saved } = fakeImages(NEW_HASH);
     const { read } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "srd-2024_goblin", read, {
-      replace: false,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      read,
+      { replace: false },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "stored", sha256: NEW_HASH });
     expect(saved).toEqual([
@@ -90,9 +112,14 @@ describe("importTokenArt", () => {
     const { images, saved } = fakeImages(NEW_HASH);
     const { read, calls } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "srd-2024_goblin", read, {
-      replace: false,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      read,
+      { replace: false },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "skipped", reason: "has_art" });
     expect(calls.count).toBe(0);
@@ -108,9 +135,14 @@ describe("importTokenArt", () => {
     const { images, saved } = fakeImages(NEW_HASH);
     const { read } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "srd-2024_goblin", read, {
-      replace: true,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      read,
+      { replace: true },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "stored", sha256: NEW_HASH });
     expect(saved).toHaveLength(1);
@@ -123,9 +155,14 @@ describe("importTokenArt", () => {
     const { images } = fakeImages(NEW_HASH);
     const { read } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "srd-2024_goblin", read, {
-      replace: true,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      read,
+      { replace: true },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "skipped", reason: "same_image" });
     expect(writes).toEqual([]);
@@ -147,6 +184,7 @@ describe("importTokenArt", () => {
       "srd-2024_goblin",
       reader(notAnImage).read,
       { replace: false },
+      importOrigin,
     );
     const replacing = importTokenArt(
       art,
@@ -154,6 +192,7 @@ describe("importTokenArt", () => {
       "srd-2024_wolf",
       reader(notAnImage).read,
       { replace: true },
+      importOrigin,
     );
 
     const rejection = {
@@ -173,14 +212,84 @@ describe("importTokenArt", () => {
     const { images } = fakeImages(NEW_HASH);
     const { read } = reader(PNG_1X1);
 
-    const result = importTokenArt(art, images, "constructor", read, {
-      replace: false,
-    });
+    const result = importTokenArt(
+      art,
+      images,
+      "constructor",
+      read,
+      { replace: false },
+      importOrigin,
+    );
 
     expect(result).toEqual({ outcome: "stored", sha256: NEW_HASH });
     expect(writes).toEqual([
       { monsterKey: "constructor", art: { sha256: NEW_HASH } },
     ]);
     expect(stored).toEqual({ constructor: { sha256: NEW_HASH } });
+  });
+
+  it("importTokenArt assigns imported art with source agent under the given origin, replacing table art with replace", () => {
+    const origin: ChangeOrigin = { source: "mcp", commandId: "import-1" };
+    const stored: Record<string, StoredTokenArt> = {
+      "srd-2024_goblin": { art: publishedArt(OLD_HASH), source: "table" },
+    };
+    const writes: {
+      monsterKey: string;
+      art: TokenArt;
+      source: TokenArtSource;
+      origin: ChangeOrigin;
+      inTransaction: boolean;
+    }[] = [];
+    let depth = 0;
+    const art: TokenArtRepository = {
+      listTokenArt: () =>
+        Object.fromEntries(
+          Object.entries(stored).map(([key, value]) => [key, value.art]),
+        ),
+      getTokenArt: (monsterKey) =>
+        Object.hasOwn(stored, monsterKey) ? stored[monsterKey] : undefined,
+      setTokenArt(monsterKey, value, source, writeOrigin) {
+        writes.push({
+          monsterKey,
+          art: value,
+          source,
+          origin: writeOrigin,
+          inTransaction: depth > 0,
+        });
+        stored[monsterKey] = { art: value, source };
+      },
+      transaction<T>(fn: () => T): T {
+        depth += 1;
+        try {
+          return fn();
+        } finally {
+          depth -= 1;
+        }
+      },
+    };
+    const { images } = fakeImages(NEW_HASH);
+
+    const result = importTokenArt(
+      art,
+      images,
+      "srd-2024_goblin",
+      reader(PNG_1X1).read,
+      { replace: true },
+      origin,
+    );
+
+    expect(result).toEqual({ outcome: "stored", sha256: NEW_HASH });
+    expect(writes).toEqual([
+      {
+        monsterKey: "srd-2024_goblin",
+        art: { sha256: NEW_HASH },
+        source: "agent",
+        origin,
+        inTransaction: true,
+      },
+    ]);
+    expect(stored).toEqual({
+      "srd-2024_goblin": { art: { sha256: NEW_HASH }, source: "agent" },
+    });
   });
 });

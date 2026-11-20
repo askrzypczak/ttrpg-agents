@@ -12,6 +12,7 @@ import {
 } from "@ttrpg-agents/bridge/client";
 import { SETTINGS, describeProfile, loadConfig } from "@ttrpg-agents/config";
 import { getSetupStatus } from "@ttrpg-agents/engine";
+import { createSharpTokeniser } from "@ttrpg-agents/imaging";
 import { createDatabaseProbe } from "@ttrpg-agents/store-sqlite";
 import { formatSetupStatus } from "./setup-status.js";
 
@@ -44,6 +45,7 @@ async function main(): Promise<void> {
       tokenPath: settings.agentTokenFile,
     }),
     now: () => new Date(),
+    tokeniser: createSharpTokeniser(),
   });
   process.stdout.write(`${formatSetupStatus(status)}\n`);
 }

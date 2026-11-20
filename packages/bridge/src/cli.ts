@@ -2,7 +2,11 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describeProfile, loadConfig } from "@ttrpg-agents/config";
-import { openScene, storeTokenImage } from "@ttrpg-agents/engine";
+import {
+  assignTokenArt,
+  openScene,
+  storeTokenImage,
+} from "@ttrpg-agents/engine";
 import {
   SqliteEncounterLog,
   SqliteEncounterDirectory,
@@ -59,7 +63,12 @@ const server = await startBridgeServer({
   mapRooms: () => mapRoomsMessage(encounters),
   removeInstance: (id, commandId) => removeInstance(encounters, id, commandId),
   editInstance: (edit, commandId) => editInstance(encounters, edit, commandId),
-  setTokenArt: (monsterKey, art) => artRepo.setTokenArt(monsterKey, art),
+  setTokenArt: (monsterKey, art, commandId) => {
+    assignTokenArt(artRepo, monsterKey, art, "table", {
+      source: "table",
+      commandId,
+    });
+  },
   storeTokenImage: (bytes) => storeTokenImage(imageRepo, bytes),
   getTokenImage: (sha256) => imageRepo.getTokenImage(sha256),
   openScene: (sceneId) => openScene(encounters, sceneId),

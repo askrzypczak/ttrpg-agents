@@ -58,3 +58,71 @@ export {
   type TokenImageStoreResult,
   type TokenImageValidation,
 } from "./token-image.js";
+// #379 TooManyTokens index
+export {
+  defaultVariant,
+  tooManyTokensIndexSchema,
+  tooManyTokensUrls,
+  tooManyTokensVariants,
+  type TooManyTokensIndex,
+  type TooManyTokensVariant,
+} from "./too-many-tokens.js";
+// #380 tokeniser
+export {
+  IMAGE_LOAD_TIMEOUT_MS,
+  parseImageLocation,
+  type ImageLocation,
+  type ImageSource,
+} from "./image-source.js";
+export {
+  TOKEN_STYLE,
+  TOKEN_ZOOM_MAX,
+  makeToken,
+  tokenCrop,
+  type FocalPoint,
+  type MadeToken,
+  type MakeTokenDeps,
+  type SquareCrop,
+  type TokenStyle,
+  type Tokeniser,
+} from "./tokeniser.js";
+export {
+  TOKEN_SOURCE_MAX_BYTES,
+  TOKEN_SOURCE_MAX_SIDE,
+  validateTokenSource,
+} from "./token-image.js";
+export {
+  ImageUnavailableError,
+  InvalidTokenRequestError,
+  TokeniserError,
+} from "./errors.js";
+// #378 token art source and precedence
+export {
+  assignTokenArt,
+  type AssignTokenArtResult,
+  type StoredTokenArt,
+  type TokenArtSource,
+} from "./token-art.js";
+// #382 own token art
+export {
+  setOwnTokenArt,
+  type SetOwnTokenArtDeps,
+  type SetOwnTokenArtResult,
+} from "./own-token-art.js";
+// #383 TooManyTokens default art
+export { changeMonsterTypeWithDefaultArt } from "./change-monster.js";
+export {
+  restoreEncounterWithDefaultArt,
+  restoreMonstersWithDefaultArt,
+} from "./restore.js";
+export type { DefaultArtDeps, DefaultArtOutcome } from "./default-art.js";
+// #387 TooManyTokens variants
+export { CONTACT_SHEET_LAYOUT, type ContactSheetLayout } from "./tokeniser.js";
+export {
+  setTooManyTokensVariant,
+  tooManyTokensSheet,
+  type SetTooManyTokensVariantDeps,
+  type SetTooManyTokensVariantResult,
+  type TooManyTokensSheet,
+  type TooManyTokensSheetDeps,
+} from "./token-variants.js";

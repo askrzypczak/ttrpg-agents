@@ -169,6 +169,12 @@ const sampleEvents: Record<EncounterEvent["type"], unknown> = {
     origin,
   },
   "monster-changed": monsterChanged,
+  "art-changed": {
+    type: "art-changed",
+    monsterKey: "srd-2024_goblin",
+    art: { sha256: "a".repeat(64) },
+    origin,
+  },
 };
 
 describe("repository mutations and events", () => {

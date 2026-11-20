@@ -3,11 +3,18 @@ import {
   createMonsterIndex,
   type Monster,
 } from "@ttrpg-agents/engine";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestImageSource,
+  makeTestSetupPorts,
+  makeTestTokeniser,
+  makeTestTooManyTokensIndex,
+} from "@ttrpg-agents/engine/testing";
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -43,6 +50,11 @@ beforeEach(() => {
     newGroupId: () => `group-${String(tick)}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => `command-${String(++commands)}`,
   };
 });

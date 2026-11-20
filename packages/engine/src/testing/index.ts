@@ -1,3 +1,16 @@
+import { ImageUnavailableError } from "../encounter/errors.js";
+import type { ImageLocation, ImageSource } from "../encounter/image-source.js";
+import type {
+  ContactSheetLayout,
+  FocalPoint,
+  SquareCrop,
+  TokenStyle,
+  Tokeniser,
+} from "../encounter/tokeniser.js";
+import {
+  tooManyTokensIndexSchema,
+  type TooManyTokensIndex,
+} from "../encounter/too-many-tokens.js";
 import type { MonsterInstance } from "../encounter/types.js";
 import type {
   CreatureRecord,
@@ -15,6 +28,7 @@ import type {
   DatabaseFacts,
   SettingsFacts,
   SetupPorts,
+  TokeniserFacts,
 } from "../setup/port.js";
 
 /**
@@ -51,7 +65,7 @@ export function makeTestInstance(
  * Ports for a ready setup (default profile, no config file, no problems, no
  * settings, database at version 15 of 15, a backup taken at 09:00 UTC on
  * 2026-11-12, bridge on 5199 with a connected tab in room "test-room", now
- * 10:00 UTC on 2026-11-12), with `overrides` replacing parts of each fact and
+ * 10:00 UTC on 2026-11-12, a tokeniser that loaded), with `overrides` replacing parts of each fact and
  * `now`; each call returns new objects.
  */
 export function makeTestSetupPorts(
@@ -61,6 +75,7 @@ export function makeTestSetupPorts(
     backups?: Partial<BackupFacts>;
     bridge?: Partial<BridgeFacts>;
     now?: Date;
+    tokeniser?: TokeniserFacts;
   } = {},
 ): SetupPorts {
   const settings: SettingsFacts = {
@@ -95,11 +110,15 @@ export function makeTestSetupPorts(
     answer: { kind: "gm-tab-connected", roomId: "test-room" },
     ...overrides.bridge,
   };
+  const tokeniser: TokeniserFacts = overrides.tokeniser ?? { kind: "loaded" };
   return {
     settings,
     database: { check: () => database, checkBackups: () => backups },
     bridge: { check: () => Promise.resolve(bridge) },
     now: () => new Date(now.getTime()),
+    tokeniser: {
+      check: () => Promise.resolve(tokeniser),
+    },
   };
 }
 
@@ -198,4 +217,123 @@ export function makeTestCreatureRepository(
   };
   for (const creature of creatures) repo.insert(creature.key, creature);
   return repo;
+}
+
+/** A PNG signature and IHDR declaring the given size, zero-padded to `length` bytes. */
+export function pngDeclaring(
+  width: number,
+  height: number,
+  length = 33,
+): Uint8Array {
+  const out = new Uint8Array(length);
+  out.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const view = new DataView(out.buffer);
+  view.setUint32(8, 13);
+  out.set([0x49, 0x48, 0x44, 0x52], 12);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  out.set([8, 6, 0, 0, 0], 24);
+  return out;
+}
+
+/** A WebP RIFF header with a VP8X chunk declaring the given size, zero-padded to `length` bytes. */
+export function webpDeclaring(
+  width: number,
+  height: number,
+  length = 30,
+): Uint8Array {
+  const out = new Uint8Array(length);
+  const view = new DataView(out.buffer);
+  out.set([0x52, 0x49, 0x46, 0x46], 0); // RIFF
+  view.setUint32(4, length - 8, true);
+  out.set([0x57, 0x45, 0x42, 0x50], 8); // WEBP
+  out.set([0x56, 0x50, 0x38, 0x58], 12); // VP8X
+  view.setUint32(16, 10, true);
+  // Flags and reserved bytes (20 to 23) stay zero.
+  const w = width - 1;
+  const h = height - 1;
+  out.set([w & 0xff, (w >> 8) & 0xff, (w >> 16) & 0xff], 24);
+  out.set([h & 0xff, (h >> 8) & 0xff, (h >> 16) & 0xff], 27);
+  return out;
+}
+
+/** The key a test image source files a location under: its path or its url. */
+function locationKey(location: ImageLocation): string {
+  return "path" in location ? location.path : location.url;
+}
+
+/**
+ * An ImageSource answering `images` by path or url and recording every load;
+ * an unknown location rejects with ImageUnavailableError.
+ */
+export function makeTestImageSource(
+  images: Record<string, Uint8Array> = {},
+): ImageSource & { loads: ImageLocation[] } {
+  const loads: ImageLocation[] = [];
+  return {
+    loads,
+    load(location) {
+      loads.push(location);
+      const key = locationKey(location);
+      const bytes = images[key];
+      return bytes === undefined
+        ? Promise.reject(new ImageUnavailableError(`No test image at ${key}.`))
+        : Promise.resolve(bytes);
+    },
+  };
+}
+
+/**
+ * A Tokeniser recording every render's crop and style; by default it renders
+ * a 512 px square WebP header and answers the focal point (0.25, 0.3);
+ * contactSheet records each call and by default answers webpDeclaring(640, 512).
+ * `overrides` replace any method (renders and sheets are still recorded).
+ */
+export function makeTestTokeniser(
+  overrides: Partial<Tokeniser> = {},
+): Tokeniser & {
+  renders: { crop: SquareCrop; style: TokenStyle }[];
+  sheets: { images: (Uint8Array | null)[]; layout: ContactSheetLayout }[];
+} {
+  const renders: { crop: SquareCrop; style: TokenStyle }[] = [];
+  const sheets: {
+    images: (Uint8Array | null)[];
+    layout: ContactSheetLayout;
+  }[] = [];
+  const focus: FocalPoint = { x: 0.25, y: 0.3 };
+  return {
+    renders,
+    sheets,
+    contactSheet(images, layout) {
+      sheets.push({ images: [...images], layout: { ...layout } });
+      return overrides.contactSheet
+        ? overrides.contactSheet(images, layout)
+        : Promise.resolve(webpDeclaring(640, 512));
+    },
+    focalPoint(bytes) {
+      return overrides.focalPoint
+        ? overrides.focalPoint(bytes)
+        : Promise.resolve({ ...focus });
+    },
+    renderToken(bytes, crop, style) {
+      renders.push({ crop: { ...crop }, style: { ...style } });
+      return overrides.renderToken
+        ? overrides.renderToken(bytes, crop, style)
+        : Promise.resolve(webpDeclaring(512, 512));
+    },
+  };
+}
+
+/** The fixed commit of the test TooManyTokens index. */
+const TEST_TOO_MANY_TOKENS_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+/** A TooManyTokens index (repo "test/pack", a fixed 40-hex commit) with the given folders; none by default. */
+export function makeTestTooManyTokensIndex(
+  folders: TooManyTokensIndex["folders"] = [],
+): TooManyTokensIndex {
+  return tooManyTokensIndexSchema.parse({
+    repo: "test/pack",
+    commit: TEST_TOO_MANY_TOKENS_COMMIT,
+    folders,
+  });
 }

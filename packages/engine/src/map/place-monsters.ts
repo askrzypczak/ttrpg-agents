@@ -9,6 +9,12 @@ import {
   type MonstersPreview,
   type PreviewMonstersDeps,
 } from "../encounter/add-monsters.js";
+import {
+  loadDefaultArt,
+  storeDefaultArt,
+  type DefaultArtDeps,
+  type DefaultArtOutcome,
+} from "../encounter/default-art.js";
 import { UnknownInstanceError } from "../encounter/errors.js";
 import type { ChangeOrigin } from "../encounter/origin.js";
 import type { EncounterRepository } from "../encounter/repository.js";
@@ -51,6 +57,8 @@ export interface RoomPlacement {
 export interface AddMonstersInRoomsResult extends AddMonstersResult {
   placements: RoomPlacement[];
   moved: boolean;
+  /** The groups' types' default art outcomes; [] without `defaultArt`. */
+  art: DefaultArtOutcome[];
 }
 
 /**
@@ -65,16 +73,21 @@ export async function addMonstersInRooms(
   deps: AddMonstersDeps & {
     table: Pick<TablePort, "sceneMap" | "sceneTokens">;
     maps: Pick<MapRepository, "getActiveMap" | "getRooms">;
+    /** With it: every stored-state check, then the default art load, then the table reads, then the art and the add in one transaction, art first. */
+    defaultArt?: DefaultArtDeps;
   },
   groups: readonly RoomGroup[],
   origin: ChangeOrigin,
   options: AddMonstersOptions = {},
 ): Promise<AddMonstersInRoomsResult> {
-  if (groups.every((g) => g.room === undefined)) {
+  const { defaultArt } = deps;
+  const hasRoom = groups.some((g) => g.room !== undefined);
+  if (!hasRoom && defaultArt === undefined) {
     return {
       ...addMonsters(deps, groups.map(withoutRoom), origin, options),
       placements: [],
       moved: false,
+      art: [],
     };
   }
   validateAddMonsters(
@@ -84,21 +97,37 @@ export async function addMonstersInRooms(
     options.initiative ?? "group",
   );
   findJoinTargets(deps.repo, groups);
-  const blocks = await pickRoomBlocks(deps, groups);
+  const rooms = hasRoom ? findGroupRooms(deps.maps, groups) : undefined;
+  const loaded =
+    defaultArt === undefined
+      ? []
+      : await loadDefaultArt(
+          { ...defaultArt, monsters: deps.monsters },
+          groups.map((g) => g.monster),
+        );
+  const blocks =
+    rooms === undefined ? undefined : await pickRoomBlocks(deps, groups, rooms);
 
-  const result = addMonsters(
-    deps,
-    groups.map((g, i) => {
-      const plain = withoutRoom(g);
-      const groupPicks = blocks.picks[i];
-      return groupPicks === undefined
-        ? plain
-        : { ...plain, spawnPositions: groupPicks.map((p) => p.position) };
-    }),
-    origin,
-    options,
-  );
+  const add = () =>
+    addMonsters(
+      deps,
+      groups.map((g, i) => {
+        const plain = withoutRoom(g);
+        const groupPicks = blocks?.picks[i];
+        return groupPicks === undefined
+          ? plain
+          : { ...plain, spawnPositions: groupPicks.map((p) => p.position) };
+      }),
+      origin,
+      options,
+    );
+  const { result, art } =
+    defaultArt === undefined
+      ? { result: add(), art: [] }
+      : storeDefaultArt(defaultArt, loaded, origin, add);
 
+  if (blocks === undefined)
+    return { ...result, placements: [], moved: false, art };
   const cells = instanceCells(groups, blocks);
   const placements: RoomPlacement[] = [];
   cells.forEach((cell, n) => {
@@ -106,7 +135,7 @@ export async function addMonstersInRooms(
     if (cell === undefined || instance === undefined) return;
     placements.push({ id: instance.id, name: instance.name, ...cell });
   });
-  return { ...result, placements, moved: blocks.moved };
+  return { ...result, placements, moved: blocks.moved, art };
 }
 
 /** Where a would-be monster of a group with a room would go; `cell` as in RoomPlacement, null when no free block is left. */
@@ -144,7 +173,11 @@ export async function previewMonstersInRooms(
     options.initiative ?? "group",
   );
   findJoinTargets(deps.repo, groups);
-  const blocks = await pickRoomBlocks(deps, groups);
+  const blocks = await pickRoomBlocks(
+    deps,
+    groups,
+    findGroupRooms(deps.maps, groups),
+  );
 
   const preview = previewMonsters(deps, groups.map(withoutRoom), options);
 
@@ -160,7 +193,7 @@ export async function previewMonstersInRooms(
 
 /** Each group's saved room and picked blocks, and the live map placement they are on. */
 interface RoomBlocks {
-  rooms: (Room | undefined)[];
+  rooms: readonly (Room | undefined)[];
   /** Per group with a room, its free blocks in pick order; undefined for a group without one. */
   picks: (CellPick[] | undefined)[];
   placement: MapPlacement;
@@ -168,10 +201,26 @@ interface RoomBlocks {
 }
 
 /**
- * Finds the map in use and each group's saved room, reads the table's map and
- * tokens, and picks free blocks of each group's footprint in its room, larger
- * footprints first (ties in input order). A cell is occupied when its centre
- * lies under a token on the table or it was picked for another group.
+ * Finds the map in use and each group's saved room (undefined for a group
+ * without one) in the stored state; throws when there is no map in use or a
+ * room is not saved. Reads nothing from the table.
+ */
+function findGroupRooms(
+  maps: Pick<MapRepository, "getActiveMap" | "getRooms">,
+  groups: readonly RoomGroup[],
+): (Room | undefined)[] {
+  const active = requireActiveMap(maps);
+  const saved = maps.getRooms(active.itemId);
+  return groups.map((g) =>
+    g.room === undefined ? undefined : findRoom(saved, g.room),
+  );
+}
+
+/**
+ * Reads the table's map and tokens and picks free blocks of each group's
+ * footprint in its room (from findGroupRooms), larger footprints first (ties
+ * in input order). A cell is occupied when its centre lies under a token on
+ * the table or it was picked for another group.
  */
 async function pickRoomBlocks(
   deps: {
@@ -180,13 +229,8 @@ async function pickRoomBlocks(
     maps: Pick<MapRepository, "getActiveMap" | "getRooms">;
   },
   groups: readonly RoomGroup[],
+  rooms: readonly (Room | undefined)[],
 ): Promise<RoomBlocks> {
-  const active = requireActiveMap(deps.maps);
-  const saved = deps.maps.getRooms(active.itemId);
-  const rooms: (Room | undefined)[] = groups.map((g) =>
-    g.room === undefined ? undefined : findRoom(saved, g.room),
-  );
-
   const [live, tokens] = await Promise.all([
     liveActiveMap(deps.table, deps.maps),
     deps.table.sceneTokens(),

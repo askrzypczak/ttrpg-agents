@@ -3,7 +3,7 @@ import {
   TargetError,
   addMonstersInRooms,
   canRestoreEncounter,
-  changeMonsterType,
+  changeMonsterTypeWithDefaultArt,
   compareByInitiative,
   createCreature,
   creatureChangesSchema,
@@ -26,8 +26,8 @@ import {
   resetMaxHp,
   resolveEncounter,
   resolveTargets,
-  restoreEncounter,
-  restoreMonsters,
+  restoreEncounterWithDefaultArt,
+  restoreMonstersWithDefaultArt,
   rollInitiative,
   setRooms,
   splitInitiative,
@@ -36,8 +36,15 @@ import {
   undoLastCommand,
   useEncounter,
   useMap,
+  makeToken,
+  setOwnTokenArt,
+  setTooManyTokensVariant,
+  tooManyTokensSheet,
   type ChangeOrigin,
+  type DefaultArtDeps,
+  type DefaultArtOutcome,
   type EncounterRepository,
+  type MadeToken,
   type MapRepository,
   type MonsterInstance,
   type PreviewInstance,
@@ -45,7 +52,12 @@ import {
   type ResolvedEncounter,
   type RestoredMonster,
   type RoomPlacement,
+  type SetOwnTokenArtResult,
+  type SetTooManyTokensVariantResult,
   type TableArtWait,
+  type TokenArtSource,
+  type TokenImageMime,
+  type TooManyTokensSheet,
   type UndoChange,
   type UndoField,
   type UndoNext,
@@ -421,11 +433,13 @@ const addMonstersTool = defineTool({
         newGroupId: ctx.newGroupId,
         table: ctx.table,
         maps: ctx.maps,
+        defaultArt: defaultArtDeps(ctx),
       },
       groups,
       origin(),
       initiative === undefined ? {} : { initiative },
     );
+    const artLines = defaultArtLines(result.art);
     const text = [
       table(
         ["id", "name", "AC", "HP", "initiative"],
@@ -442,6 +456,7 @@ const addMonstersTool = defineTool({
         line,
       ]),
       ...(result.moved ? ["", movedLine] : []),
+      ...(artLines.length > 0 ? ["", ...artLines] : []),
       ...(result.rolls.length > 0
         ? [
             "",
@@ -743,14 +758,22 @@ const removeMonstersTool = defineTool({
   },
 });
 
-/** The reply of a restore: "Restored N: name (HP, was old name), ...". */
-function restoredReply(restored: readonly RestoredMonster[]): ToolResult {
+/** The reply of a restore: "Restored N: name (HP, was old name), ...", then the default art lines. */
+function restoredReply(
+  restored: readonly RestoredMonster[],
+  art: readonly DefaultArtOutcome[],
+): ToolResult {
   const parts = restored.map(({ instance, renamedFrom }) => {
     const hp = `${String(instance.currentHp)}/${String(instance.maxHp)} HP`;
     const was = renamedFrom === null ? "" : `, was ${renamedFrom}`;
     return `${instance.displayName} (${hp}${was})`;
   });
-  return ok(`Restored ${String(restored.length)}: ${parts.join(", ")}`, {
+  const artLines = defaultArtLines(art);
+  const text = [
+    `Restored ${String(restored.length)}: ${parts.join(", ")}`,
+    ...(artLines.length > 0 ? ["", ...artLines] : []),
+  ].join("\n");
+  return ok(text, {
     restored: restored.map(({ instance, renamedFrom }) => ({
       ...instanceView(instance),
       renamedFrom,
@@ -765,11 +788,15 @@ const restoreMonstersTool = defineTool({
   description:
     "Bring back monsters removed from the encounter, by instance id or exact name, with the HP, initiative and group they had. All targets must resolve, otherwise nothing is restored. list_encounter names what can be restored; a name taken meanwhile gets a new number.",
   inputSchema: { targets: z.array(z.string()).min(1) },
-  run(ctx, { targets }, origin) {
-    let restored: RestoredMonster[];
+  async run(ctx, { targets }, origin) {
+    let result: { restored: RestoredMonster[]; art: DefaultArtOutcome[] };
     try {
-      restored = restoreMonsters(
-        { repo: ctx.repo, monsters: ctx.monsters },
+      result = await restoreMonstersWithDefaultArt(
+        {
+          repo: ctx.repo,
+          monsters: ctx.monsters,
+          defaultArt: defaultArtDeps(ctx),
+        },
         targets,
         origin(),
       );
@@ -779,7 +806,7 @@ const restoreMonstersTool = defineTool({
       }
       throw e;
     }
-    return restoredReply(restored);
+    return restoredReply(result.restored, result.art);
   },
 });
 
@@ -812,7 +839,7 @@ const changeMonsterTypeTool = defineTool({
     monster: z.string(),
     hp: z.enum(["rolled", "average"]).optional(),
   },
-  run(ctx, { targets, monster, hp }, origin) {
+  async run(ctx, { targets, monster, hp }, origin) {
     let resolved: MonsterInstance[];
     try {
       resolved = resolveTargets(ctx.repo.listInstances(), targets);
@@ -822,8 +849,14 @@ const changeMonsterTypeTool = defineTool({
       }
       throw e;
     }
-    const result = changeMonsterType(
-      { repo: ctx.repo, monsters: ctx.monsters, rng: ctx.rng, now: ctx.now },
+    const result = await changeMonsterTypeWithDefaultArt(
+      {
+        repo: ctx.repo,
+        monsters: ctx.monsters,
+        rng: ctx.rng,
+        now: ctx.now,
+        defaultArt: defaultArtDeps(ctx),
+      },
       resolved.map((i) => i.id),
       monster,
       hp ?? "rolled",
@@ -847,8 +880,10 @@ const changeMonsterTypeTool = defineTool({
       (r) =>
         `- ${r.label ?? r.expression}: ${r.expression} = ${String(r.total)}`,
     );
+    const artLines = defaultArtLines(result.art);
     const text = [
       ...lines,
+      ...(artLines.length > 0 ? ["", ...artLines] : []),
       ...(rollLines.length > 0 ? ["", "Rolls:", ...rollLines] : []),
     ].join("\n");
     return ok(text, {
@@ -1082,10 +1117,16 @@ const restoreEncounterTool = defineTool({
   description:
     "Bring back every monster the last clear_encounter removed, with the HP, initiative, group and stats visibility they had; their tokens are created again. Monsters added since stay; a name taken meanwhile gets a new number. Fails when nothing cleared is left to restore.",
   inputSchema: {},
-  run(ctx, _args, origin) {
-    return restoredReply(
-      restoreEncounter({ repo: ctx.repo, monsters: ctx.monsters }, origin()),
+  async run(ctx, _args, origin) {
+    const { restored, art } = await restoreEncounterWithDefaultArt(
+      {
+        repo: ctx.repo,
+        monsters: ctx.monsters,
+        defaultArt: defaultArtDeps(ctx),
+      },
+      origin(),
     );
+    return restoredReply(restored, art);
   },
 });
 
@@ -1094,7 +1135,7 @@ const undoTool = defineTool({
   takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
-    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms), encounter renames and bindings (rename_encounter, use_encounter) and creature changes (create_creature, edit_creature, remove_creature) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
+    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms), encounter renames and bindings (rename_encounter, use_encounter), creature changes (create_creature, edit_creature, remove_creature) and token art changes (set_token_art) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
   inputSchema: {},
   run(ctx, _args, origin) {
     const snapshot = ctx.repo.listInstances();
@@ -1224,7 +1265,7 @@ const setupStatusTool = defineTool({
   name: "setup_status",
   annotations: { readOnlyHint: true },
   description:
-    "Check whether this setup is ready: profile, config file and its problems, settings, the encounter database and its stored creature count, the bridge (with this profile's agent token) and the Owlbear GM tab, with one fix per problem. Does not need the bridge running: a missing bridge or tab is a row. For scene sync use table_status.",
+    "Check whether this setup is ready: profile, config file and its problems, settings, the encounter database and its stored creature count, the bridge (with this profile's agent token), the Owlbear GM tab and the tokeniser, with one fix per problem. Does not need the bridge running: a missing bridge or tab is a row. For scene sync use table_status.",
   inputSchema: {},
   async run(ctx) {
     const status = await getSetupStatus(ctx.setup);
@@ -2085,6 +2126,278 @@ function clearedListLine(cleared: readonly MonsterInstance[]): string[] {
   ];
 }
 
+/** The input shared by preview_token and set_token_art: the image, focus and zoom. */
+const tokenInput = {
+  image: z.string(),
+  focus: z.object({ x: z.number(), y: z.number() }).optional(),
+  zoom: z.number().optional(),
+};
+
+const previewTokenTool = defineTool({
+  name: "preview_token",
+  annotations: { readOnlyHint: true },
+  description:
+    "Preview a round token made from an image: an absolute file path or an https URL (PNG, JPEG or WebP, at most 20 MiB and 8192 px a side). The crop centres on the image's most salient point (sharp's attention strategy) unless focus (fractions 0 to 1 of the width and height) is given, which overrides it. Zoom 1 to 8 (default 1) narrows the crop. Replies with the token and its source size, focus, zoom and crop. Stores nothing.",
+  inputSchema: tokenInput,
+  async run(ctx, { image, focus, zoom }) {
+    const token = await makeToken(ctx, image, { focus, zoom });
+    return {
+      content: [
+        {
+          type: "image",
+          data: Buffer.from(token.bytes).toString("base64"),
+          mimeType: "image/webp",
+        },
+        { type: "text", text: tokenPreviewText(token) },
+      ],
+    };
+  },
+});
+
+const setTokenArtTool = defineTool({
+  name: "set_token_art",
+  annotations: { destructiveHint: true },
+  description:
+    "Set the token art of a monster type, by monster key (search_monsters and list_creatures give keys), from image or variant (exactly one). image: an absolute file path or an https URL (PNG, JPEG or WebP, at most 20 MiB and 8192 px a side), made into a round token as preview_token does (focus, zoom); the GM then publishes it from the extension panel: Re-upload, then Pick the uploaded image. variant: a TooManyTokens variant number from show_token_variants, used as it is (no focus or zoom) and published at once. Either replaces the type's art whatever set it (a GM pick in Owlbear, an earlier image or variant, the TooManyTokens default); the reply names what it replaced. Takes no encounter and creates none; undo does not cover it.",
+  inputSchema: {
+    monster: z.string().describe("The monster key."),
+    ...tokenInput,
+    image: z.string().optional(),
+    variant: z
+      .number()
+      .optional()
+      .describe(
+        "A TooManyTokens variant number from show_token_variants; instead of image.",
+      ),
+  },
+  async run(ctx, { monster, image, variant, focus, zoom }, origin) {
+    if (image !== undefined && variant !== undefined)
+      return fail("Give image or variant, not both.");
+    if (variant !== undefined) {
+      if (focus !== undefined || zoom !== undefined)
+        return fail(
+          "focus and zoom apply to image only; a variant is used as it is.",
+        );
+      const chosen = await setTooManyTokensVariant(
+        {
+          monsters: ctx.monsters,
+          art: ctx.art,
+          images: ctx.images,
+          imageSource: ctx.imageSource,
+          tooManyTokens: ctx.tooManyTokens,
+          directory: ctx.encounters,
+        },
+        monster,
+        variant,
+        origin(),
+      );
+      const text = setTokenVariantText(chosen);
+      if (chosen.outcome === "set")
+        return ok(text, {
+          outcome: "set",
+          monsterKey: chosen.monster.key,
+          sha256: chosen.sha256,
+          replaced: chosen.replaced?.source ?? null,
+          kept: null,
+          published: true,
+        });
+      return ok(text, {
+        outcome: "unchanged",
+        monsterKey: chosen.monster.key,
+        sha256: chosen.sha256,
+        replaced: null,
+        kept: chosen.kept.source,
+        published: chosen.kept.art.url !== undefined,
+      });
+    }
+    if (image === undefined)
+      return fail(
+        "Give image (an absolute file path or an https URL) or variant (a number from show_token_variants).",
+      );
+    const result = await setOwnTokenArt(
+      {
+        imageSource: ctx.imageSource,
+        tokeniser: ctx.tokeniser,
+        monsters: ctx.monsters,
+        art: ctx.art,
+        images: ctx.images,
+        directory: ctx.encounters,
+      },
+      monster,
+      image,
+      { focus, zoom },
+      origin(),
+    );
+    const text = setTokenArtText(result, image);
+    if (result.outcome === "set")
+      return ok(text, {
+        outcome: "set",
+        monsterKey: result.monster.key,
+        sha256: result.sha256,
+        replaced: result.replaced?.source ?? null,
+        kept: null,
+        published: result.published,
+      });
+    return ok(text, {
+      outcome: "unchanged",
+      monsterKey: result.monster.key,
+      sha256: result.sha256,
+      replaced: null,
+      kept: result.kept.source,
+      published: result.published,
+    });
+  },
+});
+
+const showTokenVariantsTool = defineTool({
+  name: "show_token_variants",
+  annotations: { readOnlyHint: true },
+  description:
+    "Show a monster type's TooManyTokens token art variants, by monster key (search_monsters and list_creatures give keys), as one contact-sheet image: 20 variants a page in 5 columns, numbered left to right, top to bottom, with no numbers drawn. page (default 1) picks the page. The reply line gives the variant numbers on the sheet, the total, the current art's variant number and how many images could not be loaded (blank cells). Choose one with set_token_art and variant. Stores nothing; takes no encounter and creates none.",
+  inputSchema: {
+    monster: z.string().describe("The monster key."),
+    page: z
+      .number()
+      .optional()
+      .describe("The page, from 1 (default 1); 20 variants a page."),
+  },
+  async run(ctx, { monster, page }) {
+    const sheet = await tooManyTokensSheet(
+      {
+        monsters: ctx.monsters,
+        art: ctx.art,
+        imageSource: ctx.imageSource,
+        tokeniser: ctx.tokeniser,
+        tooManyTokens: ctx.tooManyTokens,
+      },
+      monster,
+      page ?? 1,
+    );
+    return {
+      content: [
+        {
+          type: "image",
+          data: Buffer.from(sheet.bytes).toString("base64"),
+          mimeType: "image/webp",
+        },
+        { type: "text", text: tokenVariantsText(sheet) },
+      ],
+    };
+  },
+});
+
+const MIME_WORD: Record<TokenImageMime, string> = {
+  "image/png": "PNG",
+  "image/jpeg": "JPEG",
+  "image/webp": "WebP",
+};
+
+function tokenPreviewText({ source, focus, zoom, crop }: MadeToken): string {
+  return [
+    `Source: ${String(source.width)} x ${String(source.height)} px ${MIME_WORD[source.mime]}.`,
+    `Focus: x ${focus.x.toFixed(2)}, y ${focus.y.toFixed(2)}.`,
+    `Zoom: ${String(zoom)}.`,
+    `Crop: ${String(crop.side)} px square at x ${String(crop.left)}, y ${String(crop.top)}.`,
+  ].join(" ");
+}
+
+const ART_SOURCE_WORDS: Record<TokenArtSource, string> = {
+  table: "a GM pick in Owlbear",
+  agent: "art set through the agent (the DM's own image or a chosen variant)",
+  default: "the TooManyTokens default",
+};
+
+/** What the engine needs to give a monster type with no art its TooManyTokens default. */
+function defaultArtDeps(ctx: ToolContext): DefaultArtDeps {
+  return {
+    art: ctx.art,
+    images: ctx.images,
+    imageSource: ctx.imageSource,
+    tooManyTokens: ctx.tooManyTokens,
+  };
+}
+
+/** One reply line per type that got its default art or failed to; none for a type that has art or no default. */
+function defaultArtLines(art: readonly DefaultArtOutcome[]): string[] {
+  return art.flatMap((a) => {
+    switch (a.outcome) {
+      case "set":
+        return [`${a.name}: token art set to ${ART_SOURCE_WORDS.default}.`];
+      case "failed":
+        return [
+          `No TooManyTokens art for ${a.name}; the GM will be asked to pick. ${a.reason}`,
+        ];
+      case "has-art":
+      case "not-covered":
+        return [];
+    }
+  });
+}
+
+/** The reply of set_token_art: what was set or kept, the token's source, focus, zoom and crop, and how the art reaches the table. */
+function setTokenArtText(result: SetOwnTokenArtResult, image: string): string {
+  const { name, key } = result.monster;
+  const waits = `It waits on the GM: in the extension panel, click Re-upload next to ${name}, then Pick the uploaded image. ${name} is listed there while the open scene's encounter has one. Until it is published, new ${name} tokens are circles and existing ones keep their look.`;
+  if (result.outcome === "unchanged")
+    return [
+      `${name} (${key}) already has this token as its art, from ${ART_SOURCE_WORDS[result.kept.source]}; nothing changed.`,
+      tokenPreviewText(result.token),
+      result.published ? "It is published in Owlbear." : waits,
+    ].join("\n");
+  const replaced =
+    result.replaced === null
+      ? "It had no art before."
+      : `It replaces ${ART_SOURCE_WORDS[result.replaced.source]}.`;
+  return [
+    `Set ${name} (${key}) token art to a token made from ${image}. ${replaced}`,
+    tokenPreviewText(result.token),
+    waits,
+  ].join("\n");
+}
+
+/** The reply line of show_token_variants: the variant numbers on the sheet, the total, the current art's variant and the blank cells. */
+function tokenVariantsText({
+  monster,
+  first,
+  last,
+  total,
+  failed,
+  current,
+}: TooManyTokensSheet): string {
+  const range =
+    first === last
+      ? `variant ${String(first)} of ${String(total)}`
+      : `variants ${String(first)}-${String(last)} of ${String(total)}`;
+  const currentClause =
+    current === null
+      ? "none of the variants is the current art."
+      : `the current art is ${String(current)}.`;
+  const blank =
+    failed === 0
+      ? ""
+      : failed === 1
+        ? " 1 could not be loaded and is left blank."
+        : ` ${String(failed)} could not be loaded and are left blank.`;
+  return `${monster.name}: ${range}, numbered left to right, top to bottom; ${currentClause}${blank}`;
+}
+
+/** The reply of set_token_art with variant: the variant set and the art it replaced, or that nothing changed. */
+function setTokenVariantText(result: SetTooManyTokensVariantResult): string {
+  const { name, key } = result.monster;
+  const number = String(result.variant);
+  if (result.outcome === "unchanged")
+    return `${name} (${key}) already has TooManyTokens variant ${number} as its art, from ${ART_SOURCE_WORDS[result.kept.source]}; nothing changed.`;
+  const replaced =
+    result.replaced === null
+      ? "It had no art before."
+      : `It replaces ${ART_SOURCE_WORDS[result.replaced.source]}.`;
+  const { folder, file } = result.image;
+  return [
+    `Set ${name} (${key}) token art to TooManyTokens variant ${number} (${folder}/${file}). ${replaced}`,
+    `It is published in Owlbear: new ${name} tokens are drawn with it, and those in the open scene are redrawn once.`,
+  ].join("\n");
+}
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -2126,4 +2439,7 @@ export const tools: readonly ToolDefinition[] = [
   editCreatureTool,
   removeCreatureTool,
   listCreaturesTool,
+  previewTokenTool,
+  setTokenArtTool,
+  showTokenVariantsTool,
 ];

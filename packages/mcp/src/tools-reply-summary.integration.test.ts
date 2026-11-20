@@ -11,6 +11,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -18,7 +20,10 @@ import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 const WOLF = "srd-2024_wolf";
@@ -59,7 +64,8 @@ let ctx: ToolContext;
 beforeEach(() => {
   let tick = 1000;
   let commands = 0;
-  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"), {
+  const db = openDatabase(":memory:");
+  const encounters = new SqliteEncounterDirectory(db, {
     now: () => tick++,
   });
   encounters
@@ -86,6 +92,11 @@ beforeEach(() => {
     newGroupId: () => `group-${String(tick)}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => `command-${String(++commands)}`,
   };
 });

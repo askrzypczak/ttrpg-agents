@@ -16,6 +16,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { describe, expect, it } from "vitest";
@@ -23,7 +25,10 @@ import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 /** Trollskull Manor: 3000x4000 px at 125 dpi on a 150-unit grid, rotated 270 (32 x 24 cells). */
@@ -62,7 +67,8 @@ function scene(...maps: TableMapItem[]): TableSceneMap {
 }
 
 function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
-  const encounters = new SqliteEncounterDirectory(openDatabase(":memory:"));
+  const db = openDatabase(":memory:");
+  const encounters = new SqliteEncounterDirectory(db);
   encounters
     .mapRepositoryFor(
       resolveEncounter(encounters, { writes: true }).encounter.id,
@@ -83,6 +89,11 @@ function contextWith(sceneTokens: TablePort["sceneTokens"]): ToolContext {
     newGroupId: () => "group",
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
 }

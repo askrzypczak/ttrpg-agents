@@ -812,4 +812,62 @@ describe("undoLastCommand", () => {
     });
     expect(writes()).toEqual([]);
   });
+
+  it("undoLastCommand treats an art-changed event in the record as no instance change and writes nothing for it", () => {
+    const before = makeTestInstance({
+      id: "w1",
+      monsterKey: "wolf",
+      displayName: "Wolf 1",
+      maxHp: 11,
+      currentHp: 11,
+    });
+    const now = { ...before, currentHp: 4 };
+    const wolfArt = {
+      url: "https://cdn.owlbear.rodeo/assets/wolf.png",
+      mime: "image/png",
+      width: 300,
+      height: 300,
+    };
+    const { repo, writes } = fakeRepo({
+      live: [now],
+      record: record(
+        "apply_damage",
+        [{ instanceId: "w1", before }],
+        [
+          {
+            type: "hp-changed",
+            id: "w1",
+            currentHp: 4,
+            maxHp: 11,
+            origin: commandOrigin,
+          },
+          {
+            type: "art-changed",
+            monsterKey: "wolf",
+            art: wolfArt,
+            origin: commandOrigin,
+          },
+          {
+            type: "art-changed",
+            monsterKey: "wolf",
+            art: { sha256: "d".repeat(64) },
+            origin: tableOrigin,
+          },
+        ],
+      ),
+    });
+
+    const result = undoLastCommand(repo, undoOrigin);
+
+    expect(writes().map((c) => [c.method, ...c.args])).toEqual([
+      ["setHp", "w1", 11, undoOrigin],
+    ]);
+    expect(result).toEqual({
+      kind: "undone",
+      command: "apply_damage",
+      changes: [{ kind: "reverted", field: "hp", from: now, to: before }],
+      next: null,
+    });
+    expect(repo.listInstances()).toEqual([before]);
+  });
 });

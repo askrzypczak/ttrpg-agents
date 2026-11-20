@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { pngDeclaring } from "../testing/index.js";
 import {
   TOKEN_IMAGE_MAX_BYTES,
+  TOKEN_SOURCE_MAX_BYTES,
+  TOKEN_SOURCE_MAX_SIDE,
   storeTokenImage,
   validateTokenImage,
+  validateTokenSource,
   type NewTokenImage,
   type TokenImage,
   type TokenImageRepository,
@@ -25,19 +29,6 @@ const WEBP_LOSSY_1X1 = new Uint8Array([
   0x52, 0x49, 0x46, 0x46, 0x16, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50,
   0x38, 0x20, 10, 0, 0, 0, 0x10, 0, 0, 0x9d, 0x01, 0x2a, 1, 0, 1, 0,
 ]);
-
-/** A PNG signature and IHDR declaring the given size, zero-padded to `length` bytes. */
-function pngDeclaring(width: number, height: number, length = 33): Uint8Array {
-  const out = new Uint8Array(length);
-  out.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const view = new DataView(out.buffer);
-  view.setUint32(8, 13);
-  out.set([0x49, 0x48, 0x44, 0x52], 12);
-  view.setUint32(16, width);
-  view.setUint32(20, height);
-  out.set([8, 6, 0, 0, 0], 24);
-  return out;
-}
 
 const text = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -161,6 +152,43 @@ describe("validateTokenImage", () => {
       true,
     );
   });
+});
+
+describe("validateTokenSource", () => {
+  it("validateTokenSource accepts an image of exactly 20 MiB with 8,192 px on the longer side", () => {
+    const bytes = pngDeclaring(8192, 600, TOKEN_SOURCE_MAX_BYTES);
+    expect(bytes).toHaveLength(20 * 1024 * 1024);
+    expect(validateTokenSource(bytes)).toEqual({
+      ok: true,
+      image: { mime: "image/png", width: 8192, height: 600 },
+    });
+    expect(validateTokenSource(pngDeclaring(600, 8192))).toMatchObject({
+      ok: true,
+      image: { width: 600, height: 8192 },
+    });
+    // The source caps are above the token caps: this image is too big for a token.
+    expect(validateTokenImage(pngDeclaring(8192, 600)).ok).toBe(false);
+  });
+
+  it.each([
+    [
+      "over 20 MiB",
+      () => pngDeclaring(1000, 600, TOKEN_SOURCE_MAX_BYTES + 1),
+      "too_large",
+    ],
+    [
+      "over 8,192 px on the longer side",
+      () => pngDeclaring(TOKEN_SOURCE_MAX_SIDE + 1, 600),
+      "dimensions_too_large",
+    ],
+  ] as const)(
+    "validateTokenSource refuses an image %s",
+    (_case, bytes, code) => {
+      const result = validateTokenSource(bytes());
+      expect(result).toMatchObject({ ok: false, code });
+      if (!result.ok) expect(result.message).not.toBe("");
+    },
+  );
 });
 
 /** An in-memory repository that records every save and answers a fixed hash. */

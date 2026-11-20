@@ -12,10 +12,16 @@ import {
 } from "@ttrpg-agents/bridge/client";
 import { SETTINGS, describeProfile, loadConfig } from "@ttrpg-agents/config";
 import { createMonsterIndex, type Rng } from "@ttrpg-agents/engine";
-import { loadSrdMonsters } from "@ttrpg-agents/srd";
+import {
+  createNodeImageSource,
+  createSharpTokeniser,
+} from "@ttrpg-agents/imaging";
+import { loadSrdMonsters, loadTooManyTokensIndex } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   createDatabaseProbe,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -42,6 +48,7 @@ async function main(): Promise<void> {
     port: settings.bridgePort,
     tokenPath: settings.agentTokenFile,
   });
+  const tokeniser = createSharpTokeniser();
   const server = createServer({
     table: createBridgeTable(client),
     browser: createSystemBrowser(),
@@ -70,7 +77,13 @@ async function main(): Promise<void> {
         tokenPath: settings.agentTokenFile,
       }),
       now: () => new Date(),
+      tokeniser,
     },
+    tokeniser,
+    imageSource: createNodeImageSource(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
+    tooManyTokens: loadTooManyTokensIndex(),
   });
   await server.connect(new StdioServerTransport());
 }

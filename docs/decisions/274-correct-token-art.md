@@ -23,7 +23,7 @@ Issue: [#274](https://github.com/askrzypczak/ttrpg-agents/issues/274).
   - Repeat the steps in `repickArt` (and again in #273): three copies of the same eight lines.
   - Leave `reupload` types to the re-upload box only: see 274.1.
 - Where: `takePanelPick`, `panelPicked`, `repickArt`, `pickUploadedArt`, `usableArt`, `reuploadList` (`packages/owlbear/src/encounter-sync.ts`).
-- Status: active
+- Status: superseded in part by 378.4 (an `mcp` `art-changed` clears the panel pick; the rule against stale snapshots stands)
 
 ## 274.3 Every in-place redraw from a panel pick is listed under the overrides
 

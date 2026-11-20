@@ -7,6 +7,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -14,7 +16,10 @@ import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 const SHADOW = "srd-2024_shadow";
@@ -36,6 +41,7 @@ let groupN: number;
 
 beforeEach(() => {
   groupN = 0;
+  const db = openDatabase(":memory:");
   ctx = {
     table: {
       sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -43,7 +49,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:")),
+    encounters: new SqliteEncounterDirectory(db),
     monsters,
     creatures: makeTestCreatureRepository(),
     rng: cycleRng(0, 3, 5, 7),
@@ -51,6 +57,11 @@ beforeEach(() => {
     newGroupId: () => `group-${++groupN}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
 });

@@ -1,12 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { Rng } from "../dice/rng.js";
 import type { Monster } from "../monsters/schema.js";
-import { makeTestInstance, makeTestMonsterIndex } from "../testing/index.js";
+import {
+  makeTestImageSource,
+  makeTestInstance,
+  makeTestMonsterIndex,
+  makeTestTooManyTokensIndex,
+  webpDeclaring,
+} from "../testing/index.js";
 import type { HpMode } from "./add-monsters.js";
 import {
   changeMonsterType,
+  changeMonsterTypeWithDefaultArt,
   type ChangeMonsterTypeResult,
 } from "./change-monster.js";
+import type { DefaultArtDeps } from "./default-art.js";
+import type { StoredTokenArt, TokenArtRepository } from "./token-art.js";
+import type { TokenImageRepository } from "./token-image.js";
+import { tooManyTokensUrls } from "./too-many-tokens.js";
 import {
   SameMonsterError,
   UnknownInstanceError,
@@ -505,5 +516,125 @@ describe("changeMonsterType", () => {
     ).toThrow(SameMonsterError);
     expect(rng.calls).toBe(0);
     expect(repo.calls).toEqual([]);
+  });
+});
+
+/** The Dire Wolf's TooManyTokens default: one folder keyed to it. */
+const direWolfIndex = makeTestTooManyTokensIndex([
+  { name: "Dire Wolf", key: "dire-wolf", files: ["Dire Wolf_01.webp"] },
+]);
+const direWolfUrls = tooManyTokensUrls(direWolfIndex, {
+  folder: "Dire Wolf",
+  file: "Dire Wolf_01.webp",
+});
+
+/**
+ * Deps whose store, art and image stores record in one list, in order: the
+ * outermost art transaction's start and end, each art and image write, and
+ * each change, with whether it ran inside the art transaction.
+ */
+function artDeps(instances: MonsterInstance[]) {
+  const log: string[] = [];
+  let depth = 0;
+  const repo = memoryRepo(instances);
+  const change = repo.changeMonsters.bind(repo);
+  repo.changeMonsters = (changes, at) => {
+    log.push(`change ${depth > 0 ? "in" : "outside"} transaction`);
+    return change(changes, at);
+  };
+  const stored: Record<string, StoredTokenArt> = {};
+  const art: TokenArtRepository = {
+    listTokenArt: () =>
+      Object.fromEntries(Object.entries(stored).map(([k, v]) => [k, v.art])),
+    getTokenArt: (key) =>
+      Object.hasOwn(stored, key) ? stored[key] : undefined,
+    setTokenArt(key, value, source) {
+      log.push(`set-art ${key}`);
+      stored[key] = { art: value, source };
+    },
+    transaction<T>(fn: () => T): T {
+      const outer = depth === 0;
+      if (outer) log.push("begin");
+      depth += 1;
+      try {
+        const result = fn();
+        if (outer) log.push("commit");
+        return result;
+      } finally {
+        depth -= 1;
+      }
+    },
+  };
+  const images: TokenImageRepository = {
+    saveTokenImage() {
+      log.push("save-image");
+      return "a".repeat(64);
+    },
+    getTokenImage: () => undefined,
+  };
+  const imageSource = makeTestImageSource({
+    [direWolfUrls.jsdelivr]: webpDeclaring(256, 256),
+  });
+  const defaultArt: DefaultArtDeps = {
+    art,
+    images,
+    imageSource,
+    tooManyTokens: direWolfIndex,
+  };
+  const deps = {
+    repo,
+    monsters,
+    rng: cycleRng(0),
+    now: () => new Date(NOW),
+    defaultArt,
+  };
+  return { deps, log, stored, imageSource };
+}
+
+describe("changeMonsterTypeWithDefaultArt", () => {
+  it("changeMonsterTypeWithDefaultArt writes the new type's art before the changed instances in one transaction and answers its outcome", async () => {
+    const { deps, log, stored } = artDeps([wolf("w1", "Wolf 1")]);
+
+    const result = await changeMonsterTypeWithDefaultArt(
+      deps,
+      ["w1"],
+      "dire-wolf",
+      "average",
+      origin,
+    );
+
+    expect(result.art).toEqual([
+      { outcome: "set", monsterKey: "dire-wolf", name: "Dire Wolf" },
+    ]);
+    expect(result.instances.map((i) => i.after.monsterKey)).toEqual([
+      "dire-wolf",
+    ]);
+    expect(log).toEqual([
+      "begin",
+      "save-image",
+      "set-art dire-wolf",
+      "change in transaction",
+      "commit",
+    ]);
+    expect(stored["dire-wolf"]?.source).toBe("default");
+  });
+
+  it("changeMonsterTypeWithDefaultArt loads no image when a target already is of the new type", async () => {
+    const { deps, log, imageSource } = artDeps([
+      wolf("w1", "Wolf 1"),
+      direWolf("d1", "Dire Wolf 1"),
+    ]);
+
+    await expect(
+      changeMonsterTypeWithDefaultArt(
+        deps,
+        ["w1", "d1"],
+        "dire-wolf",
+        "average",
+        origin,
+      ),
+    ).rejects.toBeInstanceOf(SameMonsterError);
+    expect(imageSource.loads).toEqual([]);
+    expect(log).toEqual([]);
   });
 });

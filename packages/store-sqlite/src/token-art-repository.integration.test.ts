@@ -2,8 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NewTokenImage, TokenArt } from "@ttrpg-agents/engine";
+import type {
+  ChangeOrigin,
+  NewTokenImage,
+  TokenArt,
+} from "@ttrpg-agents/engine";
 import { openDatabase } from "./db.js";
+import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteTokenArtRepository } from "./token-art-repository.js";
 import { SqliteTokenImageRepository } from "./token-image-repository.js";
 
@@ -46,8 +51,8 @@ describe("SqliteTokenArtRepository", () => {
 
   it("stores art and lists it by monster key", () => {
     const repo = new SqliteTokenArtRepository(openDatabase(":memory:"));
-    repo.setTokenArt("shadow", shadowArt);
-    repo.setTokenArt("ghoul", ghoulArt);
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
+    repo.setTokenArt("ghoul", ghoulArt, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({
       shadow: shadowArt,
       ghoul: ghoulArt,
@@ -56,8 +61,8 @@ describe("SqliteTokenArtRepository", () => {
 
   it("replaces the art of a monster key that already has some", () => {
     const repo = new SqliteTokenArtRepository(openDatabase(":memory:"));
-    repo.setTokenArt("shadow", shadowArt);
-    repo.setTokenArt("shadow", ghoulArt);
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
+    repo.setTokenArt("shadow", ghoulArt, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({ shadow: ghoulArt });
   });
 
@@ -67,7 +72,7 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({
       shadow: { ...shadowArt, sha256 },
     });
@@ -79,8 +84,8 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", shadowArt);
-    repo.setTokenArt("ghoul", { ...ghoulArt, sha256 });
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
+    repo.setTokenArt("ghoul", { ...ghoulArt, sha256 }, "table", tableOrigin);
     const listed = repo.listTokenArt();
     expect(listed.shadow).toEqual(shadowArt);
     expect(Object.keys(listed.shadow ?? {})).not.toContain("sha256");
@@ -94,9 +99,9 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
     expect(repo.listTokenArt().shadow?.sha256).toBe(sha256);
-    repo.setTokenArt("shadow", ghoulArt);
+    repo.setTokenArt("shadow", ghoulArt, "table", tableOrigin);
     const listed = repo.listTokenArt();
     expect(listed.shadow).toEqual(ghoulArt);
     expect(Object.keys(listed.shadow ?? {})).not.toContain("sha256");
@@ -105,10 +110,15 @@ describe("SqliteTokenArtRepository", () => {
   it("refuses art that refers to a hash with no stored image", () => {
     const db = openDatabase(":memory:");
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", shadowArt);
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
     let error: unknown;
     try {
-      repo.setTokenArt("ghoul", { ...ghoulArt, sha256: "a".repeat(64) });
+      repo.setTokenArt(
+        "ghoul",
+        { ...ghoulArt, sha256: "a".repeat(64) },
+        "table",
+        tableOrigin,
+      );
     } catch (e) {
       error = e;
     }
@@ -124,7 +134,7 @@ describe("SqliteTokenArtRepository", () => {
     );
     const repo = new SqliteTokenArtRepository(db);
     const key = "homebrew: the Unlisted One / 7";
-    repo.setTokenArt(key, { ...shadowArt, sha256 });
+    repo.setTokenArt(key, { ...shadowArt, sha256 }, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({
       [key]: { ...shadowArt, sha256 },
     });
@@ -149,8 +159,8 @@ describe("SqliteTokenArtRepository", () => {
       },
     });
     const repo = new SqliteTokenArtRepository(spied);
-    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
-    repo.setTokenArt("ghoul", ghoulArt);
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
+    repo.setTokenArt("ghoul", ghoulArt, "table", tableOrigin);
 
     prepared.length = 0;
     const listed = repo.listTokenArt();
@@ -169,8 +179,8 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", { sha256 });
-    repo.setTokenArt("ghoul", ghoulArt);
+    repo.setTokenArt("shadow", { sha256 }, "agent", mcpOrigin);
+    repo.setTokenArt("ghoul", ghoulArt, "table", tableOrigin);
     const listed = repo.listTokenArt();
     expect(listed).toEqual({ shadow: { sha256 }, ghoul: ghoulArt });
     expect(Object.keys(listed.shadow ?? {})).toEqual(["sha256"]);
@@ -182,8 +192,8 @@ describe("SqliteTokenArtRepository", () => {
       storedImage,
     );
     const repo = new SqliteTokenArtRepository(db);
-    repo.setTokenArt("shadow", { sha256 });
-    repo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    repo.setTokenArt("shadow", { sha256 }, "agent", mcpOrigin);
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
     expect(repo.listTokenArt()).toEqual({ shadow: { ...shadowArt, sha256 } });
   });
 
@@ -192,7 +202,12 @@ describe("SqliteTokenArtRepository", () => {
     dirs.push(dir);
     const path = join(dir, "enc.db");
     const first = openDatabase(path);
-    new SqliteTokenArtRepository(first).setTokenArt("shadow", shadowArt);
+    new SqliteTokenArtRepository(first).setTokenArt(
+      "shadow",
+      shadowArt,
+      "table",
+      tableOrigin,
+    );
     first.close();
 
     const second = openDatabase(path);
@@ -200,5 +215,144 @@ describe("SqliteTokenArtRepository", () => {
       shadow: shadowArt,
     });
     second.close();
+  });
+});
+
+const mcpOrigin: ChangeOrigin = { source: "mcp", commandId: "cmd-1" };
+const tableOrigin: ChangeOrigin = { source: "table", commandId: "msg-1" };
+
+describe("SqliteTokenArtRepository sources and the change log", () => {
+  it("setTokenArt stores the art with its source and logs one art-changed event with a null encounter id, read back through SqliteEncounterLog", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteTokenArtRepository(db);
+    const log = new SqliteEncounterLog(db);
+    const before = log.latestSeq();
+
+    repo.setTokenArt("shadow", shadowArt, "agent", mcpOrigin);
+
+    const events = log.eventsSince(before);
+    expect(events).toEqual([
+      {
+        seq: expect.any(Number) as number,
+        encounterId: null,
+        event: {
+          type: "art-changed",
+          monsterKey: "shadow",
+          art: shadowArt,
+          origin: mcpOrigin,
+        },
+      },
+    ]);
+    expect(repo.getTokenArt("shadow")).toEqual({
+      art: shadowArt,
+      source: "agent",
+    });
+    expect(repo.listTokenArt()).toEqual({ shadow: shadowArt });
+  });
+
+  it("setTokenArt logs the origin without its command name", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteTokenArtRepository(db);
+
+    repo.setTokenArt("shadow", shadowArt, "agent", {
+      ...mcpOrigin,
+      command: "set_token_art",
+    });
+
+    const rows = db.prepare("SELECT event FROM encounter_events").all() as {
+      event: string;
+    }[];
+    expect(rows).toHaveLength(1);
+    const logged = JSON.parse(rows[0]?.event ?? "null") as {
+      origin: unknown;
+    };
+    expect(logged.origin).toEqual({ source: "mcp", commandId: "cmd-1" });
+  });
+
+  it("a setTokenArt that token_art refuses (a hash with no stored image) stores no art and logs no event", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteTokenArtRepository(db);
+    const log = new SqliteEncounterLog(db);
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
+    const after = log.latestSeq();
+    expect(log.eventsSince(0)).toHaveLength(1);
+
+    let error: unknown;
+    try {
+      repo.setTokenArt(
+        "ghoul",
+        { ...ghoulArt, sha256: "a".repeat(64) },
+        "agent",
+        mcpOrigin,
+      );
+    } catch (e) {
+      error = e;
+    }
+
+    // SQLITE_CONSTRAINT_FOREIGNKEY
+    expect(error).toMatchObject({ errcode: 787 });
+    expect(log.eventsSince(after)).toEqual([]);
+    expect(repo.listTokenArt()).toEqual({ shadow: shadowArt });
+    expect(repo.getTokenArt("ghoul")).toBeUndefined();
+  });
+
+  it("getTokenArt answers the art and its source, and undefined for a key with none", () => {
+    const db = openDatabase(":memory:");
+    const sha256 = new SqliteTokenImageRepository(db).saveTokenImage(
+      storedImage,
+    );
+    const repo = new SqliteTokenArtRepository(db);
+    repo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", tableOrigin);
+    repo.setTokenArt("ghoul", { sha256 }, "agent", mcpOrigin);
+    repo.setTokenArt("wight", ghoulArt, "default", mcpOrigin);
+
+    expect(repo.getTokenArt("shadow")).toEqual({
+      art: { ...shadowArt, sha256 },
+      source: "table",
+    });
+    expect(repo.getTokenArt("ghoul")).toEqual({
+      art: { sha256 },
+      source: "agent",
+    });
+    expect(repo.getTokenArt("wight")).toEqual({
+      art: ghoulArt,
+      source: "default",
+    });
+    expect(repo.getTokenArt("wraith")).toBeUndefined();
+    expect(repo.getTokenArt("constructor")).toBeUndefined();
+  });
+
+  it("transaction rolls back every art write and event of a throwing function", () => {
+    const db = openDatabase(":memory:");
+    const repo = new SqliteTokenArtRepository(db);
+    const log = new SqliteEncounterLog(db);
+    repo.setTokenArt("shadow", shadowArt, "table", tableOrigin);
+    const before = log.latestSeq();
+    const failure = new Error("boom");
+
+    let caught: unknown;
+    try {
+      repo.transaction(() => {
+        repo.setTokenArt("ghoul", ghoulArt, "agent", mcpOrigin);
+        repo.setTokenArt("shadow", ghoulArt, "agent", mcpOrigin);
+        throw failure;
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBe(failure);
+    expect(repo.listTokenArt()).toEqual({ shadow: shadowArt });
+    expect(log.eventsSince(before)).toEqual([]);
+    expect(log.latestSeq()).toBe(before);
+    expect(db.isTransaction).toBe(false);
+    // Control: the same writes outside a throwing function are kept.
+    const result = repo.transaction(() => {
+      repo.setTokenArt("ghoul", ghoulArt, "agent", mcpOrigin);
+      return "done";
+    });
+    expect(result).toBe("done");
+    expect(repo.listTokenArt()).toEqual({ shadow: shadowArt, ghoul: ghoulArt });
+    expect(log.eventsSince(before)).toHaveLength(1);
   });
 });

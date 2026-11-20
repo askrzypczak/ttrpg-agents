@@ -3,11 +3,16 @@ import type {
   CreatureRepository,
   EncounterDirectory,
   EncounterRepository,
+  ImageSource,
   MapRepository,
   MonsterIndex,
   Rng,
   SetupPorts,
   TablePort,
+  TokenArtRepository,
+  TokenImageRepository,
+  Tokeniser,
+  TooManyTokensIndex,
 } from "@ttrpg-agents/engine";
 
 /** Everything a tool handler needs; injected so tests stay deterministic. */
@@ -28,6 +33,16 @@ export interface ToolContext {
   newCommandId: () => string;
   /** Settings facts and the database and bridge probes, for the setup report. */
   setup: SetupPorts;
+  /** Renders token images (in production sharp, via the imaging adapter). */
+  tokeniser: Tokeniser;
+  /** Loads source images from absolute paths and https URLs. */
+  imageSource: ImageSource;
+  /** Token art per monster type with its source: set_token_art writes it. */
+  art: TokenArtRepository;
+  /** Token image bytes by SHA-256: set_token_art stores its token here. */
+  images: TokenImageRepository;
+  /** The committed TooManyTokens index: the default art of a monster type with none. */
+  tooManyTokens: TooManyTokensIndex;
 }
 
 /** What a tool's run receives: the context plus the encounter of this call. */

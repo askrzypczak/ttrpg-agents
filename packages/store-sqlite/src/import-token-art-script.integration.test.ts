@@ -120,12 +120,17 @@ describe("import-token-art script", () => {
   it("the script with --replace replaces existing art", () => {
     const { library, dbPath } = setup({ "goblin.png": PNG_1X1 });
     const db = openDatabase(dbPath);
-    new SqliteTokenArtRepository(db).setTokenArt("goblin", {
-      url: "https://cdn.owlbear.rodeo/assets/goblin.png",
-      mime: "image/png",
-      width: 300,
-      height: 280,
-    });
+    new SqliteTokenArtRepository(db).setTokenArt(
+      "goblin",
+      {
+        url: "https://cdn.owlbear.rodeo/assets/goblin.png",
+        mime: "image/png",
+        width: 300,
+        height: 280,
+      },
+      "table",
+      { source: "table", commandId: "seed" },
+    );
     db.close();
 
     const kept = run([library], { TTRPG_AGENTS_DB: dbPath });

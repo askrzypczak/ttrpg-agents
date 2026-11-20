@@ -1,10 +1,12 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import {
+  assignTokenArt,
   resolveEncounter,
   type TokenArt,
   type ChangeOrigin,
@@ -15,6 +17,7 @@ import {
   SqliteEncounterRepository,
   SqliteTokenArtRepository,
   SqliteTokenImageRepository,
+  importTokenArtLibrary,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import {
@@ -23,7 +26,7 @@ import {
   encodeMessage,
   type BridgeMessage,
 } from "@ttrpg-agents/protocol";
-import { snapshotMessage } from "./encounter-bridge.js";
+import { broadcastLogEvents, snapshotMessage } from "./encounter-bridge.js";
 import {
   startBridgeServer,
   type BridgeServer,
@@ -31,6 +34,16 @@ import {
 } from "./server.js";
 
 const origin: ChangeOrigin = { source: "table", commandId: "test" };
+
+const PNG_1X1 = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  ),
+);
+
+const sha256Of = (bytes: Uint8Array): string =>
+  createHash("sha256").update(bytes).digest("hex");
 
 const shadowArt: TokenArt = {
   url: "https://cdn.owlbear.rodeo/assets/shadow.png",
@@ -58,7 +71,11 @@ async function startServer(
     port: 0,
     staticDir: dir,
     snapshot: () => snapshotMessage(directory, art, new SqliteEncounterLog(db)),
-    setTokenArt: (monsterKey, value) => art.setTokenArt(monsterKey, value),
+    setTokenArt: (monsterKey, value, commandId) =>
+      art.setTokenArt(monsterKey, value, "table", {
+        source: "table",
+        commandId,
+      }),
     ...options,
   });
   servers.push(server);
@@ -155,10 +172,11 @@ function hello(): string {
 }
 
 /** Raw JSON: the message type is new to the protocol. */
-function tokenArtSet(monsterKey: string, art: TokenArt): string {
+function tokenArtSet(monsterKey: string, art: TokenArt, id?: string): string {
   return JSON.stringify({
     v: PROTOCOL_VERSION,
     type: "token-art-set",
+    ...(id === undefined ? {} : { id }),
     payload: { monsterKey, art },
   });
 }
@@ -203,7 +221,7 @@ async function expectStillOpen(client: Client): Promise<void> {
 
 describe("token-art-set over the bridge", () => {
   it("the snapshot sent on connect includes the stored art", async () => {
-    artRepo.setTokenArt("shadow", shadowArt);
+    artRepo.setTokenArt("shadow", shadowArt, "table", origin);
     const server = await startServer();
 
     const client = await authed(server);
@@ -224,7 +242,7 @@ describe("token-art-set over the bridge", () => {
       height: 1,
       bytes: png,
     });
-    artRepo.setTokenArt("shadow", { ...shadowArt, sha256 });
+    artRepo.setTokenArt("shadow", { ...shadowArt, sha256 }, "table", origin);
     const server = await startServer();
 
     const client = await authed(server);
@@ -248,8 +266,8 @@ describe("token-art-set over the bridge", () => {
       height: 1,
       bytes: png,
     });
-    artRepo.setTokenArt("shadow", { sha256 });
-    artRepo.setTokenArt("ghoul", shadowArt);
+    artRepo.setTokenArt("shadow", { sha256 }, "agent", origin);
+    artRepo.setTokenArt("ghoul", shadowArt, "table", origin);
     const server = await startServer();
 
     const client = await authed(server);
@@ -342,5 +360,125 @@ describe("token-art-set over the bridge", () => {
     // The pong comes after anything the bridge sent for the art request.
     await expectStillOpen(client);
     expect(client.snapshots()).toHaveLength(before);
+  });
+});
+
+/** The art hook as the CLI wires it: a GM pick through the engine's precedence. */
+function cliSetTokenArt(): BridgeServerOptions["setTokenArt"] {
+  const art = artRepo;
+  return (monsterKey, value, commandId) => {
+    assignTokenArt(art, monsterKey, value, "table", {
+      source: "table",
+      commandId,
+    });
+  };
+}
+
+/** The art-changed events in the change log, oldest first. */
+function loggedArtChanges() {
+  return new SqliteEncounterLog(db)
+    .eventsSince(0)
+    .flatMap((entry) =>
+      "event" in entry && entry.event.type === "art-changed" ? [entry] : [],
+    );
+}
+
+describe("art changes over the bridge", () => {
+  it("a library import into the database a running bridge polls is broadcast as an mcp art-changed with a null encounter id", async () => {
+    const server = await startServer();
+    const client = await authed(server);
+    const stop = broadcastLogEvents(new SqliteEncounterLog(db), server);
+    try {
+      const library = join(dir, "library");
+      await mkdir(library);
+      await writeFile(join(library, "shadow.png"), PNG_1X1);
+      // The import runs on its own connection, as the import script does.
+      const other = openDatabase(dbPath);
+      try {
+        importTokenArtLibrary(other, library, { replace: true });
+      } finally {
+        other.close();
+      }
+
+      await waitFor(() =>
+        client.received.some(
+          (m) =>
+            m.type === "encounter-event" && m.payload.type === "art-changed",
+        ),
+      );
+
+      const artEvents = client.received.flatMap((m) =>
+        m.type === "encounter-event" && m.payload.type === "art-changed"
+          ? [m.payload]
+          : [],
+      );
+      expect(artEvents).toEqual([
+        {
+          type: "art-changed",
+          monsterKey: "shadow",
+          art: { sha256: sha256Of(PNG_1X1) },
+          origin: { source: "mcp", commandId: expect.any(String) as string },
+          seq: expect.any(Number) as number,
+          encounterId: null,
+        },
+      ]);
+    } finally {
+      stop();
+    }
+  });
+
+  it("token-art-set stores the art with source table and logs a table art-changed carrying the message id as its command id", async () => {
+    const server = await startServer({ setTokenArt: cliSetTokenArt() });
+    const client = await authed(server);
+
+    client.ws.send(tokenArtSet("shadow", shadowArt, "art-msg-1"));
+    await handled(client);
+
+    expect(client.errors()).toEqual([]);
+    expect(artRepo.getTokenArt("shadow")).toEqual({
+      art: shadowArt,
+      source: "table",
+    });
+    expect(loggedArtChanges()).toEqual([
+      {
+        seq: expect.any(Number) as number,
+        encounterId: null,
+        event: {
+          type: "art-changed",
+          monsterKey: "shadow",
+          art: shadowArt,
+          origin: { source: "table", commandId: "art-msg-1" },
+        },
+      },
+    ]);
+  });
+
+  it("token-art-set without a message id logs its art-changed under a fresh command id", async () => {
+    const server = await startServer({ setTokenArt: cliSetTokenArt() });
+    const client = await authed(server);
+
+    client.ws.send(tokenArtSet("shadow", shadowArt));
+    client.ws.send(tokenArtSet("ghoul", shadowArt));
+    await handled(client);
+
+    expect(client.errors()).toEqual([]);
+    const logged = loggedArtChanges();
+    expect(logged.map((e) => e.event)).toEqual([
+      {
+        type: "art-changed",
+        monsterKey: "shadow",
+        art: shadowArt,
+        origin: { source: "table", commandId: expect.any(String) as string },
+      },
+      {
+        type: "art-changed",
+        monsterKey: "ghoul",
+        art: shadowArt,
+        origin: { source: "table", commandId: expect.any(String) as string },
+      },
+    ]);
+    const [first, second] = logged.map((e) => e.event.origin.commandId);
+    expect(first).not.toBe("");
+    expect(first).not.toBe(second);
   });
 });

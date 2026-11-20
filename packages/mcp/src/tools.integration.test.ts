@@ -16,6 +16,8 @@ import {
 import { loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
+  SqliteTokenImageRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -25,7 +27,10 @@ import { formatSetupStatus } from "./setup-status.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestImageSource,
   makeTestSetupPorts,
+  makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "test" };
@@ -51,6 +56,7 @@ let groupN: number;
 beforeEach(() => {
   tick = 1000;
   groupN = 0;
+  const db = openDatabase(":memory:");
   ctx = {
     table: {
       sceneStatus: () =>
@@ -59,7 +65,7 @@ beforeEach(() => {
       sceneTokens: () => Promise.reject(new Error("not stubbed")),
       mapImage: () => Promise.reject(new Error("not stubbed")),
     },
-    encounters: new SqliteEncounterDirectory(openDatabase(":memory:"), {
+    encounters: new SqliteEncounterDirectory(db, {
       now: () => tick++,
     }),
     monsters,
@@ -69,6 +75,11 @@ beforeEach(() => {
     newGroupId: () => `group-${++groupN}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    tokeniser: makeTestTokeniser(),
+    imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
+    art: new SqliteTokenArtRepository(db),
+    images: new SqliteTokenImageRepository(db),
     newCommandId: () => "command",
   };
   // A scene bound to the encounter is open, so replies name no encounter.
@@ -191,7 +202,7 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the forty tools", () => {
+  it("exposes the forty-three tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -210,6 +221,7 @@ describe("tool registry", () => {
       "move_monsters",
       "open_statblock",
       "preview_monsters",
+      "preview_token",
       "propose_rooms",
       "remove_creature",
       "remove_monsters",
@@ -227,7 +239,9 @@ describe("tool registry", () => {
       "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "set_token_art",
       "setup_status",
+      "show_token_variants",
       "split_initiative",
       "table_status",
       "undo",
@@ -1591,6 +1605,7 @@ describe("the encounter a tool call acts on", () => {
   /** A full tool context over `encounters`, independent of the shared one. */
   function contextOver(encounters: EncounterDirectory): ToolContext {
     let groups = 0;
+    const db = openDatabase(":memory:");
     return {
       table: {
         sceneStatus: () => Promise.reject(new Error("not stubbed")),
@@ -1606,6 +1621,11 @@ describe("the encounter a tool call acts on", () => {
       newGroupId: () => `group-${String(++groups)}`,
       browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
       setup: makeTestSetupPorts(),
+      tokeniser: makeTestTokeniser(),
+      imageSource: makeTestImageSource(),
+      tooManyTokens: makeTestTooManyTokensIndex(),
+      art: new SqliteTokenArtRepository(db),
+      images: new SqliteTokenImageRepository(db),
       newCommandId: () => "command",
     };
   }
@@ -2010,6 +2030,9 @@ describe("the encounter a tool call acts on", () => {
       "edit_creature",
       "remove_creature",
       "list_creatures",
+      "preview_token",
+      "set_token_art",
+      "show_token_variants",
     ];
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...optional, ...required, ...none].sort(),

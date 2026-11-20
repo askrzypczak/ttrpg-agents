@@ -54,8 +54,11 @@ async function startServer(): Promise<BridgeServer> {
       editInstance(encounters, edit, commandId),
     removeInstance: (id, commandId) =>
       removeInstance(encounters, id, commandId),
-    setTokenArt: (monsterKey, art) =>
-      new SqliteTokenArtRepository(db).setTokenArt(monsterKey, art),
+    setTokenArt: (monsterKey, art, commandId) =>
+      new SqliteTokenArtRepository(db).setTokenArt(monsterKey, art, "table", {
+        source: "table",
+        commandId,
+      }),
   });
   servers.push(server);
   return server;

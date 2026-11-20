@@ -19,6 +19,7 @@ import { makeTestMonster } from "@ttrpg-agents/engine/testing";
 import {
   SqliteCreatureRepository,
   SqliteEncounterDirectory,
+  SqliteTokenArtRepository,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -67,6 +68,9 @@ const expectedAnnotations: Record<string, ToolAnnotations | undefined> = {
   edit_creature: { destructiveHint: true },
   remove_creature: { destructiveHint: true },
   list_creatures: { readOnlyHint: true },
+  preview_token: { readOnlyHint: true },
+  set_token_art: { destructiveHint: true },
+  show_token_variants: { readOnlyHint: true },
 };
 
 let cleanup: (() => Promise<void>)[] = [];
@@ -84,13 +88,32 @@ async function unusedPort(): Promise<number> {
   return port;
 }
 
-/** Starts the server on a fresh database; `seed` may fill that database first. */
+/**
+ * Starts the server on a fresh database where the Shadow already has art, so
+ * its adds fetch no TooManyTokens default; `seed` may fill that database first.
+ */
 async function connect(seed?: (dbPath: string) => void): Promise<Client> {
   const dir = mkdtempSync(join(tmpdir(), "ttrpg-mcp-"));
   cleanup.push(() => {
     rmSync(dir, { recursive: true, force: true });
     return Promise.resolve();
   });
+  const db = openDatabase(join(dir, "test.db"));
+  try {
+    new SqliteTokenArtRepository(db).setTokenArt(
+      "srd-2024_shadow",
+      {
+        url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+        mime: "image/png",
+        width: 300,
+        height: 300,
+      },
+      "table",
+      { source: "table", commandId: "seed" },
+    );
+  } finally {
+    db.close();
+  }
   seed?.(join(dir, "test.db"));
   // No bridge: an absent agent token file and a port nothing listens on.
   const transport = new StdioClientTransport({
@@ -110,7 +133,7 @@ async function connect(seed?: (dbPath: string) => void): Promise<Client> {
 }
 
 describe("stdio server", () => {
-  it("lists all forty tools and serves a call", async () => {
+  it("lists all forty-three tools and serves a call", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
@@ -132,6 +155,7 @@ describe("stdio server", () => {
       "move_monsters",
       "open_statblock",
       "preview_monsters",
+      "preview_token",
       "propose_rooms",
       "remove_creature",
       "remove_monsters",
@@ -149,7 +173,9 @@ describe("stdio server", () => {
       "set_max_hp",
       "set_rooms",
       "set_stats_visibility",
+      "set_token_art",
       "setup_status",
+      "show_token_variants",
       "split_initiative",
       "table_status",
       "undo",
@@ -166,11 +192,11 @@ describe("stdio server", () => {
     expect(JSON.stringify(listed.content)).toContain("Shadow 2");
   }, 30_000);
 
-  it("stdio server (spawned via `bin/stdio.mjs`) lists forty tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
+  it("stdio server (spawned via `bin/stdio.mjs`) lists forty-three tools including `table_status` and `setup_status`, its annotations entry is `{ readOnlyHint: true }`, and a call without a running bridge returns an `isError` result", async () => {
     const client = await connect();
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(40);
+    expect(tools).toHaveLength(43);
     expect(tools.map((t) => t.name)).toContain("setup_status");
     const tableStatus = tools.find((t) => t.name === "table_status");
     expect(tableStatus?.annotations).toEqual({ readOnlyHint: true });
@@ -332,7 +358,7 @@ describe("stdio server settings", () => {
     await client.connect(transport);
     const added = await client.callTool({
       name: "add_monsters",
-      arguments: { groups: [{ monster: "srd-2024_shadow", count: 1 }] },
+      arguments: { groups: [{ monster: "srd-2024_spy", count: 1 }] },
     });
     expect(added.isError).toBeFalsy();
     await client.close();
@@ -343,7 +369,7 @@ describe("stdio server settings", () => {
     try {
       const names = currentNames(db);
       expect(names).toHaveLength(1);
-      expect(names[0]).toMatch(/^Shadow/);
+      expect(names[0]).toMatch(/^Spy/);
     } finally {
       db.close();
     }
@@ -372,8 +398,8 @@ const checkout = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 /** Its folder name as the dev profile's folder starts with it. */
 const checkoutFolder = basename(checkout).replace(/[^A-Za-z0-9._-]/g, "_");
 
-/** Spawns the server with `env`, adds one Shadow and closes it. */
-async function addShadowWith(env: Record<string, string>): Promise<void> {
+/** Spawns the server with `env`, adds one Spy (a type the TooManyTokens index does not cover, so nothing is fetched) and closes it. */
+async function addSpyWith(env: Record<string, string>): Promise<void> {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [entry],
@@ -384,7 +410,7 @@ async function addShadowWith(env: Record<string, string>): Promise<void> {
   await client.connect(transport);
   const added = await client.callTool({
     name: "add_monsters",
-    arguments: { groups: [{ monster: "srd-2024_shadow", count: 1 }] },
+    arguments: { groups: [{ monster: "srd-2024_spy", count: 1 }] },
   });
   expect(added.isError).toBeFalsy();
   await client.close();
@@ -431,7 +457,7 @@ describe("stdio server profile", () => {
     env.TTRPG_AGENTS_PROFILE = "dev";
     env.BRIDGE_PORT = String(await unusedPort());
 
-    await addShadowWith(env);
+    await addSpyWith(env);
 
     const devDir = join(dataHome, "ttrpg-agents", "dev");
     const folders = existsSync(devDir) ? readdirSync(devDir) : [];
@@ -478,7 +504,7 @@ describe("stdio server profile", () => {
     const env: Record<string, string> = {};
     for (const [name, value] of Object.entries(process.env))
       if (value !== undefined) env[name] = value;
-    await addShadowWith(env);
+    await addSpyWith(env);
 
     const runDir = join(tmpdir(), configRun ?? "");
     const databases = readdirSync(runDir, { recursive: true, encoding: "utf8" })
@@ -486,9 +512,9 @@ describe("stdio server profile", () => {
       .map((path) => join(runDir, path));
     expect(
       databases.some((path) =>
-        namesIn(path).some((name) => name.startsWith("Shadow")),
+        namesIn(path).some((name) => name.startsWith("Spy")),
       ),
-      `a database under ${runDir} holds the added Shadow`,
+      `a database under ${runDir} holds the added Spy`,
     ).toBe(true);
   }, 30_000);
 });

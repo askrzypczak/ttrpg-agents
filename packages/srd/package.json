@@ -11,7 +11,8 @@
     }
   },
   "scripts": {
-    "import:srd": "tsc -b tsconfig.build.json && node scripts/import-srd.ts"
+    "import:srd": "tsc -b tsconfig.build.json && node scripts/import-srd.ts",
+    "import:too-many-tokens": "tsc -b tsconfig.build.json && node scripts/import-too-many-tokens.ts"
   },
   "dependencies": {
     "@ttrpg-agents/engine": "*",
