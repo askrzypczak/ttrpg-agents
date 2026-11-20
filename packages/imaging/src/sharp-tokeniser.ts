@@ -55,6 +55,11 @@ export function createSharpTokeniser(
         render(sharp, bytes, crop, style),
       );
     },
+    contactSheet(images, layout) {
+      void images;
+      void layout;
+      return Promise.reject(new Error("not implemented"));
+    },
     async check(): Promise<TokeniserFacts> {
       try {
         await sharpModule();

@@ -12,6 +12,7 @@ import {
   defaultVariant,
   tooManyTokensUrls,
   type TooManyTokensIndex,
+  type TooManyTokensVariant,
 } from "./too-many-tokens.js";
 
 /** What the TooManyTokens default needs besides the monster index. */
@@ -78,6 +79,18 @@ export async function loadDefaultArt(
     );
   }
   return Promise.all(pending);
+}
+
+/** The variant's bytes from its jsDelivr url, else its raw url: the first whose bytes pass validateTokenImage, or every try's reason. Rethrows any rejection other than ImageUnavailableError. */
+export function loadTooManyTokensImage(
+  source: ImageSource,
+  index: TooManyTokensIndex,
+  variant: TooManyTokensVariant,
+): Promise<{ url: string; bytes: Uint8Array } | { reason: string }> {
+  void source;
+  void index;
+  void variant;
+  return Promise.reject(new Error("not implemented"));
 }
 
 /** Tries each url in turn: the first whose bytes pass validateTokenImage, or every try's reason. */

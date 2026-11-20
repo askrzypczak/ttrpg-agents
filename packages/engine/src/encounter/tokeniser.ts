@@ -41,7 +41,28 @@ export interface Tokeniser {
     crop: SquareCrop,
     style: TokenStyle,
   ): Promise<Uint8Array>;
+  /** Composes `images` into the layout's cells left to right, top to bottom, each scaled to fit its cell; a null leaves its cell blank. Answers a WebP of columns*cell by rows*cell px with no text. Rejects with TokeniserError. */
+  contactSheet(
+    images: readonly (Uint8Array | null)[],
+    layout: ContactSheetLayout,
+  ): Promise<Uint8Array>;
 }
+
+/** A contact sheet's grid: `columns` by `rows` cells of `cell` px on an opaque `background` (a #rrggbb colour). */
+export interface ContactSheetLayout {
+  columns: number;
+  rows: number;
+  cell: number;
+  background: string;
+}
+
+/** The engine's sheet: 20 variants a page, 5 columns of 128 px cells, 640 by 512 px, white. */
+export const CONTACT_SHEET_LAYOUT: ContactSheetLayout = {
+  columns: 5,
+  rows: 4,
+  cell: 128,
+  background: "#ffffff",
+};
 
 export const TOKEN_ZOOM_MAX = 8;
 

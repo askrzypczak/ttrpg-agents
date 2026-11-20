@@ -202,7 +202,7 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the forty-two tools", () => {
+  it("exposes the forty-three tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
@@ -241,6 +241,7 @@ describe("tool registry", () => {
       "set_stats_visibility",
       "set_token_art",
       "setup_status",
+      "show_token_variants",
       "split_initiative",
       "table_status",
       "undo",
@@ -2031,6 +2032,7 @@ describe("the encounter a tool call acts on", () => {
       "list_creatures",
       "preview_token",
       "set_token_art",
+      "show_token_variants",
     ];
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...optional, ...required, ...none].sort(),

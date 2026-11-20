@@ -1,6 +1,7 @@
 import { ImageUnavailableError } from "../encounter/errors.js";
 import type { ImageLocation, ImageSource } from "../encounter/image-source.js";
 import type {
+  ContactSheetLayout,
   FocalPoint,
   SquareCrop,
   TokenStyle,
@@ -284,16 +285,31 @@ export function makeTestImageSource(
 
 /**
  * A Tokeniser recording every render's crop and style; by default it renders
- * a 512 px square WebP header and answers the focal point (0.25, 0.3).
- * `overrides` replace either method (renders are still recorded).
+ * a 512 px square WebP header and answers the focal point (0.25, 0.3);
+ * contactSheet records each call and by default answers webpDeclaring(640, 512).
+ * `overrides` replace any method (renders and sheets are still recorded).
  */
 export function makeTestTokeniser(
   overrides: Partial<Tokeniser> = {},
-): Tokeniser & { renders: { crop: SquareCrop; style: TokenStyle }[] } {
+): Tokeniser & {
+  renders: { crop: SquareCrop; style: TokenStyle }[];
+  sheets: { images: (Uint8Array | null)[]; layout: ContactSheetLayout }[];
+} {
   const renders: { crop: SquareCrop; style: TokenStyle }[] = [];
+  const sheets: {
+    images: (Uint8Array | null)[];
+    layout: ContactSheetLayout;
+  }[] = [];
   const focus: FocalPoint = { x: 0.25, y: 0.3 };
   return {
     renders,
+    sheets,
+    contactSheet(images, layout) {
+      sheets.push({ images: [...images], layout: { ...layout } });
+      return overrides.contactSheet
+        ? overrides.contactSheet(images, layout)
+        : Promise.resolve(webpDeclaring(640, 512));
+    },
     focalPoint(bytes) {
       return overrides.focalPoint
         ? overrides.focalPoint(bytes)
