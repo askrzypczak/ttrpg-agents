@@ -27,6 +27,7 @@ import {
   makeTestImageSource,
   makeTestSetupPorts,
   makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 // SRD 5.2: Wolf AC 12, HP 11; Dire Wolf large, AC 14, HP 22.
@@ -167,6 +168,7 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
     art: new SqliteTokenArtRepository(db),
     images: new SqliteTokenImageRepository(db),
     newCommandId: () => {

@@ -87,6 +87,18 @@ beforeEach(async () => {
   connections = [];
   const encounters = new SqliteEncounterDirectory(db);
   const artRepo = new SqliteTokenArtRepository(db);
+  // The Shadow already has art, so the server's adds fetch no TooManyTokens default.
+  artRepo.setTokenArt(
+    "srd-2024_shadow",
+    {
+      url: "https://cdn.owlbear.rodeo/assets/shadow.png",
+      mime: "image/png",
+      width: 300,
+      height: 300,
+    },
+    "table",
+    { source: "table", commandId: "seed" },
+  );
   log = new SqliteEncounterLog(db);
   server = await startBridgeServer({
     port: 0,

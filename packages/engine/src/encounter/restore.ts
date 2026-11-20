@@ -2,6 +2,7 @@ import { DomainError } from "../errors.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import { createNumberedNaming, type NamingStrategy } from "./add-monsters.js";
+import type { DefaultArtDeps, DefaultArtOutcome } from "./default-art.js";
 import type { ChangeOrigin } from "./origin.js";
 import { TargetError, resolveTargets } from "./queries.js";
 import type { EncounterRepository } from "./repository.js";
@@ -159,4 +160,28 @@ function monsterOf(monsters: MonsterIndex, instance: MonsterInstance): Monster {
     );
   }
   return monster;
+}
+
+/** restoreMonsters' resolution and checks, the restored types' default art load, then the art and the restore in one transaction, art first. */
+export async function restoreMonstersWithDefaultArt(
+  deps: RestoreMonstersDeps & { defaultArt: DefaultArtDeps },
+  targets: readonly string[],
+  origin: ChangeOrigin,
+): Promise<{ restored: RestoredMonster[]; art: DefaultArtOutcome[] }> {
+  void deps;
+  void targets;
+  void origin;
+  await Promise.resolve();
+  throw new Error("not implemented");
+}
+
+/** restoreEncounter's checks, the restored types' default art load, then the art and the restore in one transaction, art first. */
+export async function restoreEncounterWithDefaultArt(
+  deps: RestoreMonstersDeps & { defaultArt: DefaultArtDeps },
+  origin: ChangeOrigin,
+): Promise<{ restored: RestoredMonster[]; art: DefaultArtOutcome[] }> {
+  void deps;
+  void origin;
+  await Promise.resolve();
+  throw new Error("not implemented");
 }

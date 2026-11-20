@@ -7,6 +7,7 @@ import {
   type HpMode,
   type NamingStrategy,
 } from "./add-monsters.js";
+import type { DefaultArtDeps, DefaultArtOutcome } from "./default-art.js";
 import {
   SameMonsterError,
   UnknownInstanceError,
@@ -143,4 +144,21 @@ export function changeMonsterType(
     };
   });
   return { instances, rolls };
+}
+
+/** changeMonsterType's checks, the new type's default art load, then the art and the change in one transaction, art first. */
+export async function changeMonsterTypeWithDefaultArt(
+  deps: ChangeMonsterTypeDeps & { defaultArt: DefaultArtDeps },
+  instanceIds: readonly string[],
+  monsterKey: string,
+  mode: HpMode,
+  origin: ChangeOrigin,
+): Promise<ChangeMonsterTypeResult & { art: DefaultArtOutcome[] }> {
+  void deps;
+  void instanceIds;
+  void monsterKey;
+  void mode;
+  void origin;
+  await Promise.resolve();
+  throw new Error("not implemented");
 }

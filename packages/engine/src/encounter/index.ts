@@ -109,3 +109,10 @@ export {
   type SetOwnTokenArtDeps,
   type SetOwnTokenArtResult,
 } from "./own-token-art.js";
+// #383 TooManyTokens default art
+export { changeMonsterTypeWithDefaultArt } from "./change-monster.js";
+export {
+  restoreEncounterWithDefaultArt,
+  restoreMonstersWithDefaultArt,
+} from "./restore.js";
+export type { DefaultArtDeps, DefaultArtOutcome } from "./default-art.js";

@@ -12,6 +12,7 @@ import type {
   TokenArtRepository,
   TokenImageRepository,
   Tokeniser,
+  TooManyTokensIndex,
 } from "@ttrpg-agents/engine";
 
 /** Everything a tool handler needs; injected so tests stay deterministic. */
@@ -40,6 +41,8 @@ export interface ToolContext {
   art: TokenArtRepository;
   /** Token image bytes by SHA-256: set_token_art stores its token here. */
   images: TokenImageRepository;
+  /** The committed TooManyTokens index: the default art of a monster type with none. */
+  tooManyTokens: TooManyTokensIndex;
 }
 
 /** What a tool's run receives: the context plus the encounter of this call. */

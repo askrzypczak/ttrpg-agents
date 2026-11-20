@@ -6,6 +6,10 @@ import type {
   TokenStyle,
   Tokeniser,
 } from "../encounter/tokeniser.js";
+import {
+  tooManyTokensIndexSchema,
+  type TooManyTokensIndex,
+} from "../encounter/too-many-tokens.js";
 import type { MonsterInstance } from "../encounter/types.js";
 import type {
   CreatureRecord,
@@ -302,4 +306,18 @@ export function makeTestTokeniser(
         : Promise.resolve(webpDeclaring(512, 512));
     },
   };
+}
+
+/** The fixed commit of the test TooManyTokens index. */
+const TEST_TOO_MANY_TOKENS_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+/** A TooManyTokens index (repo "test/pack", a fixed 40-hex commit) with the given folders; none by default. */
+export function makeTestTooManyTokensIndex(
+  folders: TooManyTokensIndex["folders"] = [],
+): TooManyTokensIndex {
+  return tooManyTokensIndexSchema.parse({
+    repo: "test/pack",
+    commit: TEST_TOO_MANY_TOKENS_COMMIT,
+    folders,
+  });
 }

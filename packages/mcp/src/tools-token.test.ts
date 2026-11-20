@@ -13,6 +13,7 @@ import {
   makeTestTokeniser,
   pngDeclaring,
   webpDeclaring,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 import { describe, expect, it } from "vitest";
 import type { ToolContext } from "./context.js";
@@ -53,6 +54,7 @@ function contextWith(tokeniser: Tokeniser) {
     setup: makeTestSetupPorts(),
     tokeniser,
     imageSource: makeTestImageSource({ [PATH]: pngDeclaring(1000, 600) }),
+    tooManyTokens: makeTestTooManyTokensIndex(),
     art: refusingStore<TokenArtRepository>("art", storeCalls),
     images: refusingStore<TokenImageRepository>("images", storeCalls),
   };

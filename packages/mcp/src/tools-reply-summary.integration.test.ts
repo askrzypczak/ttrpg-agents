@@ -23,6 +23,7 @@ import {
   makeTestImageSource,
   makeTestSetupPorts,
   makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 const WOLF = "srd-2024_wolf";
@@ -93,6 +94,7 @@ beforeEach(() => {
     setup: makeTestSetupPorts(),
     tokeniser: makeTestTokeniser(),
     imageSource: makeTestImageSource(),
+    tooManyTokens: makeTestTooManyTokensIndex(),
     art: new SqliteTokenArtRepository(db),
     images: new SqliteTokenImageRepository(db),
     newCommandId: () => `command-${String(++commands)}`,

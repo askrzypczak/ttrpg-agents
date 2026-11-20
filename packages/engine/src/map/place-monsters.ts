@@ -9,6 +9,10 @@ import {
   type MonstersPreview,
   type PreviewMonstersDeps,
 } from "../encounter/add-monsters.js";
+import type {
+  DefaultArtDeps,
+  DefaultArtOutcome,
+} from "../encounter/default-art.js";
 import { UnknownInstanceError } from "../encounter/errors.js";
 import type { ChangeOrigin } from "../encounter/origin.js";
 import type { EncounterRepository } from "../encounter/repository.js";
@@ -51,6 +55,8 @@ export interface RoomPlacement {
 export interface AddMonstersInRoomsResult extends AddMonstersResult {
   placements: RoomPlacement[];
   moved: boolean;
+  /** The groups' types' default art outcomes; [] without `defaultArt`. */
+  art: DefaultArtOutcome[];
 }
 
 /**
@@ -65,16 +71,20 @@ export async function addMonstersInRooms(
   deps: AddMonstersDeps & {
     table: Pick<TablePort, "sceneMap" | "sceneTokens">;
     maps: Pick<MapRepository, "getActiveMap" | "getRooms">;
+    /** With it: every stored-state check, then the default art load, then the table reads, then the art and the add in one transaction, art first. */
+    defaultArt?: DefaultArtDeps;
   },
   groups: readonly RoomGroup[],
   origin: ChangeOrigin,
   options: AddMonstersOptions = {},
 ): Promise<AddMonstersInRoomsResult> {
+  if (deps.defaultArt !== undefined) throw new Error("not implemented");
   if (groups.every((g) => g.room === undefined)) {
     return {
       ...addMonsters(deps, groups.map(withoutRoom), origin, options),
       placements: [],
       moved: false,
+      art: [],
     };
   }
   validateAddMonsters(
@@ -106,7 +116,7 @@ export async function addMonstersInRooms(
     if (cell === undefined || instance === undefined) return;
     placements.push({ id: instance.id, name: instance.name, ...cell });
   });
-  return { ...result, placements, moved: blocks.moved };
+  return { ...result, placements, moved: blocks.moved, art: [] };
 }
 
 /** Where a would-be monster of a group with a room would go; `cell` as in RoomPlacement, null when no free block is left. */

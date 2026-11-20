@@ -27,8 +27,20 @@ import {
   type TablePort,
   type TableSceneMap,
   type TableToken,
+  type DefaultArtDeps,
+  type ImageSource,
+  type TokenArtRepository,
+  type TokenImageRepository,
+  type StoredTokenArt,
+  tooManyTokensUrls,
 } from "../index.js";
-import { makeTestInstance, makeTestMonsterIndex } from "../testing/index.js";
+import {
+  makeTestImageSource,
+  makeTestInstance,
+  makeTestMonsterIndex,
+  makeTestTooManyTokensIndex,
+  webpDeclaring,
+} from "../testing/index.js";
 
 const origin: ChangeOrigin = { source: "mcp", commandId: "c1" };
 
@@ -725,7 +737,12 @@ describe("addMonstersInRooms", () => {
 
     const plain = setup();
     const expected = addMonsters(plain.deps, groups, origin);
-    expect(result).toEqual({ ...expected, placements: [], moved: false });
+    expect(result).toEqual({
+      ...expected,
+      placements: [],
+      moved: false,
+      art: [],
+    });
     expect(table.sceneMapCalls).toBe(0);
     expect(table.sceneTokensCalls).toBe(0);
     expect(repo.listInstances().map((i) => i.spawnPosition)).toEqual([
@@ -1054,5 +1071,157 @@ describe("previewMonstersInRooms", () => {
       added.placements.map((p) => p.cell),
     );
     expect(preview.placements.map((p) => p.cell)).toEqual(["B1"]);
+  });
+});
+
+/** The Goblin's TooManyTokens default: one folder keyed to it. */
+const goblinIndex = makeTestTooManyTokensIndex([
+  { name: "Goblin", key: "goblin", files: ["Goblin_01.webp"] },
+]);
+const goblinUrls = tooManyTokensUrls(goblinIndex, {
+  folder: "Goblin",
+  file: "Goblin_01.webp",
+});
+
+/**
+ * A setup whose store, table, art and image stores and image source record in
+ * one list, in order: each finished image load, each table read, the outermost
+ * art transaction's start and end, each art and image write, and each add.
+ */
+function artSetup(options: Parameters<typeof setup>[0] = {}) {
+  const s = setup(options);
+  const log: string[] = [];
+  let depth = 0;
+  const add = s.repo.addInstances.bind(s.repo);
+  s.repo.addInstances = (build) => {
+    log.push(`add ${depth > 0 ? "in" : "outside"} transaction`);
+    return add(build);
+  };
+  const sceneMap = s.table.sceneMap;
+  const sceneTokens = s.table.sceneTokens;
+  s.table.sceneMap = () => {
+    log.push("sceneMap");
+    return sceneMap();
+  };
+  s.table.sceneTokens = () => {
+    log.push("sceneTokens");
+    return sceneTokens();
+  };
+  const stored: Record<string, StoredTokenArt> = {};
+  const art: TokenArtRepository = {
+    listTokenArt: () =>
+      Object.fromEntries(Object.entries(stored).map(([k, v]) => [k, v.art])),
+    getTokenArt: (key) =>
+      Object.hasOwn(stored, key) ? stored[key] : undefined,
+    setTokenArt(key, value, source) {
+      log.push(`set-art ${key}`);
+      stored[key] = { art: value, source };
+    },
+    transaction<T>(fn: () => T): T {
+      const outer = depth === 0;
+      if (outer) log.push("begin");
+      depth += 1;
+      try {
+        const result = fn();
+        if (outer) log.push("commit");
+        return result;
+      } finally {
+        depth -= 1;
+      }
+    },
+  };
+  const images: TokenImageRepository = {
+    saveTokenImage() {
+      log.push("save-image");
+      return "a".repeat(64);
+    },
+    getTokenImage: () => undefined,
+  };
+  const source = makeTestImageSource({
+    [goblinUrls.jsdelivr]: webpDeclaring(256, 256),
+  });
+  const imageSource: ImageSource & { loads: unknown[] } = {
+    loads: source.loads,
+    async load(location) {
+      const bytes = await source.load(location);
+      log.push(`loaded ${"url" in location ? location.url : location.path}`);
+      return bytes;
+    },
+  };
+  const defaultArt: DefaultArtDeps = {
+    art,
+    images,
+    imageSource,
+    tooManyTokens: goblinIndex,
+  };
+  return { ...s, log, stored, imageSource, deps: { ...s.deps, defaultArt } };
+}
+
+describe("addMonstersInRooms with the TooManyTokens default art", () => {
+  it("addMonstersInRooms with defaultArt writes a covered type's art before the added instances in one transaction and answers its outcome", async () => {
+    const { deps, log, stored } = artSetup();
+
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "goblin", count: 2 }],
+      origin,
+    );
+
+    expect(result.art).toEqual([
+      { outcome: "set", monsterKey: "goblin", name: "Goblin" },
+    ]);
+    expect(result.instances).toHaveLength(2);
+    expect(log).toEqual([
+      `loaded ${goblinUrls.jsdelivr}`,
+      "begin",
+      "save-image",
+      "set-art goblin",
+      "add in transaction",
+      "commit",
+    ]);
+    expect(stored["goblin"]?.source).toBe("default");
+  });
+
+  it("addMonstersInRooms with defaultArt loads no image when its groups fail validation", async () => {
+    const { deps, log, imageSource } = artSetup();
+
+    await expect(
+      addMonstersInRooms(
+        deps,
+        [
+          { monster: "goblin", count: 2, room: "Taproom" },
+          { monster: "goblin", count: 0 },
+        ],
+        origin,
+      ),
+    ).rejects.toBeInstanceOf(AddMonstersError);
+    expect(imageSource.loads).toEqual([]);
+    expect(log).toEqual([]);
+  });
+
+  it("addMonstersInRooms with defaultArt and a room reads the table's map and tokens after the default art load", async () => {
+    const { deps, log } = artSetup();
+
+    const result = await addMonstersInRooms(
+      deps,
+      [{ monster: "goblin", count: 2, room: "Taproom" }],
+      origin,
+    );
+
+    expect(result.placements).toHaveLength(2);
+    const loaded = log.indexOf(`loaded ${goblinUrls.jsdelivr}`);
+    const begin = log.indexOf("begin");
+    expect(loaded).toBeGreaterThanOrEqual(0);
+    for (const read of ["sceneMap", "sceneTokens"]) {
+      expect(log.indexOf(read)).toBeGreaterThan(loaded);
+      expect(log.indexOf(read)).toBeLessThan(begin);
+    }
+    expect(log.slice(begin)).toEqual([
+      "begin",
+      "save-image",
+      "set-art goblin",
+      "add in transaction",
+      "commit",
+    ]);
   });
 });

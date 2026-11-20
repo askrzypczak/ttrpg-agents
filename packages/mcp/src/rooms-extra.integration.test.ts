@@ -20,6 +20,7 @@ import {
   makeTestImageSource,
   makeTestSetupPorts,
   makeTestTokeniser,
+  makeTestTooManyTokensIndex,
 } from "@ttrpg-agents/engine/testing";
 
 /** Trollskull Manor: 3000x4000 px at 125 dpi on a 150-unit grid, rotated 270 (32 x 24 cells). */
@@ -92,6 +93,7 @@ describe("list_rooms cells", () => {
       setup: makeTestSetupPorts(),
       tokeniser: makeTestTokeniser(),
       imageSource: makeTestImageSource(),
+      tooManyTokens: makeTestTooManyTokensIndex(),
       art: new SqliteTokenArtRepository(db),
       images: new SqliteTokenImageRepository(db),
       newCommandId: () => "command",
