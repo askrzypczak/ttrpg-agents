@@ -135,7 +135,9 @@ async function ok(name: string, args: unknown = {}): Promise<ToolResult> {
 }
 
 function text(r: ToolResult): string {
-  return r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+  return r.content
+    .flatMap((c) => (c.type === "text" ? [c.text] : []))
+    .join("\n");
 }
 
 function artEventsSince(seq: number) {
@@ -193,6 +195,22 @@ describe("show_token_variants", () => {
     );
     expect(text(page1)).toBe(
       "Goblin Warrior: variants 1-20 of 45, numbered left to right, top to bottom; none of the variants is the current art. 1 could not be loaded and is left blank.",
+    );
+  });
+
+  it("show_token_variants's line names the one variant of a last page that holds one", async () => {
+    ctx.tooManyTokens = makeTestTooManyTokensIndex([
+      {
+        name: FOLDER,
+        key: GOBLIN,
+        files: Array.from({ length: 41 }, (_, i) => fileOf(i + 1)),
+      },
+    ]);
+
+    const page3 = await ok("show_token_variants", { monster: GOBLIN, page: 3 });
+
+    expect(text(page3)).toBe(
+      "Goblin Warrior: variant 41 of 41, numbered left to right, top to bottom; none of the variants is the current art.",
     );
   });
 

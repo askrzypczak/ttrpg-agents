@@ -38,6 +38,8 @@ import {
   useMap,
   makeToken,
   setOwnTokenArt,
+  setTooManyTokensVariant,
+  tooManyTokensSheet,
   type ChangeOrigin,
   type DefaultArtDeps,
   type DefaultArtOutcome,
@@ -51,9 +53,11 @@ import {
   type RestoredMonster,
   type RoomPlacement,
   type SetOwnTokenArtResult,
+  type SetTooManyTokensVariantResult,
   type TableArtWait,
   type TokenArtSource,
   type TokenImageMime,
+  type TooManyTokensSheet,
   type UndoChange,
   type UndoField,
   type UndoNext,
@@ -2154,12 +2158,62 @@ const setTokenArtTool = defineTool({
   name: "set_token_art",
   annotations: { destructiveHint: true },
   description:
-    "Make a round token from an image (an absolute file path or an https URL; PNG, JPEG or WebP, at most 20 MiB and 8192 px a side) as preview_token does (focus, zoom) and set it as the token art of a monster type, by monster key (search_monsters and list_creatures give keys). It replaces the type's art whatever set it (a GM pick in Owlbear, an earlier image or variant, the TooManyTokens default); the reply names what it replaced. The GM then publishes it from the extension panel: Re-upload, then Pick the uploaded image. Takes no encounter and creates none; undo does not cover it.",
+    "Set the token art of a monster type, by monster key (search_monsters and list_creatures give keys), from image or variant (exactly one). image: an absolute file path or an https URL (PNG, JPEG or WebP, at most 20 MiB and 8192 px a side), made into a round token as preview_token does (focus, zoom); the GM then publishes it from the extension panel: Re-upload, then Pick the uploaded image. variant: a TooManyTokens variant number from show_token_variants, used as it is (no focus or zoom) and published at once. Either replaces the type's art whatever set it (a GM pick in Owlbear, an earlier image or variant, the TooManyTokens default); the reply names what it replaced. Takes no encounter and creates none; undo does not cover it.",
   inputSchema: {
     monster: z.string().describe("The monster key."),
     ...tokenInput,
+    image: z.string().optional(),
+    variant: z
+      .number()
+      .optional()
+      .describe(
+        "A TooManyTokens variant number from show_token_variants; instead of image.",
+      ),
   },
-  async run(ctx, { monster, image, focus, zoom }, origin) {
+  async run(ctx, { monster, image, variant, focus, zoom }, origin) {
+    if (image !== undefined && variant !== undefined)
+      return fail("Give image or variant, not both.");
+    if (variant !== undefined) {
+      if (focus !== undefined || zoom !== undefined)
+        return fail(
+          "focus and zoom apply to image only; a variant is used as it is.",
+        );
+      const chosen = await setTooManyTokensVariant(
+        {
+          monsters: ctx.monsters,
+          art: ctx.art,
+          images: ctx.images,
+          imageSource: ctx.imageSource,
+          tooManyTokens: ctx.tooManyTokens,
+          directory: ctx.encounters,
+        },
+        monster,
+        variant,
+        origin(),
+      );
+      const text = setTokenVariantText(chosen);
+      if (chosen.outcome === "set")
+        return ok(text, {
+          outcome: "set",
+          monsterKey: chosen.monster.key,
+          sha256: chosen.sha256,
+          replaced: chosen.replaced?.source ?? null,
+          kept: null,
+          published: true,
+        });
+      return ok(text, {
+        outcome: "unchanged",
+        monsterKey: chosen.monster.key,
+        sha256: chosen.sha256,
+        replaced: null,
+        kept: chosen.kept.source,
+        published: chosen.kept.art.url !== undefined,
+      });
+    }
+    if (image === undefined)
+      return fail(
+        "Give image (an absolute file path or an https URL) or variant (a number from show_token_variants).",
+      );
     const result = await setOwnTokenArt(
       {
         imageSource: ctx.imageSource,
@@ -2192,6 +2246,43 @@ const setTokenArtTool = defineTool({
       kept: result.kept.source,
       published: result.published,
     });
+  },
+});
+
+const showTokenVariantsTool = defineTool({
+  name: "show_token_variants",
+  annotations: { readOnlyHint: true },
+  description:
+    "Show a monster type's TooManyTokens token art variants, by monster key (search_monsters and list_creatures give keys), as one contact-sheet image: 20 variants a page in 5 columns, numbered left to right, top to bottom, with no numbers drawn. page (default 1) picks the page. The reply line gives the variant numbers on the sheet, the total, the current art's variant number and how many images could not be loaded (blank cells). Choose one with set_token_art and variant. Stores nothing; takes no encounter and creates none.",
+  inputSchema: {
+    monster: z.string().describe("The monster key."),
+    page: z
+      .number()
+      .optional()
+      .describe("The page, from 1 (default 1); 20 variants a page."),
+  },
+  async run(ctx, { monster, page }) {
+    const sheet = await tooManyTokensSheet(
+      {
+        monsters: ctx.monsters,
+        art: ctx.art,
+        imageSource: ctx.imageSource,
+        tokeniser: ctx.tokeniser,
+        tooManyTokens: ctx.tooManyTokens,
+      },
+      monster,
+      page ?? 1,
+    );
+    return {
+      content: [
+        {
+          type: "image",
+          data: Buffer.from(sheet.bytes).toString("base64"),
+          mimeType: "image/webp",
+        },
+        { type: "text", text: tokenVariantsText(sheet) },
+      ],
+    };
   },
 });
 
@@ -2264,6 +2355,49 @@ function setTokenArtText(result: SetOwnTokenArtResult, image: string): string {
   ].join("\n");
 }
 
+/** The reply line of show_token_variants: the variant numbers on the sheet, the total, the current art's variant and the blank cells. */
+function tokenVariantsText({
+  monster,
+  first,
+  last,
+  total,
+  failed,
+  current,
+}: TooManyTokensSheet): string {
+  const range =
+    first === last
+      ? `variant ${String(first)} of ${String(total)}`
+      : `variants ${String(first)}-${String(last)} of ${String(total)}`;
+  const currentClause =
+    current === null
+      ? "none of the variants is the current art."
+      : `the current art is ${String(current)}.`;
+  const blank =
+    failed === 0
+      ? ""
+      : failed === 1
+        ? " 1 could not be loaded and is left blank."
+        : ` ${String(failed)} could not be loaded and are left blank.`;
+  return `${monster.name}: ${range}, numbered left to right, top to bottom; ${currentClause}${blank}`;
+}
+
+/** The reply of set_token_art with variant: the variant set and the art it replaced, or that nothing changed. */
+function setTokenVariantText(result: SetTooManyTokensVariantResult): string {
+  const { name, key } = result.monster;
+  const number = String(result.variant);
+  if (result.outcome === "unchanged")
+    return `${name} (${key}) already has TooManyTokens variant ${number} as its art, from ${ART_SOURCE_WORDS[result.kept.source]}; nothing changed.`;
+  const replaced =
+    result.replaced === null
+      ? "It had no art before."
+      : `It replaces ${ART_SOURCE_WORDS[result.replaced.source]}.`;
+  const { folder, file } = result.image;
+  return [
+    `Set ${name} (${key}) token art to TooManyTokens variant ${number} (${folder}/${file}). ${replaced}`,
+    `It is published in Owlbear: new ${name} tokens are drawn with it, and those in the open scene are redrawn once.`,
+  ].join("\n");
+}
+
 export const tools: readonly ToolDefinition[] = [
   searchMonstersTool,
   getStatblockTool,
@@ -2307,4 +2441,5 @@ export const tools: readonly ToolDefinition[] = [
   listCreaturesTool,
   previewTokenTool,
   setTokenArtTool,
+  showTokenVariantsTool,
 ];
