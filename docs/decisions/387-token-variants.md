@@ -61,7 +61,7 @@ Issue: [#387](https://github.com/askrzypczak/ttrpg-agents/issues/387).
 
 ## 387.6 Each contact-sheet cell is encoded as PNG before compositing, so every format's letterbox bands show the background
 
-- Decided by: epic #375 orchestrator, 2026-11-20, review round 1 (overriding a reviewer note), not human-approved.
+- Decided by: work-ticket orchestrator (the #387 builder, under the epic #375 orchestrator), 2026-11-20, review round 1 (overriding a reviewer note), not human-approved.
 - Context: Per 387.5. `validateTokenImage` accepts PNG, JPEG and WebP. A resized cell kept its input format, and JPEG has no alpha, so a non-square JPEG's bands came out black instead of the layout background. Every file in today's index is WebP, so the data never hit it.
 - Options:
   - Chosen: encode each resized cell as PNG before compositing; one unit test pins a JPEG's bands to the background.
