@@ -1,13 +1,19 @@
 import type { RollLogEntry } from "../dice/log.js";
 import type { Rng } from "../dice/rng.js";
 import { footprintForSize } from "../monsters/footprint.js";
+import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import {
   createNumberedNaming,
   type HpMode,
   type NamingStrategy,
 } from "./add-monsters.js";
-import type { DefaultArtDeps, DefaultArtOutcome } from "./default-art.js";
+import {
+  loadDefaultArt,
+  storeDefaultArt,
+  type DefaultArtDeps,
+  type DefaultArtOutcome,
+} from "./default-art.js";
 import {
   SameMonsterError,
   UnknownInstanceError,
@@ -67,42 +73,12 @@ export function changeMonsterType(
   mode: HpMode,
   origin: ChangeOrigin,
 ): ChangeMonsterTypeResult {
-  const { repo, monsters, rng, now } = deps;
-  const monster = monsters.get(monsterKey);
-  if (monster === undefined) {
-    throw new UnknownMonsterError(`unknown monster "${monsterKey}"`);
-  }
-  const live = repo.listInstances();
-  const byId = new Map(live.map((i) => [i.id, i] as const));
-  const targets = instanceIds.map((id) => {
-    const instance = byId.get(id);
-    if (instance === undefined) {
-      throw new UnknownInstanceError(`no instance ${id}`);
-    }
-    return instance;
-  });
-  const oldModifiers = targets.map((instance) => {
-    if (instance.initiative === null) return 0;
-    const old = monsters.get(instance.monsterKey);
-    if (old === undefined) {
-      throw new UnknownMonsterError(
-        `${instance.displayName}: unknown monster "${instance.monsterKey}"`,
-      );
-    }
-    return old.initiativeModifier;
-  });
-  const keptRolls = targets.map((instance, n) =>
-    instance.initiative === null
-      ? null
-      : instance.initiative - (oldModifiers[n] ?? 0),
+  const { repo, rng, now } = deps;
+  const { monster, live, targets, keptRolls } = checkChange(
+    deps,
+    instanceIds,
+    monsterKey,
   );
-  for (const instance of targets) {
-    if (instance.monsterKey === monster.key) {
-      throw new SameMonsterError(
-        `${instance.displayName} already is a ${monster.name}`,
-      );
-    }
-  }
 
   const naming = deps.naming ?? createNumberedNaming();
   const names = live.map((i) => i.displayName);
@@ -154,11 +130,66 @@ export async function changeMonsterTypeWithDefaultArt(
   mode: HpMode,
   origin: ChangeOrigin,
 ): Promise<ChangeMonsterTypeResult & { art: DefaultArtOutcome[] }> {
-  void deps;
-  void instanceIds;
-  void monsterKey;
-  void mode;
-  void origin;
-  await Promise.resolve();
-  throw new Error("not implemented");
+  checkChange(deps, instanceIds, monsterKey);
+  const loaded = await loadDefaultArt(
+    { ...deps.defaultArt, monsters: deps.monsters },
+    [monsterKey],
+  );
+  const { result, art } = storeDefaultArt(deps.defaultArt, loaded, origin, () =>
+    changeMonsterType(deps, instanceIds, monsterKey, mode, origin),
+  );
+  return { ...result, art };
+}
+
+/**
+ * changeMonsterType's checks against stored state, before any roll or write:
+ * the new monster, the live targets, and each target's kept d20 roll.
+ */
+function checkChange(
+  deps: Pick<ChangeMonsterTypeDeps, "repo" | "monsters">,
+  instanceIds: readonly string[],
+  monsterKey: string,
+): {
+  monster: Monster;
+  live: MonsterInstance[];
+  targets: MonsterInstance[];
+  keptRolls: (number | null)[];
+} {
+  const { repo, monsters } = deps;
+  const monster = monsters.get(monsterKey);
+  if (monster === undefined) {
+    throw new UnknownMonsterError(`unknown monster "${monsterKey}"`);
+  }
+  const live = repo.listInstances();
+  const byId = new Map(live.map((i) => [i.id, i] as const));
+  const targets = instanceIds.map((id) => {
+    const instance = byId.get(id);
+    if (instance === undefined) {
+      throw new UnknownInstanceError(`no instance ${id}`);
+    }
+    return instance;
+  });
+  const oldModifiers = targets.map((instance) => {
+    if (instance.initiative === null) return 0;
+    const old = monsters.get(instance.monsterKey);
+    if (old === undefined) {
+      throw new UnknownMonsterError(
+        `${instance.displayName}: unknown monster "${instance.monsterKey}"`,
+      );
+    }
+    return old.initiativeModifier;
+  });
+  const keptRolls = targets.map((instance, n) =>
+    instance.initiative === null
+      ? null
+      : instance.initiative - (oldModifiers[n] ?? 0),
+  );
+  for (const instance of targets) {
+    if (instance.monsterKey === monster.key) {
+      throw new SameMonsterError(
+        `${instance.displayName} already is a ${monster.name}`,
+      );
+    }
+  }
+  return { monster, live, targets, keptRolls };
 }

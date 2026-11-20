@@ -2,7 +2,12 @@ import { DomainError } from "../errors.js";
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
 import { createNumberedNaming, type NamingStrategy } from "./add-monsters.js";
-import type { DefaultArtDeps, DefaultArtOutcome } from "./default-art.js";
+import {
+  loadDefaultArt,
+  storeDefaultArt,
+  type DefaultArtDeps,
+  type DefaultArtOutcome,
+} from "./default-art.js";
 import type { ChangeOrigin } from "./origin.js";
 import { TargetError, resolveTargets } from "./queries.js";
 import type { EncounterRepository } from "./repository.js";
@@ -168,11 +173,11 @@ export async function restoreMonstersWithDefaultArt(
   targets: readonly string[],
   origin: ChangeOrigin,
 ): Promise<{ restored: RestoredMonster[]; art: DefaultArtOutcome[] }> {
-  void deps;
-  void targets;
-  void origin;
-  await Promise.resolve();
-  throw new Error("not implemented");
+  const removed = deps.repo.listRemovedInstances().map((r) => r.instance);
+  const resolved = resolveRemoved(deps.repo, removed, targets);
+  return restoreWithDefaultArt(deps, resolved, origin, () =>
+    restoreMonsters(deps, targets, origin),
+  );
 }
 
 /** restoreEncounter's checks, the restored types' default art load, then the art and the restore in one transaction, art first. */
@@ -180,8 +185,38 @@ export async function restoreEncounterWithDefaultArt(
   deps: RestoreMonstersDeps & { defaultArt: DefaultArtDeps },
   origin: ChangeOrigin,
 ): Promise<{ restored: RestoredMonster[]; art: DefaultArtOutcome[] }> {
-  void deps;
-  void origin;
-  await Promise.resolve();
-  throw new Error("not implemented");
+  const cleared = clearedNotRestored(deps.repo);
+  if (cleared.length === 0) {
+    throw new RestoreMonstersError(
+      "nothing_cleared",
+      "No cleared monsters to restore",
+    );
+  }
+  return restoreWithDefaultArt(deps, cleared, origin, () =>
+    restoreEncounter(deps, origin),
+  );
+}
+
+/**
+ * Checks every resolved instance's monster type, loads the types' default art,
+ * then stores the art and runs `restore` in one transaction, art first.
+ */
+async function restoreWithDefaultArt(
+  deps: RestoreMonstersDeps & { defaultArt: DefaultArtDeps },
+  resolved: readonly MonsterInstance[],
+  origin: ChangeOrigin,
+  restore: () => RestoredMonster[],
+): Promise<{ restored: RestoredMonster[]; art: DefaultArtOutcome[] }> {
+  for (const instance of resolved) monsterOf(deps.monsters, instance);
+  const loaded = await loadDefaultArt(
+    { ...deps.defaultArt, monsters: deps.monsters },
+    resolved.map((i) => i.monsterKey),
+  );
+  const { result, art } = storeDefaultArt(
+    deps.defaultArt,
+    loaded,
+    origin,
+    restore,
+  );
+  return { restored: result, art };
 }
