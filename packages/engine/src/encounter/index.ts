@@ -116,3 +116,13 @@ export {
   restoreMonstersWithDefaultArt,
 } from "./restore.js";
 export type { DefaultArtDeps, DefaultArtOutcome } from "./default-art.js";
+// #387 TooManyTokens variants
+export { CONTACT_SHEET_LAYOUT, type ContactSheetLayout } from "./tokeniser.js";
+export {
+  setTooManyTokensVariant,
+  tooManyTokensSheet,
+  type SetTooManyTokensVariantDeps,
+  type SetTooManyTokensVariantResult,
+  type TooManyTokensSheet,
+  type TooManyTokensSheetDeps,
+} from "./token-variants.js";

@@ -65,7 +65,8 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `remove_creature`      | Delete a stored creature by key; refused while a monster in any encounter uses it, naming them                                                               |
 | `list_creatures`       | The stored creatures (key, name, book, page, CR), of one book with `book`                                                                                    |
 | `preview_token`        | Preview a round token of an absolute path or https URL at its most salient point or `focus`, `zoom` 1 to 8; image and crop line; stores nothing              |
-| `set_token_art`        | Make a round token as `preview_token` does and set it as a monster type's art, by key, replacing any art; the reply names what it replaced                   |
+| `set_token_art`        | Set a type's art by key, replacing any: `image` as `preview_token` makes it, or `variant` from `show_token_variants`; the reply names what it replaced       |
+| `show_token_variants`  | A monster type's TooManyTokens variants as one numbered contact-sheet image, 20 a page (`page`); stores nothing                                              |
 
 Every tool that reads or changes an encounter takes an optional `encounter`, an
 encounter's name in any case (`use_encounter` requires it); `list_encounters`,
@@ -94,8 +95,13 @@ on the current one, when there is one, so `undo` right after it says it does not
 cover the art change. It replaces the type's art whatever set it (a GM pick, an
 earlier variant or the default) and stores the token's bytes in the same
 transaction. A token whose hash the type's art already has keeps that art and
-its url, and changes and notes nothing. The GM publishes new art from the
-extension panel (Re-upload, then Pick the uploaded image).
+its url, and changes and notes nothing. The GM publishes a new image from the
+extension panel (Re-upload, then Pick the uploaded image); a `variant` is
+published at once, with its url.
+
+`show_token_variants` takes no `encounter`, creates none and stores nothing: it
+loads the sheet's images and replies with one line. A `variant` is a number from
+that sheet, used as it is (no `focus` or `zoom`).
 
 `add_monsters`, `change_monster_type`, `restore_monsters` and
 `restore_encounter` give a monster type with no art its TooManyTokens default

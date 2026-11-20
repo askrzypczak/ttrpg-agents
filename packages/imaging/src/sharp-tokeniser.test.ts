@@ -1,4 +1,8 @@
-import { TOKEN_STYLE, TokeniserError } from "@ttrpg-agents/engine";
+import {
+  CONTACT_SHEET_LAYOUT,
+  TOKEN_STYLE,
+  TokeniserError,
+} from "@ttrpg-agents/engine";
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
 import { createSharpTokeniser, type SharpLoader } from "./sharp-tokeniser.js";
@@ -124,5 +128,100 @@ describe("createSharpTokeniser", () => {
     expect(await createSharpTokeniser({ loadSharp }).check()).toEqual({
       kind: "loaded",
     });
+  });
+});
+
+/** Twenty colours far apart from each other and from white. */
+const SHEET_COLOURS = [
+  "#e6194b",
+  "#3cb44b",
+  "#ffe119",
+  "#4363d8",
+  "#f58231",
+  "#911eb4",
+  "#42d4f4",
+  "#f032e6",
+  "#bfef45",
+  "#000075",
+  "#469990",
+  "#9a6324",
+  "#800000",
+  "#808000",
+  "#000000",
+  "#a9a9a9",
+  "#ff8080",
+  "#008080",
+  "#4b0082",
+  "#556b2f",
+];
+
+/** The centre pixel of cell `i` in a 5-column grid of 128 px cells. */
+function cellCentre(i: number): [number, number] {
+  return [(i % 5) * 128 + 64, Math.floor(i / 5) * 128 + 64];
+}
+
+describe("createSharpTokeniser contactSheet", () => {
+  it("contactSheet composes 20 generated 256 px images into one 640 by 512 WebP, each image's colour at the centre of its cell, left to right, top to bottom", async () => {
+    const images = await Promise.all(
+      SHEET_COLOURS.map((colour) => flatPng(256, 256, colour)),
+    );
+
+    const sheet = await createSharpTokeniser().contactSheet(
+      images,
+      CONTACT_SHEET_LAYOUT,
+    );
+
+    const meta = await sharp(sheet).metadata();
+    expect(meta).toMatchObject({ format: "webp", width: 640, height: 512 });
+    const pixels = await rgba(sheet);
+    SHEET_COLOURS.forEach((colour, i) => {
+      const [x, y] = cellCentre(i);
+      expectColour(pixels.at(x, y), hexRgb(colour), `cell ${String(i)}`);
+    });
+  });
+
+  it("contactSheet leaves a null image's cell in the layout's background colour", async () => {
+    const background = "#20a040";
+    const images = [
+      await flatPng(256, 256, "#e6194b"),
+      null,
+      await flatPng(256, 256, "#4363d8"),
+    ];
+
+    const sheet = await createSharpTokeniser().contactSheet(images, {
+      ...CONTACT_SHEET_LAYOUT,
+      background,
+    });
+
+    const meta = await sharp(sheet).metadata();
+    expect(meta).toMatchObject({ format: "webp", width: 640, height: 512 });
+    const pixels = await rgba(sheet);
+    expectColour(pixels.at(...cellCentre(0)), hexRgb("#e6194b"), "cell 0");
+    expectColour(pixels.at(...cellCentre(1)), hexRgb(background), "cell 1");
+    expectColour(pixels.at(...cellCentre(2)), hexRgb("#4363d8"), "cell 2");
+    expectColour(pixels.at(...cellCentre(19)), hexRgb(background), "cell 19");
+  });
+
+  it("contactSheet letterboxes a non-square JPEG on the layout's background colour", async () => {
+    const background = "#20a040";
+    const jpeg = await sharp({
+      create: { width: 200, height: 100, channels: 3, background: "#e6194b" },
+    })
+      .jpeg()
+      .toBuffer();
+
+    const sheet = await createSharpTokeniser().contactSheet([jpeg], {
+      ...CONTACT_SHEET_LAYOUT,
+      background,
+    });
+
+    const pixels = await rgba(sheet);
+    expectColour(
+      pixels.at(...cellCentre(0)),
+      hexRgb("#e6194b"),
+      "cell 0 centre",
+    );
+    // The 200 by 100 image scales to 128 by 64, so the top band is 32 px deep.
+    expectColour(pixels.at(64, 10), hexRgb(background), "cell 0 top band");
   });
 });

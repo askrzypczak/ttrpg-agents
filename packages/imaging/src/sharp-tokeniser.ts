@@ -1,5 +1,6 @@
 import {
   TokeniserError,
+  type ContactSheetLayout,
   type FocalPoint,
   type SquareCrop,
   type TokenStyle,
@@ -53,6 +54,11 @@ export function createSharpTokeniser(
     renderToken(bytes, crop, style) {
       return withSharp("render the token", (sharp) =>
         render(sharp, bytes, crop, style),
+      );
+    },
+    contactSheet(images, layout) {
+      return withSharp("compose the contact sheet", (sharp) =>
+        composeSheet(sharp, images, layout),
       );
     },
     async check(): Promise<TokeniserFacts> {
@@ -121,6 +127,51 @@ function render(
       { input: ring(style) },
     ])
     .webp({ quality: 90, alphaQuality: 100 })
+    .toBuffer();
+}
+
+/**
+ * The layout's grid on an opaque background canvas, as WebP: each non-null image
+ * scaled to fit its cell as PNG, so the bands it leaves transparent show the
+ * background (a JPEG cell would have none), and placed at the cell's offset; a
+ * null leaves its cell blank.
+ */
+async function composeSheet(
+  sharp: Sharp,
+  images: readonly (Uint8Array | null)[],
+  layout: ContactSheetLayout,
+): Promise<Uint8Array> {
+  const { columns, rows, cell, background } = layout;
+  const cells = await Promise.all(
+    images.flatMap((image, i) =>
+      image === null
+        ? []
+        : [
+            sharp(image)
+              .resize(cell, cell, {
+                fit: "contain",
+                background: { r: 0, g: 0, b: 0, alpha: 0 },
+              })
+              .png()
+              .toBuffer()
+              .then((input) => ({
+                input,
+                left: (i % columns) * cell,
+                top: Math.floor(i / columns) * cell,
+              })),
+          ],
+    ),
+  );
+  return sharp({
+    create: {
+      width: columns * cell,
+      height: rows * cell,
+      channels: 3,
+      background,
+    },
+  })
+    .composite(cells)
+    .webp({ quality: 90 })
     .toBuffer();
 }
 

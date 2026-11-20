@@ -56,7 +56,7 @@ flowchart LR
   mcp -->|"open_statblock: macOS open"| browser["DM's browser"]
   mcp -->|"preview_token, set_token_art: reads"| imagefiles["local image files"]
   mcp -->|"preview_token, set_token_art: HTTPS GET"| imagehosts["https image hosts"]
-  mcp -->|"default token art: HTTPS GET"| defaultart["cdn.jsdelivr.net, raw.githubusercontent.com"]
+  mcp -->|"default token art, show_token_variants, set_token_art variant: HTTPS GET"| defaultart["cdn.jsdelivr.net, raw.githubusercontent.com"]
   bridge["Bridge"] -->|"polls"| db
   ext["Owlbear extension"] <-->|"WebSocket (own origin)"| bridge
   ext -->|"HTTP POST and GET /token-images (own origin)"| bridge
@@ -65,7 +65,7 @@ flowchart LR
 
 ## Processes
 
-- **MCP server**: stdio, started by Claude Code from `.mcp.json` through `packages/mcp/bin/stdio.mjs`. It writes the database and asks the table through the bridge (see "Queries to the table"). For `preview_token` and `set_token_art` it reads local image files and fetches https images (5 s and 20 MiB per image) and renders the token in process with sharp. When `add_monsters`, `change_monster_type`, `restore_monsters` or `restore_encounter` bring in a monster type with no art, it fetches the type's TooManyTokens default from cdn.jsdelivr.net, else raw.githubusercontent.com (5 s per image), and stores the bytes.
+- **MCP server**: stdio, started by Claude Code from `.mcp.json` through `packages/mcp/bin/stdio.mjs`. It writes the database and asks the table through the bridge (see "Queries to the table"). For `preview_token` and `set_token_art` it reads local image files and fetches https images (5 s and 20 MiB per image) and renders the token in process with sharp. When `add_monsters`, `change_monster_type`, `restore_monsters` or `restore_encounter` bring in a monster type with no art, it fetches the type's TooManyTokens default from cdn.jsdelivr.net, else raw.githubusercontent.com (5 s per image), and stores the bytes. `show_token_variants` and `set_token_art` with `variant` load TooManyTokens images from the same hosts, up to 20 at once for a sheet.
 - **Browser opener**: the MCP server runs macOS `open <url>` for `open_statblock`, a short-lived process that hands a D&D Beyond page to the DM's default browser (other platforms are refused; the reply still carries the link).
 - **Bridge**: `npm run bridge:start` (detached; `bridge:stop`, `bridge:restart`, `bridge:status`) or `npm run bridge` (foreground), a separate process on 127.0.0.1, default port 5199, or 5299 in the dev profile (the `bridgePort` setting, see [`docs/settings.md`](settings.md)): HTTP plus WebSocket `/ws`. Its routes are `POST /agent/query` (the agent's queries), `POST /token-images` and `GET /token-images/<sha256>` (token art bytes, see "Token and auth"), and the built extension (`packages/owlbear/dist`) for everything else. Bodies, timeouts and refusals: [`packages/bridge/README.md`](../packages/bridge/README.md).
 - **Extension**: runs in the GM's Owlbear tab as the bridge's client, reconciles the scene to the encounter and answers the agent's queries. It fetches images from Owlbear for token art and for the `map-image` query. Mechanics: [`packages/owlbear/README.md`](../packages/owlbear/README.md).
