@@ -1,14 +1,29 @@
 import type { Monster } from "../monsters/schema.js";
 import type { MonsterIndex } from "../monsters/types.js";
-import type { DefaultArtDeps } from "./default-art.js";
-import type { EncounterDirectory } from "./directory.js";
+import { loadTooManyTokensImage, type DefaultArtDeps } from "./default-art.js";
+import {
+  noteCommandOnCurrentEncounter,
+  type EncounterDirectory,
+} from "./directory.js";
+import {
+  ImageUnavailableError,
+  InvalidTokenRequestError,
+  UnknownMonsterError,
+} from "./errors.js";
 import type { ImageSource } from "./image-source.js";
 import type { ChangeOrigin } from "./origin.js";
-import type { StoredTokenArt, TokenArtRepository } from "./token-art.js";
-import type { Tokeniser } from "./tokeniser.js";
-import type {
-  TooManyTokensIndex,
-  TooManyTokensVariant,
+import {
+  assignTokenArt,
+  type StoredTokenArt,
+  type TokenArtRepository,
+} from "./token-art.js";
+import { storeTokenImage } from "./token-image.js";
+import { CONTACT_SHEET_LAYOUT, type Tokeniser } from "./tokeniser.js";
+import {
+  tooManyTokensUrls,
+  tooManyTokensVariants,
+  type TooManyTokensIndex,
+  type TooManyTokensVariant,
 } from "./too-many-tokens.js";
 
 export interface TooManyTokensSheetDeps {
@@ -34,20 +49,62 @@ export interface TooManyTokensSheet {
   current: number | null;
 }
 
+/** Variants a page of the contact sheet holds: one per cell. */
+const PAGE_SIZE = CONTACT_SHEET_LAYOUT.columns * CONTACT_SHEET_LAYOUT.rows;
+
 /**
  * One page of a monster's TooManyTokens variants as a contact sheet
  * (CONTACT_SHEET_LAYOUT), with the page's variant numbers, the total, the
  * failed loads and the current art's variant number. Writes nothing.
  */
-export function tooManyTokensSheet(
+export async function tooManyTokensSheet(
   deps: TooManyTokensSheetDeps,
   monsterKey: string,
   page: number,
 ): Promise<TooManyTokensSheet> {
-  void deps;
-  void monsterKey;
-  void page;
-  return Promise.reject(new Error("not implemented"));
+  const { monster, variants } = monsterVariants(
+    deps.monsters,
+    deps.tooManyTokens,
+    monsterKey,
+  );
+  const total = variants.length;
+  const pages = Math.ceil(total / PAGE_SIZE);
+  if (!Number.isInteger(page) || page < 1 || page > pages)
+    throw new InvalidTokenRequestError(
+      `Page ${String(page)} is out of range: ${monster.name} has ${String(total)} variants, on pages 1 to ${String(pages)}.`,
+    );
+  const first = (page - 1) * PAGE_SIZE + 1;
+  const last = Math.min(page * PAGE_SIZE, total);
+  const loads = await Promise.all(
+    variants
+      .slice(first - 1, last)
+      .map((variant) =>
+        loadTooManyTokensImage(deps.imageSource, deps.tooManyTokens, variant),
+      ),
+  );
+  const failures = loads.filter(
+    (load): load is { reason: string } => "reason" in load,
+  );
+  const [cause] = failures;
+  if (cause !== undefined && failures.length === loads.length)
+    throw new ImageUnavailableError(
+      `No image of ${monster.name}'s variants ${String(first)}-${String(last)} could be loaded: ${cause.reason}`,
+    );
+  const cells = loads.map((load) => ("bytes" in load ? load.bytes : null));
+  const bytes = await deps.tokeniser.contactSheet(cells, CONTACT_SHEET_LAYOUT);
+  const artUrl = deps.art.getTokenArt(monsterKey)?.art.url;
+  return {
+    monster,
+    bytes,
+    first,
+    last,
+    total,
+    failed: failures.length,
+    current:
+      artUrl === undefined
+        ? null
+        : numberOfUrl(deps.tooManyTokens, variants, artUrl),
+  };
 }
 
 export interface SetTooManyTokensVariantDeps extends DefaultArtDeps {
@@ -82,15 +139,91 @@ export type SetTooManyTokensVariantResult =
  * with source `agent`, replacing any art, and notes the command on the
  * current encounter; unchanged when the stored art already has its hash.
  */
-export function setTooManyTokensVariant(
+export async function setTooManyTokensVariant(
   deps: SetTooManyTokensVariantDeps,
   monsterKey: string,
   variant: number,
   origin: ChangeOrigin,
 ): Promise<SetTooManyTokensVariantResult> {
-  void deps;
-  void monsterKey;
-  void variant;
-  void origin;
-  return Promise.reject(new Error("not implemented"));
+  const { monster, variants } = monsterVariants(
+    deps.monsters,
+    deps.tooManyTokens,
+    monsterKey,
+  );
+  const image = Number.isInteger(variant) ? variants[variant - 1] : undefined;
+  if (image === undefined)
+    throw new InvalidTokenRequestError(
+      `Variant ${String(variant)} is out of range: ${monster.name} has variants 1 to ${String(variants.length)}.`,
+    );
+  const loaded = await loadTooManyTokensImage(
+    deps.imageSource,
+    deps.tooManyTokens,
+    image,
+  );
+  if ("reason" in loaded)
+    throw new ImageUnavailableError(
+      `${monster.name}'s variant ${String(variant)} could not be loaded: ${loaded.reason}`,
+    );
+  const { url, bytes } = loaded;
+  return deps.art.transaction((): SetTooManyTokensVariantResult => {
+    const stored = storeTokenImage(deps.images, bytes);
+    if (!stored.ok)
+      throw new Error(
+        `The variant's image was refused by the store: ${stored.message}`,
+      );
+    const { sha256 } = stored;
+    const kept = deps.art.getTokenArt(monsterKey);
+    if (kept?.art.sha256 === sha256)
+      return { outcome: "unchanged", monster, variant, image, sha256, kept };
+    const assigned = assignTokenArt(
+      deps.art,
+      monsterKey,
+      { url, ...stored.image, sha256 },
+      "agent",
+      origin,
+    );
+    if (assigned.outcome === "kept")
+      throw new Error(`The art of ${monsterKey} was kept, not set.`);
+    noteCommandOnCurrentEncounter(deps.directory, origin);
+    return {
+      outcome: "set",
+      monster,
+      variant,
+      image,
+      sha256,
+      replaced: assigned.replaced,
+    };
+  });
+}
+
+/** The monster of `monsterKey` and its TooManyTokens variants in order; an unknown key and a monster with none are refused. */
+function monsterVariants(
+  monsters: MonsterIndex,
+  index: TooManyTokensIndex,
+  monsterKey: string,
+): { monster: Monster; variants: TooManyTokensVariant[] } {
+  const monster = monsters.get(monsterKey);
+  if (monster === undefined)
+    throw new UnknownMonsterError(
+      `Unknown monster "${monsterKey}". Use search_monsters to find keys.`,
+    );
+  const variants = tooManyTokensVariants(index, monster);
+  if (variants.length === 0)
+    throw new InvalidTokenRequestError(
+      `${monster.name} (${monster.key}) has no TooManyTokens variants.`,
+    );
+  return { monster, variants };
+}
+
+/** The 1-based number of the variant whose jsDelivr or raw url is `url`, or null when none is. */
+function numberOfUrl(
+  index: TooManyTokensIndex,
+  variants: readonly TooManyTokensVariant[],
+  url: string,
+): number | null {
+  const at = variants.findIndex((variant) => {
+    const urls = tooManyTokensUrls(index, variant);
+    return url === urls.jsdelivr || url === urls.raw;
+  });
+  return at === -1 ? null : at + 1;
 }

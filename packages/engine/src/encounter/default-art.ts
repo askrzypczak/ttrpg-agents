@@ -68,13 +68,15 @@ export async function loadDefaultArt(
       );
       continue;
     }
-    const urls = tooManyTokensUrls(deps.tooManyTokens, variant);
     pending.push(
-      loadFirst(deps.imageSource, [urls.jsdelivr, urls.raw]).then(
-        (answer): LoadedDefaultArt =>
-          "bytes" in answer
-            ? { outcome: "loaded", monsterKey, name, ...answer }
-            : { outcome: "failed", monsterKey, name, reason: answer.reason },
+      loadTooManyTokensImage(
+        deps.imageSource,
+        deps.tooManyTokens,
+        variant,
+      ).then((answer): LoadedDefaultArt =>
+        "bytes" in answer
+          ? { outcome: "loaded", monsterKey, name, ...answer }
+          : { outcome: "failed", monsterKey, name, reason: answer.reason },
       ),
     );
   }
@@ -82,24 +84,14 @@ export async function loadDefaultArt(
 }
 
 /** The variant's bytes from its jsDelivr url, else its raw url: the first whose bytes pass validateTokenImage, or every try's reason. Rethrows any rejection other than ImageUnavailableError. */
-export function loadTooManyTokensImage(
+export async function loadTooManyTokensImage(
   source: ImageSource,
   index: TooManyTokensIndex,
   variant: TooManyTokensVariant,
 ): Promise<{ url: string; bytes: Uint8Array } | { reason: string }> {
-  void source;
-  void index;
-  void variant;
-  return Promise.reject(new Error("not implemented"));
-}
-
-/** Tries each url in turn: the first whose bytes pass validateTokenImage, or every try's reason. */
-async function loadFirst(
-  source: ImageSource,
-  urls: readonly string[],
-): Promise<{ url: string; bytes: Uint8Array } | { reason: string }> {
+  const urls = tooManyTokensUrls(index, variant);
   const reasons: string[] = [];
-  for (const url of urls) {
+  for (const url of [urls.jsdelivr, urls.raw]) {
     let bytes: Uint8Array;
     try {
       bytes = await source.load({ url });
