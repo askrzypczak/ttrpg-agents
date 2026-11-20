@@ -106,7 +106,7 @@ If `get_map_image` fails (no map in use, the map is no longer on the scene, a gr
 ## Output after adding monsters
 
 1. A compact table with columns name, AC, HP, initiative, copied from the `add_monsters` result.
-2. When a group had a room, the tool's "Placed in ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present; after a room was proposed live, also the one-line guess (see Proposing rooms).
+2. When a group had a room, the tool's "Placed in ..." and "No free cell left ..." lines verbatim, and the line saying the map moved if present; after a room was proposed live, also the one-line guess (see Proposing rooms). When a type got default art, also the tool's "<Name>: token art set to the TooManyTokens default." or "No TooManyTokens art for <Name>; ..." line verbatim; choosing other art is the Token art section of `dm-prep`.
 3. The statblock, once per NEW monster type: call `get_statblock` for each monster key newly added in this sentence that is not already in the encounter and has not been shown earlier in the conversation. `add_monsters` does not return a statblock. Do not fetch it again when adding more of a type that is already present.
 4. No extra commentary beyond the one-line notes above.
 
@@ -187,7 +187,7 @@ Removed monsters stay restorable until the next `clear_encounter` that clears mo
 
 - "Undo that", "take that back" or "undo the last change" is ONE `undo` call (no arguments). It reverses the agent's last encounter change; saying it again goes one change further back. Do not reverse the change yourself with `heal`, `set_hp` or another tool.
 - After a `clear_encounter`, use `restore_encounter` as above; `undo` does not reach past a clear.
-- After a map or room change (`use_map`, `set_rooms`, `remove_rooms`) or an encounter rename or binding (`rename_encounter`, `use_encounter`), `undo` says it does not cover it, changes nothing and names what the next undo would reach. Relay that, and call `undo` again only when the DM wants that change undone.
+- After a map or room change (`use_map`, `set_rooms`, `remove_rooms`), an encounter rename or binding (`rename_encounter`, `use_encounter`) or a token art change (`set_token_art`), `undo` says it does not cover it, changes nothing and names what the next undo would reach. Relay that, and call `undo` again only when the DM wants that change undone.
 - Relay the tool's reply verbatim, including any value it left as set at the table and its last line, which says what the next undo would reverse (for example "Undid apply_damage: Goblin Warrior 2 HP 0 -> 7/7" then "Next undo would reverse add_monsters: Goblin Warrior 1, Goblin Warrior 2, Goblin Warrior 3.").
 
 ## Correcting a monster's type
