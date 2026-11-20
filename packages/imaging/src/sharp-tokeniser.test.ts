@@ -201,4 +201,27 @@ describe("createSharpTokeniser contactSheet", () => {
     expectColour(pixels.at(...cellCentre(2)), hexRgb("#4363d8"), "cell 2");
     expectColour(pixels.at(...cellCentre(19)), hexRgb(background), "cell 19");
   });
+
+  it("contactSheet letterboxes a non-square JPEG on the layout's background colour", async () => {
+    const background = "#20a040";
+    const jpeg = await sharp({
+      create: { width: 200, height: 100, channels: 3, background: "#e6194b" },
+    })
+      .jpeg()
+      .toBuffer();
+
+    const sheet = await createSharpTokeniser().contactSheet([jpeg], {
+      ...CONTACT_SHEET_LAYOUT,
+      background,
+    });
+
+    const pixels = await rgba(sheet);
+    expectColour(
+      pixels.at(...cellCentre(0)),
+      hexRgb("#e6194b"),
+      "cell 0 centre",
+    );
+    // The 200 by 100 image scales to 128 by 64, so the top band is 32 px deep.
+    expectColour(pixels.at(64, 10), hexRgb(background), "cell 0 top band");
+  });
 });
