@@ -1703,7 +1703,7 @@ function monsterTable(monsters: DifficultyAssessment["monsters"]): string {
       m.name,
       formatCr(m.cr),
       m.hypotheticalCount > 0
-        ? `${String(m.encounterCount + m.hypotheticalCount)} (${String(m.hypotheticalCount)} hypothetical)`
+        ? `${String(m.encounterCount)} (+${String(m.hypotheticalCount)} hypothetical)`
         : m.encounterCount,
       m.xpEach,
       m.xpTotal,
@@ -1830,7 +1830,9 @@ const assessDifficultyTool = defineTool({
       ),
       difficultyLine(assessment),
       assessment.monsters.length === 0
-        ? "No monsters."
+        ? assessment.problems.length > 0
+          ? "No monsters counted in XP."
+          : "No monsters."
         : monsterTable(assessment.monsters),
       crowdingLine(assessment),
       hpLine(assessment),

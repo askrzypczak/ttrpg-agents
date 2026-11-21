@@ -201,8 +201,8 @@ describe("assess_difficulty", () => {
     ]);
     expect(result.totals.monsterCount).toBe(7);
     expect(result.totals.xp).toBe(500);
-    expect(rowOf(r, "Goblin Warrior")?.[2]).toBe("6 (2 hypothetical)");
-    expect(rowOf(r, "Bugbear Warrior")?.[2]).toBe("1 (1 hypothetical)");
+    expect(rowOf(r, "Goblin Warrior")?.[2]).toBe("4 (+2 hypothetical)");
+    expect(rowOf(r, "Bugbear Warrior")?.[2]).toBe("0 (+1 hypothetical)");
     expect(currentInstances()).toEqual(before);
     expect(directory.listEncounters()).toEqual(encountersBefore);
   });
@@ -399,7 +399,7 @@ describe("assess_difficulty", () => {
     expect(lines(crowded)).toContain(
       "Monsters: 10 for 4 characters, more than two per character.",
     );
-    expect(rowOf(crowded, "Goblin Warrior")?.[2]).toBe("9 (5 hypothetical)");
+    expect(rowOf(crowded, "Goblin Warrior")?.[2]).toBe("4 (+5 hypothetical)");
     expect(text(crowded)).not.toMatch(/deadly/i);
   });
 });
@@ -468,6 +468,7 @@ describe("assess_difficulty reply lines", () => {
     expect(lines(r)).toContain(
       'Not counted in XP: unknown monster "homebrew_ghost" (Ghost 1).',
     );
+    expect(lines(r)).toContain("No monsters counted in XP.");
     expect(assessment(r).totals.monsterCount).toBe(1);
   });
 
