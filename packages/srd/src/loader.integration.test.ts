@@ -10,6 +10,7 @@ import {
 import {
   MonsterLoadError,
   loadAliases,
+  loadDifficultyTables,
   loadDndBeyondPages,
   loadMonsters,
   loadSrdMonsters,
@@ -322,5 +323,28 @@ describe("loadDndBeyondPages", () => {
       expect(err, JSON.stringify(data)).toBeInstanceOf(MonsterLoadError);
       expect((err as Error).message, JSON.stringify(data)).toContain(file);
     }
+  });
+});
+
+describe("loadDifficultyTables", () => {
+  it("difficulty tables: a copy with an invalid row fails naming the file and the failing path", () => {
+    const file = write(tmp(), "difficulty.json", {
+      xpByCr: [
+        { cr: 0, xp: 10 },
+        { cr: 1, xp: 200 },
+        { cr: 2, xp: 450 },
+        { cr: 3, xp: -700 },
+      ],
+      budgetPerCharacter: [{ level: 1, low: 50, moderate: 75, high: 100 }],
+    });
+    let err: unknown;
+    try {
+      loadDifficultyTables(file);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(MonsterLoadError);
+    expect((err as Error).message).toContain(file);
+    expect((err as Error).message).toContain("xpByCr.3.xp");
   });
 });

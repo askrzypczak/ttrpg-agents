@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   monsterSchema,
+  type DifficultyTables,
   type Monster,
   type MonsterSet,
 } from "@ttrpg-agents/engine";
@@ -224,4 +225,19 @@ export function loadSrdMonsters(): MonsterSet {
     SRD_DNDBEYOND_PATH,
     loadAliases(SRD_ALIASES_PATH, loadMonsters([{ path: SRD_MONSTERS_PATH }])),
   );
+}
+
+/**
+ * Load and validate the difficulty tables (XP by CR, XP budget per character)
+ * in `file`. Throws {@link MonsterLoadError} naming the file and the failing
+ * path on invalid data.
+ */
+export function loadDifficultyTables(file: string): DifficultyTables {
+  void file;
+  throw new Error("not implemented");
+}
+
+/** Load the committed SRD 5.2 difficulty tables. */
+export function loadSrdDifficultyTables(): DifficultyTables {
+  throw new Error("not implemented");
 }
