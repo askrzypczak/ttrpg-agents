@@ -13,7 +13,7 @@ import {
   type ChangeOrigin,
   resolveEncounter,
 } from "@ttrpg-agents/engine";
-import { loadSrdMonsters } from "@ttrpg-agents/srd";
+import { loadSrdDifficultyTables, loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
   openDatabase,
@@ -25,6 +25,7 @@ import { formatSetupStatus } from "./setup-status.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestPartyStore,
   makeTestSetupPorts,
 } from "@ttrpg-agents/engine/testing";
 
@@ -69,6 +70,8 @@ beforeEach(() => {
     newGroupId: () => `group-${++groupN}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    difficultyTables: loadSrdDifficultyTables(),
+    party: makeTestPartyStore(),
     newCommandId: () => "command",
   };
   // A scene bound to the encounter is open, so replies name no encounter.
@@ -1606,6 +1609,8 @@ describe("the encounter a tool call acts on", () => {
       newGroupId: () => `group-${String(++groups)}`,
       browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
       setup: makeTestSetupPorts(),
+      difficultyTables: loadSrdDifficultyTables(),
+      party: makeTestPartyStore(),
       newCommandId: () => "command",
     };
   }

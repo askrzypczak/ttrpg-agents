@@ -5,7 +5,7 @@ import {
   type TableSceneMap,
   staticMonsterIndex,
 } from "@ttrpg-agents/engine";
-import { loadSrdMonsters } from "@ttrpg-agents/srd";
+import { loadSrdDifficultyTables, loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
   openDatabase,
@@ -15,6 +15,7 @@ import type { ToolContext } from "./context.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestPartyStore,
   makeTestSetupPorts,
 } from "@ttrpg-agents/engine/testing";
 
@@ -53,6 +54,8 @@ function contextWith(sceneMap: TablePort["sceneMap"]): ToolContext {
     newGroupId: () => "group",
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    difficultyTables: loadSrdDifficultyTables(),
+    party: makeTestPartyStore(),
     newCommandId: () => "command",
   };
 }
