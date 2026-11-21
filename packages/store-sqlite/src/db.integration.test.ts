@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { makeTestInstance } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestInstance,
+  makeTestMonster,
+} from "@ttrpg-agents/engine/testing";
+import { SqliteCreatureRepository } from "./creature-repository.js";
 import { openDatabase } from "./db.js";
 import {
   LATEST_VERSION,
@@ -11,6 +15,7 @@ import {
   migrate,
   migrations,
 } from "./migrations.js";
+import { SqlitePartyStore } from "./party-store.js";
 import { SqliteEncounterDirectory } from "./sqlite-directory.js";
 import { SqliteEncounterLog } from "./sqlite-log.js";
 import { SqliteEncounterRepository } from "./sqlite-repository.js";
@@ -825,6 +830,29 @@ describe("migration to scene bindings", () => {
       encounter: undefined,
     });
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    db.close();
+  });
+});
+
+describe("migration to the party table", () => {
+  it("a version 20 database migrates to 21 keeping its stored creatures, with no party set", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    migrateToVersion(db, 20);
+    const thornling = makeTestMonster({
+      key: "homebrew_thornling",
+      name: "Thornling",
+      source: { book: "homebrew" },
+    });
+    new SqliteCreatureRepository(db).insert(thornling.key, thornling);
+
+    migrateToVersion(db, 21);
+
+    expect(getUserVersion(db)).toBe(21);
+    expect(
+      new SqliteCreatureRepository(db).getRecord("homebrew_thornling"),
+    ).toEqual({ key: "homebrew_thornling", data: thornling });
+    expect(new SqlitePartyStore(db).get()).toBeNull();
     db.close();
   });
 });
