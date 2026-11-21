@@ -96,6 +96,11 @@ describe("setParty", () => {
       { size: 4, level: 4.5 },
       "Party level must be a whole number from 1 to 20; got 4.5.",
     ],
+    [
+      "size 0 and level 21",
+      { size: 0, level: 21 },
+      "Party size must be a whole number of 1 or more; got 0. Party level must be a whole number from 1 to 20; got 21.",
+    ],
   ])(
     "setParty rejects a size that is not a whole number of 1 or more and a level that is not a whole number from 1 to 20, and stores nothing (%s)",
     (_label, change, message) => {
