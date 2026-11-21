@@ -3,7 +3,12 @@ import {
   createMonsterIndex,
   type DifficultyAssessment,
 } from "@ttrpg-agents/engine";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
+import {
+  makeTestInstance,
+  makeTestMonster,
+  makeTestMonsterIndex,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
 import { loadSrdDifficultyTables, loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
@@ -439,5 +444,81 @@ describe("set_party", () => {
     );
     expect(currentInstances()).toEqual(before);
     expect(partyStore.get()).toEqual({ size: 4, level: 1 });
+  });
+});
+
+describe("assess_difficulty reply lines", () => {
+  it('assess_difficulty names a monster it cannot count in a "Not counted in XP" line', async () => {
+    partyStore.set({ size: 4, level: 1 });
+    const crypt = directory.createEncounter("Crypt");
+    directory.setCurrentEncounter(crypt.id);
+    directory.repositoryFor(crypt.id).addInstances(
+      () => [
+        makeTestInstance({
+          monsterKey: "homebrew_ghost",
+          displayName: "Ghost 1",
+          maxHp: 5,
+        }),
+      ],
+      { source: "table", commandId: "seed" },
+    );
+
+    const r = await ok("assess_difficulty");
+
+    expect(lines(r)).toContain(
+      'Not counted in XP: unknown monster "homebrew_ghost" (Ghost 1).',
+    );
+    expect(assessment(r).totals.monsterCount).toBe(1);
+  });
+
+  it('assess_difficulty names a monster whose CR has no row in the XP table in a "Not counted in XP" line', async () => {
+    partyStore.set({ size: 4, level: 1 });
+    ctx = {
+      ...ctx,
+      monsters: makeTestMonsterIndex([
+        makeTestMonster({ key: "homebrew_dust", name: "Dust Mote", cr: 0.375 }),
+      ]),
+    };
+    const crypt = directory.createEncounter("Crypt");
+    directory.setCurrentEncounter(crypt.id);
+    directory.repositoryFor(crypt.id).addInstances(
+      () => [
+        makeTestInstance({
+          monsterKey: "homebrew_dust",
+          displayName: "Dust Mote 1",
+          maxHp: 2,
+        }),
+      ],
+      { source: "table", commandId: "seed" },
+    );
+
+    const r = await ok("assess_difficulty");
+
+    expect(lines(r)).toContain(
+      "Not counted in XP: Dust Mote (CR 0.375) has no row in the XP table.",
+    );
+  });
+
+  it('assess_difficulty for a party of one with an empty encounter replies "No monsters." and counts one character', async () => {
+    partyStore.set({ size: 1, level: 1 });
+    const crypt = directory.createEncounter("Crypt");
+    directory.setCurrentEncounter(crypt.id);
+
+    const r = await ok("assess_difficulty");
+
+    expect(lines(r)).toContain("Party: 1 character, level 1.");
+    expect(lines(r)).toContain("No monsters.");
+    expect(lines(r)).toContain("Monsters: 0 for 1 character.");
+  });
+
+  it("assess_difficulty with an override and no party stored says none is stored", async () => {
+    await addGoblins(4);
+
+    const r = await ok("assess_difficulty", { partySize: 4, partyLevel: 1 });
+
+    expect(lines(r)).toContain(
+      "Party: 4 characters, level 1, for this call only (none stored).",
+    );
+    expect(partyStore.get()).toBeNull();
   });
 });

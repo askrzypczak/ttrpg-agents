@@ -1,7 +1,9 @@
 import {
   DomainError,
+  NoSceneEncounterError,
   TargetError,
   addMonstersInRooms,
+  assessDifficulty,
   canRestoreEncounter,
   changeMonsterType,
   compareByInitiative,
@@ -17,6 +19,7 @@ import {
   listEncounterSummaries,
   listRooms,
   moveMonstersIntoRoom,
+  noteCommandOnCurrentEncounter,
   previewMonstersInRooms,
   proposeRooms,
   removeCreature,
@@ -25,11 +28,13 @@ import {
   renameEncounter,
   resetMaxHp,
   resolveEncounter,
+  resolveParty,
   resolveTargets,
   restoreEncounter,
   restoreMonsters,
   rollInitiative,
   setRooms,
+  setParty,
   splitInitiative,
   getMonsterByKey,
   searchMonsters,
@@ -37,9 +42,11 @@ import {
   useEncounter,
   useMap,
   type ChangeOrigin,
+  type DifficultyAssessment,
   type EncounterRepository,
   type MapRepository,
   type MonsterInstance,
+  type Party,
   type PreviewInstance,
   type PreviewPlacement,
   type ResolvedEncounter,
@@ -58,7 +65,12 @@ import {
   formatKeptInstances,
 } from "./creature-reply.js";
 import { formatSetupStatus } from "./setup-status.js";
-import { formatSource, formatStatblock, signed } from "./statblock.js";
+import {
+  formatCr,
+  formatSource,
+  formatStatblock,
+  signed,
+} from "./statblock.js";
 
 export type ToolContent =
   | { type: "text"; text: string }
@@ -1094,7 +1106,7 @@ const undoTool = defineTool({
   takesEncounter: true,
   annotations: { destructiveHint: true },
   description:
-    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms), encounter renames and bindings (rename_encounter, use_encounter) and creature changes (create_creature, edit_creature, remove_creature) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
+    "Undo the agent's last encounter change; say it again to go one change further back (no redo). A value changed at the table since is left as set there. The reply ends with what the next undo would reverse. Does not undo clear_encounter (use restore_encounter). Map and room changes (use_map, set_rooms, remove_rooms), encounter renames and bindings (rename_encounter, use_encounter), creature changes (create_creature, edit_creature, remove_creature) and party changes (set_party) are not undone: when one is the last change, undo says so, changes nothing and names what the next undo would reach.",
   inputSchema: {},
   run(ctx, _args, origin) {
     const snapshot = ctx.repo.listInstances();
@@ -1614,6 +1626,221 @@ const listCreaturesTool = defineTool({
   },
 });
 
+/** "1 character" for one, else "n characters". */
+function characters(n: number): string {
+  return `${String(n)} ${n === 1 ? "character" : "characters"}`;
+}
+
+/** A party as the reply words it: "4 characters, level 1", "1 character" for one. */
+function partyText(party: Party): string {
+  return `${characters(party.size)}, level ${String(party.level)}`;
+}
+
+const setPartyTool = defineTool({
+  name: "set_party",
+  annotations: { destructiveHint: true },
+  description:
+    "Store the party's size (number of characters, 1 or more) and level (1 to 20), the numbers assess_difficulty uses. Give either or both; the other keeps its stored value. Not an encounter command: takes no encounter and creates none; undo does not cover it.",
+  inputSchema: {
+    size: z
+      .number()
+      .int()
+      .optional()
+      .describe("The number of characters in the party: 1 or more."),
+    level: z.number().int().optional().describe("The party's level: 1 to 20."),
+  },
+  run(ctx, { size, level }, origin) {
+    const change = setParty(ctx.party, { size, level });
+    noteCommandOnCurrentEncounter(ctx.encounters, origin());
+    const was = change.before === null ? "none set" : partyText(change.before);
+    return ok(`Party: ${partyText(change.after)} (was: ${was}).`, {
+      before: change.before,
+      after: change.after,
+    });
+  },
+});
+
+const BAND_NAMES: Record<DifficultyAssessment["band"], string> = {
+  low: "Low",
+  moderate: "Moderate",
+  high: "High",
+  "above-high": "above High",
+};
+
+function yesNo(fact: boolean): string {
+  return fact ? "yes" : "no";
+}
+
+/** The party line: the party assessed, and for an override, the stored party it replaces. */
+function partyLine(
+  party: Party,
+  stored: Party | null,
+  overridden: boolean,
+): string {
+  if (!overridden) return `Party: ${partyText(party)}.`;
+  const was = stored === null ? "none stored" : `stored: ${partyText(stored)}`;
+  return `Party: ${partyText(party)}, for this call only (${was}).`;
+}
+
+function difficultyLine(a: DifficultyAssessment): string {
+  const { low, moderate, high } = a.party.budgets;
+  return `Difficulty: ${BAND_NAMES[a.band]}. ${String(a.totals.xp)} XP against budgets of Low ${String(low)}, Moderate ${String(moderate)}, High ${String(high)}.`;
+}
+
+function monsterTable(monsters: DifficultyAssessment["monsters"]): string {
+  return table(
+    [
+      "monster",
+      "CR",
+      "count",
+      "XP each",
+      "XP total",
+      "Multiattack",
+      "legendary",
+      "lair",
+    ],
+    monsters.map((m) => [
+      m.name,
+      formatCr(m.cr),
+      m.hypotheticalCount > 0
+        ? `${String(m.encounterCount + m.hypotheticalCount)} (${String(m.hypotheticalCount)} hypothetical)`
+        : m.encounterCount,
+      m.xpEach,
+      m.xpTotal,
+      yesNo(m.multiattack),
+      yesNo(m.legendaryActions),
+      yesNo(m.lairVariant),
+    ]),
+  );
+}
+
+function crowdingLine(a: DifficultyAssessment): string {
+  const crowded = a.crowding.moreThanTwoPerCharacter
+    ? ", more than two per character"
+    : "";
+  return `Monsters: ${String(a.totals.monsterCount)} for ${characters(a.party.size)}${crowded}.`;
+}
+
+function hpLine(a: DifficultyAssessment): string {
+  return `HP: ${String(a.totals.currentHp)} current, ${String(a.totals.maxHp)} max; ${String(a.totals.atZeroHp)} at 0 HP.`;
+}
+
+/** The lair line, for the monsters with a lair variant; says whether inLair counted them at the next CR's XP. */
+function lairLine(
+  monsters: DifficultyAssessment["monsters"],
+  inLair: boolean,
+): string | undefined {
+  const names = monsters.filter((m) => m.lairVariant).map((m) => m.name);
+  if (names.length === 0) return undefined;
+  const list = names.join(", ");
+  return inLair
+    ? `In lair: ${list} counted at the next CR's XP.`
+    : `Lair variant: ${list}. With inLair, each counts at the next CR's XP.`;
+}
+
+function problemLine(
+  problem: DifficultyAssessment["problems"][number],
+): string {
+  return problem.kind === "unknown-monster"
+    ? `Not counted in XP: unknown monster "${problem.monsterKey}" (${problem.instances.join(", ")}).`
+    : `Not counted in XP: ${problem.name} (CR ${formatCr(problem.cr)}) has no row in the XP table.`;
+}
+
+const assessDifficultyTool = defineTool({
+  name: "assess_difficulty",
+  takesEncounter: true,
+  annotations: { readOnlyHint: true },
+  description:
+    "Assess the encounter's difficulty for the party with the SRD's XP budgets: total XP against the Low, Moderate and High budgets and the band; per monster type its CR, count, XP each and whether it has Multiattack, legendary actions or a lair variant; the monster count against the party size; HP totals and how many monsters are at 0 HP; and monsters it could not count. Uses the stored party (set_party); partySize and partyLevel override it for this call only. with adds hypothetical monsters (monster key and count, as add_monsters takes them) without storing them; in an open scene with no encounter, with assesses them alone. inLair counts monsters with a lair variant at the next CR's XP.",
+  inputSchema: {
+    partySize: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "Overrides the stored party's size for this call only: 1 or more.",
+      ),
+    partyLevel: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "Overrides the stored party's level for this call only: 1 to 20.",
+      ),
+    with: z
+      .array(
+        z.object({
+          monster: z.string().describe("Monster key, e.g. srd-2024_shadow."),
+          count: z.number().int().min(1),
+        }),
+      )
+      .optional()
+      .describe(
+        "Hypothetical monsters, counted with the encounter's but not stored: monster key and count, as add_monsters takes them.",
+      ),
+    inLair: z
+      .boolean()
+      .optional()
+      .describe(
+        "Counts each monster with a lair variant at the next CR's XP. Default false.",
+      ),
+  },
+  run(ctx, { partySize, partyLevel, with: hypothetical, inLair }) {
+    const stored = ctx.party.get();
+    const party = resolveParty(stored, { size: partySize, level: partyLevel });
+    let instances: readonly MonsterInstance[];
+    let alone = false;
+    try {
+      instances = ctx.repo.listInstances();
+    } catch (e) {
+      // The read form fails in an open scene with no encounter. With monsters
+      // to assess, they are assessed alone; without, the failure is the reply.
+      if (
+        !(e instanceof NoSceneEncounterError) ||
+        hypothetical === undefined ||
+        hypothetical.length === 0
+      )
+        throw e;
+      instances = [];
+      alone = true;
+    }
+    const assessment = assessDifficulty(
+      { tables: ctx.difficultyTables, monsters: ctx.monsters },
+      {
+        instances,
+        hypothetical: hypothetical?.map((g) => ({
+          monsterKey: g.monster,
+          count: g.count,
+        })),
+        party,
+        inLair,
+      },
+    );
+    const lair = lairLine(assessment.monsters, inLair === true);
+    const lines = [
+      ...(alone
+        ? [
+            "This scene has no encounter yet; assessed the hypothetical monsters alone.",
+          ]
+        : []),
+      partyLine(
+        party,
+        stored,
+        partySize !== undefined || partyLevel !== undefined,
+      ),
+      difficultyLine(assessment),
+      assessment.monsters.length === 0
+        ? "No monsters."
+        : monsterTable(assessment.monsters),
+      crowdingLine(assessment),
+      hpLine(assessment),
+      ...(lair === undefined ? [] : [lair]),
+      ...assessment.problems.map(problemLine),
+    ];
+    return ok(lines.join("\n\n"), { ...assessment });
+  },
+});
+
 const proposeRoomsTool = defineTool({
   name: "propose_rooms",
   annotations: { readOnlyHint: true },
@@ -2126,4 +2353,6 @@ export const tools: readonly ToolDefinition[] = [
   editCreatureTool,
   removeCreatureTool,
   listCreaturesTool,
+  assessDifficultyTool,
+  setPartyTool,
 ];

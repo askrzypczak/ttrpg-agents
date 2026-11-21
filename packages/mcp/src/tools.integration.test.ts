@@ -194,10 +194,11 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the forty tools", () => {
+  it("exposes the forty-two tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
+      "assess_difficulty",
       "change_monster_type",
       "clear_encounter",
       "create_creature",
@@ -228,6 +229,7 @@ describe("tool registry", () => {
       "set_hp",
       "set_initiative",
       "set_max_hp",
+      "set_party",
       "set_rooms",
       "set_stats_visibility",
       "setup_status",
@@ -2001,6 +2003,7 @@ describe("the encounter a tool call acts on", () => {
       "remove_rooms",
       "get_map_image",
       "rename_encounter",
+      "assess_difficulty",
     ];
     const required = ["use_encounter"];
     const none = [
@@ -2015,6 +2018,7 @@ describe("the encounter a tool call acts on", () => {
       "edit_creature",
       "remove_creature",
       "list_creatures",
+      "set_party",
     ];
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...optional, ...required, ...none].sort(),
