@@ -5,7 +5,7 @@ SRD 5.2 monster data adapter: the committed snapshot, its loader and the import 
 ## Monsters
 
 - `src/map-open5e.ts`: pure mapper from an Open5e v2 creature to `Monster`.
-- `src/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadAliases(file, set)` adds the alias file's entries (see Aliases). `loadDndBeyondPages(file, set)` adds the D&D Beyond page file's entries (see D&D Beyond pages). `loadSrdMonsters()` loads the committed snapshot with its aliases and pages. The loaders return a `MonsterSet`.
+- `src/loader.ts`: `loadMonsters(sources)` validates and merges JSON files or directories of `*.json` (duplicate keys throw; errors name the file and monster key). `loadAliases(file, set)` adds the alias file's entries (see Aliases). `loadDndBeyondPages(file, set)` adds the D&D Beyond page file's entries (see D&D Beyond pages). `loadSrdMonsters()` loads the committed snapshot with its aliases and pages. The loaders return a `MonsterSet`. `loadSrdDifficultyTables()` loads the SRD XP tables (see Difficulty tables).
 
 ## SRD 5.2 data
 
@@ -34,3 +34,11 @@ A new pair needs evidence in its PR that it is the SRD 5.1 to 5.2 successor: the
 `data/srd-5.2/dndbeyond.json` is a JSON object that maps each monster key to its D&D Beyond 2024 page path `<id>-<slug>` (the part after `/monsters/`), sorted by key. It is hand-curated from the maintainer's harvest of the Free Rules creature page (see #278), not written by the import script. The slug is required: D&D Beyond returns 404 without it.
 
 `loadDndBeyondPages` (used by `loadSrdMonsters()`) fails, naming the file and entry, when the file is not an object, a key is not in the snapshot or a value is not `<id>-<slug>`. Giant Fly has no 2024 page and no entry; the test suite lists it as the one exception.
+
+## Difficulty tables
+
+`data/srd-5.2/difficulty.json` holds the SRD 5.2 XP by challenge rating (`xpByCr`) and XP budget per character by level (`budgetPerCharacter`: Low, Moderate, High), in the engine's `DifficultyTables` shape. It is hand-maintained, not generated: the numbers were transcribed from public CC-BY Markdown copies of the SRD text (decision 407.1), not from the PDF. The engine computes every number from it.
+
+`loadDifficultyTables(file)` validates a file with the engine's `difficultyTablesSchema`, and `loadSrdDifficultyTables()` loads the committed one. Both throw `MonsterLoadError` naming the file and the failing path. A unit test pins the SRD's three worked examples against the file and checks that every CR used by a snapshot monster has a row.
+
+CR 0 is 10 XP, always (decision 396.1). The SRD says "0 or 10"; Giant Fly, Shrieker Fungus and Seahorse state 0 XP in the snapshot's source, so the assessment overstates each by 10.

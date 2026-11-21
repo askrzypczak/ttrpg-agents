@@ -55,4 +55,4 @@ The bridge polls the SQLite file every 250 ms and pushes each change the MCP ser
 
 ## Attribution
 
-Monster data is from the System Reference Document 5.2 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode); see [`ATTRIBUTION.md`](packages/srd/data/srd-5.2/ATTRIBUTION.md). This project is not affiliated with or endorsed by Wizards of the Coast or Owlbear Rodeo.
+Monster data and the XP and budget tables are from the System Reference Document 5.2 by Wizards of the Coast LLC, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode); see [`ATTRIBUTION.md`](packages/srd/data/srd-5.2/ATTRIBUTION.md). This project is not affiliated with or endorsed by Wizards of the Coast or Owlbear Rodeo.

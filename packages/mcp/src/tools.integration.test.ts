@@ -13,7 +13,7 @@ import {
   type ChangeOrigin,
   resolveEncounter,
 } from "@ttrpg-agents/engine";
-import { loadSrdMonsters } from "@ttrpg-agents/srd";
+import { loadSrdDifficultyTables, loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteEncounterDirectory,
   openDatabase,
@@ -25,6 +25,7 @@ import { formatSetupStatus } from "./setup-status.js";
 import { tools, type ToolResult } from "./tools.js";
 import {
   makeTestCreatureRepository,
+  makeTestPartyStore,
   makeTestSetupPorts,
 } from "@ttrpg-agents/engine/testing";
 
@@ -69,6 +70,8 @@ beforeEach(() => {
     newGroupId: () => `group-${++groupN}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    difficultyTables: loadSrdDifficultyTables(),
+    party: makeTestPartyStore(),
     newCommandId: () => "command",
   };
   // A scene bound to the encounter is open, so replies name no encounter.
@@ -191,10 +194,11 @@ function repoOf(context: ToolContext): EncounterRepository {
 }
 
 describe("tool registry", () => {
-  it("exposes the forty tools", () => {
+  it("exposes the forty-two tools", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_monsters",
       "apply_damage",
+      "assess_difficulty",
       "change_monster_type",
       "clear_encounter",
       "create_creature",
@@ -225,6 +229,7 @@ describe("tool registry", () => {
       "set_hp",
       "set_initiative",
       "set_max_hp",
+      "set_party",
       "set_rooms",
       "set_stats_visibility",
       "setup_status",
@@ -1606,6 +1611,8 @@ describe("the encounter a tool call acts on", () => {
       newGroupId: () => `group-${String(++groups)}`,
       browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
       setup: makeTestSetupPorts(),
+      difficultyTables: loadSrdDifficultyTables(),
+      party: makeTestPartyStore(),
       newCommandId: () => "command",
     };
   }
@@ -1996,6 +2003,7 @@ describe("the encounter a tool call acts on", () => {
       "remove_rooms",
       "get_map_image",
       "rename_encounter",
+      "assess_difficulty",
     ];
     const required = ["use_encounter"];
     const none = [
@@ -2010,6 +2018,7 @@ describe("the encounter a tool call acts on", () => {
       "edit_creature",
       "remove_creature",
       "list_creatures",
+      "set_party",
     ];
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...optional, ...required, ...none].sort(),

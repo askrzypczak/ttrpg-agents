@@ -1,6 +1,6 @@
 ---
 name: dm-encounter
-description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "that should have been a goblin boss", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "undo that", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", "open the aboleth's statblock", "show me the goblin's page", "in the ambush, goblin 2 takes 5", "what encounters are there", "call this one the goblin ambush", "use the ambush here", or asks what a monster does or rolls.
+description: Run D&D encounter commands at the table through the ttrpg-agents MCP tools. Use when the DM says things like "add 3 goblins", "what would 3 trolls look like", "would 2 trolls fit in the attic", "make it 3 wolves", "goblin 2 takes 7", "heal the shadow", "goblin 2 is at 4 HP", "the shadow has AC 15", "give the wolf average HP", "that should have been a goblin boss", "remove the wolves", "bring the wolf back", "what's the initiative order", "clear it", "bring the encounter back", "undo that", "use the current map", "we're on the Trollskull map", "the taproom is T5 to AB11", "what rooms are there", "remove the attic", "label the rooms", "open the aboleth's statblock", "show me the goblin's page", "in the ambush, goblin 2 takes 5", "what encounters are there", "call this one the goblin ambush", "use the ambush here", "how hard is this", "is this deadly for four level-5 characters", "what if I add two trolls to this", "we're five level-6 characters now", or asks what a monster does or rolls.
 ---
 
 # DM encounter commands
@@ -206,3 +206,11 @@ Removed monsters stay restorable until the next `clear_encounter` that clears mo
 
 - When any tool fails because the bridge or the Owlbear tab cannot be reached, call `setup_status` once and relay each problem line and its fix line verbatim.
 - This is the one extra call allowed by the "relay the error and stop" rules above. Do not retry the failed call.
+
+## How hard is this? And the party
+
+- "How hard is this?", "is this deadly for four level-5 characters?" and "what if I add two trolls to this?" are ONE `assess_difficulty` call (read-only). Arguments are as in `dm-prep`'s Difficulty section: `with` for a what-if (nothing is added), `partySize` and `partyLevel` for a party the DM states for this question only, `inLair`, and `encounter` when the DM names one. "What would 3 trolls look like?" is still `preview_monsters`.
+- Relay the Difficulty line verbatim, then ONE line that opens "My judgement, not a rule:" on monster count and action economy from the Monsters line and the Multiattack, legendary and lair columns. Show the rest of the reply (table, HP, lair, "Not counted in XP" lines) only when the DM asks or a "Not counted in XP" line is present. Give no number the tool did not give.
+- The band is Low, Moderate, High or above High. Never call it "deadly" as if it were a rule: answer a "deadly?" question with the band.
+- "We're five level-6 characters now" is ONE `set_party` with `size` and `level`; relay its Party line.
+- On "Party size and level are not set.", ask the DM for the numbers, then ONE `set_party` and the assessment again. `undo` does not cover `set_party`.
