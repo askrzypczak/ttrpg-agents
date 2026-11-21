@@ -12,10 +12,11 @@ import {
 } from "@ttrpg-agents/bridge/client";
 import { SETTINGS, describeProfile, loadConfig } from "@ttrpg-agents/config";
 import { createMonsterIndex, type Rng } from "@ttrpg-agents/engine";
-import { loadSrdMonsters } from "@ttrpg-agents/srd";
+import { loadSrdDifficultyTables, loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
   SqliteEncounterDirectory,
+  SqlitePartyStore,
   createDatabaseProbe,
   openDatabase,
 } from "@ttrpg-agents/store-sqlite";
@@ -52,6 +53,8 @@ async function main(): Promise<void> {
     now: () => new Date(),
     newGroupId: randomUUID,
     newCommandId: randomUUID,
+    difficultyTables: loadSrdDifficultyTables(),
+    party: new SqlitePartyStore(db),
     setup: {
       settings: {
         profile: describeProfile(loaded.profile),
