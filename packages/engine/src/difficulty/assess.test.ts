@@ -286,12 +286,13 @@ describe("assessDifficulty problems", () => {
         }),
         ...instancesOf(oddling, 1, { currentHp: 4, maxHp: 8 }),
       ],
+      hypothetical: [{ monsterKey: "oddling", count: 1 }],
     });
 
     expect(result.totals.xp).toBe(100);
-    expect(result.totals.monsterCount).toBe(3);
-    expect(result.totals.currentHp).toBe(29);
-    expect(result.totals.maxHp).toBe(38);
+    expect(result.totals.monsterCount).toBe(4);
+    expect(result.totals.currentHp).toBe(35);
+    expect(result.totals.maxHp).toBe(44);
   });
 });
 
