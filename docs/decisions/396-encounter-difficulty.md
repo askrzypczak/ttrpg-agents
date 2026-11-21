@@ -10,7 +10,7 @@ Decisions for [#396](https://github.com/askrzypczak/ttrpg-agents/issues/396) tha
   - Chosen: the table row is `cr: 0, xp: 10`; the three 0-XP monsters are overstated by 10 XP each, which no budget band turns on.
   - Always 0: understates 27 monsters.
   - 10 with a committed list of the three exceptions: a hand-maintained list for 30 XP of precision.
-- Where: `packages/srd/data/srd-5.2/difficulty.json` (#407), `difficultyTablesSchema` (#404), `packages/srd/README.md`.
+- Where: `packages/srd/data/srd-5.2/difficulty.json` (#407, whose test on the committed file pins the row), `packages/srd/README.md`. The engine schema (#404) does not pin the value.
 - Revisit if: the DM asks why a swarm of CR 0 creatures counts, or the snapshot gains per-monster XP.
 - Status: active
 
