@@ -10,3 +10,5 @@ export * from "./browser.js";
 export * from "./setup/index.js";
 // party (#408)
 export * from "./party/index.js";
+// difficulty (#404)
+export * from "./difficulty/index.js";
