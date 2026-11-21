@@ -1,6 +1,6 @@
 ---
 name: dm-prep
-description: Prepare D&D creatures between sessions through the ttrpg-agents MCP tools. Use when the DM says things like "make a goblin shaman", "make a tougher goblin warrior", "add this statblock from page 52 of my Monster Manual", "here is a statblock", "create this creature", "store this monster", "change the stored goblin shaman's AC", "that's a typo, the Talons do 10", "remove the goblin shaman from my creatures", "what creatures have I stored", or pastes the text of a creature's statblock.
+description: Prepare D&D creatures between sessions through the ttrpg-agents MCP tools. Use when the DM says things like "make a goblin shaman", "make a tougher goblin warrior", "add this statblock from page 52 of my Monster Manual", "here is a statblock", "create this creature", "store this monster", "change the stored goblin shaman's AC", "that's a typo, the Talons do 10", "remove the goblin shaman from my creatures", "what creatures have I stored", "how hard is this encounter", "is this deadly for four level-5 characters", "what if I add two trolls", "we're five level-6 characters now", or pastes the text of a creature's statblock.
 ---
 
 # DM prep
@@ -73,3 +73,27 @@ A name that is both a stored creature and a monster in an encounter (a stored Go
 ## Book content
 
 This skill and its evals hold no text from published books. Examples use SRD names and the invented test book in `fixtures/test-book/`.
+
+## Difficulty
+
+"How hard is this?", "is this deadly for four level-5 characters?" and "what if I add two trolls?" ask about the encounter, so they are `assess_difficulty` calls (read-only; it creates nothing). `dm-encounter` has the same entry for the table. The party is two stored numbers, its size and its level (`set_party`), not a list of characters.
+
+- ONE `assess_difficulty` call per question.
+  - "What if I add two trolls?": pass `with` as `[{ monster, count }]`, the monster key from `search_monsters` unless known from this session. Nothing is added or stored; say so in one line.
+  - The DM states a party for this question ("for four level-5 characters"): pass `partySize` and `partyLevel`. They apply to this call only and store nothing.
+  - "In their lair": pass `inLair: true`. When the DM names an encounter, pass `encounter` as `dm-encounter` does.
+- "We're five level-6 characters now" is ONE `set_party` with `size` and `level` (give only the one that changed when the DM changes one). Relay its Party line. It makes no assessment unless the DM asks for one. `undo` does not cover it.
+- When the tool fails with "Party size and level are not set." (or says one of them is not set), ask the DM for the missing number or numbers and call nothing else. When they answer, ONE `set_party`, then ONE `assess_difficulty` again for the original question.
+
+### Relaying the numbers
+
+- Relay the reply as it is: the Party line, the Difficulty line (the total, the three budgets and the band), the monster table, the Monsters and HP lines, a lair line and every "Not counted in XP" line. Never recompute, round, add up or restate a number in your own words.
+- The band is the SRD's: Low, Moderate, High or above High. Never call an encounter "deadly" as if it were a rule. When the DM says "deadly", answer with the band for their party ("That is High for four level-5 characters: ...") and say the SRD has no band called deadly.
+- A "Not counted in XP" line means the band covers only the monsters that were counted: say so.
+
+### The judgement
+
+- After the tool's lines, give a short judgement that opens with "My judgement, not a rule:". It is about action economy: how many monsters there are against the party (the Monsters line), and which monsters have Multiattack, legendary actions or a lair variant (the table columns), with the HP line for how long the fight may run.
+- Call `get_statblock` first when a monster's actions matter to the judgement, and say what the statblock shows, not what you remember of the creature.
+- State no number the tool did not give: no damage per round, no actions per round, no chance of winning, no number of rounds. Two or three sentences.
+- The budgets are not a forecast: if the DM asks whether the party will win, give the band, the judgement, and say the outcome depends on tactics and dice.
