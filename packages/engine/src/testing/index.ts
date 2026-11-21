@@ -4,6 +4,7 @@ import type {
   CreatureRepository,
 } from "../monsters/creatures.js";
 import type { Monster } from "../monsters/schema.js";
+import type { Party, PartyStore } from "../party/party.js";
 import {
   staticMonsterIndex,
   type MonsterIndex,
@@ -198,4 +199,15 @@ export function makeTestCreatureRepository(
   };
   for (const creature of creatures) repo.insert(creature.key, creature);
   return repo;
+}
+
+/** An in-memory PartyStore holding `party`, or none when null. Each call returns a new store; `get` and `set` copy the party. */
+export function makeTestPartyStore(party: Party | null = null): PartyStore {
+  let stored: Party | null = party === null ? null : { ...party };
+  return {
+    get: () => (stored === null ? null : { ...stored }),
+    set: (next) => {
+      stored = { ...next };
+    },
+  };
 }
