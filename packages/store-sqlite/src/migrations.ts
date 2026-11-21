@@ -256,6 +256,19 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    // The party's size and level: one row or none; none means not set. The
+    // engine checks the numbers before it writes, so the table has no range
+    // checks. No change-log event.
+    version: 21,
+    sql: `
+      CREATE TABLE party (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        size INTEGER NOT NULL,
+        level INTEGER NOT NULL
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = Math.max(...migrations.map((m) => m.version));
