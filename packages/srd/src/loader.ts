@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  difficultyTablesSchema,
   monsterSchema,
   type DifficultyTables,
   type Monster,
@@ -216,6 +217,12 @@ const SRD_DNDBEYOND_PATH = resolve(
   "../../data/srd-5.2/dndbeyond.json",
 );
 
+/** Path of the committed SRD 5.2 difficulty tables (works from src/ and dist/). */
+const SRD_DIFFICULTY_PATH = resolve(
+  fileURLToPath(import.meta.url),
+  "../../data/srd-5.2/difficulty.json",
+);
+
 /**
  * Load the committed SRD 5.2 snapshot with its aliases (see {@link loadAliases})
  * and its D&D Beyond 2024 pages (see {@link loadDndBeyondPages}).
@@ -233,11 +240,17 @@ export function loadSrdMonsters(): MonsterSet {
  * path on invalid data.
  */
 export function loadDifficultyTables(file: string): DifficultyTables {
-  void file;
-  throw new Error("not implemented");
+  const result = difficultyTablesSchema.safeParse(readJsonFile(file));
+  if (result.success) return result.data;
+  const issues = result.error.issues
+    .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+    .join("; ");
+  throw new MonsterLoadError(`${file}: invalid difficulty tables: ${issues}`);
 }
 
-/** Load the committed SRD 5.2 difficulty tables. */
+/**
+ * Load the committed SRD 5.2 difficulty tables (see {@link loadDifficultyTables}).
+ */
 export function loadSrdDifficultyTables(): DifficultyTables {
-  throw new Error("not implemented");
+  return loadDifficultyTables(SRD_DIFFICULTY_PATH);
 }
