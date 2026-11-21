@@ -3,8 +3,11 @@ import {
   createMonsterIndex,
   type Monster,
 } from "@ttrpg-agents/engine";
-import { makeTestSetupPorts } from "@ttrpg-agents/engine/testing";
-import { loadSrdMonsters } from "@ttrpg-agents/srd";
+import {
+  makeTestPartyStore,
+  makeTestSetupPorts,
+} from "@ttrpg-agents/engine/testing";
+import { loadSrdDifficultyTables, loadSrdMonsters } from "@ttrpg-agents/srd";
 import {
   SqliteCreatureRepository,
   SqliteEncounterDirectory,
@@ -43,6 +46,8 @@ beforeEach(() => {
     newGroupId: () => `group-${String(tick)}`,
     browser: { showPage: () => Promise.reject(new Error("not stubbed")) },
     setup: makeTestSetupPorts(),
+    difficultyTables: loadSrdDifficultyTables(),
+    party: makeTestPartyStore(),
     newCommandId: () => `command-${String(++commands)}`,
   };
 });

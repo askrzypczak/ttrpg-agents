@@ -1,10 +1,12 @@
 import type {
   BrowserPort,
   CreatureRepository,
+  DifficultyTables,
   EncounterDirectory,
   EncounterRepository,
   MapRepository,
   MonsterIndex,
+  PartyStore,
   Rng,
   SetupPorts,
   TablePort,
@@ -28,6 +30,10 @@ export interface ToolContext {
   newCommandId: () => string;
   /** Settings facts and the database and bridge probes, for the setup report. */
   setup: SetupPorts;
+  /** The SRD XP-by-CR and budget tables, loaded once at startup; assess_difficulty reads them. */
+  difficultyTables: DifficultyTables;
+  /** The stored party: set_party writes it, assess_difficulty reads it. */
+  party: PartyStore;
 }
 
 /** What a tool's run receives: the context plus the encounter of this call. */

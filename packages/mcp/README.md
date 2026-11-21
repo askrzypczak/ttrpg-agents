@@ -48,7 +48,7 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `set_stats_visibility` | Show or hide several monsters' Stat Bubbles (HP and AC) to the players                                                                            |
 | `clear_encounter`      | Remove every monster; replies with their names, and `restore_encounter` can bring them back                                                       |
 | `restore_encounter`    | Bring back every monster the last clear removed, with HP, initiative, group and stats visibility; a taken name gets a new number                  |
-| `undo`                 | Undo the last change, again the one before; table edits stay; not clears, map/room, encounter rename/binding or creature changes; names next undo |
+| `undo`                 | Undo the last change, again the one before; table edits stay; not clears, map/room, renames/bindings, creature or party changes; names next undo  |
 | `table_status`         | Owlbear room and scene status, in sync or not with the open scene's encounter (named); our tokens left alone; art for the GM to pick or re-upload |
 | `setup_status`         | Is this setup ready: profile, config, settings, database, newest backup, bridge with this profile's token, GM tab; a fix under each problem       |
 | `use_map`              | Use the map aligned on the Owlbear scene; reports its grid size                                                                                   |
@@ -64,6 +64,8 @@ table commands into these tool calls (see its `EVALS.md` for the prompt evals).
 | `edit_creature`        | Change a stored creature by key with the same changes plus `page`; key and book kept; monsters in encounters keep their values and are named      |
 | `remove_creature`      | Delete a stored creature by key; refused while a monster in any encounter uses it, naming them                                                    |
 | `list_creatures`       | The stored creatures (key, name, book, page, CR), of one book with `book`                                                                         |
+| `set_party`            | Store the party's size and level (`size`, `level`); give either or both; takes no encounter, creates none; `undo` does not cover it               |
+| `assess_difficulty`    | XP and band against the SRD budgets for the stored party, or `partySize`/`partyLevel` for this call; `with` adds unstored monsters                |
 
 Every tool that reads or changes an encounter takes an optional `encounter`, an
 encounter's name in any case (`use_encounter` requires it); `list_encounters`,
@@ -85,6 +87,20 @@ stored and the reply lists them with the values the engine expects.
 `edit_creature` leaves the monsters already in encounters as they are (max HP,
 AC, size and name) and names them; `remove_creature` is refused while a monster
 in any encounter uses the creature.
+
+`set_party` stores the party's size and level, the two numbers the difficulty
+maths needs; give either or both, and the other keeps its stored value. It takes
+no `encounter`, creates none, and notes its command like the creature tools, so
+`undo` right after it says it does not cover it.
+
+`assess_difficulty` is a read-only encounter command. It totals the XP of the
+encounter's monsters, plus any `with` monsters (keys and counts as
+`add_monsters` takes them, never stored), against the SRD's budgets for the
+stored party, or for `partySize` and `partyLevel` given for that call, and names
+the band: Low, Moderate, High or above High. In an open scene with no encounter
+it assesses the `with` monsters alone, or without them replies "This scene has
+no encounter yet.". `inLair` counts monsters with a lair variant at the next
+CR's XP. The tables are the SRD's, loaded at startup in `src/stdio.ts`.
 
 `table_status`, `use_map`, `set_rooms`, `list_rooms`, `get_map_image`,
 `move_monsters`, and `add_monsters` or `preview_monsters` with a `room`, need the bridge running (`npm run bridge`) and a GM
